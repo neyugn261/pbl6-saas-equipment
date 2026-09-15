@@ -1,59 +1,40 @@
-# =========================
-# CẤU HÌNH CHUNG (Hệ điều hành & IDE)
-# =========================
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
+# Node
+node_modules/
+dist/
+coverage/
 *.log
 
-# =========================
-# BACKEND (Node.js) & FRONTEND (ReactJS)
-# =========================
-# Thư viện
-node_modules/
-.pnp
-.pnp.js
-
-# File môi trường chứa thông tin bảo mật (Database, API Key)
+# Environment
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
-# Thư mục build
-dist/
-build/
-coverage/
+# Nest
+apps/*/dist/
 
-# Log lỗi npm/yarn
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Vite
+apps/web/dist/
 
-# =========================
-# MOBILE (Flutter)
-# =========================
-# File cấu hình sinh tự động của Dart/Flutter
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
+# Flutter / Dart
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
 
-# Thư mục build app
-build/
+# IDE
+.vscode/
+.idea/
 
-# Android
-**/android/key.properties
-**/*.jks
-**/*.keystore
-**/android/local.properties
+# OS
+.DS_Store
+Thumbs.db
 
-# iOS
-**/ios/Flutter/.last_build_id
-**/ios/Pods/
-**/ios/.symlinks/
-**/ios/profile
+# Test
+.nyc_output/
+
+# Prisma generated
+**/generated/
+
+# Temporary
+tmp/
+temp/

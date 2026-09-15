@@ -1,0 +1,23 @@
+{
+  "name": "pbl6-asset-maintenance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PBL6 SaaS Asset Maintenance and Field Technician Platform",
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+
+    "dev:gateway": "pnpm --filter api-gateway start:dev",
+    "dev:identity": "pnpm --filter identity-service start:dev",
+    "dev:asset": "pnpm --filter asset-service start:dev",
+    "dev:maintenance": "pnpm --filter maintenance-service start:dev",
+    "dev:workorder": "pnpm --filter workorder-service start:dev",
+    "dev:notification": "pnpm --filter notification-service start:dev",
+    "dev:web": "pnpm --filter web dev",
+
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test",
+    "lint": "pnpm -r --if-present lint"
+  }
+}

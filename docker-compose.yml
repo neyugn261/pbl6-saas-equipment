@@ -1,0 +1,80 @@
+services:
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: pbl6-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: pbl6
+      POSTGRES_PASSWORD: pbl6_dev_password
+      POSTGRES_DB: postgres
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+
+    networks:
+      - pbl6-network
+
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: pbl6-rabbitmq
+    restart: unless-stopped
+
+    environment:
+      RABBITMQ_DEFAULT_USER: pbl6
+      RABBITMQ_DEFAULT_PASS: pbl6_dev_password
+
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+    networks:
+      - pbl6-network
+
+
+  redis:
+    image: redis:8-alpine
+    container_name: pbl6-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    networks:
+      - pbl6-network
+
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+    container_name: pbl6-minio
+    restart: unless-stopped
+
+    command: server /data --console-address ":9001"
+
+    environment:
+      MINIO_ROOT_USER: pbl6
+      MINIO_ROOT_PASSWORD: pbl6_minio_password
+
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+    volumes:
+      - minio_data:/data
+
+    networks:
+      - pbl6-network
+volumes:
+  postgres_data:
+  minio_data:
+
+
+networks:
+  pbl6-network:
+    driver: bridge
