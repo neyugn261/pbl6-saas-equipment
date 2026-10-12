@@ -9,6 +9,15 @@ Nền tảng SaaS quản lý vòng đời thiết bị, bảo trì và điều p
 * **Mobile App:** Flutter
 * **Database:** PostgreSQL
 
+## Web frontend
+
+The enterprise admin portal, platform administration and customer portal are implemented in `apps/web` using Vite, React and TypeScript. See [docs/FRONTEND_IMPLEMENTATION.md](docs/FRONTEND_IMPLEMENTATION.md) for routes, role navigation and demo workflows.
+
+```bash
+pnpm install
+pnpm dev:web
+```
+
 ## 📂 Cấu trúc thư mục (Monorepo)
 
 Dự án sử dụng kiến trúc Monorepo, gồm 3 phân hệ chính hoạt động độc lập:
