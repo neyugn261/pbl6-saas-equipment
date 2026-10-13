@@ -1,114 +1,94 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Identity Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Owns authentication, accounts, the fixed RBAC catalog and sessions
+(`identity_db`). Reference implementation for the other NestJS services:
+validated configuration, Prisma migrations with drift check, unit + e2e tests
+against a real PostgreSQL.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+- Port: `IDENTITY_SERVICE_PORT` (default 3001)
+- Database: `IDENTITY_DATABASE_URL` — see [prisma/README.md](prisma/README.md)
+- All settings: root [`.env.example`](../../.env.example), validated at startup by
+  [`src/config/env.validation.ts`](src/config/env.validation.ts)
 
-## Description
+## API
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Method | Path | Auth | Body | Result |
+|---|---|---|---|---|
+| `GET` | `/health` | — | — | `200 {status, database}` / `503` |
+| `POST` | `/auth/login` | — | `{email, password, tenantCode?}` | `200` tokens + profile |
+| `POST` | `/auth/refresh` | — | `{refreshToken}` | `200` new token pair |
+| `POST` | `/auth/logout` | — | `{refreshToken}` | `204` (always) |
+| `GET` | `/auth/me` | Bearer | — | `200` profile |
 
-## Project setup
+Errors carry a stable `code`: `INVALID_CREDENTIALS` (401), `ACCOUNT_NOT_ACTIVE`
+(403), `TENANT_NOT_ACTIVE` (403), `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED`,
+`REFRESH_TOKEN_REUSED`, `INVALID_ACCESS_TOKEN` (401). Unknown body fields are
+rejected with 400.
 
-```bash
-$ pnpm install
+## Behaviour
+
+**Login scope (ADR 0001).** Tenant users send `tenantCode`; Platform Admin
+omits it. The code is resolved through the local `tenant_directory` read model
+and only selects where to look up the email (case-insensitive). `tenant_id` in
+the token always comes from the stored account — never from the request.
+Wrong password, unknown email and unknown tenant code return the same 401;
+account/tenant status is revealed (403) only after the password is proven.
+
+**Who can log in.** Only `ACTIVE` accounts of an `ACTIVE` tenant. `INVITED`
+accounts (no password yet, or invitation not completed), `SUSPENDED` and
+`DISABLED` accounts are refused.
+
+**Access token** — HS256 JWT, `JWT_ACCESS_TTL_SECONDS` (default 15 min):
+
+```json
+{ "sub": "<user id>", "sid": "<session id>", "tenant_id": "<uuid|null>",
+  "user_type": "PLATFORM_STAFF|TENANT_STAFF|CUSTOMER", "roles": ["DISPATCHER"],
+  "iss": "pbl6-identity", "aud": "pbl6", "iat": 0, "exp": 0 }
 ```
 
-## Compile and run the project
+Permissions are not in the token yet (catalog not approved).
+
+**Refresh token** — opaque random 256-bit string; only its SHA-256 hash is
+stored in `auth_sessions.refresh_token_hash`.
+- Every refresh rotates: the old session row is revoked and a new one is
+  created with the **same absolute expiry** (`REFRESH_TOKEN_TTL_DAYS` from login).
+- Presenting a revoked token (reuse) revokes **all** active sessions of the
+  account. Clients must therefore not send two refreshes in parallel with the
+  same token; only one succeeds.
+- Refresh re-checks account and tenant status.
+- Logout revokes the session; `/auth/me` then fails even with an unexpired
+  access token. Other services that only verify the JWT will accept it until
+  it expires (short TTL by design).
+
+**Passwords** — bcrypt (`bcryptjs`, `BCRYPT_COST`, default 12). Logins for
+unknown accounts still run a bcrypt comparison to keep timing similar.
+
+**Time zone** — Prisma connections pin the session time zone to UTC
+([`create-adapter.ts`](src/prisma/create-adapter.ts)); without it the pg
+adapter shifts every `TIMESTAMPTZ` on servers not running in UTC.
+
+## Commands
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+pnpm db:migrate        # prisma migrate deploy
+pnpm db:check-drift    # migrations vs schema.prisma (needs IDENTITY_SHADOW_DATABASE_URL)
+pnpm db:seed           # provisional permission catalog
+pnpm db:seed:dev       # + demo tenant DEMO and demo accounts
+pnpm start:dev
+pnpm test              # unit tests (no database)
+pnpm test:e2e          # API tests on IDENTITY_TEST_DATABASE_URL (name must contain "test")
+pnpm lint && pnpm typecheck
 ```
 
-## Run tests
+Demo accounts after `db:seed:dev` (password = `SEED_DEMO_PASSWORD`):
+`platform.admin@pbl6.local` (no tenant code) and, with tenant code `DEMO`,
+`tenant.admin@`, `service.manager@`, `dispatcher@`, `inventory@`,
+`technician@`, `customer.admin@`, `customer.user@demo.local`;
+`invited@demo.local` is INVITED and cannot log in.
 
-```bash
-# unit tests
-$ pnpm run test
+## Not implemented yet
 
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+User invitation / activation and password reset (`account_tokens` exists),
+role assignment API with the assigner matrix (ADR open point #2), consuming
+Organization tenant events into `tenant_directory`, login rate limiting,
+permission claims.
