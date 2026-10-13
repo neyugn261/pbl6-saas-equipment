@@ -34,13 +34,16 @@ apps/
   maintenance-service/    :3003  scaffold
   workorder-service/      :3004  scaffold
   notification-service/   :3005  scaffold
+  organization-service/   :3006  scaffold
+  service-request-service/:3007  scaffold
+  inventory-service/      :3008  scaffold
   web/                    :5173  prototype UI, dữ liệu mock (chưa nối API)
   mobile/                        Flutter template
 infrastructure/postgres/  init.sql — tạo 8 database rỗng cho các service
 docs/                     SRS, ADR, ERD
 ```
 
-Organization, Service Request và Inventory service chưa được tạo. Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
+Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
 
 ## 2. Yêu cầu hệ thống
 
@@ -52,7 +55,7 @@ Organization, Service Request và Inventory service chưa được tạo. Mỗi 
 | Docker | Docker Engine + Compose plugin (Ubuntu) / Docker Desktop (Windows) | Chạy PostgreSQL, RabbitMQ, Redis, MinIO |
 | Flutter | 3.x | Chỉ cần nếu làm mobile |
 
-Các cổng sẽ dùng: `5432` (PostgreSQL), `5672`/`15672` (RabbitMQ), `6379` (Redis), `9000`/`9001` (MinIO), `3000`–`3005` (services), `5173` (web). Nếu máy đã có PostgreSQL cài sẵn đang chiếm `5432`, xem [mục 8](#cổng-5432-đã-bị-chiếm).
+Các cổng sẽ dùng: `5432` (PostgreSQL), `5672`/`15672` (RabbitMQ), `6379` (Redis), `9000`/`9001` (MinIO), `3000`–`3008` (services), `5173` (web). Nếu máy đã có PostgreSQL cài sẵn đang chiếm `5432`, xem [mục 8](#cổng-5432-đã-bị-chiếm).
 
 ## 3. Cài công cụ
 
@@ -228,6 +231,9 @@ pnpm dev:asset              # :3002 (scaffold)
 pnpm dev:maintenance        # :3003 (scaffold)
 pnpm dev:workorder          # :3004 (scaffold)
 pnpm dev:notification       # :3005 (scaffold)
+pnpm dev:organization       # :3006 (scaffold)
+pnpm dev:service-request    # :3007 (scaffold)
+pnpm dev:inventory          # :3008 (scaffold)
 ```
 
 Mobile (cần Flutter SDK):
