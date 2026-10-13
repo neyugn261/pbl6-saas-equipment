@@ -12,6 +12,9 @@ coverage/
 # Nest
 apps/*/dist/
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # Vite
 apps/web/dist/
 

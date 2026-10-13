@@ -7,7 +7,6 @@
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
-
     "dev:gateway": "pnpm --filter api-gateway start:dev",
     "dev:identity": "pnpm --filter identity-service start:dev",
     "dev:asset": "pnpm --filter asset-service start:dev",
@@ -15,9 +14,14 @@
     "dev:workorder": "pnpm --filter workorder-service start:dev",
     "dev:notification": "pnpm --filter notification-service start:dev",
     "dev:web": "pnpm --filter web dev",
-
     "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm -r --if-present test:e2e",
     "lint": "pnpm -r --if-present lint"
+  },
+  "packageManager": "pnpm@11.26.0",
+  "engines": {
+    "node": ">=24.9"
   }
 }
