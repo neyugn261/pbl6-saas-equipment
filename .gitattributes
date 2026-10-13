@@ -1,0 +1,7 @@
+# Keep LF in the working tree on every OS. Prisma checksums migration.sql, so
+# a CRLF checkout on Windows would make applied migrations look modified.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
