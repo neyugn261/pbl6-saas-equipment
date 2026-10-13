@@ -16,6 +16,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./infrastructure/postgres/dev-databases.sql:/docker-entrypoint-initdb.d/02-dev-databases.sql:ro
 
     networks:
       - pbl6-network

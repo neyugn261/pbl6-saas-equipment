@@ -1,0 +1,212 @@
+// Organization Service — organization_db
+//
+// Source of truth for the table structure is prisma/migrations/0001_init
+// (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
+// Prisma Client. Partial unique indexes and CHECK constraints live only in
+// the migration; see prisma/README.md before changing anything here.
+//
+// Children reference their parent with a composite key (tenant_id, parent_id)
+// so a row can never point to a parent of another tenant.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// status: ACTIVE | SUSPENDED | DISABLED. Soft-deleted with deleted_at.
+model Tenant {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code      String    @unique @db.VarChar(50)
+  name      String    @db.VarChar(200)
+  status    String    @default("ACTIVE") @db.VarChar(30)
+  /// Informational only; subscription management is out of MVP scope.
+  plan      String    @default("BASIC") @db.VarChar(50)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  branches  Branch[]
+  customers Customer[]
+
+  @@map("tenants")
+}
+
+/// Internal branch of the equipment vendor (not a customer site).
+/// status: ACTIVE | INACTIVE.
+model Branch {
+  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                 @map("tenant_id") @db.Uuid
+  code              String                 @db.VarChar(50)
+  name              String                 @db.VarChar(150)
+  address           String
+  phone             String?                @db.VarChar(30)
+  email             String?                @db.VarChar(255)
+  status            String                 @default("ACTIVE") @db.VarChar(30)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt         DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  servicedSites     CustomerSite[]
+  userAssignments   BranchUserAssignment[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, id])
+  @@index([tenantId, status], map: "idx_branches_tenant_status")
+  @@map("branches")
+}
+
+/// Business served by a tenant; not a tenant itself. status: ACTIVE | INACTIVE.
+model Customer {
+  id          String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String                   @map("tenant_id") @db.Uuid
+  code        String                   @db.VarChar(50)
+  name        String                   @db.VarChar(200)
+  taxCode     String?                  @map("tax_code") @db.VarChar(50)
+  phone       String?                  @db.VarChar(30)
+  email       String?                  @db.VarChar(255)
+  address     String?
+  status      String                   @default("ACTIVE") @db.VarChar(30)
+  createdAt   DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  sites       CustomerSite[]
+  contacts    CustomerContact[]
+  memberships CustomerUserMembership[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, id])
+  @@index([tenantId, status], map: "idx_customers_tenant_status")
+  @@map("customers")
+}
+
+/// Physical location of a customer. Latitude/longitude ranges are CHECKed in SQL.
+model CustomerSite {
+  id                       String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String            @map("tenant_id") @db.Uuid
+  customerId               String            @map("customer_id") @db.Uuid
+  code                     String            @db.VarChar(50)
+  name                     String            @db.VarChar(150)
+  address                  String
+  latitude                 Decimal?          @db.Decimal(9, 6)
+  longitude                Decimal?          @db.Decimal(9, 6)
+  defaultServicingBranchId String?           @map("default_servicing_branch_id") @db.Uuid
+  status                   String            @default("ACTIVE") @db.VarChar(30)
+  createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt                DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  customer                 Customer          @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  defaultServicingBranch   Branch?           @relation(fields: [tenantId, defaultServicingBranchId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  locations                Location[]
+  contacts                 CustomerContact[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, id])
+  @@unique([customerId, id])
+  @@index([customerId, status], map: "idx_customer_sites_customer")
+  @@map("customer_sites")
+}
+
+/// Hierarchical location inside a site; the parent must be in the same site.
+/// type: BUILDING | FLOOR | ROOM | AREA. Deeper cycles are rejected by the service.
+model Location {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  customerSiteId String       @map("customer_site_id") @db.Uuid
+  parentId       String?      @map("parent_id") @db.Uuid
+  code           String?      @db.VarChar(50)
+  name           String       @db.VarChar(150)
+  type           String       @db.VarChar(30)
+  description    String?
+  status         String       @default("ACTIVE") @db.VarChar(30)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz(6)
+  customerSite   CustomerSite @relation(fields: [tenantId, customerSiteId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  parent         Location?    @relation("LocationTree", fields: [customerSiteId, parentId], references: [customerSiteId, id], onDelete: Restrict, onUpdate: NoAction)
+  children       Location[]   @relation("LocationTree")
+
+  @@unique([customerSiteId, id])
+  @@index([customerSiteId, parentId], map: "idx_locations_site_parent")
+  @@index([tenantId, customerSiteId], map: "idx_locations_tenant")
+  @@map("locations")
+}
+
+/// At most one live primary contact per customer (partial unique index in SQL).
+model CustomerContact {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  customerId     String        @map("customer_id") @db.Uuid
+  customerSiteId String?       @map("customer_site_id") @db.Uuid
+  name           String        @db.VarChar(150)
+  email          String?       @db.VarChar(255)
+  phone          String?       @db.VarChar(30)
+  position       String?       @db.VarChar(100)
+  isPrimary      Boolean       @default(false) @map("is_primary")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz(6)
+  customer       Customer      @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  customerSite   CustomerSite? @relation(fields: [customerId, customerSiteId], references: [customerId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, customerId], map: "idx_customer_contacts_customer")
+  @@map("customer_contacts")
+}
+
+/// user_id is a TENANT_STAFF account of the same tenant (validated via Identity API).
+/// At most one primary branch per user (partial unique index in SQL).
+model BranchUserAssignment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  branchId  String   @map("branch_id") @db.Uuid
+  /// Logical reference to identity_db.users.id
+  userId    String   @map("user_id") @db.Uuid
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  branch    Branch   @relation(fields: [tenantId, branchId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([branchId, userId])
+  @@index([userId], map: "idx_branch_user_assignments_user")
+  @@map("branch_user_assignments")
+}
+
+/// Links a CUSTOMER account to one Customer. Not a source of authorization:
+/// Customer Admin / Customer User roles live in Identity.
+model CustomerUserMembership {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  /// Logical reference to identity_db.users.id; one Customer per account.
+  userId     String   @unique @map("user_id") @db.Uuid
+  status     String   @default("ACTIVE") @db.VarChar(30)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer   Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, customerId, status], map: "idx_customer_user_memberships_customer")
+  @@map("customer_user_memberships")
+}
+
+/// Transactional outbox; id is the event id sent to consumers.
+/// status: PENDING | PUBLISHED | FAILED.
+model OutboxEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(100)
+  eventVersion  Int       @default(1) @map("event_version") @db.SmallInt
+  payload       Json
+  status        String    @default("PENDING") @db.VarChar(20)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastError     String?   @map("last_error")
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}

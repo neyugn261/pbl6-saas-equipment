@@ -3,4 +3,4 @@
 Scaffold — business endpoints are not implemented yet.
 
 - Port: `SERVICE_REQUEST_SERVICE_PORT` (default 3007)
-- Database: `service_request_db` via `SERVICE_REQUEST_DATABASE_URL`
+- Database: `service_request_db` via `SERVICE_REQUEST_DATABASE_URL` — see [prisma/README.md](prisma/README.md)

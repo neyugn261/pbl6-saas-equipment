@@ -26,8 +26,8 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-  identity-db:
-    name: Identity migrations and e2e (PostgreSQL 17)
+  databases:
+    name: Migrations, drift check and Identity e2e (PostgreSQL 17)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -47,6 +47,20 @@ jobs:
       PGPASSWORD: pbl6_ci_password
       IDENTITY_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_db
       IDENTITY_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_shadow_db
+      ORGANIZATION_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_db
+      ORGANIZATION_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_shadow_db
+      ASSET_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_db
+      ASSET_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_shadow_db
+      SERVICE_REQUEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_db
+      SERVICE_REQUEST_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_shadow_db
+      WORKORDER_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/workorder_db
+      WORKORDER_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/workorder_shadow_db
+      MAINTENANCE_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_db
+      MAINTENANCE_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_shadow_db
+      INVENTORY_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_db
+      INVENTORY_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_shadow_db
+      NOTIFICATION_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_db
+      NOTIFICATION_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_shadow_db
       IDENTITY_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_test_db
     steps:
       - uses: actions/checkout@v4
@@ -56,22 +70,26 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Create databases (bootstrap script, run twice to prove it is idempotent)
+      - name: Create databases (bootstrap scripts, run twice to prove they are idempotent)
         run: |
-          psql -h localhost -U pbl6 -d postgres -f infrastructure/postgres/init.sql
-          psql -h localhost -U pbl6 -d postgres -f infrastructure/postgres/init.sql
-          psql -h localhost -U pbl6 -d postgres -c 'CREATE DATABASE identity_shadow_db' -c 'CREATE DATABASE identity_test_db'
-      - name: Apply migrations
-        working-directory: apps/identity-service
+          for f in infrastructure/postgres/init.sql infrastructure/postgres/dev-databases.sql; do
+            psql -h localhost -U pbl6 -d postgres -f "$f"
+            psql -h localhost -U pbl6 -d postgres -f "$f"
+          done
+      - name: Apply migrations of every service (twice)
         run: pnpm db:migrate && pnpm db:migrate
-      - name: Check schema drift (migrations vs schema.prisma vs database)
-        working-directory: apps/identity-service
+      - name: Check schema drift (migrations vs schema.prisma)
+        run: pnpm db:check-drift
+      - name: Check schema drift (database vs schema.prisma)
         run: |
-          pnpm db:check-drift
-          pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
-      - name: Seed (twice, must be idempotent)
+          for svc in identity-service organization-service asset-service service-request-service workorder-service maintenance-service inventory-service notification-service; do
+            echo "::group::$svc"
+            (cd "apps/$svc" && pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code)
+            echo "::endgroup::"
+          done
+      - name: Seed Identity (twice, must be idempotent)
         working-directory: apps/identity-service
         run: pnpm db:seed && pnpm db:seed
-      - name: e2e tests
+      - name: Identity e2e tests
         working-directory: apps/identity-service
         run: pnpm test:e2e

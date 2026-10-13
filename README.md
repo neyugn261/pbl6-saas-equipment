@@ -28,22 +28,22 @@ Nền tảng SaaS quản lý bảo hành, bảo trì và điều phối kỹ thu
 
 ```text
 apps/
-  api-gateway/            :3000  scaffold
-  identity-service/       :3001  ✅ auth (login/refresh/logout/me), Prisma, tests
-  asset-service/          :3002  scaffold
-  maintenance-service/    :3003  scaffold
-  workorder-service/      :3004  scaffold
-  notification-service/   :3005  scaffold
-  organization-service/   :3006  scaffold
-  service-request-service/:3007  scaffold
-  inventory-service/      :3008  scaffold
-  web/                    :5173  prototype UI, dữ liệu mock (chưa nối API)
-  mobile/                        Flutter template
-infrastructure/postgres/  init.sql — tạo 8 database rỗng cho các service
-docs/                     SRS, ADR, ERD
+  api-gateway/              :3000  scaffold
+  identity-service/         :3001  ✅ auth (login/refresh/logout/me), Prisma, tests
+  asset-service/            :3002  scaffold + schema asset_db
+  maintenance-service/      :3003  scaffold + schema maintenance_db
+  workorder-service/        :3004  scaffold + schema workorder_db
+  notification-service/     :3005  scaffold + schema notification_db
+  organization-service/     :3006  scaffold + schema organization_db
+  service-request-service/  :3007  scaffold + schema service_request_db
+  inventory-service/        :3008  scaffold + schema inventory_db
+  web/                      :5173  prototype UI, dữ liệu mock (chưa nối API)
+  mobile/                          Flutter template
+infrastructure/postgres/    init.sql (8 database của service), dev-databases.sql (shadow/test DB)
+docs/                       SRS, ADR, ERD
 ```
 
-Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
+Cả 8 service backend đều có Prisma migration `0001_init` cho database riêng (chép từ `docs/erd/pbl6-schema-v3.1.sql`). Chỉ Identity đã có API nghiệp vụ; các service còn lại mới có schema. Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
 
 ## 2. Yêu cầu hệ thống
 
@@ -165,20 +165,33 @@ docker ps --filter name=pbl6-postgres
 
 Nếu cột PORTS trống, xem [mục 8](#cổng-5432-đã-bị-chiếm).
 
-### 4.4. Tạo database phụ (chỉ làm một lần)
+### 4.4. Database
 
-`init.sql` tự tạo 8 database của các service ở lần chạy đầu tiên. Identity Service cần thêm hai database: shadow database cho kiểm tra drift và database riêng cho e2e test. Lệnh dưới đây chạy được trên cả bash và PowerShell:
+Lần đầu khởi động (volume còn trống), PostgreSQL tự chạy hai script:
+
+- `init.sql` — 8 database của các service (`identity_db`, `organization_db`, …)
+- `dev-databases.sql` — shadow database `<service>_shadow_db` (cho `migrate dev` / drift check) và `identity_test_db` (cho e2e test)
+
+Nếu bạn đã chạy `infra:up` **trước** khi có `dev-databases.sql` (volume cũ), tạo bổ sung bằng hai lệnh sau (chạy được trên cả bash và PowerShell, chạy lại nhiều lần không sao):
 
 ```bash
-docker compose exec postgres psql -U pbl6 -d postgres -c "CREATE DATABASE identity_shadow_db" -c "CREATE DATABASE identity_test_db"
+docker compose up -d
+docker compose exec postgres psql -U pbl6 -d postgres -f /docker-entrypoint-initdb.d/02-dev-databases.sql
 ```
 
-Nếu báo `already exists` nghĩa là đã tạo rồi, bỏ qua.
+Áp migration cho **tất cả** service (tạo bảng trong 8 database):
+
+```bash
+pnpm db:migrate
+pnpm db:check-drift       # tuỳ chọn: xác nhận schema.prisma khớp migration
+```
+
+> `.env` tạo trước ngày có các service mới sẽ thiếu biến `*_SHADOW_DATABASE_URL`; copy các dòng đó từ `.env.example` nếu muốn chạy `db:check-drift`.
 
 ## 5. Chạy Identity Service
 
 ```bash
-pnpm identity:migrate       # áp migration vào identity_db (prisma migrate deploy)
+pnpm identity:migrate       # chỉ identity_db (đã nằm trong `pnpm db:migrate` ở bước 4.4)
 pnpm identity:seed:dev      # permission catalog + tenant DEMO + tài khoản demo
 pnpm dev:identity           # chạy ở http://localhost:3001 (watch mode)
 ```
@@ -226,14 +239,14 @@ API, cơ chế token và lỗi trả về: [apps/identity-service/README.md](app
 
 ```bash
 pnpm dev:web                # Web prototype: http://localhost:5173
-pnpm dev:gateway            # :3000 (scaffold)
-pnpm dev:asset              # :3002 (scaffold)
-pnpm dev:maintenance        # :3003 (scaffold)
-pnpm dev:workorder          # :3004 (scaffold)
-pnpm dev:notification       # :3005 (scaffold)
-pnpm dev:organization       # :3006 (scaffold)
-pnpm dev:service-request    # :3007 (scaffold)
-pnpm dev:inventory          # :3008 (scaffold)
+pnpm dev:gateway            # :3000
+pnpm dev:asset              # :3002
+pnpm dev:maintenance        # :3003
+pnpm dev:workorder          # :3004
+pnpm dev:notification       # :3005
+pnpm dev:organization       # :3006
+pnpm dev:service-request    # :3007
+pnpm dev:inventory          # :3008
 ```
 
 Mobile (cần Flutter SDK):
@@ -258,9 +271,11 @@ pnpm build
 
 - E2E của Identity **xoá dữ liệu** trong database test, nên chỉ chạy khi tên database có chữ `test` (mặc định `identity_test_db`).
 - Jest chạy với `--experimental-vm-modules` vì NestJS 12 chỉ phát hành dạng ESM; các script `test` đã có sẵn cờ này.
-- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR, kèm migration + drift check + seed + e2e của Identity trên PostgreSQL 17.
+- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR, kèm migration + drift check của cả 8 database và seed + e2e của Identity trên PostgreSQL 17.
 
-Các lệnh database của Identity (chạy trong `apps/identity-service`):
+Lệnh database ở root: `pnpm db:migrate` (mọi service), `pnpm db:check-drift` (mọi service). Mỗi service có cùng bộ lệnh `db:migrate`, `db:check-drift`, `db:migrate:dev`, `prisma:generate` (chạy trong `apps/<service>`); quy tắc migration: [apps/identity-service/prisma/README.md](apps/identity-service/prisma/README.md).
+
+Các lệnh database riêng của Identity (chạy trong `apps/identity-service`):
 
 | Lệnh | Tác dụng |
 |---|---|

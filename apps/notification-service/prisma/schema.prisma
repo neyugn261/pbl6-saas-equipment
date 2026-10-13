@@ -1,0 +1,52 @@
+// Notification Service — notification_db
+//
+// Source of truth for the table structure is prisma/migrations/0001_init
+// (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
+// Prisma Client. Partial indexes and CHECK constraints live only in the
+// migration; see prisma/README.md before changing anything here.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// channel: IN_APP | EMAIL | PUSH. status (delivery): PENDING | SENT | FAILED.
+/// read_at is only allowed for IN_APP (CHECK in SQL). (source_event_id,
+/// user_id, channel) is unique when source_event_id is set (partial unique in
+/// SQL), so a replayed event never notifies twice.
+model Notification {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// NULL may represent a platform-level notification.
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  /// Logical reference to identity_db.users.id
+  userId        String    @map("user_id") @db.Uuid
+  sourceEventId String?   @map("source_event_id") @db.Uuid
+  type          String    @db.VarChar(50)
+  title         String    @db.VarChar(200)
+  content       String
+  payload       Json?
+  channel       String    @db.VarChar(20)
+  status        String    @default("PENDING") @db.VarChar(20)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(6)
+  readAt        DateTime? @map("read_at") @db.Timestamptz(6)
+
+  @@index([tenantId, type, createdAt(sort: Desc)], map: "idx_notifications_tenant_type")
+  @@map("notifications")
+}
+
+/// Inbox for idempotent event consumers.
+model ProcessedEvent {
+  eventId     String   @map("event_id") @db.Uuid
+  consumer    String   @db.VarChar(100)
+  eventType   String   @map("event_type") @db.VarChar(100)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([eventId, consumer])
+  @@map("processed_events")
+}

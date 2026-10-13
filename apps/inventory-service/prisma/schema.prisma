@@ -1,0 +1,153 @@
+// Inventory Service — inventory_db (MVP: parts, warehouses, stock, basic
+// low-stock alert; no part-request workflow)
+//
+// Source of truth for the table structure is prisma/migrations/0001_init
+// (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
+// Prisma Client. Partial indexes and CHECK constraints live only in the
+// migration; see prisma/README.md before changing anything here.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// status: ACTIVE | INACTIVE.
+model Part {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  sku               String             @db.VarChar(100)
+  name              String             @db.VarChar(200)
+  unit              String             @db.VarChar(30)
+  description       String?
+  status            String             @default("ACTIVE") @db.VarChar(30)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  stocks            Stock[]
+  stockTransactions StockTransaction[]
+  workOrderParts    WorkOrderPart[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, id])
+  @@index([tenantId, status], map: "idx_parts_tenant_status")
+  @@map("parts")
+}
+
+/// status: ACTIVE | INACTIVE.
+model Warehouse {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  /// Logical reference to organization_db.branches.id
+  branchId          String             @map("branch_id") @db.Uuid
+  code              String             @db.VarChar(50)
+  name              String             @db.VarChar(150)
+  address           String?
+  status            String             @default("ACTIVE") @db.VarChar(30)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  stocks            Stock[]
+  stockTransactions StockTransaction[]
+  workOrderParts    WorkOrderPart[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, id])
+  @@index([tenantId, branchId, status], map: "idx_warehouses_tenant_branch")
+  @@map("warehouses")
+}
+
+/// Low stock: quantity < min_quantity (partial index in SQL). low_stock_alerted_at
+/// is set when an alert event is written and cleared on replenishment.
+/// quantity and min_quantity are >= 0 (CHECK in SQL).
+model Stock {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  warehouseId       String    @map("warehouse_id") @db.Uuid
+  partId            String    @map("part_id") @db.Uuid
+  quantity          Decimal   @default(0) @db.Decimal(12, 2)
+  minQuantity       Decimal   @default(0) @map("min_quantity") @db.Decimal(12, 2)
+  lowStockAlertedAt DateTime? @map("low_stock_alerted_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  warehouse         Warehouse @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  part              Part      @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([warehouseId, partId])
+  @@index([tenantId, partId, warehouseId], map: "idx_stocks_part_warehouse")
+  @@map("stocks")
+}
+
+/// quantity is always positive; the direction comes from type:
+///   IN : RECEIVE, RETURN, ADJUST_IN    OUT: ISSUE, ADJUST_OUT
+/// The matching stocks.quantity change happens in the same transaction.
+model StockTransaction {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String          @map("tenant_id") @db.Uuid
+  warehouseId    String          @map("warehouse_id") @db.Uuid
+  partId         String          @map("part_id") @db.Uuid
+  type           String          @db.VarChar(20)
+  quantity       Decimal         @db.Decimal(12, 2)
+  referenceType  String?         @map("reference_type") @db.VarChar(30)
+  referenceId    String?         @map("reference_id") @db.Uuid
+  note           String?
+  /// Logical reference to identity_db.users.id
+  createdBy      String?         @map("created_by") @db.Uuid
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  warehouse      Warehouse       @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  part           Part            @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  /// At most one row: work_order_parts.stock_transaction_id is UNIQUE in SQL.
+  /// Modelled as a list because the composite FK is not itself unique.
+  workOrderParts WorkOrderPart[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, partId, createdAt(sort: Desc)], map: "idx_stock_transactions_part_time")
+  @@index([tenantId, warehouseId, createdAt(sort: Desc)], map: "idx_stock_transactions_warehouse_time")
+  @@index([referenceType, referenceId], map: "idx_stock_transactions_reference")
+  @@map("stock_transactions")
+}
+
+/// Parts issued for a Work Order; each row is backed by exactly one ISSUE
+/// stock transaction.
+model WorkOrderPart {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  /// Logical reference to workorder_db.work_orders.id
+  workOrderId        String           @map("work_order_id") @db.Uuid
+  partId             String           @map("part_id") @db.Uuid
+  warehouseId        String           @map("warehouse_id") @db.Uuid
+  stockTransactionId String           @unique @map("stock_transaction_id") @db.Uuid
+  quantityUsed       Decimal          @map("quantity_used") @db.Decimal(12, 2)
+  unitCost           Decimal?         @map("unit_cost") @db.Decimal(14, 2)
+  /// Logical reference to identity_db.users.id
+  recordedBy         String           @map("recorded_by") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  part               Part             @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  warehouse          Warehouse        @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  stockTransaction   StockTransaction @relation(fields: [tenantId, stockTransactionId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, workOrderId], map: "idx_work_order_parts_work_order")
+  @@index([tenantId, partId, createdAt(sort: Desc)], map: "idx_work_order_parts_part")
+  @@map("work_order_parts")
+}
+
+/// Transactional outbox; id is the event id sent to consumers.
+/// status: PENDING | PUBLISHED | FAILED.
+model OutboxEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(100)
+  eventVersion  Int       @default(1) @map("event_version") @db.SmallInt
+  payload       Json
+  status        String    @default("PENDING") @db.VarChar(20)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastError     String?   @map("last_error")
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}

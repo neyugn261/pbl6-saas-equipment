@@ -1,0 +1,94 @@
+// Maintenance Service — maintenance_db (MVP: plans and tasks, no checklist)
+//
+// Source of truth for the table structure is prisma/migrations/0001_init
+// (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
+// Prisma Client. Partial unique indexes and CHECK constraints live only in
+// the migration; see prisma/README.md before changing anything here.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// frequency_unit: DAY | WEEK | MONTH | YEAR (frequency_value > 0).
+/// status: ACTIVE | PAUSED | INACTIVE.
+model MaintenancePlan {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  /// Logical reference to asset_db.equipments.id
+  equipmentId     String            @map("equipment_id") @db.Uuid
+  name            String            @db.VarChar(200)
+  description     String?
+  frequencyUnit   String            @map("frequency_unit") @db.VarChar(20)
+  frequencyValue  Int               @map("frequency_value")
+  lastCompletedAt DateTime?         @map("last_completed_at") @db.Timestamptz(6)
+  nextDueDate     DateTime          @map("next_due_date") @db.Date
+  status          String            @default("ACTIVE") @db.VarChar(30)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tasks           MaintenanceTask[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, nextDueDate, status], map: "idx_maintenance_plans_due")
+  @@index([tenantId, equipmentId], map: "idx_maintenance_plans_equipment")
+  @@map("maintenance_plans")
+}
+
+/// One task per plan and scheduled date. work_order_id is set from Work Order
+/// events and is unique when present (partial unique index in SQL).
+/// status: PENDING | WORK_ORDER_CREATED | COMPLETED | FAILED | CANCELLED.
+model MaintenanceTask {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  maintenancePlanId String          @map("maintenance_plan_id") @db.Uuid
+  scheduledDate     DateTime        @map("scheduled_date") @db.Date
+  /// Logical reference to workorder_db.work_orders.id
+  workOrderId       String?         @map("work_order_id") @db.Uuid
+  status            String          @default("PENDING") @db.VarChar(30)
+  attemptCount      Int             @default(0) @map("attempt_count")
+  lastError         String?         @map("last_error")
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  completedAt       DateTime?       @map("completed_at") @db.Timestamptz(6)
+  maintenancePlan   MaintenancePlan @relation(fields: [tenantId, maintenancePlanId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([maintenancePlanId, scheduledDate])
+  @@index([tenantId, status, scheduledDate], map: "idx_maintenance_tasks_status_date")
+  @@map("maintenance_tasks")
+}
+
+/// Transactional outbox; id is the event id sent to consumers.
+/// status: PENDING | PUBLISHED | FAILED.
+model OutboxEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(100)
+  eventVersion  Int       @default(1) @map("event_version") @db.SmallInt
+  payload       Json
+  status        String    @default("PENDING") @db.VarChar(20)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastError     String?   @map("last_error")
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+/// Inbox for idempotent event consumers.
+model ProcessedEvent {
+  eventId     String   @map("event_id") @db.Uuid
+  consumer    String   @db.VarChar(100)
+  eventType   String   @map("event_type") @db.VarChar(100)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([eventId, consumer])
+  @@map("processed_events")
+}

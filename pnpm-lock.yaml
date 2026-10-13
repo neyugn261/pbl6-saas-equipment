@@ -256,6 +256,18 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.1)(supports-color@8.1.1)
+      '@prisma/adapter-pg':
+        specifier: 7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -284,6 +296,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.4
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.1
@@ -296,6 +311,9 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.9.6
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
@@ -441,6 +459,18 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.1)(supports-color@8.1.1)
+      '@prisma/adapter-pg':
+        specifier: 7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -469,6 +499,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.4
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.1
@@ -481,6 +514,9 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.9.6
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
@@ -517,6 +553,18 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.1)(supports-color@8.1.1)
+      '@prisma/adapter-pg':
+        specifier: 7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -545,6 +593,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.4
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.1
@@ -557,6 +608,9 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.9.6
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
@@ -593,6 +647,18 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.1)(supports-color@8.1.1)
+      '@prisma/adapter-pg':
+        specifier: 7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -621,6 +687,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.4
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.1
@@ -633,6 +702,9 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.9.6
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
@@ -669,6 +741,18 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.1)(supports-color@8.1.1)
+      '@prisma/adapter-pg':
+        specifier: 7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -697,6 +781,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.4
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.1
@@ -709,6 +796,9 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.9.6
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
@@ -745,6 +835,18 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.1)(supports-color@8.1.1)
+      '@prisma/adapter-pg':
+        specifier: 7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -773,6 +875,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.4
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.1
@@ -785,6 +890,9 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.9.6
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
@@ -876,6 +984,18 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.0.1)(supports-color@8.1.1)
+      '@prisma/adapter-pg':
+        specifier: 7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: 7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -904,6 +1024,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.4
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       '@types/supertest':
         specifier: ^7.0.0
         version: 7.2.1
@@ -916,6 +1039,9 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.9.6
+      prisma:
+        specifier: 7.10.0
+        version: 7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21

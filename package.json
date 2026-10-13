@@ -20,6 +20,8 @@
     "identity:migrate": "pnpm --filter identity-service db:migrate",
     "identity:seed": "pnpm --filter identity-service db:seed",
     "identity:seed:dev": "pnpm --filter identity-service db:seed:dev",
+    "db:migrate": "pnpm -r --if-present db:migrate",
+    "db:check-drift": "pnpm -r --if-present db:check-drift",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",

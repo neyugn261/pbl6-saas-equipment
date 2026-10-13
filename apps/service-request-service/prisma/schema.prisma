@@ -1,0 +1,206 @@
+// Service Request Service — service_request_db
+//
+// Source of truth for the table structure is prisma/migrations/0001_init
+// (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
+// Prisma Client. Partial unique indexes, CHECK constraints and the generated
+// column cost_estimate_items.amount live only in the migration; see
+// prisma/README.md before changing anything here.
+//
+// customer_id, equipment_id, warranty_id and *_by user ids are logical
+// references to other services and are validated by the service layer.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Concurrency-safe per-tenant display numbers (e.g. sequence_key 'SR-2026'),
+/// incremented with INSERT ... ON CONFLICT DO UPDATE ... RETURNING.
+model DocumentSequence {
+  tenantId    String @map("tenant_id") @db.Uuid
+  sequenceKey String @map("sequence_key") @db.VarChar(50)
+  lastValue   BigInt @map("last_value")
+
+  @@id([tenantId, sequenceKey])
+  @@map("document_sequences")
+}
+
+/// type: WARRANTY | REPAIR | MAINTENANCE | INSPECTION.
+/// priority: LOW | NORMAL | HIGH | URGENT.
+/// status: NEW | REVIEWING | AWAITING_INFO | AWAITING_CUSTOMER_APPROVAL | ACCEPTED |
+///         PROCESSING | RESOLVED | CLOSED | REJECTED | CANCELLED | COST_REJECTED.
+/// The warranty_* columns are the decision snapshot frozen at review time;
+/// warranty_check_result: IN_WARRANTY | OUT_OF_WARRANTY | NO_WARRANTY.
+model ServiceRequest {
+  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                 @map("tenant_id") @db.Uuid
+  requestNo           String                 @map("request_no") @db.VarChar(50)
+  /// Logical reference to organization_db.customers.id
+  customerId          String                 @map("customer_id") @db.Uuid
+  /// Logical reference to asset_db.equipments.id
+  equipmentId         String                 @map("equipment_id") @db.Uuid
+  /// Logical reference to identity_db.users.id
+  requesterId         String                 @map("requester_id") @db.Uuid
+  type                String                 @db.VarChar(30)
+  priority            String                 @default("NORMAL") @db.VarChar(20)
+  title               String                 @db.VarChar(200)
+  description         String
+  status              String                 @default("NEW") @db.VarChar(40)
+  warrantyCheckResult String?                @map("warranty_check_result") @db.VarChar(30)
+  /// Logical reference to asset_db.warranties.id
+  warrantyId          String?                @map("warranty_id") @db.Uuid
+  warrantyEndDate     DateTime?              @map("warranty_end_date") @db.Date
+  warrantyCheckedBy   String?                @map("warranty_checked_by") @db.Uuid
+  warrantyCheckedAt   DateTime?              @map("warranty_checked_at") @db.Timestamptz(6)
+  reviewStartedAt     DateTime?              @map("review_started_at") @db.Timestamptz(6)
+  resolvedAt          DateTime?              @map("resolved_at") @db.Timestamptz(6)
+  confirmedBy         String?                @map("confirmed_by") @db.Uuid
+  confirmedAt         DateTime?              @map("confirmed_at") @db.Timestamptz(6)
+  closedAt            DateTime?              @map("closed_at") @db.Timestamptz(6)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attachments         RequestAttachment[]
+  comments            RequestComment[]
+  statusHistory       RequestStatusHistory[]
+  costEstimates       CostEstimate[]
+
+  @@unique([tenantId, requestNo])
+  @@unique([tenantId, id])
+  @@index([tenantId, status], map: "idx_service_requests_tenant_status")
+  @@index([tenantId, customerId], map: "idx_service_requests_tenant_customer")
+  @@index([tenantId, equipmentId], map: "idx_service_requests_tenant_equipment")
+  @@index([tenantId, createdAt(sort: Desc)], map: "idx_service_requests_created")
+  @@map("service_requests")
+}
+
+model RequestAttachment {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  requestId   String         @map("request_id") @db.Uuid
+  storageKey  String         @map("storage_key") @db.VarChar(500)
+  fileName    String         @map("file_name") @db.VarChar(255)
+  mimeType    String         @map("mime_type") @db.VarChar(100)
+  sizeBytes   BigInt?        @map("size_bytes")
+  /// Logical reference to identity_db.users.id
+  uploadedBy  String         @map("uploaded_by") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  request     ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([requestId], map: "idx_request_attachments_request")
+  @@map("request_attachments")
+}
+
+/// visibility: INTERNAL (default, never returned to customer accounts) | CUSTOMER.
+model RequestComment {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String         @map("tenant_id") @db.Uuid
+  requestId    String         @map("request_id") @db.Uuid
+  /// Logical reference to identity_db.users.id
+  authorUserId String         @map("author_user_id") @db.Uuid
+  visibility   String         @default("INTERNAL") @db.VarChar(20)
+  content      String
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  request      ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([requestId, visibility, createdAt], map: "idx_request_comments_request_time")
+  @@map("request_comments")
+}
+
+model RequestStatusHistory {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  requestId String         @map("request_id") @db.Uuid
+  oldStatus String?        @map("old_status") @db.VarChar(40)
+  newStatus String         @map("new_status") @db.VarChar(40)
+  /// Logical reference to identity_db.users.id; NULL when changed by an event.
+  changedBy String?        @map("changed_by") @db.Uuid
+  reason    String?
+  changedAt DateTime       @default(now()) @map("changed_at") @db.Timestamptz(6)
+  request   ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([requestId, changedAt], map: "idx_request_status_history_request_time")
+  @@map("request_status_history")
+}
+
+/// Versioned: a new revision supersedes a SENT one or answers a rejection.
+/// Only one live (DRAFT/SENT/APPROVED) revision per request (partial unique in SQL).
+/// status: DRAFT | SENT | APPROVED | REJECTED | EXPIRED | SUPERSEDED.
+/// total_amount must be recalculated in the same transaction as item changes.
+model CostEstimate {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String             @map("tenant_id") @db.Uuid
+  requestId   String             @map("request_id") @db.Uuid
+  revisionNo  Int                @map("revision_no")
+  currency    String             @default("VND") @db.Char(3)
+  totalAmount Decimal            @default(0) @map("total_amount") @db.Decimal(14, 2)
+  status      String             @default("DRAFT") @db.VarChar(30)
+  validUntil  DateTime?          @map("valid_until") @db.Date
+  notes       String?
+  /// Logical reference to identity_db.users.id
+  createdBy   String             @map("created_by") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  respondedBy String?            @map("responded_by") @db.Uuid
+  respondedAt DateTime?          @map("responded_at") @db.Timestamptz(6)
+  request     ServiceRequest     @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  items       CostEstimateItem[]
+
+  @@unique([requestId, revisionNo])
+  @@unique([tenantId, id])
+  @@index([tenantId, status, createdAt(sort: Desc)], map: "idx_cost_estimates_tenant_status")
+  @@map("cost_estimates")
+}
+
+/// item_type: LABOR | PART | TRAVEL | OTHER.
+model CostEstimateItem {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  estimateId  String       @map("estimate_id") @db.Uuid
+  itemType    String       @map("item_type") @db.VarChar(30)
+  description String       @db.VarChar(255)
+  quantity    Decimal      @db.Decimal(12, 2)
+  unitPrice   Decimal      @map("unit_price") @db.Decimal(14, 2)
+  /// GENERATED ALWAYS AS (round(quantity * unit_price, 2)) STORED in SQL.
+  /// Read-only: never set it in create/update.
+  amount      Decimal?     @default(dbgenerated("round((quantity * unit_price), 2)")) @db.Decimal(14, 2)
+  estimate    CostEstimate @relation(fields: [tenantId, estimateId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([estimateId], map: "idx_cost_estimate_items_estimate")
+  @@map("cost_estimate_items")
+}
+
+/// Transactional outbox; id is the event id sent to consumers.
+/// status: PENDING | PUBLISHED | FAILED.
+model OutboxEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(100)
+  eventVersion  Int       @default(1) @map("event_version") @db.SmallInt
+  payload       Json
+  status        String    @default("PENDING") @db.VarChar(20)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastError     String?   @map("last_error")
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+/// Inbox for idempotent event consumers.
+model ProcessedEvent {
+  eventId     String   @map("event_id") @db.Uuid
+  consumer    String   @db.VarChar(100)
+  eventType   String   @map("event_type") @db.VarChar(100)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([eventId, consumer])
+  @@map("processed_events")
+}
