@@ -1,6 +1,6 @@
 -- ============================================================================
 -- inventory_db 0001_init
--- Source: docs/erd/pbl6-schema-v3.1.sql lines 1022-1143 (section "inventory_db"),
+-- Source: docs/erd/pbl6-schema-v3.1.sql lines 1025-1146 (section "inventory_db"),
 -- copied verbatim. See docs/decisions/0001-database-v3.1.md.
 --
 -- PostgreSQL-specific objects that schema.prisma cannot represent (CHECK

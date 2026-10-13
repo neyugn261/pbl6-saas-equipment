@@ -1,6 +1,6 @@
 -- ============================================================================
 -- notification_db 0001_init
--- Source: docs/erd/pbl6-schema-v3.1.sql lines 1150-1185 (section "notification_db"),
+-- Source: docs/erd/pbl6-schema-v3.1.sql lines 1153-1188 (section "notification_db"),
 -- copied verbatim. See docs/decisions/0001-database-v3.1.md.
 --
 -- PostgreSQL-specific objects that schema.prisma cannot represent (CHECK

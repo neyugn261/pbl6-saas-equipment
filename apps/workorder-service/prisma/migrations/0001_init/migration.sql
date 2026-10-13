@@ -1,7 +1,8 @@
 -- ============================================================================
 -- workorder_db 0001_init
--- Source: docs/erd/pbl6-schema-v3.1.sql lines 718-941 (section "workorder_db"),
--- copied verbatim. See docs/decisions/0001-database-v3.1.md.
+-- Source: docs/erd/pbl6-schema-v3.1.sql lines 718-944 (section "workorder_db"),
+-- copied verbatim, including the ADR 0002 amendment (F07).
+-- See docs/decisions/0001-database-v3.1.md and 0002-*.md.
 --
 -- PostgreSQL-specific objects that schema.prisma cannot represent (CHECK
 -- constraints, partial/expression indexes, generated columns, triggers) are
@@ -89,8 +90,11 @@ CREATE TABLE work_orders (
 );
 CREATE INDEX idx_work_orders_service_request
     ON work_orders (service_request_id) WHERE service_request_id IS NOT NULL;
+-- One live Work Order per Maintenance Task; a CANCELLED one releases the task
+-- so a replacement can be created (ADR 0002, fixes audit finding F07).
 CREATE UNIQUE INDEX uq_work_orders_maintenance_task
-    ON work_orders (maintenance_task_id) WHERE maintenance_task_id IS NOT NULL;
+    ON work_orders (maintenance_task_id)
+    WHERE maintenance_task_id IS NOT NULL AND status <> 'CANCELLED';
 -- MVP rule: a Service Request can have only one non-terminal Work Order at a time.
 CREATE UNIQUE INDEX uq_active_workorder_per_request
     ON work_orders (service_request_id)

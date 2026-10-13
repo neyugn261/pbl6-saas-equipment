@@ -362,5 +362,6 @@ pnpm identity:seed:dev
 
 - [AGENTS.md](AGENTS.md) — phạm vi nghiệp vụ, kiến trúc, quy tắc phát triển
 - [docs/decisions/0001-database-v3.1.md](docs/decisions/0001-database-v3.1.md) — quyết định thiết kế database
+- [docs/decisions/0002-workorder-maintenance-task-index.md](docs/decisions/0002-workorder-maintenance-task-index.md) — sửa index WO ↔ Maintenance Task (F07)
 - [apps/identity-service/README.md](apps/identity-service/README.md) — API và cơ chế xác thực
 - [docs/FRONTEND_IMPLEMENTATION.md](docs/FRONTEND_IMPLEMENTATION.md) — route và luồng demo của web

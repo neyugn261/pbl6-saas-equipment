@@ -1,7 +1,7 @@
 // Work Order Service — workorder_db (also owns technician profiles)
 //
 // Source of truth for the table structure is prisma/migrations/0001_init
-// (copied from docs/erd/pbl6-schema-v3.1.sql).
+// (copied from docs/erd/pbl6-schema-v3.1.sql, including the ADR 0002 fix).
 // This file mirrors it for the Prisma Client. Partial unique indexes and CHECK
 // constraints live only in the migration; see prisma/README.md before
 // changing anything here.
@@ -84,7 +84,7 @@ model TechnicianSkill {
 
 /// Exactly one of service_request_id / maintenance_task_id is set (CHECK in SQL).
 /// Partial unique indexes in SQL: one non-terminal Work Order per Service
-/// Request, one Work Order per Maintenance Task.
+/// Request, one non-cancelled Work Order per Maintenance Task (ADR 0002).
 /// type: REPAIR | WARRANTY | MAINTENANCE | INSPECTION. priority: LOW | NORMAL | HIGH | URGENT.
 /// status: CREATED | ASSIGNED | ACCEPTED | TRAVELLING | IN_PROGRESS | ON_HOLD | COMPLETED | CANCELLED.
 model WorkOrder {
