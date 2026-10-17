@@ -173,7 +173,7 @@ Nếu cột PORTS trống, xem [mục 8](#cổng-5432-đã-bị-chiếm).
 Lần đầu khởi động (volume còn trống), PostgreSQL tự chạy hai script:
 
 - `init.sql` — 8 database của các service (`identity_db`, `organization_db`, …)
-- `dev-databases.sql` — shadow database `<service>_shadow_db` (cho `migrate dev` / drift check) và `identity_test_db` (cho e2e test)
+- `dev-databases.sql` — shadow database `<service>_shadow_db` (cho `migrate dev` / drift check) và `<service>_test_db` của Identity, Organization, Asset, Service Request (cho e2e test)
 
 Nếu bạn đã chạy `infra:up` **trước** khi có `dev-databases.sql` (volume cũ), tạo bổ sung bằng hai lệnh sau (chạy được trên cả bash và PowerShell, chạy lại nhiều lần không sao):
 

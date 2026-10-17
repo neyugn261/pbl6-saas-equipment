@@ -81,6 +81,9 @@ jobs:
       NOTIFICATION_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_db
       NOTIFICATION_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_shadow_db
       IDENTITY_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_test_db
+      ORGANIZATION_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_test_db
+      ASSET_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_test_db
+      SERVICE_REQUEST_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_test_db
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
