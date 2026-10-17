@@ -104,6 +104,74 @@ export interface ServiceRequestStatusChangedV1 {
   reason: string | null;
 }
 
+
+export const WORK_ORDER_TYPES = ['REPAIR', 'WARRANTY', 'MAINTENANCE', 'INSPECTION'] as const;
+export const REPORT_RESULTS = ['RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED'] as const;
+
+// Exactly one of serviceRequestId / maintenanceTaskId is set (work_orders CHECK).
+interface WorkOrderOrigin {
+  serviceRequestId: string | null;
+  maintenanceTaskId: string | null;
+}
+
+export interface WorkOrderCreatedV1 extends WorkOrderOrigin {
+  workOrderId: string;
+  workOrderNo: string;
+  equipmentId: string;
+  customerId: string;
+  type: (typeof WORK_ORDER_TYPES)[number];
+  priority: (typeof PRIORITIES)[number];
+}
+
+export interface WorkOrderAssignedV1 {
+  workOrderId: string;
+  workOrderNo: string;
+  technicianId: string;
+  /** identity_db.users.id of the technician, for notifications. */
+  technicianUserId: string;
+  assignedBy: string;
+  scheduledStart: string | null;
+}
+
+export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
+  workOrderId: string;
+  workOrderNo: string;
+  equipmentId: string;
+  customerId: string;
+  serviceReportId: string;
+  result: (typeof REPORT_RESULTS)[number];
+  completedAt: string;
+}
+
+export interface WorkOrderCancelledV1 extends WorkOrderOrigin {
+  workOrderId: string;
+  workOrderNo: string;
+  equipmentId: string;
+  reason: string | null;
+  cancelledAt: string;
+}
+
+export interface MaintenanceTaskDueV1 {
+  maintenanceTaskId: string;
+  maintenancePlanId: string;
+  equipmentId: string;
+  /** Snapshot kept by Maintenance so Work Order needs no synchronous call. */
+  customerId: string;
+  customerSiteId: string | null;
+  scheduledDate: string;
+  title: string;
+}
+
+export interface LowStockDetectedV1 {
+  stockId: string;
+  partId: string;
+  partSku: string;
+  warehouseId: string;
+  /** Decimal strings. */
+  quantity: string;
+  minQuantity: string;
+}
+
 export const Events = {
   TenantCreated: define<TenantCreatedV1>({
     type: 'TenantCreated',
@@ -172,6 +240,97 @@ export const Events = {
       toStatus: is.oneOf(SERVICE_REQUEST_STATUSES),
       changedBy: is.nullable(is.uuid),
       reason: is.nullable(is.string(2000)),
+    },
+  }),
+  WorkOrderCreated: define<WorkOrderCreatedV1>({
+    type: 'WorkOrderCreated',
+    version: 1,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      serviceRequestId: is.nullable(is.uuid),
+      maintenanceTaskId: is.nullable(is.uuid),
+      equipmentId: is.uuid,
+      customerId: is.uuid,
+      type: is.oneOf(WORK_ORDER_TYPES),
+      priority: is.oneOf(PRIORITIES),
+    },
+  }),
+  WorkOrderAssigned: define<WorkOrderAssignedV1>({
+    type: 'WorkOrderAssigned',
+    version: 1,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      technicianId: is.uuid,
+      technicianUserId: is.uuid,
+      assignedBy: is.uuid,
+      scheduledStart: is.nullable(is.isoDateTime),
+    },
+  }),
+  WorkOrderCompleted: define<WorkOrderCompletedV1>({
+    type: 'WorkOrderCompleted',
+    version: 1,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      serviceRequestId: is.nullable(is.uuid),
+      maintenanceTaskId: is.nullable(is.uuid),
+      equipmentId: is.uuid,
+      customerId: is.uuid,
+      serviceReportId: is.uuid,
+      result: is.oneOf(REPORT_RESULTS),
+      completedAt: is.isoDateTime,
+    },
+  }),
+  WorkOrderCancelled: define<WorkOrderCancelledV1>({
+    type: 'WorkOrderCancelled',
+    version: 1,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      serviceRequestId: is.nullable(is.uuid),
+      maintenanceTaskId: is.nullable(is.uuid),
+      equipmentId: is.uuid,
+      reason: is.nullable(is.string(2000)),
+      cancelledAt: is.isoDateTime,
+    },
+  }),
+  MaintenanceTaskDue: define<MaintenanceTaskDueV1>({
+    type: 'MaintenanceTaskDue',
+    version: 1,
+    aggregateType: 'MaintenanceTask',
+    producer: 'maintenance-service',
+    fields: {
+      maintenanceTaskId: is.uuid,
+      maintenancePlanId: is.uuid,
+      equipmentId: is.uuid,
+      customerId: is.uuid,
+      customerSiteId: is.nullable(is.uuid),
+      scheduledDate: is.isoDate,
+      title: is.string(200),
+    },
+  }),
+  LowStockDetected: define<LowStockDetectedV1>({
+    type: 'LowStockDetected',
+    version: 1,
+    aggregateType: 'Stock',
+    producer: 'inventory-service',
+    fields: {
+      stockId: is.uuid,
+      partId: is.uuid,
+      partSku: is.string(100),
+      warehouseId: is.uuid,
+      quantity: is.decimal,
+      minQuantity: is.decimal,
     },
   }),
 } as const;

@@ -18,6 +18,12 @@ export const is = {
     (values: readonly string[]): Check =>
     (value) =>
       typeof value === 'string' && values.includes(value),
+  isoDate: ((value) =>
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(Date.parse(value))) as Check,
+  /** Decimal as a string, e.g. "12.50" (money and quantities never travel as floats). */
+  decimal: ((value) => typeof value === 'string' && /^-?\d{1,12}(\.\d{1,4})?$/.test(value)) as Check,
   nullable:
     (check: Check): Check =>
     (value) =>

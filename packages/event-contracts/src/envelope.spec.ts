@@ -45,6 +45,44 @@ describe('event catalog', () => {
     ).toEqual([]);
   });
 
+  it('accepts the work order and stock contracts and their invariants', () => {
+    const id = TENANT;
+    expect(
+      payloadProblems(Events.WorkOrderCompleted, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0001',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        customerId: id,
+        serviceReportId: id,
+        result: 'RESOLVED',
+        completedAt: '2026-10-17T03:00:00Z',
+      }),
+    ).toEqual([]);
+    expect(
+      payloadProblems(Events.MaintenanceTaskDue, {
+        maintenanceTaskId: id,
+        maintenancePlanId: id,
+        equipmentId: id,
+        customerId: id,
+        customerSiteId: null,
+        scheduledDate: '2026-11-01T00:00:00Z',
+        title: 'Quarterly service',
+      }),
+    ).toEqual(['scheduledDate is missing or invalid']);
+    expect(
+      payloadProblems(Events.LowStockDetected, {
+        stockId: id,
+        partId: id,
+        partSku: 'FLT-01',
+        warehouseId: id,
+        quantity: 1.5,
+        minQuantity: '2',
+      }),
+    ).toEqual(['quantity is missing or invalid']);
+  });
+
   it('gives every event a unique type/version and a producer', () => {
     const keys = Object.values(Events).map(routingKey);
     expect(new Set(keys).size).toBe(keys.length);

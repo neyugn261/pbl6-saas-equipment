@@ -18,16 +18,22 @@ this page and that file must change in the same PR.
 `tenantId` is in the envelope, not repeated in payloads (except tenant events,
 where it is the aggregate).
 
-## Planned (owners add them with their milestone)
+Defined ahead of their milestone (v1 contracts, so producers and consumers can
+be built in parallel; the producer may still refine them through a PR before
+first use):
 
-| Event | Producer | Milestone | Main consumers |
-|---|---|---|---|
-| `WorkOrderCreated` | workorder-service | M2 | service-request (→ PROCESSING), maintenance (task ↔ WO) |
-| `WorkOrderAssigned` | workorder-service | M2 | notification |
-| `WorkOrderCompleted` | workorder-service | M2 | service-request (→ RESOLVED), asset (`equipment_history`), maintenance |
-| `WorkOrderCancelled` | workorder-service | M2 | service-request (→ ACCEPTED), maintenance (release task, ADR 0002) |
-| `MaintenanceTaskDue` | maintenance-service | M3 | workorder (create WO) |
-| `LowStockDetected` | inventory-service | M3 | notification |
+| Event (routing key) | Producer | Milestone | Payload | Consumers |
+|---|---|---|---|---|
+| `WorkOrderCreated.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, type, priority` | service-request (→ PROCESSING), maintenance (task ↔ WO) |
+| `WorkOrderAssigned.v1` | workorder-service | M2 | `workOrderId, workOrderNo, technicianId, technicianUserId, assignedBy, scheduledStart\|null` | notification (M3) |
+| `WorkOrderCompleted.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, serviceReportId, result, completedAt` | service-request (→ RESOLVED / ACCEPTED), asset (`equipment_history`), maintenance |
+| `WorkOrderCancelled.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelledAt` | service-request (→ ACCEPTED), maintenance (release task, ADR 0002) |
+| `MaintenanceTaskDue.v1` | maintenance-service | M2 | `maintenanceTaskId, maintenancePlanId, equipmentId, customerId, customerSiteId\|null, scheduledDate (YYYY-MM-DD), title` | workorder (create WO) |
+| `LowStockDetected.v1` | inventory-service | M3 | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
+
+`MaintenanceTaskDue` carries a customer snapshot because event consumers do
+not call other services synchronously (ADR 0004); Maintenance keeps that
+snapshot on the plan.
 
 ## Adding or changing an event
 
