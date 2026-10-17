@@ -29,21 +29,24 @@ Nền tảng SaaS quản lý bảo hành, bảo trì và điều phối kỹ thu
 ```text
 apps/
   api-gateway/              :3000  scaffold
-  identity-service/         :3001  ✅ auth (login/refresh/logout/me), Prisma, tests
-  asset-service/            :3002  scaffold + schema asset_db
+  identity-service/         :3001  ✅ auth (login/refresh/logout/me), claim customer_id, consumer tenant/membership events
+  asset-service/            :3002  ✅ nối packages/ (health, auth guard) + schema asset_db; chưa có API nghiệp vụ
   maintenance-service/      :3003  scaffold + schema maintenance_db
   workorder-service/        :3004  scaffold + schema workorder_db
   notification-service/     :3005  scaffold + schema notification_db
-  organization-service/     :3006  scaffold + schema organization_db
-  service-request-service/  :3007  scaffold + schema service_request_db
+  organization-service/     :3006  ✅ nối packages/ + schema organization_db; chưa có API nghiệp vụ
+  service-request-service/  :3007  ✅ nối packages/ + schema service_request_db; chưa có API nghiệp vụ
   inventory-service/        :3008  scaffold + schema inventory_db
   web/                      :5173  prototype UI, dữ liệu mock (chưa nối API)
   mobile/                          Flutter template
+packages/                   thư viện dùng chung: service-kit, auth, event-contracts, testing (packages/README.md)
 infrastructure/postgres/    init.sql (8 database của service), dev-databases.sql (shadow/test DB)
-docs/                       SRS, ADR, ERD
+docs/                       SRS, ADR, ERD, API contract, kiến trúc (event, state machine)
 ```
 
-Cả 8 service backend đều có Prisma migration `0001_init` cho database riêng (chép từ `docs/erd/pbl6-schema-v3.1.sql`). Chỉ Identity đã có API nghiệp vụ; các service còn lại mới có schema. Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
+Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; Identity thêm `0002_user_customer_links`). Chỉ Identity đã có API nghiệp vụ. Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
+
+Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác thực token và phân quyền theo catalog RBAC, phạm vi tenant/customer, định dạng lỗi `{code, message}`, log JSON có correlation id, `/health`, outbox/inbox và RabbitMQ. Quy trình làm việc nhóm: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 2. Yêu cầu hệ thống
 
@@ -262,16 +265,23 @@ Dừng hạ tầng: `pnpm infra:down` (dữ liệu vẫn giữ trong Docker volu
 ## 7. Kiểm tra (lint, test, build)
 
 ```bash
-pnpm lint                   # oxlint (services) + eslint (web); warning cũng là lỗi
+pnpm lint                   # oxlint (services, packages) + eslint (web); warning cũng là lỗi
 pnpm typecheck
 pnpm test                   # unit test, không cần database
 pnpm test:e2e               # e2e; Identity dùng IDENTITY_TEST_DATABASE_URL trong .env
 pnpm build
+pnpm build:packages         # build packages/* (typecheck/test/dev:* ở root tự gọi; cần khi chạy lệnh trong một service sau khi sửa package)
+```
+
+Test truyền tải sự kiện với RabbitMQ thật (cần `pnpm infra:up`):
+
+```bash
+RABBITMQ_TEST_URL=amqp://pbl6:pbl6_dev_password@localhost:5672 pnpm --filter @pbl6/event-contracts test
 ```
 
 - E2E của Identity **xoá dữ liệu** trong database test, nên chỉ chạy khi tên database có chữ `test` (mặc định `identity_test_db`).
 - Jest chạy với `--experimental-vm-modules` vì NestJS 12 chỉ phát hành dạng ESM; các script `test` đã có sẵn cờ này.
-- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR, kèm migration + drift check của cả 8 database và seed + e2e của Identity trên PostgreSQL 17.
+- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR (kèm RabbitMQ cho test truyền tải và e2e khởi động của Organization/Asset/Service Request), cộng migration + drift check của cả 8 database và seed + e2e của Identity trên PostgreSQL 17.
 
 Lệnh database ở root: `pnpm db:migrate` (mọi service), `pnpm db:check-drift` (mọi service). Mỗi service có cùng bộ lệnh `db:migrate`, `db:check-drift`, `db:migrate:dev`, `prisma:generate` (chạy trong `apps/<service>`); quy tắc migration: [apps/identity-service/prisma/README.md](apps/identity-service/prisma/README.md).
 
@@ -333,9 +343,17 @@ Prisma client chưa được sinh (thư mục `src/generated` không nằm trong
 pnpm --filter identity-service prisma:generate
 ```
 
+### `Cannot find module '@pbl6/...'` hoặc `.../packages/<tên>/dist/...`
+
+`packages/*` chưa được build (ví dụ `pnpm install` bị ngắt giữa chừng). Chạy:
+
+```bash
+pnpm build:packages
+```
+
 ### `Invalid environment configuration`
 
-Service kiểm tra `.env` khi khởi động và liệt kê biến bị sai. Hay gặp nhất: chưa đổi `JWT_ACCESS_SECRET` (phải ≥ 32 ký tự), hoặc `SEED_DEMO_PASSWORD` ngắn hơn 8 ký tự khi chạy `identity:seed:dev`.
+Service kiểm tra `.env` khi khởi động và liệt kê biến bị sai. Hay gặp nhất: chưa đổi `JWT_ACCESS_SECRET` (phải ≥ 32 ký tự — **mọi service** đều cần, vì đều tự xác thực token), hoặc `SEED_DEMO_PASSWORD` ngắn hơn 8 ký tự khi chạy `identity:seed:dev`.
 
 ### Prisma báo migration đã bị sửa (Windows)
 
@@ -361,6 +379,11 @@ pnpm identity:seed:dev
 ## 9. Tài liệu liên quan
 
 - [AGENTS.md](AGENTS.md) — phạm vi nghiệp vụ, kiến trúc, quy tắc phát triển
+- [CONTRIBUTING.md](CONTRIBUTING.md) — ownership, branch/PR, migration, Definition of Done
+- [packages/README.md](packages/README.md) — cách dùng thư viện dùng chung
+- [docs/api/conventions.md](docs/api/conventions.md) — quy ước REST API; contract nháp: [organization](docs/api/organization.yaml), [asset](docs/api/asset.yaml), [service-request](docs/api/service-request.yaml); [fixtures](docs/api/fixtures.md)
+- [docs/architecture/events.md](docs/architecture/events.md) — event catalog; [docs/architecture/state-machines.md](docs/architecture/state-machines.md) — trạng thái SR, Cost Estimate, Work Order
+- [ADR 0003](docs/decisions/0003-customer-scope.md) customer scope · [ADR 0004](docs/decisions/0004-service-auth-and-authorization.md) xác thực, phân quyền, gọi giữa service · [ADR 0005](docs/decisions/0005-event-transport.md) outbox, RabbitMQ, inbox
 - [docs/decisions/0001-database-v3.1.md](docs/decisions/0001-database-v3.1.md) — quyết định thiết kế database
 - [docs/decisions/0002-workorder-maintenance-task-index.md](docs/decisions/0002-workorder-maintenance-task-index.md) — sửa index WO ↔ Maintenance Task (F07)
 - [apps/identity-service/README.md](apps/identity-service/README.md) — API và cơ chế xác thực

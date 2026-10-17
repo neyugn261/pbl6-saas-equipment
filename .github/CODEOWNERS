@@ -1,0 +1,29 @@
+# Code owners — GitHub requests their review automatically.
+# Replace each @member-x with the GitHub username of the owner, then remove the
+# leading "# " of the lines below. Ownership per milestone: CONTRIBUTING.md.
+# Update the M2/M3 lines when a milestone starts.
+#
+# * @member-d
+#
+# /packages/                       @member-d
+# /apps/identity-service/          @member-d
+# /apps/api-gateway/               @member-d
+# /docker-compose.yml              @member-d
+# /infrastructure/                 @member-d
+# /.github/                        @member-d
+# /package.json                    @member-d
+# /pnpm-lock.yaml                  @member-d
+# /pnpm-workspace.yaml             @member-d
+# /docs/                           @member-d
+#
+# /apps/organization-service/      @member-a
+# /docs/api/organization.yaml      @member-a
+#
+# /apps/asset-service/             @member-b
+# /docs/api/asset.yaml             @member-b
+#
+# /apps/service-request-service/   @member-c
+# /docs/api/service-request.yaml   @member-c
+#
+# /apps/web/                       @member-e
+# /docs/testing/                   @member-e

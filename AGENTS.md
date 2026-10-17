@@ -126,12 +126,12 @@ apps/
 - web/
 - mobile/
 
-packages/
+packages/ (xem packages/README.md)
 
-- event-contracts/
-- config/
-- logger/
-- testing/
+- service-kit/ — bootstrap NestJS: env, logger JSON, correlation id, lỗi, health, pagination, HTTP giữa service, Prisma adapter
+- auth/ — verify token, RBAC catalog, guard, data scope tenant/customer
+- event-contracts/ — catalog event có version, outbox, inbox, RabbitMQ
+- testing/ — token cho test, kiểm tra DB test
 
 infrastructure/
 
@@ -214,7 +214,7 @@ RabbitMQ được dùng cho các sự kiện nghiệp vụ, ví dụ:
 - MaintenanceTaskCreated.
 - NotificationRequested.
 
-Tên event trên chỉ là ví dụ; hãy đối chiếu với các contract hiện có trước khi sử dụng.
+Tên event trên chỉ là ví dụ; contract hiện hành nằm ở `packages/event-contracts/src/catalog.ts` và `docs/architecture/events.md` (ADR 0005). Xác thực, phân quyền và gọi giữa service theo ADR 0004; phạm vi dữ liệu của tài khoản CUSTOMER theo ADR 0003.
 
 Khi triển khai event:
 

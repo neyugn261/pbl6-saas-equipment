@@ -1,0 +1,567 @@
+openapi: 3.1.0
+info:
+  title: PBL6 Service Request Service
+  version: 0.1.0-draft
+  description: |
+    DRAFT contract (M0) — owner: Service Request owner (Member C).
+    Conventions: docs/api/conventions.md. Transitions, who may call them and
+    their side effects: docs/architecture/state-machines.md (Proposed).
+    A transition not allowed from the current status returns
+    409 `INVALID_STATE_TRANSITION` with `details: { from, action }`.
+    CUSTOMER accounts only see requests of their own customer (ADR 0003) and
+    only `CUSTOMER` comments.
+servers:
+  - url: http://localhost:3007
+    description: Local service (through the gateway later at /api/service-requests)
+security:
+  - bearer: []
+tags:
+  - name: Requests
+  - name: Transitions
+  - name: Comments
+  - name: Cost estimates
+paths:
+  /service-requests:
+    get:
+      tags: [Requests]
+      summary: List service requests
+      x-permissions: [service_request:read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: q
+          in: query
+          description: Search in request number and title
+          schema: { type: string, maxLength: 100 }
+        - name: status
+          in: query
+          description: Comma-separated statuses
+          schema: { type: string }
+        - name: customerId
+          in: query
+          description: Ignored for CUSTOMER accounts
+          schema: { type: string, format: uuid }
+        - name: equipmentId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: priority
+          in: query
+          schema: { $ref: '#/components/schemas/Priority' }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [createdAt, -createdAt, priority, -priority], default: -createdAt }
+      responses:
+        '200':
+          description: Page of requests
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/ServiceRequest' } }
+    post:
+      tags: [Requests]
+      summary: Create a service request
+      description: |
+        CUSTOMER accounts create for their own customer (`customerId` omitted,
+        taken from the token) and their own equipment. Staff pass `customerId`.
+        Equipment is validated through Asset (`GET /internal/equipment/{id}`
+        with the caller's token). Writes `ServiceRequestCreated`.
+      x-permissions: [service_request:create]
+      x-events: [ServiceRequestCreated.v1, ServiceRequestStatusChanged.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateServiceRequest' }
+      responses:
+        '201':
+          description: Created with status NEW
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequest' }
+        '422':
+          description: EQUIPMENT_NOT_FOUND, EQUIPMENT_RETIRED, CUSTOMER_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /service-requests/{requestId}:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    get:
+      tags: [Requests]
+      summary: Request detail with warranty snapshot and live estimate
+      x-permissions: [service_request:read]
+      responses:
+        '200':
+          description: Request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequestDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Requests]
+      summary: Edit title, description or priority while NEW or AWAITING_INFO
+      x-permissions: [service_request:create]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                title: { type: string, maxLength: 200 }
+                description: { type: string }
+                priority: { $ref: '#/components/schemas/Priority' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequest' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/history:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    get:
+      tags: [Requests]
+      summary: Status history, oldest first
+      x-permissions: [service_request:read]
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/StatusChange' } }
+  /service-requests/{requestId}/start-review:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: NEW → REVIEWING
+      x-permissions: [service_request:review]
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/request-info:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: REVIEWING → AWAITING_INFO (reason posted as a CUSTOMER comment)
+      x-permissions: [service_request:review]
+      requestBody: { $ref: '#/components/requestBodies/RequiredReason' }
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/warranty-check:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: Record the warranty decision snapshot (status stays REVIEWING)
+      description: Calls Asset `GET /equipment/{id}/warranty-status` and stores the result.
+      x-permissions: [service_request:review]
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+        '503':
+          description: UPSTREAM_UNAVAILABLE — Asset Service is down
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /service-requests/{requestId}/accept:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: REVIEWING → ACCEPTED (only with an IN_WARRANTY snapshot)
+      x-permissions: [service_request:review]
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422':
+          description: WARRANTY_CHECK_REQUIRED or ESTIMATE_REQUIRED (out of warranty)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /service-requests/{requestId}/reject:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: NEW / REVIEWING / AWAITING_INFO → REJECTED
+      x-permissions: [service_request:review]
+      requestBody: { $ref: '#/components/requestBodies/RequiredReason' }
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/cancel:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: Cancel (requester side or service_request:review; allowed statuses in state-machines.md)
+      x-permissions: [service_request:read]
+      requestBody: { $ref: '#/components/requestBodies/OptionalReason' }
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '403':
+          description: FORBIDDEN — not the requester side and no service_request:review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/confirm:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: RESOLVED → CLOSED (customer confirms the result)
+      x-permissions: [service_request:read]
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/reopen:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: RESOLVED → ACCEPTED (work not satisfactory)
+      x-permissions: [service_request:read]
+      requestBody: { $ref: '#/components/requestBodies/RequiredReason' }
+      responses:
+        '200': { $ref: '#/components/responses/Request' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/comments:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    get:
+      tags: [Comments]
+      summary: Comments, oldest first (CUSTOMER accounts get only CUSTOMER comments)
+      x-permissions: [service_request:read]
+      responses:
+        '200':
+          description: Comments
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+    post:
+      tags: [Comments]
+      summary: Add a comment
+      description: |
+        CUSTOMER accounts always write `CUSTOMER` comments (visibility ignored).
+        `INTERNAL` needs service_request:comment_internal. A CUSTOMER comment
+        while AWAITING_INFO moves the request back to REVIEWING.
+      x-permissions: [service_request:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [content]
+              properties:
+                content: { type: string, maxLength: 5000 }
+                visibility: { $ref: '#/components/schemas/Visibility' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+  /service-requests/{requestId}/estimates:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    get:
+      tags: [Cost estimates]
+      summary: All revisions, newest first (CUSTOMER accounts never see DRAFT)
+      x-permissions: [service_request:read]
+      responses:
+        '200':
+          description: Revisions
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostEstimate' } }
+    post:
+      tags: [Cost estimates]
+      summary: Create a DRAFT revision (n+1)
+      x-permissions: [cost_estimate:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CostEstimateInput' }
+      responses:
+        '201':
+          description: Draft created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostEstimate' }
+        '409':
+          description: LIVE_ESTIMATE_EXISTS or INVALID_STATE_TRANSITION
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /estimates/{estimateId}:
+    parameters: [{ $ref: '#/components/parameters/EstimateId' }]
+    put:
+      tags: [Cost estimates]
+      summary: Replace the items of a DRAFT revision (total recomputed)
+      x-permissions: [cost_estimate:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CostEstimateInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostEstimate' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+    delete:
+      tags: [Cost estimates]
+      summary: Delete a DRAFT revision
+      x-permissions: [cost_estimate:manage]
+      responses:
+        '204': { description: Deleted }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /estimates/{estimateId}/send:
+    parameters: [{ $ref: '#/components/parameters/EstimateId' }]
+    post:
+      tags: [Cost estimates]
+      summary: DRAFT → SENT; request → AWAITING_CUSTOMER_APPROVAL
+      x-permissions: [cost_estimate:manage]
+      responses:
+        '200': { $ref: '#/components/responses/Estimate' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /estimates/{estimateId}/revise:
+    parameters: [{ $ref: '#/components/parameters/EstimateId' }]
+    post:
+      tags: [Cost estimates]
+      summary: SENT → SUPERSEDED and a new DRAFT revision; request → REVIEWING
+      x-permissions: [cost_estimate:manage]
+      responses:
+        '201': { $ref: '#/components/responses/Estimate' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /estimates/{estimateId}/approve:
+    parameters: [{ $ref: '#/components/parameters/EstimateId' }]
+    post:
+      tags: [Cost estimates]
+      summary: SENT → APPROVED; request → ACCEPTED (customer side)
+      x-permissions: [cost_estimate:respond]
+      x-user-types: [CUSTOMER]
+      responses:
+        '200': { $ref: '#/components/responses/Estimate' }
+        '409':
+          description: INVALID_STATE_TRANSITION or ESTIMATE_EXPIRED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /estimates/{estimateId}/reject:
+    parameters: [{ $ref: '#/components/parameters/EstimateId' }]
+    post:
+      tags: [Cost estimates]
+      summary: SENT → REJECTED; request → COST_REJECTED (customer side)
+      x-permissions: [cost_estimate:respond]
+      x-user-types: [CUSTOMER]
+      requestBody: { $ref: '#/components/requestBodies/OptionalReason' }
+      responses:
+        '200': { $ref: '#/components/responses/Estimate' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EstimateId:
+      name: estimateId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  requestBodies:
+    RequiredReason:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [reason]
+            properties:
+              reason: { type: string, minLength: 1, maxLength: 2000 }
+    OptionalReason:
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              reason: { type: string, maxLength: 2000 }
+  responses:
+    Request:
+      description: The request after the transition
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ServiceRequest' }
+    Estimate:
+      description: The estimate revision after the action
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/CostEstimate' }
+    NotFound:
+      description: Not found or outside the caller's scope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InvalidTransition:
+      description: INVALID_STATE_TRANSITION (details.from, details.action)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: {}
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    Status:
+      type: string
+      enum: [NEW, REVIEWING, AWAITING_INFO, AWAITING_CUSTOMER_APPROVAL, ACCEPTED, PROCESSING, RESOLVED, CLOSED, REJECTED, CANCELLED, COST_REJECTED]
+    Type:
+      type: string
+      enum: [WARRANTY, REPAIR, MAINTENANCE, INSPECTION]
+    Priority:
+      type: string
+      enum: [LOW, NORMAL, HIGH, URGENT]
+    Visibility:
+      type: string
+      enum: [INTERNAL, CUSTOMER]
+      default: INTERNAL
+    CreateServiceRequest:
+      type: object
+      additionalProperties: false
+      required: [equipmentId, type, title, description]
+      properties:
+        customerId: { type: string, format: uuid, description: Staff only; CUSTOMER accounts use their own }
+        equipmentId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/Type' }
+        priority: { $ref: '#/components/schemas/Priority' }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 10000 }
+    ServiceRequest:
+      type: object
+      required: [id, requestNo, customerId, equipmentId, requesterId, type, priority, title, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        requestNo: { type: string, examples: [SR-2026-0001] }
+        customerId: { type: string, format: uuid }
+        equipmentId: { type: string, format: uuid }
+        requesterId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/Type' }
+        priority: { $ref: '#/components/schemas/Priority' }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/Status' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+        closedAt: { type: [string, 'null'], format: date-time }
+    ServiceRequestDetail:
+      allOf:
+        - $ref: '#/components/schemas/ServiceRequest'
+        - type: object
+          properties:
+            warrantyCheck:
+              type: [object, 'null']
+              properties:
+                result: { type: string, enum: [IN_WARRANTY, OUT_OF_WARRANTY, NO_WARRANTY] }
+                warrantyId: { type: [string, 'null'], format: uuid }
+                warrantyEndDate: { type: [string, 'null'], format: date }
+                checkedBy: { type: string, format: uuid }
+                checkedAt: { type: string, format: date-time }
+            liveEstimate:
+              oneOf:
+                - $ref: '#/components/schemas/CostEstimate'
+                - type: 'null'
+            allowedActions:
+              type: array
+              description: Actions the caller may perform now (drives the UI buttons)
+              items: { type: string, examples: [start-review, accept, cancel] }
+    StatusChange:
+      type: object
+      required: [id, newStatus, changedAt]
+      properties:
+        id: { type: string, format: uuid }
+        oldStatus: { oneOf: [{ $ref: '#/components/schemas/Status' }, { type: 'null' }] }
+        newStatus: { $ref: '#/components/schemas/Status' }
+        changedBy: { type: [string, 'null'], format: uuid, description: NULL when changed by an event }
+        reason: { type: [string, 'null'] }
+        changedAt: { type: string, format: date-time }
+    Comment:
+      type: object
+      required: [id, authorUserId, visibility, content, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        authorUserId: { type: string, format: uuid }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+    CostEstimateItem:
+      type: object
+      required: [itemType, description, quantity, unitPrice]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        itemType: { type: string, enum: [LABOR, PART, TRAVEL, OTHER] }
+        description: { type: string, maxLength: 255 }
+        quantity: { type: string, pattern: '^\d{1,10}(\.\d{1,2})?$', description: 'Decimal string, > 0' }
+        unitPrice: { type: string, pattern: '^\d{1,12}(\.\d{1,2})?$', description: 'Decimal string, >= 0' }
+        amount: { type: string, readOnly: true, description: 'round(quantity × unitPrice, 2), generated by the database' }
+    CostEstimateInput:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        currency: { type: string, minLength: 3, maxLength: 3, default: VND }
+        validUntil: { type: string, format: date }
+        notes: { type: string }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/CostEstimateItem' }
+    CostEstimate:
+      type: object
+      required: [id, requestId, revisionNo, currency, totalAmount, status, items]
+      properties:
+        id: { type: string, format: uuid }
+        requestId: { type: string, format: uuid }
+        revisionNo: { type: integer, minimum: 1 }
+        currency: { type: string }
+        totalAmount: { type: string, description: Decimal string }
+        status: { type: string, enum: [DRAFT, SENT, APPROVED, REJECTED, EXPIRED, SUPERSEDED] }
+        validUntil: { type: [string, 'null'], format: date }
+        notes: { type: [string, 'null'] }
+        items: { type: array, items: { $ref: '#/components/schemas/CostEstimateItem' } }
+        createdBy: { type: string, format: uuid }
+        respondedBy: { type: [string, 'null'], format: uuid }
+        respondedAt: { type: [string, 'null'], format: date-time }
