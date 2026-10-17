@@ -12,8 +12,8 @@ this page and that file must change in the same PR.
 | `TenantCreated.v1` | organization-service | Tenant | `tenantId, code, name, status` | identity-service.directory → `tenant_directory` |
 | `TenantStatusChanged.v1` | organization-service | Tenant | `tenantId, code, status, previousStatus, changedAt` | identity-service.directory → `tenant_directory` |
 | `CustomerMembershipChanged.v1` | organization-service | CustomerUserMembership | `membershipId, userId, customerId, status (ACTIVE\|INACTIVE), changedAt` | identity-service.directory → `user_customer_links` (ADR 0003) |
-| `ServiceRequestCreated.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, requesterId, type, priority` | notification (M4) |
-| `ServiceRequestStatusChanged.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, fromStatus, toStatus, changedBy, reason` | notification (M4), asset history (M2) |
+| `ServiceRequestCreated.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, requesterId, type, priority` | notification (M3) |
+| `ServiceRequestStatusChanged.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, fromStatus, toStatus, changedBy, reason` | notification (M3), asset history (M2) |
 
 `tenantId` is in the envelope, not repeated in payloads (except tenant events,
 where it is the aggregate).

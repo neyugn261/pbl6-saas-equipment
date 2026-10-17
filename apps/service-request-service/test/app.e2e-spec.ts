@@ -1,7 +1,6 @@
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { configureApp } from '@pbl6/service-kit';
-import { testJwtEnv } from '@pbl6/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -25,10 +24,6 @@ describe('service-request-service bootstrap (e2e)', () => {
   };
 
   beforeAll(async () => {
-    Object.assign(process.env, testJwtEnv(), {
-      NODE_ENV: 'test',
-      SERVICE_REQUEST_DATABASE_URL: 'postgresql://unused:unused@localhost:5432/unused_test_db',
-    });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(fakePrisma)
