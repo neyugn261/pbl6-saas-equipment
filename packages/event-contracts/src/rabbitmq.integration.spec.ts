@@ -12,6 +12,9 @@ import { RabbitMqEventBus, subscriptionQueues } from './rabbitmq';
 const url = process.env.RABBITMQ_TEST_URL;
 const describeBroker = url ? describe : describe.skip;
 
+// CI runners are slower than a laptop; waits below poll a condition instead of sleeping.
+jest.setTimeout(30_000);
+
 const TENANT = '11111111-1111-4111-8111-111111111111';
 
 function tenantCreated(): EventEnvelope {
@@ -29,7 +32,7 @@ function tenantCreated(): EventEnvelope {
   };
 }
 
-function waitFor(predicate: () => boolean, timeoutMs = 10_000): Promise<void> {
+function waitFor(predicate: () => boolean, timeoutMs = 20_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const tick = () => {
@@ -100,9 +103,13 @@ describeBroker('RabbitMqEventBus (real broker)', () => {
     const channel = await connection.createChannel();
     await channel.publish(exchange, 'TenantCreated.v1', Buffer.from('not json'));
     const { deadLetter } = subscriptionQueues(queue);
-    await waitFor(() => false, 1500).catch(() => undefined);
-    const info = await channel.checkQueue(deadLetter);
-    expect(info.messageCount).toBe(2);
+    let messageCount = 0;
+    const deadline = Date.now() + 20_000;
+    while (messageCount < 2 && Date.now() < deadline) {
+      messageCount = (await channel.checkQueue(deadLetter)).messageCount;
+      if (messageCount < 2) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(messageCount).toBe(2);
     failuresLeft = 0;
     await connection.close();
   });
