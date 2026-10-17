@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthModule as SharedAuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
+import { HealthModule } from '@pbl6/service-kit';
+import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { AuthModule } from './auth/auth.module';
 import { validateEnv } from './config/env.validation';
-import { HealthController } from './health/health.controller';
+import { EventsModule } from './events/events.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { PrismaService } from './prisma/prisma.service';
 
 @Module({
   imports: [
@@ -14,8 +18,17 @@ import { PrismaModule } from './prisma/prisma.module';
       validate: validateEnv,
     }),
     PrismaModule,
+    // Global JwtAuthGuard + PermissionsGuard: every route needs a token unless @Public().
+    SharedAuthModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => jwtOptionsFromConfig(config),
+    }),
+    HealthModule.forRootAsync({
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
+    }),
     AuthModule,
+    EventsModule,
   ],
-  controllers: [HealthController],
 })
 export class AppModule {}

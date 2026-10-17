@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import bcrypt from 'bcryptjs';
 import { AppModule } from '../../src/app.module';
-import { configureApp } from '../../src/app.setup';
+import { configureApp } from '@pbl6/service-kit';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 export async function createTestApp(): Promise<{
@@ -14,7 +14,7 @@ export async function createTestApp(): Promise<{
     imports: [AppModule],
   }).compile();
   const app = moduleRef.createNestApplication();
-  configureApp(app);
+  configureApp(app, { logger: new Logger('e2e') });
   await app.init();
   return { app, prisma: app.get(PrismaService) };
 }
@@ -22,7 +22,7 @@ export async function createTestApp(): Promise<{
 /** Clears all identity data except the role and permission catalogs. */
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE auth_sessions, account_tokens, user_roles, users, tenant_directory, processed_events',
+    'TRUNCATE auth_sessions, account_tokens, user_customer_links, user_roles, users, tenant_directory, processed_events',
   );
 }
 

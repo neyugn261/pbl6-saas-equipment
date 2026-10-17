@@ -57,23 +57,24 @@ model RolePermission {
 /// expression indexes uq_users_tenant_email and uq_users_platform_email
 /// (lower(email)) in the migration. status: INVITED | ACTIVE | SUSPENDED | DISABLED.
 model User {
-  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// Logical reference to organization_db.tenants.id; NULL for PLATFORM_STAFF.
-  tenantId      String?        @map("tenant_id") @db.Uuid
-  userType      String         @map("user_type") @db.VarChar(20)
-  email         String         @db.VarChar(255)
+  tenantId      String?           @map("tenant_id") @db.Uuid
+  userType      String            @map("user_type") @db.VarChar(20)
+  email         String            @db.VarChar(255)
   /// NULL only while status is INVITED or DISABLED (CHECK in migration).
-  passwordHash  String?        @map("password_hash") @db.VarChar(255)
-  fullName      String         @map("full_name") @db.VarChar(150)
-  phone         String?        @db.VarChar(30)
-  status        String         @default("INVITED") @db.VarChar(30)
-  lastLoginAt   DateTime?      @map("last_login_at") @db.Timestamptz(6)
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  roles         UserRole[]     @relation("UserRoleUser")
-  assignedRoles UserRole[]     @relation("UserRoleAssignedBy")
+  passwordHash  String?           @map("password_hash") @db.VarChar(255)
+  fullName      String            @map("full_name") @db.VarChar(150)
+  phone         String?           @db.VarChar(30)
+  status        String            @default("INVITED") @db.VarChar(30)
+  lastLoginAt   DateTime?         @map("last_login_at") @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  roles         UserRole[]        @relation("UserRoleUser")
+  assignedRoles UserRole[]        @relation("UserRoleAssignedBy")
   sessions      AuthSession[]
   accountTokens AccountToken[]
+  customerLink  UserCustomerLink?
 
   @@index([tenantId, status], map: "idx_users_tenant_status")
   @@map("users")
@@ -134,6 +135,28 @@ model TenantDirectory {
   syncedAt DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
 
   @@map("tenant_directory")
+}
+
+/// Local read model of organization_db.customer_user_memberships (ADR 0003),
+/// fed by CustomerMembershipChanged. Source of the `customer_id` token claim.
+/// A trigger (migration 0002) only accepts CUSTOMER accounts of the same tenant.
+/// status: ACTIVE | INACTIVE (CHECK in migration).
+model UserCustomerLink {
+  userId          String   @id @map("user_id") @db.Uuid
+  /// Logical reference to organization_db.tenants.id.
+  tenantId        String   @map("tenant_id") @db.Uuid
+  /// Logical reference to organization_db.customers.id.
+  customerId      String   @map("customer_id") @db.Uuid
+  /// Logical reference to organization_db.customer_user_memberships.id.
+  membershipId    String   @map("membership_id") @db.Uuid
+  status          String   @db.VarChar(30)
+  /// Membership updated_at in Organization; older events are ignored.
+  sourceChangedAt DateTime @map("source_changed_at") @db.Timestamptz(6)
+  syncedAt        DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, customerId], map: "idx_user_customer_links_customer")
+  @@map("user_customer_links")
 }
 
 /// Inbox for idempotent event consumers.

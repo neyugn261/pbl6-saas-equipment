@@ -6,8 +6,8 @@
  */
 import { config as loadEnv } from 'dotenv';
 import { PrismaClient } from '../src/generated/prisma/client.js';
-import { createPrismaAdapter } from '../src/prisma/create-adapter';
-import { CATALOG_STATUS } from './seed/permission-catalog';
+import { createPrismaAdapter } from '@pbl6/service-kit/prisma';
+import { CATALOG_STATUS } from '@pbl6/auth';
 import { seedDevData } from './seed/seed-dev-data';
 import { seedPermissions } from './seed/seed-permissions';
 

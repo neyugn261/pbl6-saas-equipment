@@ -5,10 +5,10 @@ import { IdentityEnv } from '../config/env.validation';
 import { AuthController } from './auth.controller';
 import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './jwt-auth.guard';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 
+/** Issues tokens; verification is done by the global guard of @pbl6/auth. */
 @Module({
   imports: [
     JwtModule.registerAsync({
@@ -40,7 +40,6 @@ import { TokenService } from './token.service';
     AuthRepository,
     PasswordService,
     TokenService,
-    JwtAuthGuard,
   ],
 })
 export class AuthModule {}

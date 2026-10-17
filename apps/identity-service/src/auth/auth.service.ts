@@ -11,8 +11,8 @@ import {
   SessionWithUser,
   UserWithRoles,
 } from './auth.repository';
+import type { Principal, RoleCode } from '@pbl6/auth';
 import {
-  AuthenticatedUser,
   ClientContext,
   LoginResult,
   TokenPair,
@@ -38,6 +38,17 @@ function unauthorized(
   message: string,
 ): UnauthorizedException {
   return new UnauthorizedException({ code, message });
+}
+
+/**
+ * ADR 0003: a CUSTOMER account carries the customer of its ACTIVE link; any
+ * other account, or a CUSTOMER without an active link, carries null (other
+ * services then refuse it customer data with CUSTOMER_SCOPE_MISSING).
+ */
+function customerIdOf(user: UserWithRoles): string | null {
+  return user.userType === 'CUSTOMER' && user.customerLink?.status === 'ACTIVE'
+    ? user.customerLink.customerId
+    : null;
 }
 
 export interface LoginInput {
@@ -179,14 +190,14 @@ export class AuthService {
    * Current account, re-read from the database. Fails once the session has
    * been revoked, even if the access token itself has not expired yet.
    */
-  async me(principal: AuthenticatedUser): Promise<UserProfile> {
+  async me(principal: Principal): Promise<UserProfile> {
     const [session, user] = await Promise.all([
-      this.repository.findSessionById(principal.sid),
-      this.repository.findUserWithRoles(principal.sub),
+      this.repository.findSessionById(principal.sessionId),
+      this.repository.findUserWithRoles(principal.userId),
     ]);
     const sessionActive =
       session !== null &&
-      session.userId === principal.sub &&
+      session.userId === principal.userId &&
       session.revokedAt === null &&
       session.expiresAt.getTime() > Date.now();
     const tenant = user?.tenantId
@@ -244,7 +255,8 @@ export class AuthService {
       sid: sessionId,
       tenant_id: user.tenantId,
       user_type: user.userType as UserType,
-      roles: user.roles.map((assignment) => assignment.role.code),
+      roles: user.roles.map((assignment) => assignment.role.code as RoleCode),
+      customer_id: customerIdOf(user),
     });
     return {
       tokenType: 'Bearer',
@@ -265,6 +277,7 @@ export class AuthService {
       phone: user.phone,
       status: user.status as UserStatus,
       roles: user.roles.map((assignment) => assignment.role.code),
+      customerId: customerIdOf(user),
       lastLoginAt: user.lastLoginAt,
     };
   }

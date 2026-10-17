@@ -6,8 +6,8 @@ import {
   HttpStatus,
   Post,
   Req,
-  UseGuards,
 } from '@nestjs/common';
+import { CurrentUser, Public, type Principal } from '@pbl6/auth';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import {
@@ -18,8 +18,6 @@ import {
 } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import type { AuthenticatedRequest } from './jwt-auth.guard';
-import { JwtAuthGuard } from './jwt-auth.guard';
 
 function clientContext(request: Request): ClientContext {
   const userAgent = request.headers['user-agent'];
@@ -33,12 +31,14 @@ function clientContext(request: Request): ClientContext {
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() body: LoginDto, @Req() request: Request): Promise<LoginResult> {
     return this.auth.login(body, clientContext(request));
   }
 
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(
@@ -49,15 +49,16 @@ export class AuthController {
   }
 
   /** Takes the refresh token so a client can log out after its access token expired. */
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   logout(@Body() body: RefreshTokenDto): Promise<void> {
     return this.auth.logout(body.refreshToken);
   }
 
+  /** Requires a bearer token (global JwtAuthGuard from @pbl6/auth). */
   @Get('me')
-  @UseGuards(JwtAuthGuard)
-  me(@Req() request: AuthenticatedRequest): Promise<UserProfile> {
-    return this.auth.me(request.user);
+  me(@CurrentUser() principal: Principal): Promise<UserProfile> {
+    return this.auth.me(principal);
   }
 }

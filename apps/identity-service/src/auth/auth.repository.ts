@@ -7,7 +7,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 
 const userWithRoles = {
-  include: { roles: { include: { role: { select: { code: true } } } } },
+  include: {
+    roles: { include: { role: { select: { code: true } } } },
+    customerLink: { select: { customerId: true, status: true } },
+  },
 } satisfies Prisma.UserDefaultArgs;
 
 export type UserWithRoles = Prisma.UserGetPayload<typeof userWithRoles>;

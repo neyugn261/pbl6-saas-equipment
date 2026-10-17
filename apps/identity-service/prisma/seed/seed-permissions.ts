@@ -1,5 +1,5 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
-import { PERMISSIONS, ROLE_PERMISSIONS } from './permission-catalog';
+import { PERMISSIONS, ROLE_PERMISSIONS } from '@pbl6/auth';
 
 /**
  * Upserts the permission catalog and makes role_permissions match
@@ -8,7 +8,7 @@ import { PERMISSIONS, ROLE_PERMISSIONS } from './permission-catalog';
  */
 export async function seedPermissions(prisma: PrismaClient): Promise<void> {
   for (const [role, codes] of Object.entries(ROLE_PERMISSIONS)) {
-    const unknown = codes.filter((code) => !(code in PERMISSIONS));
+    const unknown = codes.filter((code: string) => !(code in PERMISSIONS));
     if (unknown.length > 0) {
       throw new Error(
         `Role ${role} references unknown permissions: ${unknown.join(', ')}`,

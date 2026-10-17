@@ -2,14 +2,28 @@ import bcrypt from 'bcryptjs';
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
 
 /**
- * DEVELOPMENT-ONLY demo data. Organization Service does not exist yet, so the
- * demo tenant is written straight into the tenant_directory read model; once
- * Organization publishes tenant events this row will come from there.
+ * DEVELOPMENT-ONLY demo data. The demo tenant and the customer links are
+ * written straight into the read models (tenant_directory,
+ * user_customer_links); once Organization Service publishes its events these
+ * rows come from there.
  */
 export const DEMO_TENANT = {
   tenantId: '00000000-0000-4000-8000-000000000001',
   code: 'DEMO',
 };
+
+/**
+ * Demo customer of the DEMO tenant (docs/api/fixtures.md). Organization's dev
+ * seed creates the customer and memberships with these ids; until its events
+ * arrive, the links are written here so customer accounts get `customer_id`.
+ */
+export const DEMO_CUSTOMER_ID = '00000000-0000-4000-8000-000000000101';
+const DEMO_MEMBERSHIPS: Record<string, string> = {
+  'customer.admin@demo.local': '00000000-0000-4000-8000-000000000201',
+  'customer.user@demo.local': '00000000-0000-4000-8000-000000000202',
+};
+// Epoch: any real CustomerMembershipChanged event is newer and wins.
+const SEED_CHANGED_AT = new Date(0);
 
 interface DemoUser {
   email: string;
@@ -131,5 +145,21 @@ export async function seedDevData(
       create: { userId: user.id, roleId: roleIds.get(demo.role)! },
       update: {},
     });
+    const membershipId = DEMO_MEMBERSHIPS[demo.email];
+    if (membershipId) {
+      await prisma.userCustomerLink.upsert({
+        where: { userId: user.id },
+        create: {
+          userId: user.id,
+          tenantId: DEMO_TENANT.tenantId,
+          customerId: DEMO_CUSTOMER_ID,
+          membershipId,
+          status: 'ACTIVE',
+          sourceChangedAt: SEED_CHANGED_AT,
+        },
+        // Never overwrite a link that came from a real Organization event.
+        update: {},
+      });
+    }
   }
 }

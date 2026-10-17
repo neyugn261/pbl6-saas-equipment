@@ -1,25 +1,20 @@
+import { requireTestDatabaseUrl, TEST_JWT_SECRET } from '@pbl6/testing';
+import { config as loadEnv } from 'dotenv';
+
+// Same lookup as the service: local .env, then the monorepo root .env.
+// Variables already set (CI) always win.
+loadEnv({ path: '.env', quiet: true });
+loadEnv({ path: '../../.env', quiet: true });
+
+export { TEST_JWT_SECRET };
+
 /**
  * Environment for the e2e suite. The suite TRUNCATEs identity tables, so it
  * only runs against a database whose name marks it as a test database.
  */
 export function testDatabaseUrl(): string {
-  const url = process.env.IDENTITY_TEST_DATABASE_URL;
-  if (!url) {
-    throw new Error(
-      'IDENTITY_TEST_DATABASE_URL is not set. Point it to a dedicated test database, ' +
-        'e.g. postgresql://pbl6:pbl6_dev_password@localhost:5432/identity_test_db',
-    );
-  }
-  const name = new URL(url).pathname.replace(/^\//, '');
-  if (!/test/i.test(name)) {
-    throw new Error(
-      `Refusing to run e2e tests against "${name}": the database name must contain "test"`,
-    );
-  }
-  return url;
+  return requireTestDatabaseUrl('IDENTITY_TEST_DATABASE_URL');
 }
-
-export const TEST_JWT_SECRET = 'e2e-test-secret-e2e-test-secret-0123456789';
 
 export function applyTestEnv(): void {
   process.env.NODE_ENV = 'test';
@@ -30,4 +25,6 @@ export function applyTestEnv(): void {
   process.env.JWT_ACCESS_TTL_SECONDS = '900';
   process.env.REFRESH_TOKEN_TTL_DAYS = '7';
   process.env.BCRYPT_COST = '4';
+  // No broker in e2e: the directory consumer is exercised by calling its handler.
+  process.env.RABBITMQ_URL = '';
 }

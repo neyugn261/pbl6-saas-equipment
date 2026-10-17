@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { IdentityEnv } from '../config/env.validation';
-import { AccessTokenClaims, AuthenticatedUser } from './auth.types';
+import { AccessTokenClaims } from './auth.types';
 
 const REFRESH_TOKEN_BYTES = 32;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -21,11 +21,6 @@ export class TokenService {
 
   signAccessToken(claims: AccessTokenClaims): Promise<string> {
     return this.jwt.signAsync({ ...claims });
-  }
-
-  /** Throws when the token is malformed, expired or not issued by this service. */
-  verifyAccessToken(token: string): Promise<AuthenticatedUser> {
-    return this.jwt.verifyAsync<AuthenticatedUser>(token);
   }
 
   /**
