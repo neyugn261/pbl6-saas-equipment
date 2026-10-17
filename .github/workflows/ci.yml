@@ -13,6 +13,22 @@ jobs:
   checks:
     name: Lint, typecheck, unit tests, build
     runs-on: ubuntu-latest
+    services:
+      # Real broker for the transport test of @pbl6/event-contracts.
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: pbl6
+          RABBITMQ_DEFAULT_PASS: pbl6_ci_password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RABBITMQ_TEST_URL: amqp://pbl6:pbl6_ci_password@localhost:5672
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,9 +37,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Bootstrap e2e (no database) of the services wired to packages/*
+        run: pnpm --filter organization-service --filter asset-service --filter service-request-service test:e2e
       - run: pnpm build
 
   databases:
@@ -70,6 +89,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
       - name: Create databases (bootstrap scripts, run twice to prove they are idempotent)
         run: |
           for f in infrastructure/postgres/init.sql infrastructure/postgres/dev-databases.sql; do
