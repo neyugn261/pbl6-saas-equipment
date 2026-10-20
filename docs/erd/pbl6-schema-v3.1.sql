@@ -461,6 +461,8 @@ CREATE TABLE equipments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, asset_code),
+    -- ADR 0006 (DEC-13): becomes UNIQUE (tenant_id, model_id, serial_number)
+    -- in a new asset_db migration.
     UNIQUE (tenant_id, serial_number),
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, model_id)
@@ -592,6 +594,9 @@ CREATE INDEX idx_service_requests_tenant_customer ON service_requests (tenant_id
 CREATE INDEX idx_service_requests_tenant_equipment ON service_requests (tenant_id, equipment_id);
 CREATE INDEX idx_service_requests_created ON service_requests (tenant_id, created_at DESC);
 
+-- ADR 0006 (DEC-09): request_attachments, work_order_attachments and
+-- report_attachments get visibility VARCHAR(20) NOT NULL DEFAULT 'INTERNAL'
+-- CHECK (visibility IN ('INTERNAL', 'CUSTOMER')) in new migrations.
 CREATE TABLE request_attachments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
@@ -1106,6 +1111,9 @@ CREATE INDEX idx_stock_transactions_reference
 
 -- Parts issued by Inventory Staff for a Work Order. Each row is backed by
 -- exactly one ISSUE stock transaction, so stock and usage cannot diverge.
+-- ADR 0006 (DEC-09): adds quantity_returned NUMERIC(12,2) NOT NULL DEFAULT 0,
+-- CHECK (quantity_returned >= 0 AND quantity_returned <= quantity_used);
+-- consumed = quantity_used - quantity_returned.
 CREATE TABLE work_order_parts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
