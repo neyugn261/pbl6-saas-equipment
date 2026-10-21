@@ -63,7 +63,7 @@ model Equipment {
   history          EquipmentHistory[]
 
   @@unique([tenantId, assetCode])
-  @@unique([tenantId, serialNumber])
+  @@unique([tenantId, modelId, serialNumber])
   @@unique([tenantId, id])
   @@index([tenantId, customerId], map: "idx_equipments_tenant_customer")
   @@index([tenantId, customerSiteId], map: "idx_equipments_tenant_site")
