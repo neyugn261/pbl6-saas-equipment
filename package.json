@@ -4,20 +4,39 @@
   "private": true,
   "description": "PBL6 SaaS Asset Maintenance and Field Technician Platform",
   "scripts": {
+    "postinstall": "pnpm build:packages",
+    "build:packages": "pnpm --filter \"./packages/**\" build",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
-
-    "dev:gateway": "pnpm --filter api-gateway start:dev",
-    "dev:identity": "pnpm --filter identity-service start:dev",
-    "dev:asset": "pnpm --filter asset-service start:dev",
-    "dev:maintenance": "pnpm --filter maintenance-service start:dev",
-    "dev:workorder": "pnpm --filter workorder-service start:dev",
-    "dev:notification": "pnpm --filter notification-service start:dev",
+    "dev:gateway": "pnpm build:packages && pnpm --filter api-gateway start:dev",
+    "dev:identity": "pnpm build:packages && pnpm --filter identity-service start:dev",
+    "dev:organization": "pnpm build:packages && pnpm --filter organization-service start:dev",
+    "dev:asset": "pnpm build:packages && pnpm --filter asset-service start:dev",
+    "dev:service-request": "pnpm build:packages && pnpm --filter service-request-service start:dev",
+    "dev:maintenance": "pnpm build:packages && pnpm --filter maintenance-service start:dev",
+    "dev:workorder": "pnpm build:packages && pnpm --filter workorder-service start:dev",
+    "dev:inventory": "pnpm build:packages && pnpm --filter inventory-service start:dev",
+    "dev:notification": "pnpm build:packages && pnpm --filter notification-service start:dev",
     "dev:web": "pnpm --filter web dev",
-
+    "dev:backend": "pnpm build:packages && concurrently -k -n identity,organization,asset,inventory,request,maintenance,workorder,notification,gateway \"pnpm --filter identity-service start:dev\" \"pnpm --filter organization-service start:dev\" \"pnpm --filter asset-service start:dev\" \"pnpm --filter inventory-service start:dev\" \"pnpm --filter service-request-service start:dev\" \"pnpm --filter maintenance-service start:dev\" \"pnpm --filter workorder-service start:dev\" \"pnpm --filter notification-service start:dev\" \"pnpm --filter api-gateway start:dev\"",
+"dev:frontend": "pnpm dev:web",
+    "identity:migrate": "pnpm --filter identity-service db:migrate",
+    "identity:seed": "pnpm build:packages && pnpm --filter identity-service db:seed",
+    "identity:seed:dev": "pnpm build:packages && pnpm --filter identity-service db:seed:dev",
+    "db:migrate": "pnpm -r --if-present db:migrate",
+    "db:check-drift": "pnpm -r --if-present db:check-drift",
     "build": "pnpm -r --if-present build",
-    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm build:packages && pnpm -r --if-present typecheck",
+    "test": "pnpm build:packages && pnpm -r --if-present test",
+    "test:e2e": "pnpm build:packages && pnpm -r --if-present test:e2e",
     "lint": "pnpm -r --if-present lint"
+  },
+  "packageManager": "pnpm@11.26.0",
+  "engines": {
+    "node": ">=24.9"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
   }
 }

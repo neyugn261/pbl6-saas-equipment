@@ -1,0 +1,139 @@
+// Asset Service — asset_db
+//
+// Source of truth for the table structure is prisma/migrations/0001_init
+// (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
+// Prisma Client. Partial unique indexes and CHECK constraints live only in
+// the migration; see prisma/README.md before changing anything here.
+//
+// customer_id, customer_site_id, location_id, created_by are logical
+// references to other services and are validated by the service layer.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// status: ACTIVE | INACTIVE.
+model EquipmentModel {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Logical reference to organization_db.tenants.id
+  tenantId     String      @map("tenant_id") @db.Uuid
+  manufacturer String      @db.VarChar(150)
+  modelCode    String      @map("model_code") @db.VarChar(100)
+  name         String      @db.VarChar(200)
+  category     String?     @db.VarChar(100)
+  description  String?
+  status       String      @default("ACTIVE") @db.VarChar(30)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  equipments   Equipment[]
+
+  @@unique([tenantId, manufacturer, modelCode])
+  @@unique([tenantId, id])
+  @@map("equipment_models")
+}
+
+/// Retired through status, never hard-deleted (referenced by other services).
+/// status: ACTIVE | IN_SERVICE | OUT_OF_SERVICE | RETIRED.
+model Equipment {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  modelId          String             @map("model_id") @db.Uuid
+  /// Logical reference to organization_db.customers.id
+  customerId       String             @map("customer_id") @db.Uuid
+  /// Logical reference to organization_db.customer_sites.id
+  customerSiteId   String             @map("customer_site_id") @db.Uuid
+  /// Logical reference to organization_db.locations.id
+  locationId       String?            @map("location_id") @db.Uuid
+  assetCode        String             @map("asset_code") @db.VarChar(100)
+  serialNumber     String             @map("serial_number") @db.VarChar(150)
+  installationDate DateTime?          @map("installation_date") @db.Date
+  handoverDate     DateTime?          @map("handover_date") @db.Date
+  status           String             @default("ACTIVE") @db.VarChar(30)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  model            EquipmentModel     @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  warranties       Warranty[]
+  qrCodes          EquipmentQrCode[]
+  history          EquipmentHistory[]
+
+  @@unique([tenantId, assetCode])
+  @@unique([tenantId, modelId, serialNumber])
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId], map: "idx_equipments_tenant_customer")
+  @@index([tenantId, customerSiteId], map: "idx_equipments_tenant_site")
+  @@index([tenantId, status], map: "idx_equipments_tenant_status")
+  @@map("equipments")
+}
+
+/// EXPIRED is derived from end_date at query time, never stored.
+/// status: ACTIVE | VOID. end_date >= start_date is CHECKed in SQL.
+model Warranty {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  equipmentId  String    @map("equipment_id") @db.Uuid
+  startDate    DateTime  @map("start_date") @db.Date
+  endDate      DateTime  @map("end_date") @db.Date
+  warrantyType String    @map("warranty_type") @db.VarChar(50)
+  terms        String?
+  status       String    @default("ACTIVE") @db.VarChar(30)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  equipment    Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, equipmentId, startDate, endDate], map: "idx_warranties_equipment_dates")
+  @@map("warranties")
+}
+
+/// Exactly one active QR per equipment (partial unique index in SQL);
+/// re-printing revokes the old one first. The token identifies equipment
+/// only; access is still authorized.
+model EquipmentQrCode {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  token       String    @unique @db.VarChar(255)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  equipment   Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@map("equipment_qr_codes")
+}
+
+/// source_event_id is unique (partial index in SQL) so an event consumer
+/// writes each history entry at most once.
+model EquipmentHistory {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  equipmentId   String    @map("equipment_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(50)
+  referenceType String?   @map("reference_type") @db.VarChar(50)
+  referenceId   String?   @map("reference_id") @db.Uuid
+  description   String?
+  metadata      Json?
+  sourceEventId String?   @map("source_event_id") @db.Uuid
+  /// Logical reference to identity_db.users.id
+  createdBy     String?   @map("created_by") @db.Uuid
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  equipment     Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, equipmentId, occurredAt(sort: Desc)], map: "idx_equipment_history_equipment_time")
+  @@map("equipment_history")
+}
+
+/// Inbox for idempotent event consumers.
+model ProcessedEvent {
+  eventId     String   @map("event_id") @db.Uuid
+  consumer    String   @db.VarChar(100)
+  eventType   String   @map("event_type") @db.VarChar(100)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([eventId, consumer])
+  @@map("processed_events")
+}

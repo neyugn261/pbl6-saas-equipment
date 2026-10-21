@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    services:
+      # Real broker for the transport test of @pbl6/event-contracts.
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: pbl6
+          RABBITMQ_DEFAULT_PASS: pbl6_ci_password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RABBITMQ_TEST_URL: amqp://pbl6:pbl6_ci_password@localhost:5672
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Bootstrap e2e (no database) of the services wired to packages/*
+        run: pnpm --filter organization-service --filter asset-service --filter service-request-service test:e2e
+      - run: pnpm build
+
+  databases:
+    name: Migrations, drift check and Identity e2e (PostgreSQL 17)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pbl6
+          POSTGRES_PASSWORD: pbl6_ci_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pbl6"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: pbl6_ci_password
+      IDENTITY_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_db
+      IDENTITY_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_shadow_db
+      ORGANIZATION_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_db
+      ORGANIZATION_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_shadow_db
+      ASSET_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_db
+      ASSET_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_shadow_db
+      SERVICE_REQUEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_db
+      SERVICE_REQUEST_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_shadow_db
+      WORKORDER_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/workorder_db
+      WORKORDER_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/workorder_shadow_db
+      MAINTENANCE_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_db
+      MAINTENANCE_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_shadow_db
+      INVENTORY_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_db
+      INVENTORY_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_shadow_db
+      NOTIFICATION_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_db
+      NOTIFICATION_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_shadow_db
+      IDENTITY_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_test_db
+      ORGANIZATION_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_test_db
+      ASSET_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_test_db
+      SERVICE_REQUEST_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_test_db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
+      - name: Create databases (bootstrap scripts, run twice to prove they are idempotent)
+        run: |
+          for f in infrastructure/postgres/init.sql infrastructure/postgres/dev-databases.sql; do
+            psql -h localhost -U pbl6 -d postgres -f "$f"
+            psql -h localhost -U pbl6 -d postgres -f "$f"
+          done
+      - name: Apply migrations of every service (twice)
+        run: pnpm db:migrate && pnpm db:migrate
+      - name: Check schema drift (migrations vs schema.prisma)
+        run: pnpm db:check-drift
+      - name: Check schema drift (database vs schema.prisma)
+        run: |
+          for svc in identity-service organization-service asset-service service-request-service workorder-service maintenance-service inventory-service notification-service; do
+            echo "::group::$svc"
+            (cd "apps/$svc" && pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code)
+            echo "::endgroup::"
+          done
+      - name: Seed Identity (twice, must be idempotent)
+        working-directory: apps/identity-service
+        run: pnpm db:seed && pnpm db:seed
+      - name: Identity e2e tests
+        working-directory: apps/identity-service
+        run: pnpm test:e2e

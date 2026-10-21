@@ -15,7 +15,8 @@ services:
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./infrastructure/postgres/dev-databases.sql:/docker-entrypoint-initdb.d/02-dev-databases.sql:ro
 
     networks:
       - pbl6-network
@@ -51,7 +52,9 @@ services:
 
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-02-07T23-21-09Z
+    # Official MinIO images were removed from Docker Hub and quay.io; Silo is a
+    # maintained MinIO fork with the same S3 API, ports and MINIO_* variables.
+    image: pgsty/silo:RELEASE.2026-10-18T00-00-00Z
     container_name: pbl6-minio
     restart: unless-stopped
 

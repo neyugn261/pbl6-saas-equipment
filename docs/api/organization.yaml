@@ -1,0 +1,950 @@
+openapi: 3.1.0
+info:
+  title: PBL6 Organization Service
+  version: 0.1.0-draft
+  description: |
+    DRAFT contract (M0) — owner: Organization Service owner (Member A).
+    Conventions: docs/api/conventions.md. `x-permissions` lists the catalog
+    permissions checked by `@RequirePermissions` (packages/auth/src/catalog.ts).
+    `tenant_id` always comes from the token; ids outside the caller's tenant
+    return 404.
+
+    Team decisions applied (ADR 0006): reading branches needs `branch:read`;
+    linking CUSTOMER accounts is account management (`user:read` /
+    `user:manage`, Customer Admin limited to its own customer).
+    `POST /tenants` only creates the tenant; the Platform Admin then creates
+    its Tenant Admin through Identity's user API.
+servers:
+  - url: http://localhost:3006
+    description: Local service (through the gateway later at /api/organization)
+security:
+  - bearer: []
+tags:
+  - name: Tenants
+    description: Platform Admin only.
+  - name: Branches
+  - name: Customers
+  - name: Sites and locations
+  - name: Contacts
+  - name: Memberships
+  - name: Internal
+    description: Called by other services with the caller's token; not exposed by the gateway.
+paths:
+  /tenants:
+    get:
+      tags: [Tenants]
+      summary: List tenants
+      x-permissions: [tenant:read]
+      x-user-types: [PLATFORM_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Q'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TenantStatus' }
+      responses:
+        '200':
+          description: Page of tenants
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Tenant' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Tenants]
+      summary: Create a tenant
+      description: Writes `TenantCreated` to the outbox in the same transaction.
+      x-permissions: [tenant:manage]
+      x-user-types: [PLATFORM_STAFF]
+      x-events: [TenantCreated.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTenant' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /tenants/{tenantId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Tenants]
+      summary: Get a tenant
+      x-permissions: [tenant:read]
+      x-user-types: [PLATFORM_STAFF]
+      responses:
+        '200':
+          description: Tenant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Tenants]
+      summary: Update name or plan
+      x-permissions: [tenant:manage]
+      x-user-types: [PLATFORM_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 200 }
+                plan: { type: string, maxLength: 50 }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tenants/{tenantId}/status:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      tags: [Tenants]
+      summary: Suspend, re-activate or disable a tenant
+      description: |
+        Writes `TenantStatusChanged`; Identity then refuses logins and refreshes
+        of that tenant (tenant_directory).
+      x-permissions: [tenant:manage]
+      x-user-types: [PLATFORM_STAFF]
+      x-events: [TenantStatusChanged.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/TenantStatus' }
+                reason: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /branches:
+    get:
+      tags: [Branches]
+      summary: List internal branches of the tenant
+      x-permissions: [branch:read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Q'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ActiveStatus' }
+      responses:
+        '200':
+          description: Page of branches
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Branch' } }
+    post:
+      tags: [Branches]
+      summary: Create a branch
+      x-permissions: [branch:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BranchInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Branch' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /branches/{branchId}:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      tags: [Branches]
+      summary: Get a branch
+      x-permissions: [branch:read]
+      responses:
+        '200':
+          description: Branch
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Branch' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Branches]
+      summary: Update a branch (including status ACTIVE/INACTIVE)
+      x-permissions: [branch:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BranchPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Branch' }
+    delete:
+      tags: [Branches]
+      summary: Soft-delete a branch
+      x-permissions: [branch:manage]
+      responses:
+        '204': { description: Deleted }
+        '409':
+          description: BRANCH_IN_USE — still default branch of a site or has user assignments
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /branches/{branchId}/users:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      tags: [Branches]
+      summary: Staff assigned to the branch
+      x-permissions: [user:read]
+      responses:
+        '200':
+          description: Assignments
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/BranchUserAssignment' } }
+    post:
+      tags: [Branches]
+      summary: Assign a TENANT_STAFF account to the branch
+      description: The user is validated through Identity (TENANT_STAFF, same tenant). At most one primary branch per user.
+      x-permissions: [branch:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [userId]
+              properties:
+                userId: { type: string, format: uuid }
+                isPrimary: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Assigned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BranchUserAssignment' }
+        '422':
+          description: USER_NOT_TENANT_STAFF
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /customers:
+    get:
+      tags: [Customers]
+      summary: List customers
+      description: A CUSTOMER account only gets its own customer.
+      x-permissions: [customer:read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Q'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ActiveStatus' }
+      responses:
+        '200':
+          description: Page of customers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Customer' } }
+    post:
+      tags: [Customers]
+      summary: Create a customer
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /customers/{customerId}:
+    parameters:
+      - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags: [Customers]
+      summary: Get a customer
+      x-permissions: [customer:read]
+      responses:
+        '200':
+          description: Customer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Customers]
+      summary: Update a customer
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+    delete:
+      tags: [Customers]
+      summary: Soft-delete a customer
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '204': { description: Deleted }
+  /customers/{customerId}/sites:
+    parameters:
+      - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags: [Sites and locations]
+      summary: Sites of a customer
+      x-permissions: [customer:read]
+      responses:
+        '200':
+          description: Sites
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CustomerSite' } }
+    post:
+      tags: [Sites and locations]
+      summary: Create a site
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerSiteInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerSite' }
+        '422':
+          description: BRANCH_NOT_FOUND — default servicing branch is not a branch of the tenant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /sites/{siteId}:
+    parameters:
+      - $ref: '#/components/parameters/SiteId'
+    get:
+      tags: [Sites and locations]
+      summary: Get a site
+      x-permissions: [customer:read]
+      responses:
+        '200':
+          description: Site
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerSite' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Sites and locations]
+      summary: Update a site
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerSitePatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerSite' }
+    delete:
+      tags: [Sites and locations]
+      summary: Soft-delete a site
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '204': { description: Deleted }
+  /sites/{siteId}/locations:
+    parameters:
+      - $ref: '#/components/parameters/SiteId'
+    get:
+      tags: [Sites and locations]
+      summary: Location tree of a site (flat list with parentId)
+      x-permissions: [customer:read]
+      responses:
+        '200':
+          description: Locations
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Location' } }
+    post:
+      tags: [Sites and locations]
+      summary: Create a location
+      description: The parent must be in the same site; a move that creates a cycle is refused (LOCATION_CYCLE).
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocationInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Location' }
+        '422':
+          description: LOCATION_CYCLE or PARENT_NOT_IN_SITE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /locations/{locationId}:
+    parameters:
+      - name: locationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Sites and locations]
+      summary: Update or move a location
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LocationPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Location' }
+    delete:
+      tags: [Sites and locations]
+      summary: Soft-delete a location (refused while it has children)
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '204': { description: Deleted }
+  /customers/{customerId}/contacts:
+    parameters:
+      - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags: [Contacts]
+      summary: Contacts of a customer
+      x-permissions: [customer:read]
+      responses:
+        '200':
+          description: Contacts
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Contact' } }
+    post:
+      tags: [Contacts]
+      summary: Create a contact (setting isPrimary moves the primary flag)
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+  /contacts/{contactId}:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Contacts]
+      summary: Update a contact
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+    delete:
+      tags: [Contacts]
+      summary: Soft-delete a contact
+      x-permissions: [customer:manage]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '204': { description: Deleted }
+  /customers/{customerId}/memberships:
+    parameters:
+      - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags: [Memberships]
+      summary: CUSTOMER accounts linked to the customer
+      description: |
+        Tenant Admin for any customer; Customer Admin only for its own
+        customer (another customer → 404).
+      x-permissions: [user:read]
+      responses:
+        '200':
+          description: Memberships
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Membership' } }
+    post:
+      tags: [Memberships]
+      summary: Link a CUSTOMER account to the customer
+      description: |
+        The user is validated through Identity (CUSTOMER, same tenant). An
+        account belongs to one customer; linking it again moves it.
+        Writes `CustomerMembershipChanged` (ADR 0003).
+
+        Tenant Admin: any customer of the tenant. Customer Admin (ADR 0006):
+        only its own customer (another customer → 404), only accounts whose
+        roles it may assign (CUSTOMER_USER), and never an account linked to
+        another customer (409 USER_LINKED_TO_OTHER_CUSTOMER).
+      x-permissions: [user:manage]
+      x-events: [CustomerMembershipChanged.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [userId]
+              properties:
+                userId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Linked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '409':
+          description: USER_LINKED_TO_OTHER_CUSTOMER (Customer Admin only)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: USER_NOT_CUSTOMER_ACCOUNT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /memberships/{membershipId}/status:
+    parameters:
+      - name: membershipId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Memberships]
+      summary: Activate or deactivate a membership
+      description: Same scope rules as linking (Customer Admin only for CUSTOMER_USER accounts of its own customer).
+      x-permissions: [user:manage]
+      x-events: [CustomerMembershipChanged.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/ActiveStatus' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+  /internal/customers/{customerId}:
+    parameters:
+      - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags: [Internal]
+      summary: Existence and status of a customer in the caller's tenant
+      description: Used by Asset and Service Request to validate `customerId` (404 when not in the tenant or deleted).
+      x-permissions: [customer:read]
+      responses:
+        '200':
+          description: Customer reference
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerRef' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /internal/customers/{customerId}/sites/{siteId}:
+    parameters:
+      - $ref: '#/components/parameters/CustomerId'
+      - $ref: '#/components/parameters/SiteId'
+      - name: locationId
+        in: query
+        description: Also check that this location belongs to the site.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Internal]
+      summary: Validate that a site (and optionally a location) belongs to the customer
+      x-permissions: [customer:read]
+      responses:
+        '200':
+          description: Site reference
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SiteRef' }
+        '404':
+          description: CUSTOMER_NOT_FOUND, SITE_NOT_FOUND or LOCATION_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Q:
+      name: q
+      in: query
+      description: Search in code and name
+      schema: { type: string, maxLength: 100 }
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BranchId:
+      name: branchId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SiteId:
+      name: siteId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    ValidationFailed:
+      description: VALIDATION_FAILED
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: FORBIDDEN / TENANT_SCOPE_REQUIRED / CUSTOMER_SCOPE_MISSING
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found or outside the caller's scope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: UNIQUE_VIOLATION (e.g. duplicate code) or INVALID_STATE_TRANSITION
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: {}
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    TenantStatus:
+      type: string
+      enum: [ACTIVE, SUSPENDED, DISABLED]
+    ActiveStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    Tenant:
+      type: object
+      required: [id, code, name, status, plan, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, maxLength: 50, description: Unique, used at login; cannot change }
+        name: { type: string, maxLength: 200 }
+        status: { $ref: '#/components/schemas/TenantStatus' }
+        plan: { type: string, description: Informational only }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateTenant:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9][A-Z0-9-]{1,49}$' }
+        name: { type: string, maxLength: 200 }
+        plan: { type: string, maxLength: 50, default: BASIC }
+    Branch:
+      type: object
+      required: [id, code, name, address, status]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        address: { type: string }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'], format: email }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BranchInput:
+      type: object
+      additionalProperties: false
+      required: [code, name, address]
+      properties:
+        code: { type: string, maxLength: 50 }
+        name: { type: string, maxLength: 150 }
+        address: { type: string }
+        phone: { type: string, maxLength: 30 }
+        email: { type: string, format: email, maxLength: 255 }
+    BranchPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 150 }
+        address: { type: string }
+        phone: { type: [string, 'null'], maxLength: 30 }
+        email: { type: [string, 'null'], format: email }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+    BranchUserAssignment:
+      type: object
+      required: [id, branchId, userId, isPrimary]
+      properties:
+        id: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        isPrimary: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    Customer:
+      type: object
+      required: [id, code, name, status]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        taxCode: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CustomerInput:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code: { type: string, maxLength: 50 }
+        name: { type: string, maxLength: 200 }
+        taxCode: { type: string, maxLength: 50 }
+        phone: { type: string, maxLength: 30 }
+        email: { type: string, format: email, maxLength: 255 }
+        address: { type: string }
+    CustomerPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 200 }
+        taxCode: { type: [string, 'null'], maxLength: 50 }
+        phone: { type: [string, 'null'], maxLength: 30 }
+        email: { type: [string, 'null'], format: email }
+        address: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+    CustomerSite:
+      type: object
+      required: [id, customerId, code, name, address, status]
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        address: { type: string }
+        latitude: { type: [number, 'null'], minimum: -90, maximum: 90 }
+        longitude: { type: [number, 'null'], minimum: -180, maximum: 180 }
+        defaultServicingBranchId: { type: [string, 'null'], format: uuid }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+    CustomerSiteInput:
+      type: object
+      additionalProperties: false
+      required: [code, name, address]
+      properties:
+        code: { type: string, maxLength: 50 }
+        name: { type: string, maxLength: 150 }
+        address: { type: string }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        defaultServicingBranchId: { type: string, format: uuid }
+    CustomerSitePatch:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 150 }
+        address: { type: string }
+        latitude: { type: [number, 'null'] }
+        longitude: { type: [number, 'null'] }
+        defaultServicingBranchId: { type: [string, 'null'], format: uuid }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+    LocationType:
+      type: string
+      enum: [BUILDING, FLOOR, ROOM, AREA]
+    Location:
+      type: object
+      required: [id, customerSiteId, name, type, status]
+      properties:
+        id: { type: string, format: uuid }
+        customerSiteId: { type: string, format: uuid }
+        parentId: { type: [string, 'null'], format: uuid }
+        code: { type: [string, 'null'] }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/LocationType' }
+        description: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+    LocationInput:
+      type: object
+      additionalProperties: false
+      required: [name, type]
+      properties:
+        parentId: { type: string, format: uuid }
+        code: { type: string, maxLength: 50 }
+        name: { type: string, maxLength: 150 }
+        type: { $ref: '#/components/schemas/LocationType' }
+        description: { type: string }
+    LocationPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        parentId: { type: [string, 'null'], format: uuid }
+        code: { type: [string, 'null'], maxLength: 50 }
+        name: { type: string, maxLength: 150 }
+        type: { $ref: '#/components/schemas/LocationType' }
+        description: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+    Contact:
+      type: object
+      required: [id, customerId, name, isPrimary]
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        customerSiteId: { type: [string, 'null'], format: uuid }
+        name: { type: string }
+        email: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        position: { type: [string, 'null'] }
+        isPrimary: { type: boolean }
+    ContactInput:
+      type: object
+      additionalProperties: false
+      properties:
+        customerSiteId: { type: [string, 'null'], format: uuid }
+        name: { type: string, maxLength: 150 }
+        email: { type: [string, 'null'], format: email }
+        phone: { type: [string, 'null'], maxLength: 30 }
+        position: { type: [string, 'null'], maxLength: 100 }
+        isPrimary: { type: boolean }
+    Membership:
+      type: object
+      required: [id, customerId, userId, status]
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+        updatedAt: { type: string, format: date-time }
+    CustomerRef:
+      type: object
+      required: [id, code, name, status]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
+    SiteRef:
+      type: object
+      required: [customerId, siteId, siteStatus]
+      properties:
+        customerId: { type: string, format: uuid }
+        siteId: { type: string, format: uuid }
+        siteStatus: { $ref: '#/components/schemas/ActiveStatus' }
+        locationId: { type: [string, 'null'], format: uuid }
+        defaultServicingBranchId: { type: [string, 'null'], format: uuid }

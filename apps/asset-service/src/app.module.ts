@@ -1,21 +1,30 @@
 import { Module } from '@nestjs/common';
-import { createObserveModule } from '@nestjs/observe';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-
-export const { ObserveModule, ObserveInstrument } = createObserveModule();
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
+import { HealthModule } from '@pbl6/service-kit';
+import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
+import { validateEnv } from './config/env.validation';
+import { PrismaModule } from './prisma/prisma.module';
+import { PrismaService } from './prisma/prisma.service';
 
 @Module({
   imports: [
-    // Distributed tracing, auto-correlated logs, request/job metrics, error
-    // telemetry, alarms, and more — out of the box. Sign up at https://observe.nestjs.com
-    ObserveModule.forRoot({
-      appKey: 'YOUR_APP_KEY',
-      appSecret: 'YOUR_APP_SECRET',
-      serviceId: 'asset-service',
+    ConfigModule.forRoot({
+      isGlobal: true,
+      // Service-local .env first, then the monorepo root .env.
+      envFilePath: ['.env', '../../.env'],
+      validate: validateEnv,
+    }),
+    PrismaModule,
+    // Global JwtAuthGuard + PermissionsGuard: every route needs a token unless @Public().
+    AuthModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => jwtOptionsFromConfig(config),
+    }),
+    HealthModule.forRootAsync({
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}
