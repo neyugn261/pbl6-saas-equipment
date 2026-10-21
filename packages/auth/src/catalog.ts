@@ -60,6 +60,7 @@ export const PERMISSIONS = {
   'user:manage': 'Invite, update and disable users of the tenant',
   'role:read': 'View the fixed role catalog',
   'role:assign': 'Assign roles to users of the tenant',
+  'branch:read': 'View internal branches',
   'branch:manage': 'Manage internal branches',
   'customer:read': 'View customers, sites, locations and contacts',
   'customer:manage': 'Manage customers, sites, locations and contacts',
@@ -106,6 +107,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'user:manage',
     'role:read',
     'role:assign',
+    'branch:read',
     'branch:manage',
     'customer:read',
     'customer:manage',
@@ -122,6 +124,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'report:read',
   ],
   SERVICE_MANAGER: [
+    'branch:read',
     'customer:read',
     'customer:manage',
     'equipment:read',
@@ -144,6 +147,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'report:read',
   ],
   DISPATCHER: [
+    'branch:read',
     'customer:read',
     'equipment:read',
     'service_request:read',
@@ -154,6 +158,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'notification:read',
   ],
   INVENTORY_STAFF: [
+    'branch:read',
     'equipment:read',
     'work_order:read',
     'inventory:read',
@@ -162,6 +167,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'notification:read',
   ],
   TECHNICIAN: [
+    'branch:read',
     'customer:read',
     'equipment:read',
     'service_request:read',
@@ -175,6 +181,9 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   // Customer roles are additionally limited to their own Customer
   // (customer_user_memberships) by the owning services.
   CUSTOMER_ADMIN: [
+    'user:read',
+    'user:manage',
+    'role:assign',
     'customer:read',
     'equipment:read',
     'service_request:create',
@@ -190,3 +199,43 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'notification:read',
   ],
 };
+
+/**
+ * Roles each role may grant or remove (ADR 0006, DEC-08). Identity checks it
+ * on every role change, on top of `role:assign`:
+ * - TENANT_ADMIN is granted only by the Platform Admin (tenant provisioning),
+ *   never through the tenant's own role API.
+ * - CUSTOMER_ADMIN may only manage CUSTOMER_USER accounts of its own customer
+ *   (`dataScope`, ADR 0003).
+ */
+export const ASSIGNABLE_ROLES: Record<RoleCode, readonly RoleCode[]> = {
+  PLATFORM_ADMIN: ['TENANT_ADMIN'],
+  TENANT_ADMIN: [
+    'SERVICE_MANAGER',
+    'DISPATCHER',
+    'INVENTORY_STAFF',
+    'TECHNICIAN',
+    'CUSTOMER_ADMIN',
+    'CUSTOMER_USER',
+  ],
+  SERVICE_MANAGER: [],
+  DISPATCHER: [],
+  INVENTORY_STAFF: [],
+  TECHNICIAN: [],
+  CUSTOMER_ADMIN: ['CUSTOMER_USER'],
+  CUSTOMER_USER: [],
+};
+
+/** True when one of `assignerRoles` may grant or remove `role`. */
+export function canAssignRole(
+  assignerRoles: readonly string[],
+  role: string,
+): boolean {
+  return (
+    isRoleCode(role) &&
+    assignerRoles.some(
+      (assigner) =>
+        isRoleCode(assigner) && ASSIGNABLE_ROLES[assigner].includes(role),
+    )
+  );
+}

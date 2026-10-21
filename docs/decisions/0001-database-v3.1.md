@@ -54,6 +54,10 @@ Status 2026-10-17 (M0): #1 enforcement mechanism decided in ADR 0004 (list
 still provisional); #4 drafted in `docs/architecture/state-machines.md`
 (Proposed).
 
+Status 2026-10-20: #2, #3, #4 and #5 decided in
+[ADR 0006](0006-m0-review-decisions.md); #4 is now Accepted. #1 stays
+provisional (`branch:read` added).
+
 1. Permission catalog and `role_permissions` seed: to be agreed before the Identity Service migration.
 2. Which roles each role may assign (for example, may a Tenant Admin assign Tenant Admin?). This lives in code, not in the database.
 3. Returning unused parts: a `RETURN` transaction referencing the Work Order is supported, but `work_order_parts` does not store a returned quantity. Confirm whether reports compute "used = issued − returned".

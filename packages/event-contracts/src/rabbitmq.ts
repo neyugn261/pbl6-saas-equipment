@@ -114,13 +114,15 @@ export class RabbitMqEventBus implements EventPublisher {
           this.model = model;
           const channel = await model.createConfirmChannel();
           await channel.assertExchange(this.exchange, 'topic', { durable: true });
+          for (const subscription of this.subscriptions) {
+            await this.setupSubscription(model, subscription);
+          }
+          // Ready only once every queue is bound: an event published earlier
+          // would match no binding and be dropped by the broker.
           this.publishChannel = channel;
           channel.on('close', () => {
             if (this.publishChannel === channel) this.publishChannel = undefined;
           });
-          for (const subscription of this.subscriptions) {
-            await this.setupSubscription(model, subscription);
-          }
         },
       },
     });
@@ -137,7 +139,7 @@ export class RabbitMqEventBus implements EventPublisher {
     );
   }
 
-  /** Resolves once connected (tests, scripts). */
+  /** Resolves once connected and every subscription is bound (tests, scripts). */
   async waitUntilConnected(timeoutMs = 10_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (!this.isReady()) {

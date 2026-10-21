@@ -118,7 +118,9 @@ model WorkOrderPart {
   partId             String           @map("part_id") @db.Uuid
   warehouseId        String           @map("warehouse_id") @db.Uuid
   stockTransactionId String           @unique @map("stock_transaction_id") @db.Uuid
+  /// Issued quantity; consumed = quantityUsed - quantityReturned (ADR 0006).
   quantityUsed       Decimal          @map("quantity_used") @db.Decimal(12, 2)
+  quantityReturned   Decimal          @default(0) @map("quantity_returned") @db.Decimal(12, 2)
   unitCost           Decimal?         @map("unit_cost") @db.Decimal(14, 2)
   /// Logical reference to identity_db.users.id
   recordedBy         String           @map("recorded_by") @db.Uuid

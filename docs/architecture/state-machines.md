@@ -1,9 +1,8 @@
 # State machines — Service Request, Cost Estimate, Work Order
 
-- Status: **Proposed** (M0 draft). The owners of Service Request and Work Order
-  review it with the team before implementing the transitions; changes go
-  through a PR to this file.
-- Closes ADR 0001 open point #4 once approved; decisions DEC-05 / DEC-06.
+- Status: **Accepted** (team review 2026-10-20, [ADR 0006](../decisions/0006-m0-review-decisions.md)).
+  Changes go through a PR to this file.
+- Closes ADR 0001 open point #4; decisions DEC-05 / DEC-06.
 - Statuses are the CHECK values of `service_request_db` / `workorder_db`
   (ERD v3.1). No status is added or removed here.
 - "Permission" = code of the shared catalog (`packages/auth/src/catalog.ts`).
@@ -53,15 +52,15 @@ stateDiagram-v2
 | AWAITING_INFO | info provided | requester side (own customer) by adding a `CUSTOMER` comment, or `service_request:review` | REVIEWING | — |
 | REVIEWING | record warranty check | `service_request:review` | (unchanged) | Calls Asset `warranty-status` for today; stores the snapshot (`warranty_check_result`, `warranty_id`, `warranty_end_date`, `warranty_checked_by/at`). Can be repeated while REVIEWING. |
 | REVIEWING | accept | `service_request:review` | ACCEPTED | Only when the snapshot is `IN_WARRANTY`. Out of warranty goes through an estimate. |
-| REVIEWING | send estimate | `cost_estimate:manage` | AWAITING_CUSTOMER_APPROVAL | Snapshot required and not `IN_WARRANTY`; the DRAFT revision becomes SENT. |
+| REVIEWING | send estimate | `cost_estimate:manage` | AWAITING_CUSTOMER_APPROVAL | Snapshot required and not `IN_WARRANTY`; the DRAFT revision becomes SENT. A free repair out of warranty is an estimate with `total_amount = 0` and goes through the same approval. |
 | AWAITING_CUSTOMER_APPROVAL | customer approves | `cost_estimate:respond`, own customer | ACCEPTED | Estimate SENT → APPROVED; `responded_by/at`. Refused when `valid_until` has passed (estimate → EXPIRED). |
 | AWAITING_CUSTOMER_APPROVAL | customer rejects | `cost_estimate:respond`, own customer | COST_REJECTED | Estimate SENT → REJECTED; reason stored as a `CUSTOMER` comment. |
 | AWAITING_CUSTOMER_APPROVAL | revise estimate | `cost_estimate:manage` | REVIEWING | SENT revision → SUPERSEDED; a new DRAFT revision `n+1` is created. |
-| COST_REJECTED | send new revision | `cost_estimate:manage` | AWAITING_CUSTOMER_APPROVAL | New revision `n+1` (DRAFT → SENT). Recommended answer to ADR 0001 open point #4: yes, a rejected request can get a new estimate. |
+| COST_REJECTED | send new revision | `cost_estimate:manage` | AWAITING_CUSTOMER_APPROVAL | New revision `n+1` (DRAFT → SENT); earlier revisions are kept as history. |
 | ACCEPTED | WorkOrderCreated (event) | system (`changed_by` NULL) | PROCESSING | Only one non-terminal WO per request (`uq_active_workorder_per_request`). |
 | PROCESSING | WorkOrderCompleted with report `RESOLVED` or `PARTIALLY_RESOLVED` (event) | system | RESOLVED | `resolved_at = now()`. |
 | PROCESSING | WorkOrderCompleted with `UNRESOLVED`, or WorkOrderCancelled (event) | system | ACCEPTED | A new Work Order can be created. |
-| RESOLVED | confirm | requester side (own customer, `service_request:create`) or `service_request:review` on behalf of the customer | CLOSED | `confirmed_by/at`, `closed_at`. Automatic close after N days is a later scheduler (not MVP). |
+| RESOLVED | confirm | requester side (own customer, `service_request:create`) or `service_request:review` on behalf of the customer | CLOSED | `confirmed_by/at`, `closed_at`. Never closed automatically: a RESOLVED request waits for the confirmation. |
 | RESOLVED | reopen | requester side (own customer) or `service_request:review` | ACCEPTED | Reason required. |
 | NEW, REVIEWING, AWAITING_INFO | reject | `service_request:review` | REJECTED | Reason required, visible to the customer. |
 | NEW, AWAITING_INFO, AWAITING_CUSTOMER_APPROVAL, COST_REJECTED | cancel | requester side (own customer) | CANCELLED | Reason optional. |
@@ -141,8 +140,9 @@ stateDiagram-v2
 | any non-terminal | cancel | `work_order:manage` | CANCELLED | Reason required; active assignment → REMOVED; `cancelled_at`. Event `WorkOrderCancelled`. A cancelled WO releases its Maintenance Task (ADR 0002). |
 
 Verification of the work (SRS "Verify / Close") is the Service Request step
-RESOLVED → CLOSED by the customer, not a Work Order status — recommended answer
-to DEC-06, so `workorder_db` keeps the ERD v3.1 statuses.
+RESOLVED → CLOSED by the customer, not a Work Order status (DEC-06): the Work
+Order tracks the technical work, the Service Request tracks the request, and
+`workorder_db` keeps the ERD v3.1 statuses (no VERIFIED or CLOSED).
 
 Terminal: COMPLETED, CANCELLED. Every change writes
 `work_order_status_history` and a `work_logs` row with `actor_user_id`.
