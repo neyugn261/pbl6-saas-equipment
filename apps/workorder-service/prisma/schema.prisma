@@ -202,6 +202,8 @@ model WorkOrderAttachment {
   storageKey  String    @map("storage_key") @db.VarChar(500)
   fileName    String    @map("file_name") @db.VarChar(255)
   mimeType    String    @map("mime_type") @db.VarChar(100)
+  /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
+  visibility  String    @default("INTERNAL") @db.VarChar(20)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   workOrder   WorkOrder @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
@@ -239,6 +241,8 @@ model ReportAttachment {
   storageKey      String        @map("storage_key") @db.VarChar(500)
   fileName        String        @map("file_name") @db.VarChar(255)
   mimeType        String        @map("mime_type") @db.VarChar(100)
+  /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
+  visibility      String        @default("INTERNAL") @db.VarChar(20)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   serviceReport   ServiceReport @relation(fields: [tenantId, serviceReportId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 

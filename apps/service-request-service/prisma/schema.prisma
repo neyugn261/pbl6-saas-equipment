@@ -88,6 +88,8 @@ model RequestAttachment {
   sizeBytes   BigInt?        @map("size_bytes")
   /// Logical reference to identity_db.users.id
   uploadedBy  String         @map("uploaded_by") @db.Uuid
+  /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
+  visibility  String         @default("INTERNAL") @db.VarChar(20)
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   request     ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 

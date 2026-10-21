@@ -113,19 +113,20 @@ The mobile owner is chosen when M1 ends. The M1 assignment does not change.
 
 ## Consequences
 
-- Done in the same change as this ADR: the permission catalog and
-  `ASSIGNABLE_ROLES` (`packages/auth`), the state machines, notes in the ERD
-  reference and the Organization contract.
-- Schema changes are made by the owner of each database in a **new** migration
-  (CONTRIBUTING §5), and the ERD note is then replaced by the real definition:
+- Done together with this ADR: the permission catalog and `ASSIGNABLE_ROLES`
+  (`packages/auth`), the state machines, the Organization and Asset contracts,
+  the ERD reference and these migrations (additive, applied after `0001_init`):
 
-| Change | Database | Owner | When |
-|---|---|---|---|
-| Serial number unique per model | asset_db | Asset (M1) | M1, before the equipment API |
-| `request_attachments.visibility` | service_request_db | Service Request (M1/M2) | Before attachments |
-| `work_order_attachments.visibility`, `report_attachments.visibility` | workorder_db | Work Order (M2) | M2 |
-| `work_order_parts.quantity_returned` | inventory_db | Inventory (M3) | M3 |
+| Change | Migration |
+|---|---|
+| Serial number unique per model | `asset_db` `0002_serial_unique_per_model` |
+| `request_attachments.visibility` | `service_request_db` `0002_attachment_visibility` |
+| `work_order_attachments.visibility`, `report_attachments.visibility` | `workorder_db` `0002_attachment_visibility` |
+| `work_order_parts.quantity_returned` + `chk_work_order_parts_returned` | `inventory_db` `0002_work_order_part_returns` |
 
+- Still to do by the owners when they build the features: the warranty lock
+  and overlap check (Asset), filtering attachments by visibility (Service
+  Request, Work Order) and the part return flow (Inventory).
 - Identity's user API (M1) implements `ASSIGNABLE_ROLES`; existing tokens are
   not affected because permissions are not in the token (ADR 0004).
 - The permission list stays PROVISIONAL until it is moved into an

@@ -8,12 +8,12 @@ info:
     equipment whose `customerId` equals their `customer_id` claim (ADR 0003);
     other equipment returns 404.
 
-    Open points for review:
-    - Warranty selection when several warranties cover a date (DEC-07): this
-      draft returns the ACTIVE one with the latest `endDate`, and refuses to
-      create overlapping ACTIVE warranties (409 WARRANTY_OVERLAP).
-    - `serialNumber` is unique per tenant (ERD); confirm whether it should be
-      per (tenant, model) instead (DEC-13).
+    Team decisions applied (ADR 0006):
+    - `serialNumber` is unique per (tenant, model) (DEC-13, migration
+      `0002_serial_unique_per_model`).
+    - ACTIVE warranties of one equipment never overlap; `startDate` and
+      `endDate` are both covered days (DEC-07). So at most one ACTIVE warranty
+      covers a given day.
 servers:
   - url: http://localhost:3002
     description: Local service (through the gateway later at /api/assets)
@@ -194,6 +194,11 @@ paths:
     post:
       tags: [Warranties]
       summary: Add a warranty
+      description: |
+        Runs in one transaction that first locks the equipment row
+        (`SELECT … FOR UPDATE`), then refuses a period that shares at least one
+        day with another ACTIVE warranty of the equipment (both ends
+        inclusive), so two concurrent requests cannot both pass (ADR 0006).
       x-permissions: [warranty:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -208,7 +213,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Warranty' }
         '409':
-          description: WARRANTY_OVERLAP
+          description: WARRANTY_OVERLAP — the period shares a day with an ACTIVE warranty
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -364,7 +369,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Conflict:
-      description: UNIQUE_VIOLATION (asset code, serial) or INVALID_STATE_TRANSITION
+      description: UNIQUE_VIOLATION (asset code in the tenant, serial number in the model) or INVALID_STATE_TRANSITION
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

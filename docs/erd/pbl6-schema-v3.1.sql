@@ -461,9 +461,8 @@ CREATE TABLE equipments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, asset_code),
-    -- ADR 0006 (DEC-13): becomes UNIQUE (tenant_id, model_id, serial_number)
-    -- in a new asset_db migration.
-    UNIQUE (tenant_id, serial_number),
+    -- ADR 0006 (DEC-13, asset_db 0002): was UNIQUE (tenant_id, serial_number).
+    UNIQUE (tenant_id, model_id, serial_number),
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, model_id)
         REFERENCES equipment_models (tenant_id, id) ON DELETE RESTRICT
@@ -594,9 +593,9 @@ CREATE INDEX idx_service_requests_tenant_customer ON service_requests (tenant_id
 CREATE INDEX idx_service_requests_tenant_equipment ON service_requests (tenant_id, equipment_id);
 CREATE INDEX idx_service_requests_created ON service_requests (tenant_id, created_at DESC);
 
--- ADR 0006 (DEC-09): request_attachments, work_order_attachments and
--- report_attachments get visibility VARCHAR(20) NOT NULL DEFAULT 'INTERNAL'
--- CHECK (visibility IN ('INTERNAL', 'CUSTOMER')) in new migrations.
+-- visibility (ADR 0006, DEC-09): customer accounts only receive CUSTOMER
+-- attachments; same values as request_comments. Added by migration 0002 of
+-- service_request_db / workorder_db (also on the two workorder_db tables).
 CREATE TABLE request_attachments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
@@ -606,6 +605,7 @@ CREATE TABLE request_attachments (
     mime_type VARCHAR(100) NOT NULL,
     size_bytes BIGINT,
     uploaded_by UUID NOT NULL, -- Logical reference to identity_db.users.id
+    visibility VARCHAR(20) NOT NULL DEFAULT 'INTERNAL' CHECK (visibility IN ('INTERNAL', 'CUSTOMER')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     FOREIGN KEY (tenant_id, request_id)
         REFERENCES service_requests (tenant_id, id) ON DELETE RESTRICT,
@@ -882,6 +882,7 @@ CREATE TABLE work_order_attachments (
     storage_key VARCHAR(500) NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     mime_type VARCHAR(100) NOT NULL,
+    visibility VARCHAR(20) NOT NULL DEFAULT 'INTERNAL' CHECK (visibility IN ('INTERNAL', 'CUSTOMER')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     FOREIGN KEY (tenant_id, work_order_id)
         REFERENCES work_orders (tenant_id, id) ON DELETE RESTRICT
@@ -916,6 +917,7 @@ CREATE TABLE report_attachments (
     storage_key VARCHAR(500) NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     mime_type VARCHAR(100) NOT NULL,
+    visibility VARCHAR(20) NOT NULL DEFAULT 'INTERNAL' CHECK (visibility IN ('INTERNAL', 'CUSTOMER')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     FOREIGN KEY (tenant_id, service_report_id)
         REFERENCES service_reports (tenant_id, id) ON DELETE RESTRICT
@@ -1111,9 +1113,10 @@ CREATE INDEX idx_stock_transactions_reference
 
 -- Parts issued by Inventory Staff for a Work Order. Each row is backed by
 -- exactly one ISSUE stock transaction, so stock and usage cannot diverge.
--- ADR 0006 (DEC-09): adds quantity_returned NUMERIC(12,2) NOT NULL DEFAULT 0,
--- CHECK (quantity_returned >= 0 AND quantity_returned <= quantity_used);
--- consumed = quantity_used - quantity_returned.
+-- Returns (ADR 0006, DEC-09, inventory_db 0002): quantity_used is the issued
+-- quantity; consumed = quantity_used - quantity_returned. A return writes a
+-- RETURN stock transaction and updates stocks.quantity and quantity_returned
+-- in the same transaction.
 CREATE TABLE work_order_parts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
@@ -1122,6 +1125,7 @@ CREATE TABLE work_order_parts (
     warehouse_id UUID NOT NULL,
     stock_transaction_id UUID NOT NULL UNIQUE,
     quantity_used NUMERIC(12,2) NOT NULL CHECK (quantity_used > 0),
+    quantity_returned NUMERIC(12,2) NOT NULL DEFAULT 0,
     unit_cost NUMERIC(14,2) CHECK (unit_cost IS NULL OR unit_cost >= 0),
     recorded_by UUID NOT NULL, -- Logical reference to identity_db.users.id
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1130,7 +1134,9 @@ CREATE TABLE work_order_parts (
     FOREIGN KEY (tenant_id, warehouse_id)
         REFERENCES warehouses (tenant_id, id) ON DELETE RESTRICT,
     FOREIGN KEY (tenant_id, stock_transaction_id)
-        REFERENCES stock_transactions (tenant_id, id) ON DELETE RESTRICT
+        REFERENCES stock_transactions (tenant_id, id) ON DELETE RESTRICT,
+    CONSTRAINT chk_work_order_parts_returned
+        CHECK (quantity_returned >= 0 AND quantity_returned <= quantity_used)
 );
 CREATE INDEX idx_work_order_parts_work_order ON work_order_parts (tenant_id, work_order_id);
 CREATE INDEX idx_work_order_parts_part ON work_order_parts (tenant_id, part_id, created_at DESC);
