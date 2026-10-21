@@ -5,11 +5,13 @@ info:
   description: |
     DRAFT contract (M0) — owner: Service Request owner (Member C).
     Conventions: docs/api/conventions.md. Transitions, who may call them and
-    their side effects: docs/architecture/state-machines.md (Proposed).
+    their side effects: docs/architecture/state-machines.md (Accepted).
     A transition not allowed from the current status returns
     409 `INVALID_STATE_TRANSITION` with `details: { from, action }`.
     CUSTOMER accounts only see requests of their own customer (ADR 0003) and
-    only `CUSTOMER` comments.
+    only `CUSTOMER` comments. The `review` operation is an additive convenience
+    that starts review and records the warranty snapshot in one status-change
+    transaction; the separate M0 operations remain available.
 servers:
   - url: http://localhost:3007
     description: Local service (through the gateway later at /api/service-requests)
@@ -68,7 +70,9 @@ paths:
         CUSTOMER accounts create for their own customer (`customerId` omitted,
         taken from the token) and their own equipment. Staff pass `customerId`.
         Equipment is validated through Asset (`GET /internal/equipment/{id}`
-        with the caller's token). Writes `ServiceRequestCreated`.
+        with the caller's token). The current warranty decision is also
+        requested from Asset and stored as a snapshot. Writes
+        `ServiceRequestCreated` and initial `ServiceRequestStatusChanged`.
       x-permissions: [service_request:create]
       x-events: [ServiceRequestCreated.v1, ServiceRequestStatusChanged.v1]
       requestBody:
@@ -81,9 +85,14 @@ paths:
           description: Created with status NEW
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ServiceRequest' }
+              schema: { $ref: '#/components/schemas/ServiceRequestDetail' }
         '422':
           description: EQUIPMENT_NOT_FOUND, EQUIPMENT_RETIRED, CUSTOMER_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Asset Service is unavailable
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -123,19 +132,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ServiceRequest' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+  /internal/service-requests/{requestId}:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    get:
+      tags: [Requests]
+      summary: Minimal request reference for another authenticated service
+      x-permissions: [service_request:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Request reference
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequestRef' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /service-requests/{requestId}/history:
     parameters:
       - $ref: '#/components/parameters/RequestId'
     get:
       tags: [Requests]
-      summary: Status history, oldest first
+      summary: Status changes and visible request activities, oldest first
       x-permissions: [service_request:read]
       responses:
         '200':
-          description: History
+          description: Request timeline, including comments visible to the caller
           content:
             application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/StatusChange' } }
+              schema: { type: array, items: { $ref: '#/components/schemas/HistoryEntry' } }
   /service-requests/{requestId}/start-review:
     parameters: [{ $ref: '#/components/parameters/RequestId' }]
     post:
@@ -145,6 +169,25 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Request' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+  /service-requests/{requestId}/review:
+    parameters: [{ $ref: '#/components/parameters/RequestId' }]
+    post:
+      tags: [Transitions]
+      summary: NEW → REVIEWING and record current warranty snapshot
+      description: Calls Asset warranty-status before the transaction.
+      x-permissions: [service_request:review]
+      responses:
+        '200':
+          description: Request after review and warranty snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequestDetail' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+        '503':
+          description: Asset Service is unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /service-requests/{requestId}/request-info:
     parameters: [{ $ref: '#/components/parameters/RequestId' }]
     post:
@@ -208,7 +251,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '409': { $ref: '#/components/responses/InvalidTransition' }
+        '409':
+          description: INVALID_STATE_TRANSITION or WORK_ORDER_CHECK_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /service-requests/{requestId}/confirm:
     parameters: [{ $ref: '#/components/parameters/RequestId' }]
     post:
@@ -487,6 +534,17 @@ components:
         updatedAt: { type: string, format: date-time }
         resolvedAt: { type: [string, 'null'], format: date-time }
         closedAt: { type: [string, 'null'], format: date-time }
+    ServiceRequestRef:
+      type: object
+      required: [id, requestNo, status, customerId, equipmentId, type, priority]
+      properties:
+        id: { type: string, format: uuid }
+        requestNo: { type: string }
+        status: { $ref: '#/components/schemas/Status' }
+        customerId: { type: string, format: uuid }
+        equipmentId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/Type' }
+        priority: { $ref: '#/components/schemas/Priority' }
     ServiceRequestDetail:
       allOf:
         - $ref: '#/components/schemas/ServiceRequest'
@@ -510,14 +568,29 @@ components:
               items: { type: string, examples: [start-review, accept, cancel] }
     StatusChange:
       type: object
-      required: [id, newStatus, changedAt]
+      required: [kind, id, newStatus, changedAt]
       properties:
+        kind: { type: string, const: STATUS_CHANGED }
         id: { type: string, format: uuid }
         oldStatus: { oneOf: [{ $ref: '#/components/schemas/Status' }, { type: 'null' }] }
         newStatus: { $ref: '#/components/schemas/Status' }
         changedBy: { type: [string, 'null'], format: uuid, description: NULL when changed by an event }
         reason: { type: [string, 'null'] }
         changedAt: { type: string, format: date-time }
+    CommentActivity:
+      type: object
+      required: [kind, id, authorUserId, visibility, content, occurredAt]
+      properties:
+        kind: { type: string, const: COMMENT_ADDED }
+        id: { type: string, format: uuid }
+        authorUserId: { type: string, format: uuid }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        content: { type: string }
+        occurredAt: { type: string, format: date-time }
+    HistoryEntry:
+      oneOf:
+        - $ref: '#/components/schemas/StatusChange'
+        - $ref: '#/components/schemas/CommentActivity'
     Comment:
       type: object
       required: [id, authorUserId, visibility, content, createdAt]
