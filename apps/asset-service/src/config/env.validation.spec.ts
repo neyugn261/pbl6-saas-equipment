@@ -2,6 +2,7 @@ import { PORT_VARIABLE, validateEnv } from './env.validation';
 
 const valid = {
   ASSET_DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+  ORGANIZATION_SERVICE_URL: 'http://localhost:3006',
   JWT_ACCESS_SECRET: 'x'.repeat(32),
 };
 
@@ -20,9 +21,15 @@ describe('validateEnv', () => {
     expect(validateEnv({ ...valid, [PORT_VARIABLE]: '4100' }).PORT).toBe(4100);
   });
 
-  it('requires the database URL and the JWT secret', () => {
+  it('requires the database URL, Organization URL and JWT secret', () => {
     expect(() => validateEnv({})).toThrow(
-      /ASSET_DATABASE_URL is required[\s\S]*JWT_ACCESS_SECRET is required/,
+      /ASSET_DATABASE_URL is required[\s\S]*ORGANIZATION_SERVICE_URL is required[\s\S]*JWT_ACCESS_SECRET is required/,
+    );
+  });
+
+  it('rejects a non-HTTP Organization URL', () => {
+    expect(() => validateEnv({ ...valid, ORGANIZATION_SERVICE_URL: 'file:///tmp/org' })).toThrow(
+      'ORGANIZATION_SERVICE_URL',
     );
   });
 
