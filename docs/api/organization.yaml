@@ -9,11 +9,11 @@ info:
     `tenant_id` always comes from the token; ids outside the caller's tenant
     return 404.
 
-    Open points for review:
-    - The catalog has no `branch:read`; this draft lets any TENANT_STAFF read
-      branches. Add `branch:read` to the catalog if that is too wide.
-    - Creating the first Tenant Admin account needs Identity's user API (M2);
-      until then `POST /tenants` only creates the tenant.
+    Team decisions applied (ADR 0006): reading branches needs `branch:read`;
+    linking CUSTOMER accounts is account management (`user:read` /
+    `user:manage`, Customer Admin limited to its own customer).
+    `POST /tenants` only creates the tenant; the Platform Admin then creates
+    its Tenant Admin through Identity's user API.
 servers:
   - url: http://localhost:3006
     description: Local service (through the gateway later at /api/organization)
@@ -146,8 +146,7 @@ paths:
     get:
       tags: [Branches]
       summary: List internal branches of the tenant
-      x-permissions: []
-      x-user-types: [TENANT_STAFF]
+      x-permissions: [branch:read]
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -188,7 +187,7 @@ paths:
     get:
       tags: [Branches]
       summary: Get a branch
-      x-user-types: [TENANT_STAFF]
+      x-permissions: [branch:read]
       responses:
         '200':
           description: Branch
@@ -539,7 +538,10 @@ paths:
     get:
       tags: [Memberships]
       summary: CUSTOMER accounts linked to the customer
-      x-permissions: [customer:read]
+      description: |
+        Tenant Admin for any customer; Customer Admin only for its own
+        customer (another customer → 404).
+      x-permissions: [user:read]
       responses:
         '200':
           description: Memberships
@@ -553,8 +555,12 @@ paths:
         The user is validated through Identity (CUSTOMER, same tenant). An
         account belongs to one customer; linking it again moves it.
         Writes `CustomerMembershipChanged` (ADR 0003).
-      x-permissions: [customer:manage]
-      x-user-types: [TENANT_STAFF]
+
+        Tenant Admin: any customer of the tenant. Customer Admin (ADR 0006):
+        only its own customer (another customer → 404), only accounts whose
+        roles it may assign (CUSTOMER_USER), and never an account linked to
+        another customer (409 USER_LINKED_TO_OTHER_CUSTOMER).
+      x-permissions: [user:manage]
       x-events: [CustomerMembershipChanged.v1]
       requestBody:
         required: true
@@ -572,6 +578,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Membership' }
+        '409':
+          description: USER_LINKED_TO_OTHER_CUSTOMER (Customer Admin only)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422':
           description: USER_NOT_CUSTOMER_ACCOUNT
           content:
@@ -586,8 +597,8 @@ paths:
     post:
       tags: [Memberships]
       summary: Activate or deactivate a membership
-      x-permissions: [customer:manage]
-      x-user-types: [TENANT_STAFF]
+      description: Same scope rules as linking (Customer Admin only for CUSTOMER_USER accounts of its own customer).
+      x-permissions: [user:manage]
       x-events: [CustomerMembershipChanged.v1]
       requestBody:
         required: true
