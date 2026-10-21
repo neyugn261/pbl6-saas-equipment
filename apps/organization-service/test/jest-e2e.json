@@ -15,5 +15,9 @@
   },
   "setupFiles": [
     "<rootDir>/support/setup-env.ts"
+  ],
+  "testPathIgnorePatterns": [
+    "/node_modules/",
+    "<rootDir>/db/"
   ]
 }

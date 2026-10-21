@@ -116,3 +116,6 @@ jobs:
       - name: Identity e2e tests
         working-directory: apps/identity-service
         run: pnpm test:e2e
+      - name: Organization e2e tests (organization_test_db)
+        working-directory: apps/organization-service
+        run: pnpm test:e2e:db

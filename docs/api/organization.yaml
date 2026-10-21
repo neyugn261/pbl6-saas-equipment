@@ -335,6 +335,7 @@ paths:
     delete:
       tags: [Customers]
       summary: Soft-delete a customer
+      description: Its sites, locations and contacts are no longer returned either.
       x-permissions: [customer:manage]
       x-user-types: [TENANT_STAFF]
       responses:
@@ -406,6 +407,7 @@ paths:
     delete:
       tags: [Sites and locations]
       summary: Soft-delete a site
+      description: Its locations are no longer returned either.
       x-permissions: [customer:manage]
       x-user-types: [TENANT_STAFF]
       responses:
@@ -467,6 +469,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Location' }
+        '422':
+          description: LOCATION_CYCLE or PARENT_NOT_IN_SITE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     delete:
       tags: [Sites and locations]
       summary: Soft-delete a location (refused while it has children)
@@ -474,6 +481,11 @@ paths:
       x-user-types: [TENANT_STAFF]
       responses:
         '204': { description: Deleted }
+        '409':
+          description: LOCATION_HAS_CHILDREN
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /customers/{customerId}/contacts:
     parameters:
       - $ref: '#/components/parameters/CustomerId'
@@ -496,13 +508,21 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ContactInput' }
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ContactInput'
+                - required: [name]
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Contact' }
+        '422':
+          description: SITE_NOT_OF_CUSTOMER — customerSiteId is not a live site of this customer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /contacts/{contactId}:
     parameters:
       - name: contactId
@@ -525,6 +545,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Contact' }
+        '422':
+          description: SITE_NOT_OF_CUSTOMER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     delete:
       tags: [Contacts]
       summary: Soft-delete a contact
@@ -741,7 +766,7 @@ components:
       required: [id, code, name, status, plan, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
-        code: { type: string, maxLength: 50, description: Unique, used at login; cannot change }
+        code: { type: string, maxLength: 50, description: 'Unique, used at login; cannot change' }
         name: { type: string, maxLength: 200 }
         status: { $ref: '#/components/schemas/TenantStatus' }
         plan: { type: string, description: Informational only }
