@@ -3,10 +3,14 @@ info:
   title: PBL6 Asset Service
   version: 0.1.0-draft
   description: |
-    DRAFT contract (M0) — owner: Asset Service owner (Member B).
-    Conventions: docs/api/conventions.md. CUSTOMER accounts only see
-    equipment whose `customerId` equals their `customer_id` claim (ADR 0003);
-    other equipment returns 404.
+    DRAFT M1 contract for review — owner: Asset Service owner (Member B).
+    Conventions: docs/api/conventions.md. Every operation below requires a
+    bearer access token. The tenant and, for CUSTOMER accounts, customer scope
+    come only from the token (ADR 0003). PLATFORM_STAFF has no tenant scope.
+    An equipment, warranty, model, or history resource outside the caller's
+    scope returns 404. No client-supplied tenantId or scope header is trusted.
+    Calendar dates are YYYY-MM-DD; timestamps are UTC ISO 8601. Nullable
+    response properties are present with null rather than omitted.
 
     Team decisions applied (ADR 0006):
     - `serialNumber` is unique per (tenant, model) (DEC-13, migration
@@ -14,6 +18,9 @@ info:
     - ACTIVE warranties of one equipment never overlap; `startDate` and
       `endDate` are both covered days (DEC-07). So at most one ACTIVE warranty
       covers a given day.
+    Model changes do not create equipment history. Equipment, warranty and QR
+    writes create the history entries described on their operations. Reads
+    never create history.
 servers:
   - url: http://localhost:3002
     description: Local service (through the gateway later at /api/assets)
@@ -31,11 +38,23 @@ paths:
     get:
       tags: [Models]
       summary: List equipment models of the tenant
+      description: |
+        Includes ACTIVE and INACTIVE models. A CUSTOMER account may read the
+        tenant's model catalog under the current RBAC catalog; confirm this
+        visibility with the team before implementation.
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
-        - $ref: '#/components/parameters/Q'
+        - $ref: '#/components/parameters/ModelQ'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/EquipmentModelStatus' }
+        - name: sort
+          in: query
+          description: Default name, then id for stable pagination.
+          schema: { type: string, enum: [name, '-name', createdAt, '-createdAt'], default: name }
       responses:
         '200':
           description: Page of models
@@ -45,11 +64,16 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/PageMeta'
                   - type: object
+                    required: [items]
                     properties:
                       items: { type: array, items: { $ref: '#/components/schemas/EquipmentModel' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [Models]
       summary: Create a model
+      description: New models start ACTIVE. Duplicate (tenant, manufacturer, modelCode) returns UNIQUE_VIOLATION.
       x-permissions: [equipment:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -64,6 +88,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EquipmentModel' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /equipment-models/{modelId}:
     parameters:
       - name: modelId
@@ -73,6 +100,7 @@ paths:
     patch:
       tags: [Models]
       summary: Update a model (status INACTIVE hides it from new equipment)
+      description: An INACTIVE model remains readable and linked to existing equipment, but cannot be selected on POST /equipment.
       x-permissions: [equipment:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -86,21 +114,32 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EquipmentModel' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ModelNotFound' }
   /equipment:
     get:
       tags: [Equipment]
       summary: List equipment
+      description: |
+        CUSTOMER accounts only receive equipment of the customer_id in their
+        token; their customerId query value is ignored. Staff may filter by a
+        customer of their tenant. Search covers assetCode, serialNumber and
+        model name. Warranty is evaluated for today in Asia/Ho_Chi_Minh.
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
-        - $ref: '#/components/parameters/Q'
+        - $ref: '#/components/parameters/EquipmentQ'
         - name: customerId
           in: query
           description: Ignored for CUSTOMER accounts (always their own customer)
           schema: { type: string, format: uuid }
         - name: siteId
           in: query
+          description: Matches customerSiteId; combined with the effective customer scope.
           schema: { type: string, format: uuid }
         - name: status
           in: query
@@ -109,6 +148,10 @@ paths:
           in: query
           description: Filter by warranty state today
           schema: { $ref: '#/components/schemas/WarrantyCheckResult' }
+        - name: sort
+          in: query
+          description: Default -createdAt, then id for stable pagination.
+          schema: { type: string, enum: [createdAt, '-createdAt', assetCode, '-assetCode'], default: '-createdAt' }
       responses:
         '200':
           description: Page of equipment
@@ -118,15 +161,24 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/PageMeta'
                   - type: object
+                    required: [items]
                     properties:
                       items: { type: array, items: { $ref: '#/components/schemas/Equipment' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [Equipment]
       summary: Register handed-over equipment
       description: |
-        Customer, site and location are validated through Organization
-        (`GET /internal/customers/{id}/sites/{siteId}?locationId=`). Writes an
-        `equipment_history` row `REGISTERED`.
+        Only an ACTIVE model of the caller's tenant may be selected. Validate
+        customer, site and optional location through Organization's internal
+        customer/site endpoints using the forwarded bearer token and correlation
+        id. The site must belong to the customer; the location must belong to
+        that site. The asset code is unique within the tenant and serialNumber
+        within (tenant, model), per ADR 0006. Create equipment and one
+        REGISTERED history entry atomically. A reference that cannot be
+        validated returns 422 without revealing another tenant's data.
       x-permissions: [equipment:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -141,29 +193,49 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Equipment' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '422':
-          description: MODEL_NOT_FOUND, CUSTOMER_NOT_FOUND, SITE_NOT_OF_CUSTOMER, LOCATION_NOT_IN_SITE
+          description: MODEL_NOT_FOUND, MODEL_INACTIVE, CUSTOMER_NOT_FOUND, SITE_NOT_OF_CUSTOMER or LOCATION_NOT_IN_SITE; reference existence outside the tenant is not disclosed
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
   /equipment/{equipmentId}:
     parameters:
       - $ref: '#/components/parameters/EquipmentId'
     get:
       tags: [Equipment]
       summary: Equipment detail with its current warranty state
+      description: Current warranty state uses today in Asia/Ho_Chi_Minh. RETIRED equipment remains readable.
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: Equipment
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EquipmentDetail' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     patch:
       tags: [Equipment]
       summary: Update data or move to another site/location of the same customer
-      description: A move writes history `MOVED`; a status change writes `STATUS_CHANGED`. RETIRED is final.
+      description: |
+        The equipment's customerId and modelId cannot change. A new site must
+        belong to the existing customer. If customerSiteId changes and
+        locationId is omitted, clear the old location to null; a supplied
+        locationId must belong to the new site. Changing only locationId keeps
+        the existing site. No field can be changed after RETIRED (409).
+        Create MOVED history for effective site/location changes,
+        STATUS_CHANGED for an effective status change, and DETAILS_UPDATED
+        for effective installation/handover date changes. A PATCH that changes
+        multiple categories creates one entry per category in the same
+        transaction; a no-op creates none. RETIRED remains readable.
       x-permissions: [equipment:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -178,19 +250,36 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Equipment' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
+        '422':
+          description: SITE_NOT_OF_CUSTOMER or LOCATION_NOT_IN_SITE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/UpstreamError' }
+        '503': { $ref: '#/components/responses/UpstreamUnavailable' }
   /equipment/{equipmentId}/warranties:
     parameters:
       - $ref: '#/components/parameters/EquipmentId'
     get:
       tags: [Warranties]
       summary: Warranties of the equipment
+      description: Includes ACTIVE and VOID records, ordered by startDate descending then id. `expired` is derived from endDate and today in Asia/Ho_Chi_Minh, never stored.
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: Warranties
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Warranty' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
     post:
       tags: [Warranties]
       summary: Add a warranty
@@ -199,6 +288,8 @@ paths:
         (`SELECT … FOR UPDATE`), then refuses a period that shares at least one
         day with another ACTIVE warranty of the equipment (both ends
         inclusive), so two concurrent requests cannot both pass (ADR 0006).
+        A VOID warranty does not block the period. Creates one WARRANTY_ADDED
+        equipment history entry in the same transaction.
       x-permissions: [warranty:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -217,6 +308,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
   /warranties/{warrantyId}/void:
     parameters:
       - name: warrantyId
@@ -226,6 +321,7 @@ paths:
     post:
       tags: [Warranties]
       summary: Void a warranty (status VOID, kept as history)
+      description: An ACTIVE warranty becomes VOID and creates one WARRANTY_VOIDED equipment history entry. `reason`, if supplied, is recorded in history; a second void returns INVALID_STATE_TRANSITION.
       x-permissions: [warranty:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -242,6 +338,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Warranty' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/WarrantyNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /equipment/{equipmentId}/warranty-status:
     parameters:
       - $ref: '#/components/parameters/EquipmentId'
@@ -252,21 +353,54 @@ paths:
     get:
       tags: [Warranties]
       summary: Warranty decision for a day — used by Service Request review
+      description: |
+        Only ACTIVE warranties participate. Both startDate and endDate cover
+        their calendar day. If none covers the requested date, select the
+        ACTIVE warranty with the greatest endDate strictly before that date.
+        Its id/endDate accompany OUT_OF_WARRANTY. If there is no such prior
+        ACTIVE warranty, return NO_WARRANTY with null warrantyId/endDate.
+        VOID records never participate. The query date, or today in
+        Asia/Ho_Chi_Minh when omitted, is returned unchanged in `date`.
+
+        For ACTIVE periods [2026-01-01, 2026-01-31] and
+        [2026-03-01, 2026-03-31]:
+
+        | Date / case | result | warrantyId / endDate |
+        | --- | --- | --- |
+        | 2026-01-01 (start) | IN_WARRANTY | first / 2026-01-31 |
+        | 2026-01-31 (end) | IN_WARRANTY | first / 2026-01-31 |
+        | 2025-12-31 (before first start) | NO_WARRANTY | null / null |
+        | 2026-02-01 (after first end) | OUT_OF_WARRANTY | first / 2026-01-31 |
+        | 2026-02-15 (gap) | OUT_OF_WARRANTY | first / 2026-01-31 |
+        | 2026-03-01 (next start) | IN_WARRANTY | second / 2026-03-31 |
+        | 2026-04-01 (after latest end) | OUT_OF_WARRANTY | second / 2026-03-31 |
+        | no warranties | NO_WARRANTY | null / null |
+        | VOID warranties only | NO_WARRANTY | null / null |
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: Result
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WarrantyStatus' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /equipment/{equipmentId}/qr-codes:
     parameters:
       - $ref: '#/components/parameters/EquipmentId'
     post:
       tags: [QR codes]
       summary: Create or re-print the QR code
-      description: Revokes the active code and creates a new random token in one transaction (one active QR per equipment).
+      description: |
+        Lock the equipment row, revoke its active code if any, and create a new
+        random token in one transaction. Concurrent requests cannot leave two
+        active codes. The previous token stops resolving after commit. Return
+        the new token and portal deep-link URL, not an image or print file.
+        First issue writes QR_CREATED history; re-print writes QR_REPRINTED
+        history. Never store the token in history metadata.
       x-permissions: [qr:manage]
       x-user-types: [TENANT_STAFF]
       responses:
@@ -275,13 +409,25 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/QrCode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
     delete:
       tags: [QR codes]
       summary: Revoke the active QR code
+      description: |
+        Revoke the active token if present; a repeat call returns 204. After
+        revocation the old token resolves as 404. A successful change writes
+        QR_REVOKED history; a no-op writes no history.
       x-permissions: [qr:manage]
       x-user-types: [TENANT_STAFF]
       responses:
         '204': { description: Revoked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
   /qr/{token}:
     parameters:
       - name: token
@@ -294,15 +440,21 @@ paths:
       description: |
         The QR only identifies equipment; the caller must still be logged in
         and the equipment must be in the caller's scope (else 404, also for a
-        revoked or unknown token).
+        revoked or unknown token). QR behavior after equipment retirement needs
+        team review; Service Request already rejects RETIRED equipment from
+        EquipmentRef when creating new work.
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: Equipment
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Equipment' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '404': { $ref: '#/components/responses/QrNotFound' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /equipment/{equipmentId}/history:
     parameters:
       - $ref: '#/components/parameters/EquipmentId'
@@ -311,7 +463,14 @@ paths:
     get:
       tags: [History]
       summary: Service history of the equipment, newest first
+      description: |
+        Ordered by occurredAt descending then id. M1 local entries are
+        REGISTERED, MOVED, STATUS_CHANGED, DETAILS_UPDATED, WARRANTY_ADDED,
+        WARRANTY_VOIDED, QR_CREATED, QR_REPRINTED and QR_REVOKED. Service
+        Request and Work Order entries arrive through M2 event consumers.
+        Models, reads and no-op writes create no equipment history.
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: Page of history entries
@@ -321,22 +480,36 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/PageMeta'
                   - type: object
+                    required: [items]
                     properties:
                       items: { type: array, items: { $ref: '#/components/schemas/HistoryEntry' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
   /internal/equipment/{equipmentId}:
     parameters:
       - $ref: '#/components/parameters/EquipmentId'
     get:
       tags: [Internal]
       summary: Equipment reference for other services (scope of the forwarded token applies)
+      description: |
+        The caller forwards the user's bearer token and correlation id (ADR
+        0004). Apply the same tenant/customer scope as GET /equipment/{id}.
+        RETIRED is returned as a status so Service Request can reject new
+        requests; it is not hidden. The gateway does not expose /internal/*.
       x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: Reference
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EquipmentRef' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 components:
   securitySchemes:
     bearer:
@@ -352,10 +525,15 @@ components:
       name: pageSize
       in: query
       schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
-    Q:
+    ModelQ:
       name: q
       in: query
-      description: Search in asset code, serial number, model name
+      description: Case-insensitive search in manufacturer, modelCode and name
+      schema: { type: string, maxLength: 100 }
+    EquipmentQ:
+      name: q
+      in: query
+      description: Case-insensitive search in assetCode, serialNumber and model name
       schema: { type: string, maxLength: 100 }
     EquipmentId:
       name: equipmentId
@@ -363,13 +541,53 @@ components:
       required: true
       schema: { type: string, format: uuid }
   responses:
-    NotFound:
-      description: Not found or outside the caller's scope
+    BadRequest:
+      description: VALIDATION_FAILED — malformed UUID/date, invalid filter, empty or unknown request field (including tenantId)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: INVALID_ACCESS_TOKEN — absent, invalid or expired bearer token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: FORBIDDEN, TENANT_SCOPE_REQUIRED or CUSTOMER_SCOPE_MISSING
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ModelNotFound:
+      description: MODEL_NOT_FOUND — absent model or model outside the caller's tenant scope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    EquipmentNotFound:
+      description: EQUIPMENT_NOT_FOUND — absent equipment or equipment outside the caller's tenant/customer scope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    WarrantyNotFound:
+      description: WARRANTY_NOT_FOUND — absent warranty or warranty outside the caller's tenant scope
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    QrNotFound:
+      description: QR_NOT_FOUND — unknown/revoked token or equipment outside the caller's scope
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Conflict:
       description: UNIQUE_VIOLATION (asset code in the tenant, serial number in the model) or INVALID_STATE_TRANSITION
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UpstreamError:
+      description: UPSTREAM_ERROR — Organization returned an unexpected error while validating a customer, site or location
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UpstreamUnavailable:
+      description: UPSTREAM_UNAVAILABLE — Organization could not be reached; no write is committed
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -391,12 +609,16 @@ components:
     EquipmentStatus:
       type: string
       enum: [ACTIVE, IN_SERVICE, OUT_OF_SERVICE, RETIRED]
+      description: RETIRED is final; an equipment cannot leave that state.
+    EquipmentModelStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
     WarrantyCheckResult:
       type: string
       enum: [IN_WARRANTY, OUT_OF_WARRANTY, NO_WARRANTY]
     EquipmentModel:
       type: object
-      required: [id, manufacturer, modelCode, name, status]
+      required: [id, manufacturer, modelCode, name, category, description, status, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         manufacturer: { type: string }
@@ -404,28 +626,31 @@ components:
         name: { type: string }
         category: { type: [string, 'null'] }
         description: { type: [string, 'null'] }
-        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        status: { $ref: '#/components/schemas/EquipmentModelStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     EquipmentModelInput:
       type: object
       additionalProperties: false
       required: [manufacturer, modelCode, name]
       properties:
-        manufacturer: { type: string, maxLength: 150 }
-        modelCode: { type: string, maxLength: 100 }
-        name: { type: string, maxLength: 200 }
+        manufacturer: { type: string, minLength: 1, maxLength: 150 }
+        modelCode: { type: string, minLength: 1, maxLength: 100 }
+        name: { type: string, minLength: 1, maxLength: 200 }
         category: { type: string, maxLength: 100 }
         description: { type: string }
     EquipmentModelPatch:
       type: object
       additionalProperties: false
+      minProperties: 1
       properties:
-        name: { type: string, maxLength: 200 }
+        name: { type: string, minLength: 1, maxLength: 200 }
         category: { type: [string, 'null'], maxLength: 100 }
         description: { type: [string, 'null'] }
-        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        status: { $ref: '#/components/schemas/EquipmentModelStatus' }
     Equipment:
       type: object
-      required: [id, modelId, customerId, customerSiteId, assetCode, serialNumber, status]
+      required: [id, modelId, customerId, customerSiteId, locationId, assetCode, serialNumber, installationDate, handoverDate, status, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         modelId: { type: string, format: uuid }
@@ -443,7 +668,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/Equipment'
         - type: object
-          required: [model, warranty]
+          required: [model, warranty, hasActiveQr]
           properties:
             model: { $ref: '#/components/schemas/EquipmentModel' }
             warranty: { $ref: '#/components/schemas/WarrantyStatus' }
@@ -457,22 +682,23 @@ components:
         customerId: { type: string, format: uuid }
         customerSiteId: { type: string, format: uuid }
         locationId: { type: string, format: uuid }
-        assetCode: { type: string, maxLength: 100 }
-        serialNumber: { type: string, maxLength: 150 }
+        assetCode: { type: string, minLength: 1, maxLength: 100 }
+        serialNumber: { type: string, minLength: 1, maxLength: 150, description: Unique within (tenant, model) }
         installationDate: { type: string, format: date }
         handoverDate: { type: string, format: date }
     EquipmentPatch:
       type: object
       additionalProperties: false
+      minProperties: 1
       properties:
-        customerSiteId: { type: string, format: uuid, description: Must belong to the same customer }
-        locationId: { type: [string, 'null'], format: uuid }
+        customerSiteId: { type: string, format: uuid, description: Must belong to the existing customer; changing it without locationId clears the old location }
+        locationId: { type: [string, 'null'], format: uuid, description: A non-null location must belong to the effective site }
         installationDate: { type: [string, 'null'], format: date }
         handoverDate: { type: [string, 'null'], format: date }
         status: { $ref: '#/components/schemas/EquipmentStatus' }
     Warranty:
       type: object
-      required: [id, equipmentId, startDate, endDate, warrantyType, status]
+      required: [id, equipmentId, startDate, endDate, warrantyType, terms, status, expired]
       properties:
         id: { type: string, format: uuid }
         equipmentId: { type: string, format: uuid }
@@ -481,7 +707,7 @@ components:
         warrantyType: { type: string }
         terms: { type: [string, 'null'] }
         status: { type: string, enum: [ACTIVE, VOID] }
-        expired: { type: boolean, description: Derived from endDate and today; never stored }
+        expired: { type: boolean, description: Derived as endDate before today in Asia/Ho_Chi_Minh; never stored }
     WarrantyInput:
       type: object
       additionalProperties: false
@@ -489,33 +715,33 @@ components:
       properties:
         startDate: { type: string, format: date }
         endDate: { type: string, format: date, description: '>= startDate' }
-        warrantyType: { type: string, maxLength: 50 }
+        warrantyType: { type: string, minLength: 1, maxLength: 50 }
         terms: { type: string }
     WarrantyStatus:
       type: object
-      required: [equipmentId, date, result]
+      required: [equipmentId, date, result, warrantyId, endDate]
       properties:
         equipmentId: { type: string, format: uuid }
         date: { type: string, format: date }
         result: { $ref: '#/components/schemas/WarrantyCheckResult' }
-        warrantyId: { type: [string, 'null'], format: uuid, description: Set when result is IN_WARRANTY or OUT_OF_WARRANTY (latest expired) }
-        endDate: { type: [string, 'null'], format: date }
+        warrantyId: { type: [string, 'null'], format: uuid, description: Covering ACTIVE warranty for IN_WARRANTY; latest ACTIVE warranty ended before date for OUT_OF_WARRANTY; null for NO_WARRANTY }
+        endDate: { type: [string, 'null'], format: date, description: End date of warrantyId; null exactly when warrantyId is null }
     QrCode:
       type: object
       required: [id, equipmentId, token, url, createdAt]
       properties:
         id: { type: string, format: uuid }
         equipmentId: { type: string, format: uuid }
-        token: { type: string, description: Random, at least 128 bits, base64url }
-        url: { type: string, description: 'Deep link printed in the QR, e.g. <web>/portal/qr/<token>' }
+        token: { type: string, minLength: 22, maxLength: 255, pattern: '^[A-Za-z0-9_-]+$', description: Random, at least 128 bits, base64url; only the new active token is returned }
+        url: { type: string, format: uri, description: 'Absolute portal deep link containing the token, e.g. <web>/portal/qr/<token>; portal base URL configuration is reviewed separately' }
         createdAt: { type: string, format: date-time }
     HistoryEntry:
       type: object
-      required: [id, equipmentId, eventType, occurredAt]
+      required: [id, equipmentId, eventType, referenceType, referenceId, description, metadata, createdBy, occurredAt]
       properties:
         id: { type: string, format: uuid }
         equipmentId: { type: string, format: uuid }
-        eventType: { type: string, examples: [REGISTERED, MOVED, STATUS_CHANGED, WARRANTY_ADDED, SERVICE_REQUEST, WORK_ORDER_COMPLETED] }
+        eventType: { type: string, examples: [REGISTERED, MOVED, STATUS_CHANGED, DETAILS_UPDATED, WARRANTY_ADDED, WARRANTY_VOIDED, QR_CREATED, QR_REPRINTED, QR_REVOKED, SERVICE_REQUEST, WORK_ORDER_COMPLETED] }
         referenceType: { type: [string, 'null'] }
         referenceId: { type: [string, 'null'], format: uuid }
         description: { type: [string, 'null'] }
@@ -524,7 +750,7 @@ components:
         occurredAt: { type: string, format: date-time }
     EquipmentRef:
       type: object
-      required: [id, customerId, customerSiteId, status, assetCode]
+      required: [id, customerId, customerSiteId, locationId, status, assetCode]
       properties:
         id: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
