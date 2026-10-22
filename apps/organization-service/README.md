@@ -47,7 +47,7 @@ M1 master data and tenants:
 - User ids are checked through Identity's `GET /internal/users/{id}` with the
   caller's token (`IDENTITY_SERVICE_URL`, `IdentityClient`); the e2e suites
   replace it with a fake that follows the same contract.
-- Next: dev seed.
+- Dev data: `pnpm db:seed:dev` (below).
 
 `GET /health` is public (`200 {status:'ok', database:'up'}` or 503); every
 other route requires an access token. Errors follow `{code, message, details?}`.
@@ -62,4 +62,21 @@ pnpm test:e2e:db      # API suites against organization_test_db (ORGANIZATION_TE
 pnpm lint && pnpm typecheck
 pnpm db:migrate       # prisma migrate deploy
 pnpm db:check-drift   # migrations vs schema.prisma (needs ORGANIZATION_SHADOW_DATABASE_URL)
+pnpm db:seed:dev      # demo data (refuses NODE_ENV=production), idempotent
 ```
+
+## Dev seed
+
+`pnpm db:seed:dev` writes tenant DEMO, 2 branches, 2 customers, 3 sites, a
+location tree and contacts with the fixed ids of
+[fixtures.md](../../docs/api/fixtures.md). Run Identity's
+`db:migrate` and `db:seed:dev` first and keep Identity running: the seed logs
+the demo accounts in (`IDENTITY_SERVICE_URL`, `SEED_DEMO_PASSWORD`) to read
+their ids, then links the two customer accounts to DEMO-CUST-01 and assigns
+the four staff accounts to branch HCM. Without Identity it seeds everything
+else and prints a warning. `TenantCreated` and `CustomerMembershipChanged`
+are written to the outbox for the rows it creates, as the API would.
+
+Order on a fresh machine: `pnpm db:migrate` (root) → identity `db:seed:dev` →
+start identity → organization `db:seed:dev` → start organization (publishes
+the outbox).

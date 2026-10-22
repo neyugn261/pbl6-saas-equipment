@@ -10,6 +10,8 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
+    // Development data only (refuses NODE_ENV=production): pnpm db:seed:dev
+    seed: 'tsx prisma/seed.ts',
   },
   datasource: {
     // Not wrapped in env(): `prisma generate` must work without a database URL (CI).
