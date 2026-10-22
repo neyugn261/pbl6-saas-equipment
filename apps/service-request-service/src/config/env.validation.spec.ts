@@ -1,6 +1,7 @@
 import { PORT_VARIABLE, validateEnv } from './env.validation';
 
 const valid = {
+  ASSET_SERVICE_URL: 'http://localhost:3002',
   SERVICE_REQUEST_DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   JWT_ACCESS_SECRET: 'x'.repeat(32),
 };
@@ -27,13 +28,33 @@ describe('validateEnv', () => {
   });
 
   it('rejects a placeholder JWT secret', () => {
-    expect(() => validateEnv({ ...valid, JWT_ACCESS_SECRET: 'CHANGE_ME' })).toThrow(
-      'JWT_ACCESS_SECRET',
-    );
+    expect(() =>
+      validateEnv({ ...valid, JWT_ACCESS_SECRET: 'CHANGE_ME' }),
+    ).toThrow('JWT_ACCESS_SECRET');
   });
 
   it('rejects an invalid port and an unknown NODE_ENV', () => {
-    expect(() => validateEnv({ ...valid, [PORT_VARIABLE]: 'abc' })).toThrow(PORT_VARIABLE);
-    expect(() => validateEnv({ ...valid, NODE_ENV: 'staging' })).toThrow('NODE_ENV');
+    expect(() => validateEnv({ ...valid, [PORT_VARIABLE]: 'abc' })).toThrow(
+      PORT_VARIABLE,
+    );
+    expect(() => validateEnv({ ...valid, NODE_ENV: 'staging' })).toThrow(
+      'NODE_ENV',
+    );
+  });
+
+  it('requires a valid RabbitMQ URL in production', () => {
+    expect(() => validateEnv({ ...valid, NODE_ENV: 'production' })).toThrow(
+      'RABBITMQ_URL is required in production',
+    );
+    expect(
+      validateEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        RABBITMQ_URL: 'amqps://rabbitmq.internal',
+      }).RABBITMQ_URL,
+    ).toBe('amqps://rabbitmq.internal');
+    expect(() =>
+      validateEnv({ ...valid, RABBITMQ_URL: 'https://not-rabbitmq.local' }),
+    ).toThrow('RABBITMQ_URL');
   });
 });

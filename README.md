@@ -35,7 +35,7 @@ apps/
   workorder-service/        :3004  scaffold + schema workorder_db
   notification-service/     :3005  scaffold + schema notification_db
   organization-service/     :3006  ✅ nối packages/ + schema organization_db; chưa có API nghiệp vụ
-  service-request-service/  :3007  ✅ nối packages/ + schema service_request_db; chưa có API nghiệp vụ
+  service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox
   inventory-service/        :3008  scaffold + schema inventory_db
   web/                      :5173  prototype UI, dữ liệu mock (chưa nối API)
   mobile/                          Flutter template
@@ -44,7 +44,7 @@ infrastructure/postgres/    init.sql (8 database của service), dev-databases.s
 docs/                       SRS, ADR, ERD, API contract, kiến trúc (event, state machine)
 ```
 
-Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; Identity thêm `0002_user_customer_links`). Chỉ Identity đã có API nghiệp vụ. Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
+Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; Identity thêm `0002_user_customer_links`). Identity và Service Request có API nghiệp vụ; các service còn lại đang được triển khai theo ownership trong [CONTRIBUTING.md](CONTRIBUTING.md). Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
 
 Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác thực token và phân quyền theo catalog RBAC, phạm vi tenant/customer, định dạng lỗi `{code, message}`, log JSON có correlation id, `/health`, outbox/inbox và RabbitMQ. Quy trình làm việc nhóm: [CONTRIBUTING.md](CONTRIBUTING.md).
 
