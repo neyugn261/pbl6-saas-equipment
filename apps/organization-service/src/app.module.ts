@@ -7,7 +7,9 @@ import { BranchesModule } from './branches/branches.module';
 import { validateEnv } from './config/env.validation';
 import { CustomersModule } from './customers/customers.module';
 import { EventsModule } from './events/events.module';
+import { IdentityModule } from './identity/identity.module';
 import { InternalModule } from './internal/internal.module';
+import { MembershipsModule } from './memberships/memberships.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 import { SitesModule } from './sites/sites.module';
@@ -32,10 +34,12 @@ import { TenantsModule } from './tenants/tenants.module';
       useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
     EventsModule,
+    IdentityModule,
     TenantsModule,
     BranchesModule,
     CustomersModule,
     SitesModule,
+    MembershipsModule,
     InternalModule,
   ],
 })

@@ -20,9 +20,16 @@ import {
 } from '@pbl6/auth';
 import type { Page } from '@pbl6/service-kit';
 import { ListQueryDto } from '../common/validation';
-import type { BranchResponse } from './branch.response';
+import type {
+  BranchResponse,
+  BranchUserAssignmentResponse,
+} from './branch.response';
 import { BranchesService } from './branches.service';
-import { CreateBranchDto, UpdateBranchDto } from './dto/branch.dto';
+import {
+  AssignBranchUserDto,
+  CreateBranchDto,
+  UpdateBranchDto,
+} from './dto/branch.dto';
 
 /** Internal branches of the vendor; staff only. */
 @Controller('branches')
@@ -75,5 +82,35 @@ export class BranchesController {
     @CurrentUser() user: Principal,
   ): Promise<void> {
     return this.branches.remove(requireTenantId(user), id);
+  }
+
+  @Get(':branchId/users')
+  @RequirePermissions('user:read')
+  listUsers(
+    @Param('branchId', ParseUUIDPipe) id: string,
+    @CurrentUser() user: Principal,
+  ): Promise<BranchUserAssignmentResponse[]> {
+    return this.branches.listUsers(requireTenantId(user), id);
+  }
+
+  @Post(':branchId/users')
+  @RequirePermissions('branch:manage')
+  assignUser(
+    @Param('branchId', ParseUUIDPipe) id: string,
+    @Body() body: AssignBranchUserDto,
+    @CurrentUser() user: Principal,
+  ): Promise<BranchUserAssignmentResponse> {
+    return this.branches.assignUser(user, id, body);
+  }
+
+  @Delete(':branchId/users/:userId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions('branch:manage')
+  unassignUser(
+    @Param('branchId', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() user: Principal,
+  ): Promise<void> {
+    return this.branches.unassignUser(requireTenantId(user), id, userId);
   }
 }

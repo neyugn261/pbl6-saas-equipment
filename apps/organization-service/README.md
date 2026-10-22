@@ -19,6 +19,8 @@ M1 master data and tenants:
 | Sites | `GET/POST /customers/{id}/sites`, `GET/PATCH/DELETE /sites/{id}` | same |
 | Locations | `GET/POST /sites/{id}/locations`, `PATCH/DELETE /locations/{id}` | same |
 | Contacts | `GET/POST /customers/{id}/contacts`, `PATCH/DELETE /contacts/{id}` | same |
+| Memberships | `GET/POST /customers/{id}/memberships`, `POST /memberships/{id}/status` | `user:read` / `user:manage` (Tenant Admin; Customer Admin for its own customer) |
+| Branch staff | `GET/POST /branches/{id}/users`, `DELETE /branches/{id}/users/{userId}` | `user:read` / `branch:manage` |
 | Internal | `GET /internal/customers/{id}`, `GET /internal/customers/{id}/sites/{siteId}?locationId=` | `customer:read` |
 
 - Reads under a customer are open to CUSTOMER accounts for **their own
@@ -37,7 +39,15 @@ M1 master data and tenants:
   `tenant_directory`. Without it the events stay PENDING until a broker is
   configured. The tenant code never changes; a status change to the current
   status is 409 `INVALID_STATE_TRANSITION`.
-- Next: memberships and branch staff, dev seed.
+- Memberships (ADR 0006): one customer per CUSTOMER account. A Tenant Admin
+  links any CUSTOMER account and may move it to another customer; a Customer
+  Admin only links CUSTOMER_USER accounts to its own customer and never takes
+  one from another customer. Every change writes `CustomerMembershipChanged`,
+  which Identity turns into the `customer_id` claim (ADR 0003).
+- User ids are checked through Identity's `GET /internal/users/{id}` with the
+  caller's token (`IDENTITY_SERVICE_URL`, `IdentityClient`); the e2e suites
+  replace it with a fake that follows the same contract.
+- Next: dev seed.
 
 `GET /health` is public (`200 {status:'ok', database:'up'}` or 503); every
 other route requires an access token. Errors follow `{code, message, details?}`.

@@ -239,7 +239,10 @@ paths:
     post:
       tags: [Branches]
       summary: Assign a TENANT_STAFF account to the branch
-      description: The user is validated through Identity (TENANT_STAFF, same tenant). At most one primary branch per user.
+      description: |
+        The user is validated through Identity (TENANT_STAFF, same tenant). At
+        most one primary branch per user: `isPrimary: true` moves the flag from
+        the user's previous primary branch. Assigning again updates `isPrimary`.
       x-permissions: [branch:manage]
       requestBody:
         required: true
@@ -259,7 +262,25 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/BranchUserAssignment' }
         '422':
-          description: USER_NOT_TENANT_STAFF
+          description: USER_NOT_TENANT_STAFF, or USER_NOT_FOUND in the caller's tenant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /branches/{branchId}/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Branches]
+      summary: Remove a staff account from the branch
+      x-permissions: [branch:manage]
+      responses:
+        '204': { description: Removed }
+        '404':
+          description: ASSIGNMENT_NOT_FOUND or BRANCH_NOT_FOUND
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -580,7 +601,9 @@ paths:
       summary: Link a CUSTOMER account to the customer
       description: |
         The user is validated through Identity (CUSTOMER, same tenant). An
-        account belongs to one customer; linking it again moves it.
+        account belongs to one customer; linking it again moves it (Tenant
+        Admin) or re-activates it. Linking an already active account changes
+        nothing and writes no event.
         Writes `CustomerMembershipChanged` (ADR 0003).
 
         Tenant Admin: any customer of the tenant. Customer Admin (ADR 0006):
@@ -610,8 +633,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: ROLE_NOT_ASSIGNABLE — a Customer Admin linking an account that is not only CUSTOMER_USER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422':
-          description: USER_NOT_CUSTOMER_ACCOUNT
+          description: USER_NOT_CUSTOMER_ACCOUNT, or USER_NOT_FOUND in the caller's tenant
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -643,6 +671,21 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Membership' }
+        '403':
+          description: ROLE_NOT_ASSIGNABLE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: MEMBERSHIP_NOT_FOUND (also another customer's membership for a Customer Admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: INVALID_STATE_TRANSITION — already in that status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /internal/customers/{customerId}:
     parameters:
       - $ref: '#/components/parameters/CustomerId'

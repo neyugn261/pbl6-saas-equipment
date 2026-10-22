@@ -7,19 +7,52 @@ import { signTestAccessToken } from '@pbl6/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../../../src/app.module';
+import {
+  IdentityClient,
+  type IdentityUser,
+} from '../../../src/identity/identity.client';
 import { PrismaService } from '../../../src/prisma/prisma.service';
+
+/**
+ * Identity's `GET /internal/users/{id}` as agreed in the M1 contract: only
+ * users of the caller's tenant are found (the token is decoded for it).
+ */
+export class FakeIdentityClient extends IdentityClient {
+  private readonly users = new Map<string, IdentityUser>();
+
+  add(user: Partial<IdentityUser> & Pick<IdentityUser, 'tenantId' | 'userType' | 'roles'>): string {
+    const id = user.id ?? randomUUID();
+    this.users.set(id, { id, status: 'ACTIVE', email: `${id}@example.com`, fullName: 'Test', ...user });
+    return id;
+  }
+
+  clear(): void {
+    this.users.clear();
+  }
+
+  async findUser(userId: string, accessToken: string): Promise<IdentityUser | null> {
+    const claims = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString());
+    const user = this.users.get(userId);
+    return user && user.tenantId === claims.tenant_id ? user : null;
+  }
+}
 
 export async function createTestApp(): Promise<{
   app: INestApplication<App>;
   prisma: PrismaService;
+  identity: FakeIdentityClient;
 }> {
+  const identity = new FakeIdentityClient();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  })
+    .overrideProvider(IdentityClient)
+    .useValue(identity)
+    .compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app, { logger: new Logger('e2e') });
   await app.init();
-  return { app, prisma: app.get(PrismaService) };
+  return { app, prisma: app.get(PrismaService), identity };
 }
 
 /** Clears every organization table. */
@@ -35,8 +68,13 @@ export async function createTenant(prisma: PrismaService, code: string): Promise
 }
 
 /** `Authorization` header value for a caller with `role` in `tenantId`. */
-export function bearer(role: RoleCode, tenantId?: string, customerId?: string): string {
-  return `Bearer ${signTestAccessToken({ role, tenantId, customerId, userId: randomUUID() })}`;
+export function bearer(
+  role: RoleCode,
+  tenantId?: string,
+  customerId?: string,
+  userId: string = randomUUID(),
+): string {
+  return `Bearer ${signTestAccessToken({ role, tenantId, customerId, userId })}`;
 }
 
 /** Small HTTP helper: `api(app, token).post('/branches', body)`. */

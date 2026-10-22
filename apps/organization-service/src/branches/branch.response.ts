@@ -1,4 +1,7 @@
-import type { Branch } from '../generated/prisma/client.js';
+import type {
+  Branch,
+  BranchUserAssignment,
+} from '../generated/prisma/client.js';
 
 export interface BranchResponse {
   id: string;
@@ -10,6 +13,26 @@ export interface BranchResponse {
   status: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface BranchUserAssignmentResponse {
+  id: string;
+  branchId: string;
+  userId: string;
+  isPrimary: boolean;
+  createdAt: Date;
+}
+
+export function toAssignmentResponse(
+  assignment: BranchUserAssignment,
+): BranchUserAssignmentResponse {
+  return {
+    id: assignment.id,
+    branchId: assignment.branchId,
+    userId: assignment.userId,
+    isPrimary: assignment.isPrimary,
+    createdAt: assignment.createdAt,
+  };
 }
 
 export function toBranchResponse(branch: Branch): BranchResponse {

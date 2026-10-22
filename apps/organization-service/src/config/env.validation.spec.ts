@@ -3,6 +3,7 @@ import { PORT_VARIABLE, validateEnv } from './env.validation';
 const valid = {
   ORGANIZATION_DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   JWT_ACCESS_SECRET: 'x'.repeat(32),
+  IDENTITY_SERVICE_URL: 'http://localhost:3001',
 };
 
 describe('validateEnv', () => {

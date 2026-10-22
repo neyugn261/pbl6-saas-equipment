@@ -1,9 +1,11 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   MaxLength,
 } from 'class-validator';
@@ -71,4 +73,13 @@ export class UpdateBranchDto {
   @IfPresent()
   @IsIn(ACTIVE_STATUSES)
   status?: ActiveStatus;
+}
+
+export class AssignBranchUserDto {
+  @IsUUID()
+  userId: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
 }

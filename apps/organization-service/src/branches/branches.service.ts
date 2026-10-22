@@ -1,14 +1,29 @@
 import { Injectable } from '@nestjs/common';
+import { type Principal, requireTenantId } from '@pbl6/auth';
 import { type Page, toPage } from '@pbl6/service-kit';
 import { conflict, notFound } from '../common/errors';
 import type { ListQueryDto } from '../common/validation';
-import { type BranchResponse, toBranchResponse } from './branch.response';
+import { IdentityClient } from '../identity/identity.client';
+import { requireUser } from '../identity/user-checks';
+import {
+  type BranchResponse,
+  type BranchUserAssignmentResponse,
+  toAssignmentResponse,
+  toBranchResponse,
+} from './branch.response';
 import { BranchesRepository } from './branches.repository';
-import type { CreateBranchDto, UpdateBranchDto } from './dto/branch.dto';
+import type {
+  AssignBranchUserDto,
+  CreateBranchDto,
+  UpdateBranchDto,
+} from './dto/branch.dto';
 
 @Injectable()
 export class BranchesService {
-  constructor(private readonly branches: BranchesRepository) {}
+  constructor(
+    private readonly branches: BranchesRepository,
+    private readonly identity: IdentityClient,
+  ) {}
 
   async list(tenantId: string, query: ListQueryDto): Promise<Page<BranchResponse>> {
     const [rows, total] = await this.branches.list(tenantId, query);
@@ -42,6 +57,40 @@ export class BranchesService {
       );
     }
     await this.branches.update(id, { deletedAt: new Date() });
+  }
+
+  async listUsers(
+    tenantId: string,
+    branchId: string,
+  ): Promise<BranchUserAssignmentResponse[]> {
+    await this.load(tenantId, branchId);
+    const rows = await this.branches.listAssignments(tenantId, branchId);
+    return rows.map(toAssignmentResponse);
+  }
+
+  /** Only TENANT_STAFF accounts of the same tenant (checked in Identity). */
+  async assignUser(
+    caller: Principal,
+    branchId: string,
+    input: AssignBranchUserDto,
+  ): Promise<BranchUserAssignmentResponse> {
+    const tenantId = requireTenantId(caller);
+    await this.load(tenantId, branchId);
+    await requireUser(this.identity, caller, input.userId, 'TENANT_STAFF', 'USER_NOT_TENANT_STAFF');
+    const assignment = await this.branches.assign(
+      tenantId,
+      branchId,
+      input.userId,
+      input.isPrimary ?? false,
+    );
+    return toAssignmentResponse(assignment);
+  }
+
+  async unassignUser(tenantId: string, branchId: string, userId: string): Promise<void> {
+    await this.load(tenantId, branchId);
+    if (!(await this.branches.unassign(tenantId, branchId, userId))) {
+      throw notFound('ASSIGNMENT_NOT_FOUND', 'The user is not assigned to this branch');
+    }
   }
 
   private async load(tenantId: string, id: string) {
