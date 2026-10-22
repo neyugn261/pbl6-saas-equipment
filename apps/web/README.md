@@ -1,75 +1,44 @@
-# React + TypeScript + Vite
+# Web M1
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Web dùng React + Vite. Identity chạy thật; Organization, Asset và Service Request chạy với mock server tạo từ OpenAPI trong giai đoạn phát triển M1. Các trang prototype M2/M3 còn trong source để tham khảo nhưng không được route từ `App.tsx`.
 
-Currently, two official plugins are available:
+## Chạy local
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Chạy Identity, migration và seed theo README ở root.
+2. Sao chép `apps/web/.env.example` thành `apps/web/.env.local`.
+3. Mở ba terminal ở root:
 
-## React Compiler
+   ```powershell
+   pnpm dlx @stoplight/prism-cli mock docs/api/organization.yaml -p 4010
+   pnpm dlx @stoplight/prism-cli mock docs/api/asset.yaml -p 4011
+   pnpm dlx @stoplight/prism-cli mock docs/api/service-request.yaml -p 4012
+   ```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+4. Chạy `pnpm dev:web`, mở `http://localhost:5173`. Dùng tám tài khoản trong README root. Mật khẩu do `SEED_DEMO_PASSWORD` của máy quy định.
 
-## Expanding the ESLint configuration
+Vite chuyển tiếp `/identity` đến Identity và `/mock/*` đến ba mock server, nên trình duyệt chỉ gọi cùng origin. Prism trả dữ liệu mẫu theo schema và không giữ trạng thái sau POST; bước tích hợp cần dùng backend thật để chạy trọn luồng.
+Nếu `pnpm dlx` không tải được CLI trên máy, có thể thay từng lệnh bằng `npm exec --yes --package @stoplight/prism-cli -- prism mock <file.yaml> -p <port>`.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Kiểm tra nhanh sau khi cả bốn server và Vite đã chạy:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```powershell
+./apps/web/scripts/smoke-identity.ps1 -BaseUrl http://127.0.0.1:5173/identity
+./apps/web/scripts/smoke-mocks.ps1
+./apps/identity-service/node_modules/.bin/tsx.ps1 apps/web/scripts/check-role-menu.ts
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Hai smoke script chỉ in trạng thái ca thử, không in mật khẩu hay token. Script Identity đọc `SEED_DEMO_PASSWORD` từ `.env` ở root. Bài kiểm tra menu đối chiếu tám vai trò với RBAC catalog.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Tích hợp qua gateway
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Đặt `VITE_M1_API_MODE=gateway` trong `.env.local`, sau đó khởi động lại Vite. Vite chuyển tiếp `/gateway` đến `GATEWAY_PROXY_TARGET` (mặc định `http://localhost:3000`); ba module M1 dùng `/api/organization`, `/api/assets`, `/api/service-requests` theo các OpenAPI hiện có. Identity vẫn chạy thật qua `/identity`. Kiểm tra lại route thực tế khi gateway của Member D được merge. Kết quả kiểm thử ghi vào `docs/testing/m1-test-cases.md`.
 
+Phiên dùng access token trong bộ nhớ và refresh token trong `sessionStorage` của tab. Khi tải lại trang, web refresh rồi lấy `/auth/me`. Các request cùng lúc dùng chung một lần refresh đang chạy. Backend vẫn là nơi quyết định quyền và phạm vi tenant/customer.
+
+## Kiểm tra
+
+```powershell
+pnpm --filter web lint
+pnpm --filter web typecheck
+pnpm --filter web build
 ```

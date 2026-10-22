@@ -1,0 +1,16 @@
+meta {
+  name: Reject request
+  type: http
+  seq: 10
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/reject
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"reason":"Yêu cầu không thuộc phạm vi hỗ trợ"}
+}

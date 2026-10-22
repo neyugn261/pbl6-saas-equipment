@@ -1,0 +1,16 @@
+meta {
+  name: Cancel request
+  type: http
+  seq: 11
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/cancel
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"reason":"Khách hàng không còn nhu cầu"}
+}

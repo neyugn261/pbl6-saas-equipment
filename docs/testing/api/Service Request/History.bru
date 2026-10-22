@@ -1,0 +1,12 @@
+meta {
+  name: Status history
+  type: http
+  seq: 7
+}
+get {
+  url: {{requests}}/service-requests/{{requestId}}/history
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

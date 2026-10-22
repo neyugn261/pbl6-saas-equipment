@@ -18,17 +18,17 @@ export function Select({ children, label, ...props }: React.SelectHTMLAttributes
 }
 
 const statusLabels: Record<string, string> = {
-  NEW: 'Mới', REVIEWING: 'Đang xem xét', AWAITING_CUSTOMER_APPROVAL: 'Chờ khách hàng duyệt', ACCEPTED: 'Đã tiếp nhận', PROCESSING: 'Đang xử lý', RESOLVED: 'Đã xử lý', CLOSED: 'Đã đóng', REQUEST_REJECTED: 'Từ chối yêu cầu', COST_REJECTED: 'Từ chối báo giá', CANCELLED: 'Đã hủy', CREATED: 'Đã tạo', ASSIGNED: 'Đã phân công', IN_PROGRESS: 'Đang thực hiện', ON_HOLD: 'Tạm dừng', COMPLETED: 'Hoàn thành', ACTIVE: 'Hoạt động', OUT_OF_SERVICE: 'Ngừng hoạt động', RETIRED: 'Ngừng sử dụng', EXPIRED: 'Hết hạn', AVAILABLE: 'Sẵn sàng', BUSY: 'Đang bận', OFF: 'Ngoài ca', UPCOMING: 'Sắp đến hạn', OVERDUE: 'Quá hạn', SUSPENDED: 'Tạm khóa', PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Đã từ chối',
+  NEW: 'Mới', REVIEWING: 'Đang xem xét', AWAITING_INFO: 'Chờ bổ sung thông tin', AWAITING_CUSTOMER_APPROVAL: 'Chờ khách hàng duyệt', ACCEPTED: 'Đã tiếp nhận', PROCESSING: 'Đang xử lý', RESOLVED: 'Đã xử lý', CLOSED: 'Đã đóng', COST_REJECTED: 'Từ chối báo giá', CANCELLED: 'Đã hủy', CREATED: 'Đã tạo', ASSIGNED: 'Đã phân công', IN_PROGRESS: 'Đang thực hiện', IN_SERVICE: 'Đang bảo dưỡng', ON_HOLD: 'Tạm dừng', COMPLETED: 'Hoàn thành', ACTIVE: 'Hoạt động', OUT_OF_SERVICE: 'Ngừng hoạt động', RETIRED: 'Ngừng sử dụng', EXPIRED: 'Hết hạn', AVAILABLE: 'Sẵn sàng', BUSY: 'Đang bận', OFF: 'Ngoài ca', UPCOMING: 'Sắp đến hạn', OVERDUE: 'Quá hạn', SUSPENDED: 'Tạm khóa', PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Đã từ chối',
 }
 const positive = ['ACTIVE', 'AVAILABLE', 'COMPLETED', 'RESOLVED', 'CLOSED', 'APPROVED', 'ACCEPTED']
 const warning = ['REVIEWING', 'AWAITING_CUSTOMER_APPROVAL', 'ASSIGNED', 'PROCESSING', 'IN_PROGRESS', 'BUSY', 'UPCOMING', 'PENDING', 'ON_HOLD']
-const negative = ['EXPIRED', 'OUT_OF_SERVICE', 'CANCELLED', 'REJECTED', 'REQUEST_REJECTED', 'COST_REJECTED', 'OVERDUE', 'SUSPENDED']
+const negative = ['EXPIRED', 'OUT_OF_SERVICE', 'CANCELLED', 'REJECTED', 'COST_REJECTED', 'OVERDUE', 'SUSPENDED']
 export function StatusBadge({ status }: { status: string }) {
   const tone = positive.includes(status) ? 'positive' : warning.includes(status) ? 'warning' : negative.includes(status) ? 'negative' : 'neutral'
   return <span className={`badge badge--${tone}`}><span className="badge__dot" />{statusLabels[status] ?? status}</span>
 }
 
-const priorityLabels = { LOW: 'Thấp', MEDIUM: 'Trung bình', HIGH: 'Cao', URGENT: 'Khẩn cấp' }
+const priorityLabels = { LOW: 'Thấp', NORMAL: 'Bình thường', HIGH: 'Cao', URGENT: 'Khẩn cấp' }
 export function PriorityBadge({ priority }: { priority: keyof typeof priorityLabels }) {
   return <span className={`priority priority--${priority.toLowerCase()}`}>{priorityLabels[priority]}</span>
 }

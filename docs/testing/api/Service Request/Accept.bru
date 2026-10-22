@@ -1,0 +1,12 @@
+meta {
+  name: Accept request
+  type: http
+  seq: 6
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/accept
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}
