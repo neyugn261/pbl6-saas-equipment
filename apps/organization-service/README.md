@@ -83,3 +83,12 @@ are written to the outbox for the rows it creates, as the API would.
 Order on a fresh machine: `pnpm db:migrate` (root) → identity `db:seed:dev` →
 start identity → organization `db:seed:dev` → start organization (publishes
 the outbox).
+
+## Known limitations (end of M1)
+
+| Limitation | Effect | Way out |
+|---|---|---|
+| Unique codes (`branches`, `customers`, `customer_sites`, `locations`) also count soft-deleted rows | A deleted branch or customer code cannot be reused (409 `UNIQUE_VIOLATION`) | Team decision; a migration replacing the constraints with partial unique indexes `WHERE deleted_at IS NULL` |
+| Deleting a customer or site does not check equipment in Asset | Asset may keep equipment pointing at a deleted customer/site; Organization lookups for it answer 404 | Accepted for MVP (cross-service data); Asset can react if a `CustomerDeleted` event is added later |
+| A SUSPENDED / DISABLED tenant is not checked by this service | Its staff can still write until their access token expires (≤ 15 min); Identity refuses the next refresh | Accepted in ADR 0004 |
+| Membership and branch staff endpoints call Identity `GET /internal/users/{id}` | Until Identity ships it (M1, Member D) they answer 422 `USER_NOT_FOUND` on a real setup; e2e suites use a fake following the contract | Real smoke test once the endpoint exists |
