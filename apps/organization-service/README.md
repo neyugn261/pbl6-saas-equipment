@@ -22,6 +22,7 @@ M1 master data and tenants:
 | Memberships | `GET/POST /customers/{id}/memberships`, `POST /memberships/{id}/status` | `user:read` / `user:manage` (Tenant Admin; Customer Admin for its own customer) |
 | Branch staff | `GET/POST /branches/{id}/users`, `DELETE /branches/{id}/users/{userId}` | `user:read` / `branch:manage` |
 | Internal | `GET /internal/customers/{id}`, `GET /internal/customers/{id}/sites/{siteId}?locationId=` | `customer:read` |
+| Internal | `GET /internal/branches/{id}` (for Work Order) | `branch:read`, staff only |
 
 - Reads under a customer are open to CUSTOMER accounts for **their own
   customer only** (ADR 0003); any other id answers 404. Writes are staff only.

@@ -686,6 +686,26 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /internal/branches/{branchId}:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      tags: [Internal]
+      summary: Existence and status of a branch in the caller's tenant
+      description: Used by Work Order to validate a technician's `branchId` (404 when not in the tenant or deleted).
+      x-permissions: [branch:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Branch reference
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BranchRef' }
+        '404':
+          description: BRANCH_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /internal/customers/{customerId}:
     parameters:
       - $ref: '#/components/parameters/CustomerId'
@@ -1001,6 +1021,14 @@ components:
         userId: { type: string, format: uuid }
         status: { $ref: '#/components/schemas/ActiveStatus' }
         updatedAt: { type: string, format: date-time }
+    BranchRef:
+      type: object
+      required: [id, code, name, status]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
     CustomerRef:
       type: object
       required: [id, code, name, status]

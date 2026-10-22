@@ -162,6 +162,18 @@ describe('Sites, locations and internal lookups (e2e, organization_test_db)', ()
       });
     });
 
+    it('returns a branch reference of the caller tenant only', async () => {
+      const admin = api(app, bearer('TENANT_ADMIN', tenantA));
+      const branch = await admin.post('/branches', { code: 'HCM', name: 'HCM', address: 'x' }).expect(201);
+      const ref = await api(app, bearer('DISPATCHER', tenantA)).get(`/internal/branches/${branch.body.id}`).expect(200);
+      expect(ref.body).toEqual({ id: branch.body.id, code: 'HCM', name: 'HCM', status: 'ACTIVE' });
+      const res = await api(app, bearer('DISPATCHER', tenantB)).get(`/internal/branches/${branch.body.id}`).expect(404);
+      expect(res.body.code).toBe('BRANCH_NOT_FOUND');
+      await customerUser().get(`/internal/branches/${branch.body.id}`).expect(403);
+      await admin.delete(`/branches/${branch.body.id}`).expect(204);
+      await api(app, bearer('DISPATCHER', tenantA)).get(`/internal/branches/${branch.body.id}`).expect(404);
+    });
+
     it('answers 404 with a specific code for mismatched ids', async () => {
       const otherSite = await manager()
         .post(`/customers/${other}/sites`, { code: 'S2', name: 'Plant', address: 'x' })

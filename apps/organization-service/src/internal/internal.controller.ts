@@ -1,11 +1,14 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import {
+  AllowUserTypes,
   CurrentUser,
   dataScope,
   type Principal,
   RequirePermissions,
+  requireTenantId,
 } from '@pbl6/auth';
 import { IsOptional, IsUUID } from 'class-validator';
+import { BranchesRepository } from '../branches/branches.repository';
 import { notFound } from '../common/errors';
 import { CustomersService } from '../customers/customers.service';
 import { SitesRepository } from '../sites/sites.repository';
@@ -18,6 +21,13 @@ export class SiteRefQueryDto {
 }
 
 export interface CustomerRef {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+}
+
+export interface BranchRef {
   id: string;
   code: string;
   name: string;
@@ -37,15 +47,29 @@ export interface SiteRef {
  * forwarded token, so the caller's tenant and customer scope apply. The
  * gateway never routes /internal/*.
  */
-@Controller('internal/customers')
+@Controller('internal')
 export class InternalController {
   constructor(
     private readonly customers: CustomersService,
     private readonly sites: SitesService,
     private readonly repository: SitesRepository,
+    private readonly branches: BranchesRepository,
   ) {}
 
-  @Get(':customerId')
+  /** For Work Order (technician profiles): a live branch of the caller's tenant. */
+  @Get('branches/:branchId')
+  @AllowUserTypes('TENANT_STAFF')
+  @RequirePermissions('branch:read')
+  async branch(
+    @Param('branchId', ParseUUIDPipe) id: string,
+    @CurrentUser() user: Principal,
+  ): Promise<BranchRef> {
+    const branch = await this.branches.find(requireTenantId(user), id);
+    if (!branch) throw notFound('BRANCH_NOT_FOUND', 'Branch not found');
+    return { id: branch.id, code: branch.code, name: branch.name, status: branch.status };
+  }
+
+  @Get('customers/:customerId')
   @RequirePermissions('customer:read')
   async customer(
     @Param('customerId', ParseUUIDPipe) id: string,
@@ -61,7 +85,7 @@ export class InternalController {
   }
 
   /** 404 CUSTOMER_NOT_FOUND, SITE_NOT_FOUND (also a site of another customer) or LOCATION_NOT_FOUND. */
-  @Get(':customerId/sites/:siteId')
+  @Get('customers/:customerId/sites/:siteId')
   @RequirePermissions('customer:read')
   async site(
     @Param('customerId', ParseUUIDPipe) customerId: string,
