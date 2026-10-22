@@ -1,0 +1,12 @@
+meta {
+  name: List customers
+  type: http
+  seq: 1
+}
+get {
+  url: {{organization}}/customers?page=1&pageSize=20
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

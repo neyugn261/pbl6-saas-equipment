@@ -1,19 +1,214 @@
-export type Role = 'PLATFORM_ADMIN' | 'TENANT_ADMIN' | 'SERVICE_MANAGER' | 'INVENTORY_STAFF' | 'CUSTOMER_ADMIN' | 'CUSTOMER_USER'
-export type EquipmentStatus = 'ACTIVE' | 'OUT_OF_SERVICE' | 'RETIRED'
+export type Role =
+  | 'PLATFORM_ADMIN'
+  | 'TENANT_ADMIN'
+  | 'SERVICE_MANAGER'
+  | 'DISPATCHER'
+  | 'TECHNICIAN'
+  | 'INVENTORY_STAFF'
+  | 'CUSTOMER_ADMIN'
+  | 'CUSTOMER_USER'
+export type EquipmentStatus =
+  'ACTIVE' | 'IN_SERVICE' | 'OUT_OF_SERVICE' | 'RETIRED'
 export type WarrantyStatus = 'ACTIVE' | 'EXPIRED'
-export type RequestStatus = 'NEW' | 'REVIEWING' | 'AWAITING_CUSTOMER_APPROVAL' | 'ACCEPTED' | 'PROCESSING' | 'RESOLVED' | 'CLOSED' | 'REQUEST_REJECTED' | 'COST_REJECTED' | 'CANCELLED'
-export type WorkOrderStatus = 'CREATED' | 'ASSIGNED' | 'ACCEPTED' | 'IN_PROGRESS' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED'
-export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+export type RequestStatus =
+  | 'NEW'
+  | 'REVIEWING'
+  | 'AWAITING_INFO'
+  | 'AWAITING_CUSTOMER_APPROVAL'
+  | 'ACCEPTED'
+  | 'PROCESSING'
+  | 'RESOLVED'
+  | 'CLOSED'
+  | 'REJECTED'
+  | 'COST_REJECTED'
+  | 'CANCELLED'
+export type WorkOrderStatus =
+  | 'CREATED'
+  | 'ASSIGNED'
+  | 'ACCEPTED'
+  | 'IN_PROGRESS'
+  | 'ON_HOLD'
+  | 'COMPLETED'
+  | 'CANCELLED'
+export type Priority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
 
-export interface Customer { id: string; code: string; name: string; taxCode: string; industry: string; phone: string; email: string; address: string; contact: string }
-export interface Location { id: string; customerId: string; name: string; type: string; address: string; parentId?: string }
-export interface Equipment { id: string; assetCode: string; name: string; model: string; serial: string; customerId: string; locationId: string; status: EquipmentStatus; warranty: WarrantyStatus; warrantyEnd: string; installationDate: string; handoverDate: string; manufacturer: string }
-export interface TimelineEvent { id: string; title: string; description: string; time: string; tone?: 'success' | 'warning' | 'default' }
-export interface CostEstimate { labor: number; parts: number; other: number; status: 'PENDING' | 'APPROVED' | 'REJECTED' }
-export interface ServiceRequest { id: string; number: string; customerId: string; equipmentId: string; type: string; priority: Priority; status: RequestStatus; title: string; description: string; createdAt: string; contact: string; attachments: number; estimate?: CostEstimate; timeline: TimelineEvent[] }
-export interface WorkOrder { id: string; number: string; requestId: string; technicianId?: string; scheduledAt: string; status: WorkOrderStatus; priority: Priority; workLog: string; partsUsed: string[] }
-export interface Technician { id: string; name: string; branch: string; skills: string[]; availability: 'AVAILABLE' | 'BUSY' | 'OFF'; workload: number; phone: string }
-export interface Part { id: string; code: string; name: string; category: string; unit: string; stock: number; minimum: number; warehouse: string }
-export interface MaintenancePlan { id: string; equipmentId: string; frequency: string; lastDate: string; nextDate: string; status: 'UPCOMING' | 'OVERDUE' | 'ACTIVE' }
-export interface Tenant { id: string; code: string; name: string; status: 'ACTIVE' | 'SUSPENDED'; admin: string; users: number; customers: number; equipment: number; createdAt: string }
+// Wire types from the M1 OpenAPI contracts. The prototype types below remain
+// only for the archived prototype pages; active routes use these records.
+export interface Page<T> {
+  items: T[]
+  page: number
+  pageSize: number
+  total: number
+}
+export interface CustomerRecord {
+  id: string
+  code: string
+  name: string
+  status: 'ACTIVE' | 'INACTIVE'
+  email: string | null
+  phone: string | null
+  address: string | null
+}
+export interface TenantRecord {
+  id: string
+  code: string
+  name: string
+  status: 'ACTIVE' | 'SUSPENDED' | 'DISABLED'
+}
+export interface EquipmentRecord {
+  id: string
+  modelId: string
+  customerId: string
+  customerSiteId: string
+  assetCode: string
+  serialNumber: string
+  status: EquipmentStatus
+  handoverDate: string | null
+  model?: { name: string }
+  warranty?: { result: 'IN_WARRANTY' | 'OUT_OF_WARRANTY' | 'NO_WARRANTY' }
+}
+export interface RequestRecord {
+  id: string
+  requestNo: string
+  customerId: string
+  equipmentId: string
+  type: 'WARRANTY' | 'REPAIR' | 'MAINTENANCE' | 'INSPECTION'
+  priority: Priority
+  title: string
+  description: string
+  status: RequestStatus
+  createdAt: string
+}
+export interface RequestDetail extends RequestRecord {
+  warrantyCheck: {
+    result: 'IN_WARRANTY' | 'OUT_OF_WARRANTY' | 'NO_WARRANTY'
+  } | null
+  allowedActions: string[]
+}
+export interface RequestStatusChange {
+  id: string
+  oldStatus: RequestStatus | null
+  newStatus: RequestStatus
+  reason: string | null
+  changedAt: string
+}
+export interface RequestComment {
+  id: string
+  authorUserId: string
+  visibility: 'CUSTOMER' | 'INTERNAL'
+  content: string
+  createdAt: string
+}
 
+export interface Customer {
+  id: string
+  code: string
+  name: string
+  taxCode: string
+  industry: string
+  phone: string
+  email: string
+  address: string
+  contact: string
+}
+export interface Location {
+  id: string
+  customerId: string
+  name: string
+  type: string
+  address: string
+  parentId?: string
+}
+export interface Equipment {
+  id: string
+  assetCode: string
+  name: string
+  model: string
+  serial: string
+  customerId: string
+  locationId: string
+  status: EquipmentStatus
+  warranty: WarrantyStatus
+  warrantyEnd: string
+  installationDate: string
+  handoverDate: string
+  manufacturer: string
+}
+export interface TimelineEvent {
+  id: string
+  title: string
+  description: string
+  time: string
+  tone?: 'success' | 'warning' | 'default'
+}
+export interface CostEstimate {
+  labor: number
+  parts: number
+  other: number
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+}
+export interface ServiceRequest {
+  id: string
+  number: string
+  customerId: string
+  equipmentId: string
+  type: string
+  priority: Priority
+  status: RequestStatus
+  title: string
+  description: string
+  createdAt: string
+  contact: string
+  attachments: number
+  estimate?: CostEstimate
+  timeline: TimelineEvent[]
+}
+export interface WorkOrder {
+  id: string
+  number: string
+  requestId: string
+  technicianId?: string
+  scheduledAt: string
+  status: WorkOrderStatus
+  priority: Priority
+  workLog: string
+  partsUsed: string[]
+}
+export interface Technician {
+  id: string
+  name: string
+  branch: string
+  skills: string[]
+  availability: 'AVAILABLE' | 'BUSY' | 'OFF'
+  workload: number
+  phone: string
+}
+export interface Part {
+  id: string
+  code: string
+  name: string
+  category: string
+  unit: string
+  stock: number
+  minimum: number
+  warehouse: string
+}
+export interface MaintenancePlan {
+  id: string
+  equipmentId: string
+  frequency: string
+  lastDate: string
+  nextDate: string
+  status: 'UPCOMING' | 'OVERDUE' | 'ACTIVE'
+}
+export interface Tenant {
+  id: string
+  code: string
+  name: string
+  status: 'ACTIVE' | 'SUSPENDED'
+  admin: string
+  users: number
+  customers: number
+  equipment: number
+  createdAt: string
+}

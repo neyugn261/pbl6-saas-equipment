@@ -19,9 +19,12 @@
     "dev:inventory": "pnpm build:packages && pnpm --filter inventory-service start:dev",
     "dev:notification": "pnpm build:packages && pnpm --filter notification-service start:dev",
     "dev:web": "pnpm --filter web dev",
+    "dev:backend": "pnpm build:packages && concurrently -k -n identity,organization,asset,inventory,request,maintenance,workorder,notification,gateway \"pnpm --filter identity-service start:dev\" \"pnpm --filter organization-service start:dev\" \"pnpm --filter asset-service start:dev\" \"pnpm --filter inventory-service start:dev\" \"pnpm --filter service-request-service start:dev\" \"pnpm --filter maintenance-service start:dev\" \"pnpm --filter workorder-service start:dev\" \"pnpm --filter notification-service start:dev\" \"pnpm --filter api-gateway start:dev\"",
+    "dev:frontend": "pnpm dev:web",
     "identity:migrate": "pnpm --filter identity-service db:migrate",
     "identity:seed": "pnpm build:packages && pnpm --filter identity-service db:seed",
     "identity:seed:dev": "pnpm build:packages && pnpm --filter identity-service db:seed:dev",
+    "smoke:m1": "node scripts/smoke-test-m1.mjs",
     "db:migrate": "pnpm -r --if-present db:migrate",
     "db:check-drift": "pnpm -r --if-present db:check-drift",
     "build": "pnpm -r --if-present build",
@@ -33,5 +36,8 @@
   "packageManager": "pnpm@11.26.0",
   "engines": {
     "node": ">=24.9"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
   }
 }

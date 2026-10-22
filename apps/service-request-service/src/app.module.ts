@@ -4,8 +4,10 @@ import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
 import { HealthModule } from '@pbl6/service-kit';
 import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { validateEnv } from './config/env.validation';
+import { EventsModule } from './events/events.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
+import { ServiceRequestsModule } from './service-requests/service-requests.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { PrismaService } from './prisma/prisma.service';
       validate: validateEnv,
     }),
     PrismaModule,
+    EventsModule,
+    ServiceRequestsModule,
     // Global JwtAuthGuard + PermissionsGuard: every route needs a token unless @Public().
     AuthModule.forRootAsync({
       inject: [ConfigService],

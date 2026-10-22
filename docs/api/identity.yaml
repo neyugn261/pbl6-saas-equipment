@@ -1,0 +1,889 @@
+openapi: 3.1.0
+info:
+  title: PBL6 Identity Service
+  version: 0.1.0-draft
+  description: |
+    DRAFT contract (M1) — owner: Member D (Nguyên).
+    Conventions: docs/api/conventions.md. `x-permissions` lists catalog
+    permissions checked by `@RequirePermissions` (packages/auth/src/catalog.ts).
+    `tenant_id` always comes from the token; ids outside the caller's tenant
+    return 404.
+
+    **Internal endpoints** (`/internal/*`) are only reachable from other
+    services with a valid bearer token. The API Gateway blocks all external
+    requests to `/internal/*` with 404 (ADR 0004).
+
+    Activation token delivery: for MVP the token is returned in the 201
+      response body (`activationToken`); a real deployment would email it.
+      The field will be removed once Notification Service is wired.
+    Role assignment follows ADR 0006 and `ASSIGNABLE_ROLES` in
+    `packages/auth/src/catalog.ts`.
+servers:
+  - url: http://localhost:3001
+    description: Local service (direct)
+  - url: http://localhost:3000/api/identity
+    description: Through API Gateway (local)
+security:
+  - bearer: []
+tags:
+  - name: Auth
+    description: Login, token refresh, logout and self-profile.
+  - name: Users
+    description: Tenant user management (invite, activate, lock/unlock, roles).
+  - name: Roles
+    description: Fixed RBAC role catalog.
+  - name: Internal
+    description: |
+      Called by other services with the caller's bearer token.
+      NOT exposed by the gateway.
+
+paths:
+  # ──────────────────────────────────────────────────────────────────
+  # Auth
+  # ──────────────────────────────────────────────────────────────────
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: |
+        Tenant users must supply `tenantCode`; Platform Admin omits it.
+        Responds with an access token (JWT), a refresh token (opaque) and
+        the caller's profile.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+            examples:
+              tenant:
+                summary: Tenant staff login
+                value:
+                  tenantCode: ACME-VN
+                  email: alice@acme.vn
+                  password: Correct#Pass1
+              platform:
+                summary: Platform Admin login
+                value:
+                  email: admin@platform.local
+                  password: Platform#Pass1
+      responses:
+        '200':
+          description: Tokens and caller profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: |
+        Rotates the refresh token (token rotation). Presenting the same
+        refresh token twice revokes all sessions of the user.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshInput' }
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      description: Revokes the supplied refresh token (access tokens expire naturally).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshInput' }
+      responses:
+        '204':
+          description: Logged out (idempotent)
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get caller profile
+      description: Returns the authenticated user's profile from the identity database.
+      responses:
+        '200':
+          description: Caller profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ──────────────────────────────────────────────────────────────────
+  # Users — tenant user management
+  # ──────────────────────────────────────────────────────────────────
+  /users:
+    get:
+      tags: [Users]
+      summary: List users of the caller's tenant
+      description: |
+        Returns a paginated list of users in the caller's tenant.
+        TENANT_STAFF with `user:read` can see all users. CUSTOMER_ADMIN sees
+        only CUSTOMER accounts linked to its own customer.
+      x-permissions: [user:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Q'
+        - name: status
+          in: query
+          description: Filter by user status
+          schema: { $ref: '#/components/schemas/UserStatus' }
+        - name: role
+          in: query
+          description: Filter by role code (exact match)
+          schema: { type: string, example: TECHNICIAN }
+        - name: userType
+          in: query
+          description: Filter by user type
+          schema: { $ref: '#/components/schemas/UserType' }
+      responses:
+        '200':
+          description: Page of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/UserSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+    post:
+      tags: [Users]
+      summary: Invite a user
+      description: |
+        Creates the user record with status `INVITED` and generates an
+        activation token (purpose `ACCOUNT_ACTIVATION`).
+
+        **MVP note**: the `activationToken` is returned in the response body
+        so the frontend can display or copy it. In production it would be
+        emailed by Notification Service and the field removed from this response.
+
+        **Role matrix** (ADR 0006): TENANT_ADMIN may invite TENANT_STAFF
+        with SERVICE_MANAGER, DISPATCHER, INVENTORY_STAFF or TECHNICIAN,
+        or CUSTOMER accounts with CUSTOMER_ADMIN or CUSTOMER_USER.
+        It cannot grant TENANT_ADMIN. CUSTOMER_ADMIN may invite CUSTOMER_USER
+        only; the new account must then be linked to the same customer through
+        Organization's membership API before it can access customer data.
+      x-permissions: [user:manage]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InviteUserInput' }
+            examples:
+              technician:
+                summary: Invite a Technician
+                value:
+                  email: john.tech@acme.vn
+                  fullName: John Technician
+                  userType: TENANT_STAFF
+                  roles: [TECHNICIAN]
+              customer_user:
+                summary: Invite a Customer User
+                value:
+                  email: buyer@client.com
+                  fullName: Client Buyer
+                  userType: CUSTOMER
+                  roles: [CUSTOMER_USER]
+      responses:
+        '201':
+          description: User created (INVITED); activation token included for MVP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InviteUserResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/activate:
+    post:
+      tags: [Users]
+      summary: Activate account and set password
+      description: |
+        Validates the one-time activation token, sets the password hash,
+        transitions the user from `INVITED` to `ACTIVE`, and marks the token
+        as used. The token expires after 72 hours.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActivateAccountInput' }
+      responses:
+        '200':
+          description: Account activated; returns a login result so the user is immediately signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422':
+          description: Token invalid, expired or already used
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+              example:
+                code: INVALID_ACTIVATION_TOKEN
+                message: Activation token has expired or was already used
+
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Users]
+      summary: Get a user
+      description: |
+        Returns the full user profile. Users outside the caller's tenant
+        return 404 (ids cannot be probed).
+      x-permissions: [user:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/{id}/roles:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      tags: [Users]
+      summary: Assign or remove roles
+      description: |
+        Replaces the user's role set. Caller must have `role:assign`.
+
+        **Constraints enforced by the service** (same as the DB trigger):
+        - Every role in the new set must have the same `userType` as the
+          target user (`ROLE_USER_TYPES` in the catalog).
+        - The caller may change only roles in `ASSIGNABLE_ROLES` (ADR 0006),
+          including roles being removed from the target.
+        - TENANT_ADMIN cannot grant or remove TENANT_ADMIN through this API.
+        - CUSTOMER_ADMIN manages CUSTOMER_USER accounts linked to its own customer.
+        - Empty `roles` array removes all roles.
+      x-permissions: [role:assign]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignRolesInput' }
+            examples:
+              set_technician:
+                summary: Replace with TECHNICIAN only
+                value:
+                  roles: [TECHNICIAN]
+              clear_all:
+                summary: Remove all roles
+                value:
+                  roles: []
+      responses:
+        '200':
+          description: Updated user profile with new roles
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserProfile' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [Users]
+      summary: Lock or unlock a user account
+      description: |
+        Transitions the account status. Caller must have `user:manage`.
+
+        Allowed transitions:
+        - `ACTIVE` → `SUSPENDED` (lock)
+        - `SUSPENDED` → `ACTIVE` (unlock)
+
+        Suspending an account immediately revokes all active sessions.
+        `INVITED` and `DISABLED` accounts cannot be changed by this endpoint.
+        CUSTOMER_ADMIN can change only CUSTOMER_USER accounts of its own customer.
+      x-permissions: [user:manage]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateStatusInput' }
+            examples:
+              lock:
+                value: { status: SUSPENDED }
+              unlock:
+                value: { status: ACTIVE }
+      responses:
+        '200':
+          description: Updated user profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '400':
+          description: Invalid input or status transition
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+              example:
+                code: INVALID_STATUS_TRANSITION
+                message: Cannot transition from INVITED to ACTIVE via this endpoint
+
+  # ──────────────────────────────────────────────────────────────────
+  # Roles — fixed catalog
+  # ──────────────────────────────────────────────────────────────────
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List all roles in the fixed catalog
+      x-permissions: [role:read]
+      responses:
+        '200':
+          description: Role catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Role' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ──────────────────────────────────────────────────────────────────
+  # Health
+  # ──────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [Auth]
+      summary: Service health
+      description: Returns `200 {status:"ok", database:"up"}` or `503` when the DB is down.
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+        '503':
+          description: Degraded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+  # ──────────────────────────────────────────────────────────────────
+  # Internal — service-to-service only (gateway blocks these)
+  # ──────────────────────────────────────────────────────────────────
+  /internal/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Internal]
+      summary: Look up a user by id (service-to-service)
+      description: |
+        Returns the user's identity snapshot for the calling service.
+        The caller's token must carry a `tenant_id`; if the user does not
+        belong to that tenant the endpoint returns 404 (ids cannot be probed).
+        The caller must have userType `TENANT_STAFF`.
+
+        PLATFORM_STAFF tokens (null tenant_id) are rejected with 403
+        `TENANT_SCOPE_REQUIRED`.
+      x-internal: true
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: User identity snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSnapshot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /internal/users:
+    get:
+      tags: [Internal]
+      summary: List users by role / status (service-to-service)
+      description: |
+        Returns users within the caller's tenant, optionally filtered by role
+        code and/or status. Used by, for example, Work Order Service to
+        resolve assignable technicians.
+        The caller must have userType `TENANT_STAFF`.
+
+        Pagination matches the standard `page` / `pageSize` convention.
+        Maximum `pageSize` is 200 (internal callers are allowed a larger page).
+      x-internal: true
+      x-user-types: [TENANT_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: role
+          in: query
+          description: Filter by role code (exact, from catalog)
+          schema: { type: string, example: TECHNICIAN }
+        - name: status
+          in: query
+          description: Filter by user status
+          schema: { $ref: '#/components/schemas/UserStatus' }
+      responses:
+        '200':
+          description: Page of user snapshots
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/InternalUserListItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+# ──────────────────────────────────────────────────────────────────
+# Components
+# ──────────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Q:
+      name: q
+      in: query
+      description: Free-text search (email or full name substring)
+      schema: { type: string, maxLength: 100 }
+
+  schemas:
+    # ── Enums ──────────────────────────────────────────────────────
+    UserType:
+      type: string
+      enum: [PLATFORM_STAFF, TENANT_STAFF, CUSTOMER]
+
+    UserStatus:
+      type: string
+      enum: [INVITED, ACTIVE, SUSPENDED, DISABLED]
+
+    RoleCode:
+      type: string
+      enum:
+        - PLATFORM_ADMIN
+        - TENANT_ADMIN
+        - SERVICE_MANAGER
+        - DISPATCHER
+        - INVENTORY_STAFF
+        - TECHNICIAN
+        - CUSTOMER_ADMIN
+        - CUSTOMER_USER
+
+    # ── Auth ───────────────────────────────────────────────────────
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        tenantCode:
+          type: string
+          maxLength: 50
+          description: Required for TENANT_STAFF and CUSTOMER; omit for PLATFORM_STAFF.
+          example: ACME-VN
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+
+    RefreshInput:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          description: Opaque refresh token returned by login or refresh.
+
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+          description: Signed JWT (HS256). Carries sub, tenant_id, roles, customer_id.
+        refreshToken:
+          type: string
+          description: Opaque token used to rotate the access token.
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          description: Access token TTL in seconds (default 900).
+          example: 900
+
+    LoginResult:
+      allOf:
+        - $ref: '#/components/schemas/TokenPair'
+        - type: object
+          required: [user]
+          properties:
+            user:
+              $ref: '#/components/schemas/UserProfile'
+
+    # ── Users ──────────────────────────────────────────────────────
+    UserProfile:
+      type: object
+      required: [id, userType, email, fullName, status, roles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: [string, 'null']
+          format: uuid
+          description: NULL for PLATFORM_STAFF.
+        userType:
+          $ref: '#/components/schemas/UserType'
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        phone:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+        customerId:
+          type: [string, 'null']
+          format: uuid
+          description: Set only for CUSTOMER accounts with an active membership.
+        lastLoginAt:
+          type: [string, 'null']
+          format: date-time
+
+    UserSummary:
+      type: object
+      required: [id, userType, email, fullName, status, roles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userType:
+          $ref: '#/components/schemas/UserType'
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+        createdAt:
+          type: string
+          format: date-time
+
+    # Internal read model returned to other services.
+    UserSnapshot:
+      type: object
+      required: [id, tenantId, userType, status, roles, email, fullName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: [string, 'null']
+          format: uuid
+        userType:
+          $ref: '#/components/schemas/UserType'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+
+    InternalUserListItem:
+      type: object
+      required: [id, email, fullName, roles]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+
+    InviteUserInput:
+      type: object
+      additionalProperties: false
+      required: [email, fullName, userType]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 30
+        userType:
+          $ref: '#/components/schemas/UserType'
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+          description: |
+            Initial role set. Must be compatible with `userType`.
+            Leave empty to invite without a role (assign later).
+          default: []
+
+    InviteUserResult:
+      type: object
+      required: [user, activationToken]
+      properties:
+        user:
+          $ref: '#/components/schemas/UserProfile'
+        activationToken:
+          type: string
+          description: |
+            One-time activation token (MVP only — will be replaced by email delivery).
+            Expires in 72 hours.
+          example: a1b2c3d4e5f6...
+
+    ActivateAccountInput:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token:
+          type: string
+          description: The activation token returned by `POST /users`.
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          writeOnly: true
+          description: |
+            Must contain at least one uppercase letter, one lowercase letter,
+            one digit and one special character.
+
+    AssignRolesInput:
+      type: object
+      additionalProperties: false
+      required: [roles]
+      properties:
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+          description: |
+            Complete replacement of the user's role set. Pass `[]` to remove
+            all roles.
+
+    UpdateStatusInput:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+          description: Target status. Only ACTIVE↔SUSPENDED transitions are allowed.
+
+    # ── Roles ──────────────────────────────────────────────────────
+    Role:
+      type: object
+      required: [id, code, name, userType]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          $ref: '#/components/schemas/RoleCode'
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+        userType:
+          $ref: '#/components/schemas/UserType'
+
+    # ── Health ─────────────────────────────────────────────────────
+    HealthResponse:
+      type: object
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        database:
+          type: string
+          enum: [up, down]
+
+    # ── Shared errors ──────────────────────────────────────────────
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code.
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - type: object
+          properties:
+            details:
+              type: object
+              properties:
+                fields:
+                  type: array
+                  items:
+                    type: object
+                    required: [field, message]
+                    properties:
+                      field: { type: string }
+                      message: { type: string }
+
+    # ── Pagination ─────────────────────────────────────────────────
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid access token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            missing:
+              value: { code: INVALID_ACCESS_TOKEN, message: Missing bearer token }
+            expired:
+              value: { code: INVALID_ACCESS_TOKEN, message: Access token is invalid or expired }
+
+    Forbidden:
+      description: Insufficient permissions or wrong user type
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          examples:
+            no_permission:
+              value: { code: FORBIDDEN, message: Missing permission }
+            wrong_type:
+              value: { code: FORBIDDEN, message: This account type cannot use this operation }
+
+    ValidationFailed:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+          example:
+            code: VALIDATION_FAILED
+            message: Request validation failed
+            details:
+              fields:
+                - field: email
+                  message: must be a valid email
+
+    NotFound:
+      description: Resource not found or belongs to another tenant
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            code: NOT_FOUND
+            message: Resource not found
+
+    Conflict:
+      description: Duplicate resource (e.g. email already exists in this tenant)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+          example:
+            code: CONFLICT
+            message: Email already exists in this tenant

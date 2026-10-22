@@ -1,0 +1,12 @@
+meta {
+  name: Equipment detail
+  type: http
+  seq: 2
+}
+get {
+  url: {{asset}}/equipment/{{equipmentId}}
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

@@ -43,6 +43,9 @@ jobs:
       - run: pnpm test
       - name: Bootstrap e2e (no database) of the services wired to packages/*
         run: pnpm --filter organization-service --filter asset-service --filter service-request-service test:e2e
+      - name: API Gateway e2e tests
+        working-directory: apps/api-gateway
+        run: pnpm test:e2e
       - run: pnpm build
 
   databases:
@@ -122,3 +125,9 @@ jobs:
       - name: Organization e2e tests (organization_test_db)
         working-directory: apps/organization-service
         run: pnpm test:e2e:db
+      - name: Asset e2e tests
+        working-directory: apps/asset-service
+        run: pnpm test:e2e
+      - name: Service Request e2e tests
+        working-directory: apps/service-request-service
+        run: pnpm test:e2e

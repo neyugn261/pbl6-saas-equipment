@@ -1,0 +1,12 @@
+meta {
+  name: Warranty check
+  type: http
+  seq: 5
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/warranty-check
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

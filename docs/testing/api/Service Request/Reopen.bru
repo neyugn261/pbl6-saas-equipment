@@ -1,0 +1,16 @@
+meta {
+  name: Reopen request
+  type: http
+  seq: 13
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/reopen
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"reason":"Thiết bị vẫn còn lỗi sau sửa chữa"}
+}

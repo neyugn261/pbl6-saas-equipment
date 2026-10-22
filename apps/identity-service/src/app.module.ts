@@ -8,6 +8,8 @@ import { validateEnv } from './config/env.validation';
 import { EventsModule } from './events/events.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
+import { UsersModule } from './users/users.module';
+import { InternalModule } from './internal/internal.module';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { PrismaService } from './prisma/prisma.service';
     }),
     AuthModule,
     EventsModule,
+    UsersModule,
+    InternalModule,
   ],
 })
 export class AppModule {}

@@ -1,6 +1,6 @@
 import { Bell, Boxes, Building2, ChevronRight, ClipboardList, Factory, Gauge, HelpCircle, History, LayoutDashboard, LogOut, MapPin, Menu, Package, PanelLeftClose, Search, Settings, ShieldCheck, SlidersHorizontal, UserCog, Users, Wrench, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { useAppStore } from '../state/AppStore'
 import type { Role } from '../types/domain'
 import { IconButton } from './ui'
@@ -28,7 +28,6 @@ const adminItems: NavItem[] = [
 const platformItems: NavItem[] = [
   { label: 'Tổng quan nền tảng', to: '/admin', icon: LayoutDashboard },
   { label: 'Quản lý doanh nghiệp', to: '/admin/tenants', icon: Building2, group: 'Nền tảng' },
-  { label: 'Nhật ký kiểm toán', to: '/admin/audit-logs', icon: History, group: 'Nền tảng' },
   { label: 'Cài đặt nền tảng', to: '/admin/settings', icon: Settings, group: 'Hệ thống' },
 ]
 
@@ -41,7 +40,7 @@ const portalItems: NavItem[] = [
   { label: 'Hồ sơ cá nhân', to: '/portal/profile', icon: UserCog },
 ]
 
-const roleLabels: Record<Role, string> = { PLATFORM_ADMIN: 'Platform Admin', TENANT_ADMIN: 'Tenant Admin', SERVICE_MANAGER: 'Điều phối dịch vụ', INVENTORY_STAFF: 'Nhân viên kho', CUSTOMER_ADMIN: 'Customer Admin', CUSTOMER_USER: 'Customer User' }
+const roleLabels: Record<Role, string> = { PLATFORM_ADMIN: 'Platform Admin', TENANT_ADMIN: 'Tenant Admin', SERVICE_MANAGER: 'Điều phối dịch vụ', DISPATCHER: 'Dispatcher', TECHNICIAN: 'Technician', INVENTORY_STAFF: 'Nhân viên kho', CUSTOMER_ADMIN: 'Customer Admin', CUSTOMER_USER: 'Customer User' }
 
 function Navigation({ items, collapsed, onNavigate }: { items: NavItem[]; collapsed: boolean; onNavigate: () => void }) {
   return <nav className="sidebar__nav" aria-label="Điều hướng chính">{items.map((item, index) => {
@@ -59,19 +58,14 @@ function Breadcrumbs() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, setRole, toasts, dismissToast } = useAppStore()
+  const { role, toasts, dismissToast } = useAppStore()
   const location = useLocation()
-  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const portal = location.pathname.startsWith('/portal')
   const platform = location.pathname.startsWith('/admin')
   const navItems = useMemo(() => platform ? platformItems : portal ? portalItems : adminItems.filter((item) => !item.roles || item.roles.includes(role)), [platform, portal, role])
   const tenantName = platform ? 'PBL6 Service Cloud' : portal ? 'Công ty CP Sản xuất Hòa Phát' : 'Thiết bị Kỹ thuật An Tín'
-  const changeRole = (next: Role) => {
-    setRole(next)
-    navigate(next === 'PLATFORM_ADMIN' ? '/admin' : next.startsWith('CUSTOMER') ? '/portal' : '/app/dashboard')
-  }
 
   const isCustomerRole = role === 'CUSTOMER_ADMIN' || role === 'CUSTOMER_USER'
   const isTenantRole = role === 'TENANT_ADMIN' || role === 'SERVICE_MANAGER' || role === 'INVENTORY_STAFF'
@@ -95,7 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="sidebar__footer"><Link to="/help"><HelpCircle size={19} /><span>Trợ giúp & hướng dẫn</span></Link><button><LogOut size={19} /><span>Đăng xuất</span></button></div>
     </aside>
     <div className="workspace">
-      <header className="topbar"><div className="topbar__left"><IconButton label="Mở menu" className="mobile-menu" onClick={() => setMobileOpen(true)}><Menu size={20} /></IconButton><IconButton label={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'} className="desktop-collapse" onClick={() => setCollapsed((value) => !value)}><PanelLeftClose size={19} /></IconButton><button className="global-search"><Search size={18} /><span>Tìm kiếm khách hàng, thiết bị, yêu cầu...</span><kbd>⌘ K</kbd></button></div><div className="topbar__right"><IconButton label="Thông báo"><Bell size={19} /><span className="notification-dot" /></IconButton><label className="role-switch"><span className="sr-only">Chuyển vai trò demo</span><select value={role} onChange={(event) => changeRole(event.target.value as Role)}><option value="PLATFORM_ADMIN">Platform Admin</option><option value="TENANT_ADMIN">Tenant Admin</option><option value="SERVICE_MANAGER">Điều phối dịch vụ</option><option value="INVENTORY_STAFF">Nhân viên kho</option><option value="CUSTOMER_ADMIN">Customer Admin</option><option value="CUSTOMER_USER">Customer User</option></select></label><button className="user-menu"><span className="avatar">TH</span><span><strong>{portal ? 'Trần Thu Hà' : platform ? 'Phạm Gia Hưng' : 'Trần Quốc Huy'}</strong><small>{roleLabels[role]}</small></span><ChevronRight size={15} /></button></div></header>
+      <header className="topbar"><div className="topbar__left"><IconButton label="Mở menu" className="mobile-menu" onClick={() => setMobileOpen(true)}><Menu size={20} /></IconButton><IconButton label={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'} className="desktop-collapse" onClick={() => setCollapsed((value) => !value)}><PanelLeftClose size={19} /></IconButton><button className="global-search"><Search size={18} /><span>Tìm kiếm khách hàng, thiết bị, yêu cầu...</span><kbd>⌘ K</kbd></button></div><div className="topbar__right"><IconButton label="Thông báo"><Bell size={19} /><span className="notification-dot" /></IconButton><button className="user-menu"><span className="avatar">TH</span><span><strong>{portal ? 'Trần Thu Hà' : platform ? 'Phạm Gia Hưng' : 'Trần Quốc Huy'}</strong><small>{roleLabels[role]}</small></span><ChevronRight size={15} /></button></div></header>
       <main><Breadcrumbs />{children}</main>
     </div>
     <div className="toast-region" aria-live="polite">{toasts.map((toast) => <div className="toast" key={toast.id}><div className="toast__check">✓</div><div><strong>{toast.title}</strong><p>{toast.description}</p></div><IconButton label="Đóng" onClick={() => dismissToast(toast.id)}><X size={16} /></IconButton></div>)}</div>

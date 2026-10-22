@@ -1,0 +1,12 @@
+meta {
+  name: Start review
+  type: http
+  seq: 4
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/start-review
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

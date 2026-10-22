@@ -1,0 +1,16 @@
+meta {
+  name: Request info
+  type: http
+  seq: 8
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/request-info
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"reason":"Vui lòng bổ sung mã lỗi hiển thị trên màn hình"}
+}

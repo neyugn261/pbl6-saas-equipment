@@ -8,8 +8,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
  * Boots the real AppModule with a fake database client, so the HTTP pipeline
- * (health, auth guard, error format) is checked without PostgreSQL.
- * Business e2e suites against service_request_test_db come with the first endpoints.
+ * (health, auth guard, error format and business-route protection) is checked
+ * without PostgreSQL.
  */
 describe('service-request-service bootstrap (e2e)', () => {
   let app: INestApplication<App>;
@@ -39,15 +39,36 @@ describe('service-request-service bootstrap (e2e)', () => {
 
   it('reports the database in /health without a token', async () => {
     database.up = true;
-    await request(app.getHttpServer()).get('/health').expect(200, { status: 'ok', database: 'up' });
+    await request(app.getHttpServer())
+      .get('/health')
+      .expect(200, { status: 'ok', database: 'up' });
     database.up = false;
     const res = await request(app.getHttpServer()).get('/health').expect(503);
-    expect(res.body).toMatchObject({ code: 'SERVICE_UNAVAILABLE', database: 'down' });
+    expect(res.body).toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      database: 'down',
+    });
   });
 
   it('returns errors in the shared format with a correlation id', async () => {
-    const res = await request(app.getHttpServer()).get('/does-not-exist').expect(404);
+    const res = await request(app.getHttpServer())
+      .get('/does-not-exist')
+      .expect(404);
     expect(res.body.code).toBe('NOT_FOUND');
     expect(res.headers['x-correlation-id']).toBeDefined();
+  });
+
+  it('requires authentication for business endpoints', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/service-requests')
+      .expect(401);
+    expect(res.body.code).toBe('INVALID_ACCESS_TOKEN');
+  });
+
+  it('does not expose the internal request reference publicly', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/internal/service-requests/00000000-0000-4000-8000-000000002001')
+      .expect(401);
+    expect(res.body.code).toBe('INVALID_ACCESS_TOKEN');
   });
 });

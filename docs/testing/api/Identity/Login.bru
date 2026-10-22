@@ -1,0 +1,15 @@
+meta {
+  name: Login
+  type: http
+  seq: 1
+}
+post {
+  url: {{identity}}/auth/login
+  body: json
+}
+headers {
+  Content-Type: application/json
+}
+body:json {
+  {"tenantCode":"{{tenantCode}}","email":"{{email}}","password":"{{password}}"}
+}
