@@ -193,6 +193,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'notification:read',
   ],
   CUSTOMER_USER: [
+    'customer:read',
     'equipment:read',
     'service_request:create',
     'service_request:read',

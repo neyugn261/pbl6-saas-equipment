@@ -119,9 +119,12 @@ jobs:
       - name: Identity e2e tests
         working-directory: apps/identity-service
         run: pnpm test:e2e
-      - name: Organization e2e tests
+      - name: Seed Organization dev data (twice, must be idempotent)
         working-directory: apps/organization-service
-        run: pnpm test:e2e
+        run: pnpm db:seed:dev && pnpm db:seed:dev
+      - name: Organization e2e tests (organization_test_db)
+        working-directory: apps/organization-service
+        run: pnpm test:e2e:db
       - name: Asset e2e tests
         working-directory: apps/asset-service
         run: pnpm test:e2e

@@ -120,7 +120,9 @@ paths:
       summary: Suspend, re-activate or disable a tenant
       description: |
         Writes `TenantStatusChanged`; Identity then refuses logins and refreshes
-        of that tenant (tenant_directory).
+        of that tenant (tenant_directory). Changing to the current status is
+        409 INVALID_STATE_TRANSITION. `reason` is written to the service log
+        (no column keeps it).
       x-permissions: [tenant:manage]
       x-user-types: [PLATFORM_STAFF]
       x-events: [TenantStatusChanged.v1]
@@ -237,7 +239,10 @@ paths:
     post:
       tags: [Branches]
       summary: Assign a TENANT_STAFF account to the branch
-      description: The user is validated through Identity (TENANT_STAFF, same tenant). At most one primary branch per user.
+      description: |
+        The user is validated through Identity (TENANT_STAFF, same tenant). At
+        most one primary branch per user: `isPrimary: true` moves the flag from
+        the user's previous primary branch. Assigning again updates `isPrimary`.
       x-permissions: [branch:manage]
       requestBody:
         required: true
@@ -257,7 +262,25 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/BranchUserAssignment' }
         '422':
-          description: USER_NOT_TENANT_STAFF
+          description: USER_NOT_TENANT_STAFF, or USER_NOT_FOUND in the caller's tenant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /branches/{branchId}/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Branches]
+      summary: Remove a staff account from the branch
+      x-permissions: [branch:manage]
+      responses:
+        '204': { description: Removed }
+        '404':
+          description: ASSIGNMENT_NOT_FOUND or BRANCH_NOT_FOUND
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -335,6 +358,7 @@ paths:
     delete:
       tags: [Customers]
       summary: Soft-delete a customer
+      description: Its sites, locations and contacts are no longer returned either.
       x-permissions: [customer:manage]
       x-user-types: [TENANT_STAFF]
       responses:
@@ -406,6 +430,7 @@ paths:
     delete:
       tags: [Sites and locations]
       summary: Soft-delete a site
+      description: Its locations are no longer returned either.
       x-permissions: [customer:manage]
       x-user-types: [TENANT_STAFF]
       responses:
@@ -467,6 +492,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Location' }
+        '422':
+          description: LOCATION_CYCLE or PARENT_NOT_IN_SITE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     delete:
       tags: [Sites and locations]
       summary: Soft-delete a location (refused while it has children)
@@ -474,6 +504,11 @@ paths:
       x-user-types: [TENANT_STAFF]
       responses:
         '204': { description: Deleted }
+        '409':
+          description: LOCATION_HAS_CHILDREN
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /customers/{customerId}/contacts:
     parameters:
       - $ref: '#/components/parameters/CustomerId'
@@ -496,13 +531,21 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ContactInput' }
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ContactInput'
+                - required: [name]
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Contact' }
+        '422':
+          description: SITE_NOT_OF_CUSTOMER — customerSiteId is not a live site of this customer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /contacts/{contactId}:
     parameters:
       - name: contactId
@@ -525,6 +568,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Contact' }
+        '422':
+          description: SITE_NOT_OF_CUSTOMER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     delete:
       tags: [Contacts]
       summary: Soft-delete a contact
@@ -553,7 +601,9 @@ paths:
       summary: Link a CUSTOMER account to the customer
       description: |
         The user is validated through Identity (CUSTOMER, same tenant). An
-        account belongs to one customer; linking it again moves it.
+        account belongs to one customer; linking it again moves it (Tenant
+        Admin) or re-activates it. Linking an already active account changes
+        nothing and writes no event.
         Writes `CustomerMembershipChanged` (ADR 0003).
 
         Tenant Admin: any customer of the tenant. Customer Admin (ADR 0006):
@@ -583,8 +633,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: ROLE_NOT_ASSIGNABLE — a Customer Admin linking an account that is not only CUSTOMER_USER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422':
-          description: USER_NOT_CUSTOMER_ACCOUNT
+          description: USER_NOT_CUSTOMER_ACCOUNT, or USER_NOT_FOUND in the caller's tenant
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -616,6 +671,41 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Membership' }
+        '403':
+          description: ROLE_NOT_ASSIGNABLE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: MEMBERSHIP_NOT_FOUND (also another customer's membership for a Customer Admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: INVALID_STATE_TRANSITION — already in that status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /internal/branches/{branchId}:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      tags: [Internal]
+      summary: Existence and status of a branch in the caller's tenant
+      description: Used by Work Order to validate a technician's `branchId` (404 when not in the tenant or deleted).
+      x-permissions: [branch:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Branch reference
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BranchRef' }
+        '404':
+          description: BRANCH_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /internal/customers/{customerId}:
     parameters:
       - $ref: '#/components/parameters/CustomerId'
@@ -741,7 +831,7 @@ components:
       required: [id, code, name, status, plan, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
-        code: { type: string, maxLength: 50, description: Unique, used at login; cannot change }
+        code: { type: string, maxLength: 50, description: 'Unique, used at login; cannot change' }
         name: { type: string, maxLength: 200 }
         status: { $ref: '#/components/schemas/TenantStatus' }
         plan: { type: string, description: Informational only }
@@ -931,6 +1021,14 @@ components:
         userId: { type: string, format: uuid }
         status: { $ref: '#/components/schemas/ActiveStatus' }
         updatedAt: { type: string, format: date-time }
+    BranchRef:
+      type: object
+      required: [id, code, name, status]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/ActiveStatus' }
     CustomerRef:
       type: object
       required: [id, code, name, status]

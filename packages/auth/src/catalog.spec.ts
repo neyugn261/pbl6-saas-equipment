@@ -49,6 +49,11 @@ describe('RBAC catalog', () => {
     expect(permissionsOf(['NOPE']).size).toBe(0);
   });
 
+  it('lets both customer roles read their own customer (ADR 0006)', () => {
+    expect(ROLE_PERMISSIONS.CUSTOMER_ADMIN).toContain('customer:read');
+    expect(ROLE_PERMISSIONS.CUSTOMER_USER).toContain('customer:read');
+  });
+
   it('only lets the Platform Admin grant TENANT_ADMIN', () => {
     for (const role of ROLE_CODES) {
       expect(canAssignRole([role], 'TENANT_ADMIN')).toBe(role === 'PLATFORM_ADMIN');
