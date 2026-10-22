@@ -11,6 +11,8 @@ import {
 } from './support/test-app';
 
 const PASSWORD = 'Correct#Pass1';
+const CUSTOMER_A = '00000000-0000-4000-8000-000000000101';
+const CUSTOMER_OTHER = '00000000-0000-4000-8000-000000000102';
 
 describe('Identity Users & Internal API (e2e)', () => {
   let app: INestApplication<App>;
@@ -54,6 +56,24 @@ describe('Identity Users & Internal API (e2e)', () => {
       roles: ['TENANT_ADMIN'],
     });
 
+    const customerAdminId = await createUser(prisma, {
+      tenantId: tenantA,
+      userType: 'CUSTOMER',
+      email: 'customer.admin@tenant-a.com',
+      password: PASSWORD,
+      roles: ['CUSTOMER_ADMIN'],
+    });
+    await prisma.userCustomerLink.create({
+      data: {
+        userId: customerAdminId,
+        tenantId: tenantA,
+        customerId: CUSTOMER_A,
+        membershipId: '00000000-0000-4000-8000-000000000201',
+        status: 'ACTIVE',
+        sourceChangedAt: new Date(),
+      },
+    });
+
     tenantAdminTokenA = signTestAccessToken({
       role: 'TENANT_ADMIN',
       tenantId: tenantA,
@@ -69,7 +89,8 @@ describe('Identity Users & Internal API (e2e)', () => {
     customerAdminTokenA = signTestAccessToken({
       role: 'CUSTOMER_ADMIN',
       tenantId: tenantA,
-      customerId: '00000000-0000-0000-0000-000000000001',
+      customerId: CUSTOMER_A,
+      userId: customerAdminId,
     });
 
     techTokenA = signTestAccessToken({
@@ -208,7 +229,7 @@ describe('Identity Users & Internal API (e2e)', () => {
         .expect(201);
     });
 
-    it('Customer Admin cannot invite users (403 Forbidden)', async () => {
+    it('Customer Admin cannot invite staff', async () => {
       await http()
         .post('/users')
         .set('Authorization', `Bearer ${customerAdminTokenA}`)
@@ -217,6 +238,47 @@ describe('Identity Users & Internal API (e2e)', () => {
           fullName: 'Tech Two',
           userType: 'TENANT_STAFF',
           roles: ['TECHNICIAN'],
+        })
+        .expect(403);
+    });
+
+    it('Customer Admin can invite a Customer User for membership linking', async () => {
+      const res = await http()
+        .post('/users')
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .send({
+          email: 'new.customer@tenant-a.com',
+          fullName: 'New Customer User',
+          userType: 'CUSTOMER',
+          roles: ['CUSTOMER_USER'],
+        })
+        .expect(201);
+      expect(res.body.user.roles).toEqual(['CUSTOMER_USER']);
+      expect(res.body.user.customerId).toBeNull();
+    });
+
+    it('Tenant Admin cannot grant TENANT_ADMIN through the tenant API', async () => {
+      await http()
+        .post('/users')
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({
+          email: 'another.admin@tenant-a.com',
+          fullName: 'Another Admin',
+          userType: 'TENANT_STAFF',
+          roles: ['TENANT_ADMIN'],
+        })
+        .expect(403);
+    });
+
+    it('rejects inviting a PLATFORM_STAFF account from a tenant', async () => {
+      await http()
+        .post('/users')
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({
+          email: 'platform@tenant-a.com',
+          fullName: 'Invalid Platform Account',
+          userType: 'PLATFORM_STAFF',
+          roles: [],
         })
         .expect(403);
     });
@@ -299,6 +361,20 @@ describe('Identity Users & Internal API (e2e)', () => {
       expect(res.body.code).toBe('INVALID_ACTIVATION_TOKEN');
     });
 
+    it('consumes an activation token only once under concurrent requests', async () => {
+      const attempts = await Promise.all(
+        Array.from({ length: 2 }, () =>
+          http().post('/users/activate').send({
+            token: activationToken,
+            password: 'New#Password123',
+          }),
+        ),
+      );
+      expect(attempts.map((attempt) => attempt.status).sort()).toEqual([
+        200, 422,
+      ]);
+    });
+
     it('rejects invalid or malformed activation token', async () => {
       const res = await http()
         .post('/users/activate')
@@ -375,12 +451,68 @@ describe('Identity Users & Internal API (e2e)', () => {
       expect(res.body.roles).toEqual(['CUSTOMER_ADMIN']);
     });
 
-    it('Customer Admin cannot assign staff roles (403 Forbidden)', async () => {
+    it('Tenant Admin cannot remove TENANT_ADMIN from another admin', async () => {
+      const anotherAdminId = await createUser(prisma, {
+        tenantId: tenantA,
+        userType: 'TENANT_STAFF',
+        email: 'other.admin@tenant-a.com',
+        password: PASSWORD,
+        roles: ['TENANT_ADMIN'],
+      });
+      await http()
+        .patch(`/users/${anotherAdminId}/roles`)
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ roles: [] })
+        .expect(403);
+    });
+
+    it('Customer Admin cannot manage a staff account', async () => {
       await http()
         .patch(`/users/${staffUserId}/roles`)
         .set('Authorization', `Bearer ${customerAdminTokenA}`)
         .send({ roles: ['SERVICE_MANAGER'] })
+        .expect(404);
+    });
+
+    it('Customer Admin can assign CUSTOMER_USER only within its own customer', async () => {
+      await prisma.userCustomerLink.create({
+        data: {
+          userId: customerUserId,
+          tenantId: tenantA,
+          customerId: CUSTOMER_A,
+          membershipId: '00000000-0000-4000-8000-000000000202',
+          status: 'ACTIVE',
+          sourceChangedAt: new Date(),
+        },
+      });
+      await http()
+        .patch(`/users/${customerUserId}/roles`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .send({ roles: ['CUSTOMER_USER'] })
+        .expect(200);
+      await http()
+        .patch(`/users/${customerUserId}/roles`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .send({ roles: ['CUSTOMER_ADMIN'] })
         .expect(403);
+    });
+
+    it('Customer Admin gets 404 for a user linked to another customer', async () => {
+      await prisma.userCustomerLink.create({
+        data: {
+          userId: customerUserId,
+          tenantId: tenantA,
+          customerId: CUSTOMER_OTHER,
+          membershipId: '00000000-0000-4000-8000-000000000203',
+          status: 'ACTIVE',
+          sourceChangedAt: new Date(),
+        },
+      });
+      await http()
+        .patch(`/users/${customerUserId}/roles`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .send({ roles: ['CUSTOMER_USER'] })
+        .expect(404);
     });
 
     it('rejects role assignment when role userType does not match user', async () => {
@@ -544,11 +676,34 @@ describe('Identity Users & Internal API (e2e)', () => {
       }
     });
 
-    it('Customer Admin cannot access staff list (403 Forbidden)', async () => {
-      await http()
+    it('Customer Admin lists only users linked to its own customer', async () => {
+      const ownUserId = await createUser(prisma, {
+        tenantId: tenantA,
+        userType: 'CUSTOMER',
+        email: 'own.customer@tenant-a.com',
+        password: PASSWORD,
+        roles: ['CUSTOMER_USER'],
+      });
+      await prisma.userCustomerLink.create({
+        data: {
+          userId: ownUserId,
+          tenantId: tenantA,
+          customerId: CUSTOMER_A,
+          membershipId: '00000000-0000-4000-8000-000000000204',
+          status: 'ACTIVE',
+          sourceChangedAt: new Date(),
+        },
+      });
+      const res = await http()
         .get('/users')
         .set('Authorization', `Bearer ${customerAdminTokenA}`)
-        .expect(403);
+        .expect(200);
+      const emails = res.body.items.map(
+        (item: { email: string }) => item.email,
+      );
+      expect(emails).toContain('own.customer@tenant-a.com');
+      expect(emails).not.toContain('tech_a@tenant-a.com');
+      expect(emails).not.toContain('tech_b@tenant-b.com');
     });
   });
 
@@ -602,6 +757,17 @@ describe('Identity Users & Internal API (e2e)', () => {
         .expect(404);
     });
 
+    it('rejects CUSTOMER tokens on the internal directory', async () => {
+      await http()
+        .get(`/internal/users/${techId}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(403);
+      await http()
+        .get('/internal/users?role=TECHNICIAN')
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(403);
+    });
+
     it('GET /internal/users?role=TECHNICIAN&status=ACTIVE returns list in tenant', async () => {
       const res = await http()
         .get('/internal/users?role=TECHNICIAN&status=ACTIVE')
@@ -611,9 +777,10 @@ describe('Identity Users & Internal API (e2e)', () => {
       expect(res.body.items).toBeInstanceOf(Array);
       expect(res.body.items.length).toBeGreaterThanOrEqual(1);
       const found = res.body.items.find((u: { id: string }) => u.id === techId);
-      expect(found).toMatchObject({
+      expect(found).toEqual({
         id: techId,
-        tenantId: tenantA,
+        email: 'assigned.tech@tenant-a.com',
+        fullName: 'assigned.tech',
         roles: ['TECHNICIAN'],
       });
     });

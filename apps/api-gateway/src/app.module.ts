@@ -12,6 +12,7 @@ import { InternalBlockMiddleware } from './proxy/internal-block.middleware.js';
 import { CorrelationIdMiddleware } from './proxy/correlation-id.middleware.js';
 import {
   IdentityProxyMiddleware,
+  AuthAliasProxyMiddleware,
   OrganizationProxyMiddleware,
   AssetProxyMiddleware,
   ServiceRequestProxyMiddleware,
@@ -47,22 +48,28 @@ export class AppModule implements NestModule {
       .forRoutes({ path: 'api/identity/*path', method: RequestMethod.ALL });
 
     consumer
-      .apply(OrganizationProxyMiddleware)
-      .forRoutes({
-        path: 'api/organizations/*path',
-        method: RequestMethod.ALL,
-      });
+      .apply(AuthAliasProxyMiddleware)
+      .forRoutes({ path: 'api/auth/*path', method: RequestMethod.ALL });
+
+    consumer.apply(OrganizationProxyMiddleware).forRoutes({
+      path: 'api/organization/*path',
+      method: RequestMethod.ALL,
+    });
 
     consumer
       .apply(AssetProxyMiddleware)
       .forRoutes({ path: 'api/assets/*path', method: RequestMethod.ALL });
 
-    consumer
-      .apply(ServiceRequestProxyMiddleware)
-      .forRoutes({
+    consumer.apply(ServiceRequestProxyMiddleware).forRoutes(
+      {
+        path: 'api/service-requests',
+        method: RequestMethod.ALL,
+      },
+      {
         path: 'api/service-requests/*path',
         method: RequestMethod.ALL,
-      });
+      },
+    );
 
     consumer
       .apply(WorkorderProxyMiddleware)
@@ -76,11 +83,9 @@ export class AppModule implements NestModule {
       .apply(InventoryProxyMiddleware)
       .forRoutes({ path: 'api/inventory/*path', method: RequestMethod.ALL });
 
-    consumer
-      .apply(NotificationProxyMiddleware)
-      .forRoutes({
-        path: 'api/notifications/*path',
-        method: RequestMethod.ALL,
-      });
+    consumer.apply(NotificationProxyMiddleware).forRoutes({
+      path: 'api/notifications/*path',
+      method: RequestMethod.ALL,
+    });
   }
 }

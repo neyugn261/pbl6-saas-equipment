@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { AccountToken, Prisma, User } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
+import type { AccountToken, User } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
 import type { ListUsersDto } from './dto/list-users.dto';
 import type { Page } from '@pbl6/service-kit';
 import { toSkipTake, toPage } from '@pbl6/service-kit';
-import type { UserSummary, UserProfile } from './users.types';
+import type {
+  InternalUserListItem,
+  UserSummary,
+  UserProfile,
+} from './users.types';
 
 const userWithRoles = {
   include: {
@@ -32,12 +37,25 @@ export class UsersRepository {
   async findUsers(
     tenantId: string,
     query: ListUsersDto,
+    customerId: string | null,
   ): Promise<Page<UserSummary>> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const { skip, take } = toSkipTake({ page, pageSize });
 
+    if (
+      customerId !== null &&
+      query.userType &&
+      query.userType !== 'CUSTOMER'
+    ) {
+      return toPage([], 0, { page, pageSize });
+    }
+
     const where: Prisma.UserWhereInput = { tenantId };
+    if (customerId !== null) {
+      where.userType = 'CUSTOMER';
+      where.customerLink = { is: { customerId, status: 'ACTIVE' } };
+    }
     if (query.status) where.status = query.status;
     if (query.userType) where.userType = query.userType;
     if (query.q) {
@@ -86,7 +104,7 @@ export class UsersRepository {
       role?: string;
       userType?: string;
     },
-  ): Promise<Page<import('./users.types').UserSnapshot>> {
+  ): Promise<Page<InternalUserListItem>> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
     const { skip, take } = toSkipTake({ page, pageSize });
@@ -111,7 +129,12 @@ export class UsersRepository {
       this.prisma.user.count({ where }),
     ]);
 
-    const items = users.map((u) => this.toSnapshot(u));
+    const items: InternalUserListItem[] = users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      fullName: u.fullName,
+      roles: toRoleCodes(u),
+    }));
     return toPage(items, total, { page, pageSize });
   }
 
@@ -133,24 +156,55 @@ export class UsersRepository {
     return this.findUserById(rows[0].id);
   }
 
-  async createUser(data: {
+  async createInvitation(data: {
     tenantId: string | null;
     userType: string;
     email: string;
     fullName: string;
     phone?: string | null;
-    status?: string;
+    roleCodes: string[];
+    assignedBy: string;
+    tokenHash: string;
+    expiresAt: Date;
   }): Promise<User> {
-    return this.prisma.user.create({
-      data: {
-        tenantId: data.tenantId,
-        userType: data.userType,
-        email: data.email,
-        fullName: data.fullName,
-        phone: data.phone ?? null,
-        status: data.status ?? 'INVITED',
-        passwordHash: null,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const roles = await tx.role.findMany({
+        where: { code: { in: data.roleCodes } },
+        select: { id: true },
+      });
+      if (roles.length !== new Set(data.roleCodes).size) {
+        throw new Error('Role catalog is missing an assignable role');
+      }
+
+      const user = await tx.user.create({
+        data: {
+          tenantId: data.tenantId,
+          userType: data.userType,
+          email: data.email,
+          fullName: data.fullName,
+          phone: data.phone ?? null,
+          status: 'INVITED',
+          passwordHash: null,
+        },
+      });
+      for (const role of roles) {
+        await tx.userRole.create({
+          data: {
+            userId: user.id,
+            roleId: role.id,
+            assignedBy: data.assignedBy,
+          },
+        });
+      }
+      await tx.accountToken.create({
+        data: {
+          userId: user.id,
+          purpose: 'ACCOUNT_ACTIVATION',
+          tokenHash: data.tokenHash,
+          expiresAt: data.expiresAt,
+        },
+      });
+      return user;
     });
   }
 
@@ -188,31 +242,23 @@ export class UsersRepository {
     userId: string,
     passwordHash: string,
     tokenId: string,
-  ): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: userId },
-        data: { passwordHash, status: 'ACTIVE' },
-      }),
-      this.prisma.accountToken.update({
-        where: { id: tokenId },
-        data: { usedAt: new Date() },
-      }),
-    ]);
-  }
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const claimed = await tx.accountToken.updateMany({
+        where: { id: tokenId, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (claimed.count !== 1) return false;
 
-  createActivationToken(
-    userId: string,
-    tokenHash: string,
-    expiresAt: Date,
-  ): Promise<AccountToken> {
-    return this.prisma.accountToken.create({
-      data: {
-        userId,
-        purpose: 'ACCOUNT_ACTIVATION',
-        tokenHash,
-        expiresAt,
-      },
+      const activated = await tx.user.updateMany({
+        where: { id: userId, status: 'INVITED' },
+        data: { passwordHash, status: 'ACTIVE' },
+      });
+      if (activated.count !== 1) {
+        throw new Error('Invited user state changed during activation');
+      }
+      return true;
     });
   }
 

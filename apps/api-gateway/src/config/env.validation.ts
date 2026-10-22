@@ -42,6 +42,17 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
     errors.push(`${PORT_VARIABLE} must be an integer between 1 and 65535`);
   }
 
+  const loginRateLimit = Number(raw.LOGIN_RATE_LIMIT ?? 10);
+  const loginRateLimitWindowMs = Number(
+    raw.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000,
+  );
+  if (!Number.isInteger(loginRateLimit) || loginRateLimit < 1) {
+    errors.push('LOGIN_RATE_LIMIT must be a positive integer');
+  }
+  if (!Number.isInteger(loginRateLimitWindowMs) || loginRateLimitWindowMs < 1) {
+    errors.push('LOGIN_RATE_LIMIT_WINDOW_MS must be a positive integer');
+  }
+
   if (errors.length > 0) {
     throw new Error(
       `Invalid environment configuration:\n- ${errors.join('\n- ')}`,
@@ -58,9 +69,7 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
     ORGANIZATION_SERVICE_URL: String(
       raw.ORGANIZATION_SERVICE_URL ?? 'http://localhost:3006',
     ),
-    ASSET_SERVICE_URL: String(
-      raw.ASSET_SERVICE_URL ?? 'http://localhost:3002',
-    ),
+    ASSET_SERVICE_URL: String(raw.ASSET_SERVICE_URL ?? 'http://localhost:3002'),
     SERVICE_REQUEST_SERVICE_URL: String(
       raw.SERVICE_REQUEST_SERVICE_URL ?? 'http://localhost:3007',
     ),
@@ -77,11 +86,9 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
       raw.NOTIFICATION_SERVICE_URL ?? 'http://localhost:3005',
     ),
     // CORS
-    CORS_ORIGINS: String(raw.CORS_ORIGINS ?? 'http://localhost:3000'),
+    CORS_ORIGINS: String(raw.CORS_ORIGINS ?? 'http://localhost:5173'),
     // Rate limit: 10 requests per 15 minutes for auth endpoints
-    LOGIN_RATE_LIMIT: Number(raw.LOGIN_RATE_LIMIT ?? 10),
-    LOGIN_RATE_LIMIT_WINDOW_MS: Number(
-      raw.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000,
-    ),
+    LOGIN_RATE_LIMIT: loginRateLimit,
+    LOGIN_RATE_LIMIT_WINDOW_MS: loginRateLimitWindowMs,
   };
 }

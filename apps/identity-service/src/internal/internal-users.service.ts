@@ -4,7 +4,7 @@ import type { Principal } from '@pbl6/auth';
 import type { Page } from '@pbl6/service-kit';
 import { UsersRepository } from '../users/users.repository';
 import type { ListInternalUsersDto } from './dto/list-internal-users.dto';
-import type { UserSnapshot } from '../users/users.types';
+import type { InternalUserListItem, UserSnapshot } from '../users/users.types';
 
 @Injectable()
 export class InternalUsersService {
@@ -18,7 +18,10 @@ export class InternalUsersService {
     const tenantId = requireTenantId(principal);
     const user = await this.usersRepo.findUserById(userId);
     if (!user || user.tenantId !== tenantId) {
-      throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' });
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'User not found',
+      });
     }
     return this.usersRepo.toSnapshot(user);
   }
@@ -27,7 +30,7 @@ export class InternalUsersService {
   async listUserSnapshots(
     principal: Principal,
     query: ListInternalUsersDto,
-  ): Promise<Page<UserSnapshot>> {
+  ): Promise<Page<InternalUserListItem>> {
     const tenantId = requireTenantId(principal);
     return this.usersRepo.findInternalUsers(tenantId, {
       page: query.page,

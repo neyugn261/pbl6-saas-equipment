@@ -44,7 +44,7 @@ export class UsersController {
 
   /** List users in the caller's tenant. Requires user:read permission. */
   @Get()
-  @AllowUserTypes('TENANT_STAFF')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('user:read')
   listUsers(
     @CurrentUser() principal: Principal,
@@ -55,7 +55,7 @@ export class UsersController {
 
   /** Get a single user by id. Requires user:read permission. */
   @Get(':id')
-  @AllowUserTypes('TENANT_STAFF')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('user:read')
   getUser(
     @CurrentUser() principal: Principal,
@@ -69,7 +69,7 @@ export class UsersController {
    * Requires user:manage permission.
    */
   @Post()
-  @AllowUserTypes('TENANT_STAFF')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('user:manage')
   inviteUser(
     @CurrentUser() principal: Principal,
@@ -79,7 +79,7 @@ export class UsersController {
   }
 
   @Post('invite')
-  @AllowUserTypes('TENANT_STAFF')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('user:manage')
   inviteUserAlias(
     @CurrentUser() principal: Principal,
@@ -103,7 +103,7 @@ export class UsersController {
 
   /** Replace all roles of a user. Supports PATCH /users/:id/roles and PUT /users/:id/roles. */
   @Patch(':id/roles')
-  @AllowUserTypes('TENANT_STAFF')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('role:assign')
   assignRoles(
     @CurrentUser() principal: Principal,
@@ -114,7 +114,7 @@ export class UsersController {
   }
 
   @Put(':id/roles')
-  @AllowUserTypes('TENANT_STAFF')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('role:assign')
   assignRolesPut(
     @CurrentUser() principal: Principal,
@@ -126,7 +126,8 @@ export class UsersController {
 
   /** Update user status (ACTIVE ↔ SUSPENDED). Supports POST /users/:id/status and PATCH /users/:id/status. */
   @Post(':id/status')
-  @AllowUserTypes('TENANT_STAFF')
+  @HttpCode(HttpStatus.OK)
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('user:manage')
   updateStatus(
     @CurrentUser() principal: Principal,
@@ -137,7 +138,7 @@ export class UsersController {
   }
 
   @Patch(':id/status')
-  @AllowUserTypes('TENANT_STAFF')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   @RequirePermissions('user:manage')
   updateStatusPatch(
     @CurrentUser() principal: Principal,

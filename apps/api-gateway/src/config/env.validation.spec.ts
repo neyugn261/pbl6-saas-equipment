@@ -11,7 +11,7 @@ describe('validateEnv', () => {
     const result = validateEnv({});
     expect(result.IDENTITY_SERVICE_URL).toBe('http://localhost:3001');
     expect(result.ORGANIZATION_SERVICE_URL).toBe('http://localhost:3006');
-    expect(result.CORS_ORIGINS).toBe('http://localhost:3000');
+    expect(result.CORS_ORIGINS).toBe('http://localhost:5173');
     expect(result.LOGIN_RATE_LIMIT).toBe(10);
     expect(result.LOGIN_RATE_LIMIT_WINDOW_MS).toBe(15 * 60 * 1000);
   });
@@ -39,5 +39,14 @@ describe('validateEnv', () => {
 
   it('rejects an unknown NODE_ENV', () => {
     expect(() => validateEnv({ NODE_ENV: 'staging' })).toThrow('NODE_ENV');
+  });
+
+  it('rejects invalid login rate limit values', () => {
+    expect(() => validateEnv({ LOGIN_RATE_LIMIT: '0' })).toThrow(
+      'LOGIN_RATE_LIMIT',
+    );
+    expect(() =>
+      validateEnv({ LOGIN_RATE_LIMIT_WINDOW_MS: 'invalid' }),
+    ).toThrow('LOGIN_RATE_LIMIT_WINDOW_MS');
   });
 });

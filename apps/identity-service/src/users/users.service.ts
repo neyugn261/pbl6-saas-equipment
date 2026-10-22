@@ -8,7 +8,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import { ROLE_USER_TYPES, requireTenantId } from '@pbl6/auth';
+import { ROLE_USER_TYPES, canAssignRole, dataScope } from '@pbl6/auth';
 import type { Principal, RoleCode } from '@pbl6/auth';
 import { AuthRepository } from '../auth/auth.repository';
 import { PasswordService } from '../auth/password.service';
@@ -22,6 +22,7 @@ import type { ActivateAccountDto } from './dto/activate-account.dto';
 import type { ListUsersDto } from './dto/list-users.dto';
 import type { Page } from '@pbl6/service-kit';
 import type { UserProfile, UserSummary } from './users.types';
+import type { UserWithRoles } from './users.repository';
 
 const ACTIVATION_TOKEN_TTL_HOURS = 72;
 
@@ -41,17 +42,15 @@ export class UsersService {
     principal: Principal,
     query: ListUsersDto,
   ): Promise<Page<UserSummary>> {
-    const tenantId = requireTenantId(principal);
-    return this.usersRepo.findUsers(tenantId, query);
+    const scope = dataScope(principal);
+    return this.usersRepo.findUsers(scope.tenantId, query, scope.customerId);
   }
 
   /** Get a single user by id. 404 if not in the caller's tenant. */
   async getUser(principal: Principal, userId: string): Promise<UserProfile> {
-    const tenantId = requireTenantId(principal);
+    const scope = dataScope(principal);
     const user = await this.usersRepo.findUserById(userId);
-    if (!user || user.tenantId !== tenantId) {
-      throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' });
-    }
+    this.assertInScope(user, scope);
     return this.usersRepo.toProfile(user);
   }
 
@@ -63,10 +62,27 @@ export class UsersService {
     principal: Principal,
     dto: InviteUserDto,
   ): Promise<{ user: UserProfile; activationToken: string }> {
-    const tenantId = requireTenantId(principal);
+    const scope = dataScope(principal);
+    const tenantId = scope.tenantId;
 
-    // Validate roles vs userType
-    this.validateRolesForUserType(dto.roles ?? [], dto.userType);
+    if (dto.userType === 'PLATFORM_STAFF') {
+      throw new ForbiddenException({
+        code: 'USER_TYPE_NOT_ALLOWED',
+        message: 'Tenant accounts cannot invite platform staff',
+      });
+    }
+    if (
+      scope.customerId !== null &&
+      (dto.userType !== 'CUSTOMER' ||
+        dto.roles?.length !== 1 ||
+        dto.roles[0] !== 'CUSTOMER_USER')
+    ) {
+      throw new ForbiddenException({
+        code: 'USER_TYPE_NOT_ALLOWED',
+        message: 'Customer Admin may invite Customer Users only',
+      });
+    }
+    this.validateRoleAssignment(principal, dto.roles ?? [], dto.userType);
 
     // Check email uniqueness in the tenant
     const existing = await this.usersRepo.findUserByEmail(tenantId, dto.email);
@@ -77,28 +93,24 @@ export class UsersService {
       });
     }
 
-    // Create user with status INVITED
-    const created = await this.usersRepo.createUser({
-      tenantId,
-      userType: dto.userType,
-      email: dto.email,
-      fullName: dto.fullName,
-      phone: dto.phone ?? null,
-      status: 'INVITED',
-    });
-
-    // Assign initial roles if provided
-    if (dto.roles && dto.roles.length > 0) {
-      await this.usersRepo.setRoles(created.id, dto.roles, principal.userId);
-    }
-
-    // Generate activation token
+    // Create the account, roles and token together so a failed invitation
+    // never leaves an unactivatable account behind.
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(
       Date.now() + ACTIVATION_TOKEN_TTL_HOURS * 60 * 60 * 1000,
     );
-    await this.usersRepo.createActivationToken(created.id, tokenHash, expiresAt);
+    const created = await this.usersRepo.createInvitation({
+      tenantId,
+      userType: dto.userType,
+      email: dto.email,
+      fullName: dto.fullName,
+      phone: dto.phone ?? null,
+      roleCodes: dto.roles ?? [],
+      assignedBy: principal.userId,
+      tokenHash,
+      expiresAt,
+    });
 
     // Re-read with roles
     const userWithRoles = await this.usersRepo.findUserById(created.id);
@@ -145,7 +157,19 @@ export class UsersService {
     }
 
     const passwordHash = await this.passwords.hash(dto.password);
-    await this.usersRepo.setPasswordAndActivate(user.id, passwordHash, record.id);
+    const activated = await this.usersRepo.setPasswordAndActivate(
+      user.id,
+      passwordHash,
+      record.id,
+    );
+    if (!activated) {
+      throw new UnprocessableEntityException({
+        code: 'INVALID_ACTIVATION_TOKEN',
+        message: 'Activation token is invalid or has expired',
+      });
+    }
+    const activatedUser = await this.usersRepo.findUserById(user.id);
+    if (!activatedUser) throw new Error('User not found after activation');
 
     // Create a login session immediately
     const { token, hash } = this.tokens.generateRefreshToken();
@@ -160,12 +184,14 @@ export class UsersService {
     const accessToken = await this.tokens.signAccessToken({
       sub: user.id,
       sid: session.id,
-      tenant_id: user.tenantId,
-      user_type: user.userType as import('../auth/auth.types').UserType,
-      roles: user.roles.map((r) => r.role.code as RoleCode),
+      tenant_id: activatedUser.tenantId,
+      user_type:
+        activatedUser.userType as import('../auth/auth.types').UserType,
+      roles: activatedUser.roles.map((r) => r.role.code as RoleCode),
       customer_id:
-        user.userType === 'CUSTOMER' && user.customerLink?.status === 'ACTIVE'
-          ? user.customerLink.customerId
+        activatedUser.userType === 'CUSTOMER' &&
+        activatedUser.customerLink?.status === 'ACTIVE'
+          ? activatedUser.customerLink.customerId
           : null,
     });
 
@@ -176,7 +202,7 @@ export class UsersService {
       expiresIn: this.tokens.accessTokenTtlSeconds,
       refreshToken: token,
       refreshTokenExpiresAt: session.expiresAt,
-      user: this.usersRepo.toProfile(user),
+      user: this.usersRepo.toProfile(activatedUser),
     };
   }
 
@@ -186,13 +212,12 @@ export class UsersService {
     userId: string,
     dto: AssignRolesDto,
   ): Promise<UserProfile> {
-    const tenantId = requireTenantId(principal);
+    const scope = dataScope(principal);
     const user = await this.usersRepo.findUserById(userId);
-    if (!user || user.tenantId !== tenantId) {
-      throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' });
-    }
+    this.assertInScope(user, scope);
 
-    this.validateRolesForUserType(dto.roles, user.userType);
+    this.assertMayChangeExistingRoles(principal, user);
+    this.validateRoleAssignment(principal, dto.roles, user.userType);
 
     await this.usersRepo.setRoles(userId, dto.roles, principal.userId);
 
@@ -206,10 +231,11 @@ export class UsersService {
     userId: string,
     dto: UpdateStatusDto,
   ): Promise<UserProfile> {
-    const tenantId = requireTenantId(principal);
+    const scope = dataScope(principal);
     const user = await this.usersRepo.findUserById(userId);
-    if (!user || user.tenantId !== tenantId) {
-      throw new NotFoundException({ code: 'NOT_FOUND', message: 'User not found' });
+    this.assertInScope(user, scope);
+    if (scope.customerId !== null) {
+      this.assertMayChangeExistingRoles(principal, user);
     }
 
     const allowedTransitions: Record<string, string[]> = {
@@ -235,12 +261,16 @@ export class UsersService {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  private validateRolesForUserType(roles: RoleCode[], userType: string): void {
+  private validateRoleAssignment(
+    principal: Principal,
+    roles: RoleCode[],
+    userType: string,
+  ): void {
     for (const role of roles) {
-      if (role === 'PLATFORM_ADMIN') {
+      if (!canAssignRole(principal.roles, role)) {
         throw new ForbiddenException({
           code: 'ROLE_NOT_ALLOWED',
-          message: 'Cannot assign PLATFORM_ADMIN role',
+          message: `Cannot assign ${role} role`,
         });
       }
       if (ROLE_USER_TYPES[role] !== userType) {
@@ -249,6 +279,39 @@ export class UsersService {
           message: `Role ${role} is not valid for userType ${userType}`,
         });
       }
+    }
+  }
+
+  private assertMayChangeExistingRoles(
+    principal: Principal,
+    user: UserWithRoles,
+  ): void {
+    for (const entry of user.roles) {
+      if (!canAssignRole(principal.roles, entry.role.code)) {
+        throw new ForbiddenException({
+          code: 'ROLE_NOT_ALLOWED',
+          message: `Cannot remove ${entry.role.code} role`,
+        });
+      }
+    }
+  }
+
+  private assertInScope(
+    user: UserWithRoles | null,
+    scope: { tenantId: string; customerId: string | null },
+  ): asserts user is UserWithRoles {
+    if (
+      !user ||
+      user.tenantId !== scope.tenantId ||
+      (scope.customerId !== null &&
+        (user.userType !== 'CUSTOMER' ||
+          user.customerLink?.status !== 'ACTIVE' ||
+          user.customerLink.customerId !== scope.customerId))
+    ) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'User not found',
+      });
     }
   }
 }

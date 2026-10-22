@@ -1,17 +1,26 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 import type { Request, Response, NextFunction } from 'express';
 import type { ClientRequest, IncomingMessage, ServerResponse } from 'node:http';
 import type { AppEnv } from '../config/env.validation.js';
 
-function buildProxy(target: string, pathPrefix: string) {
+function buildProxy(target: string, pathPrefix: string, upstreamPrefix = '') {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
-    pathRewrite: { [`^${pathPrefix}`]: '' },
+    // Nest mounts middleware on a route and Express shortens req.url. Use the
+    // original URL so the complete upstream path and query string survive.
+    pathRewrite: (_path, req) => {
+      const originalUrl = (req as Request).originalUrl ?? _path;
+      const suffix = originalUrl.slice(pathPrefix.length);
+      if (!suffix) return upstreamPrefix || '/';
+      return `${upstreamPrefix}${suffix.startsWith('?') && !upstreamPrefix ? '/' : ''}${suffix}`;
+    },
     onProxyReq: (proxyReq: ClientRequest, req: IncomingMessage) => {
       const expressReq = req as Request;
+      const authorization = expressReq.headers.authorization;
+      if (authorization) proxyReq.setHeader('Authorization', authorization);
       const correlationId = expressReq.headers['x-correlation-id'];
       if (correlationId) {
         proxyReq.setHeader(
@@ -19,8 +28,14 @@ function buildProxy(target: string, pathPrefix: string) {
           Array.isArray(correlationId) ? correlationId[0] : correlationId,
         );
       }
+      // Nest's JSON parser has already consumed POST/PATCH bodies by this point.
+      fixRequestBody(proxyReq, req);
     },
-    onError: (_err: Error, _req: IncomingMessage, res: ServerResponse | Response) => {
+    onError: (
+      _err: Error,
+      _req: IncomingMessage,
+      res: ServerResponse | Response,
+    ) => {
       const expressRes = res as Response;
       if (!expressRes.headersSent) {
         expressRes.status(502).json({
@@ -67,7 +82,7 @@ export class OrganizationProxyMiddleware implements NestMiddleware {
   constructor(config: ConfigService<AppEnv, true>) {
     this.proxy = buildProxy(
       config.get('ORGANIZATION_SERVICE_URL', { infer: true }),
-      '/api/organizations',
+      '/api/organization',
     );
   }
   use(req: Request, res: Response, next: NextFunction): void {
@@ -96,6 +111,7 @@ export class ServiceRequestProxyMiddleware implements NestMiddleware {
     this.proxy = buildProxy(
       config.get('SERVICE_REQUEST_SERVICE_URL', { infer: true }),
       '/api/service-requests',
+      '/service-requests',
     );
   }
   use(req: Request, res: Response, next: NextFunction): void {

@@ -13,12 +13,11 @@ info:
     services with a valid bearer token. The API Gateway blocks all external
     requests to `/internal/*` with 404 (ADR 0004).
 
-    Open points for review:
-    - Activation token delivery: for MVP the token is returned in the 201
+    Activation token delivery: for MVP the token is returned in the 201
       response body (`activationToken`); a real deployment would email it.
       The field will be removed once Notification Service is wired.
-    - `role:assign` matrix: the service validates that the role's `userType`
-      matches the target user's `userType`. The DB trigger does the same.
+    Role assignment follows ADR 0006 and `ASSIGNABLE_ROLES` in
+    `packages/auth/src/catalog.ts`.
 servers:
   - url: http://localhost:3001
     description: Local service (direct)
@@ -138,9 +137,10 @@ paths:
       summary: List users of the caller's tenant
       description: |
         Returns a paginated list of users in the caller's tenant.
-        TENANT_STAFF with `user:read` can see all users.
+        TENANT_STAFF with `user:read` can see all users. CUSTOMER_ADMIN sees
+        only CUSTOMER accounts linked to its own customer.
       x-permissions: [user:read]
-      x-user-types: [TENANT_STAFF]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -184,14 +184,14 @@ paths:
         so the frontend can display or copy it. In production it would be
         emailed by Notification Service and the field removed from this response.
 
-        **Role matrix**: the caller can only invite users whose `userType`
-        matches the roles they specify:
-        - `TENANT_ADMIN` may invite any `TENANT_STAFF` role or leave roles empty.
-        - `TENANT_ADMIN` may also invite `CUSTOMER` accounts with
-          `CUSTOMER_ADMIN` or `CUSTOMER_USER` roles.
-        - `PLATFORM_ADMIN` invites other `PLATFORM_STAFF` users (out of M1 scope).
+        **Role matrix** (ADR 0006): TENANT_ADMIN may invite TENANT_STAFF
+        with SERVICE_MANAGER, DISPATCHER, INVENTORY_STAFF or TECHNICIAN,
+        or CUSTOMER accounts with CUSTOMER_ADMIN or CUSTOMER_USER.
+        It cannot grant TENANT_ADMIN. CUSTOMER_ADMIN may invite CUSTOMER_USER
+        only; the new account must then be linked to the same customer through
+        Organization's membership API before it can access customer data.
       x-permissions: [user:manage]
-      x-user-types: [TENANT_STAFF]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       requestBody:
         required: true
         content:
@@ -244,13 +244,13 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResult' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
-        '410':
-          description: Token expired or already used
+        '422':
+          description: Token invalid, expired or already used
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApiError' }
               example:
-                code: TOKEN_EXPIRED
+                code: INVALID_ACTIVATION_TOKEN
                 message: Activation token has expired or was already used
 
   /users/{id}:
@@ -263,7 +263,7 @@ paths:
         Returns the full user profile. Users outside the caller's tenant
         return 404 (ids cannot be probed).
       x-permissions: [user:read]
-      x-user-types: [TENANT_STAFF]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: User profile
@@ -286,10 +286,13 @@ paths:
         **Constraints enforced by the service** (same as the DB trigger):
         - Every role in the new set must have the same `userType` as the
           target user (`ROLE_USER_TYPES` in the catalog).
-        - `PLATFORM_ADMIN` can never be granted by this endpoint.
+        - The caller may change only roles in `ASSIGNABLE_ROLES` (ADR 0006),
+          including roles being removed from the target.
+        - TENANT_ADMIN cannot grant or remove TENANT_ADMIN through this API.
+        - CUSTOMER_ADMIN manages CUSTOMER_USER accounts linked to its own customer.
         - Empty `roles` array removes all roles.
       x-permissions: [role:assign]
-      x-user-types: [TENANT_STAFF]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       requestBody:
         required: true
         content:
@@ -330,8 +333,9 @@ paths:
 
         Suspending an account immediately revokes all active sessions.
         `INVITED` and `DISABLED` accounts cannot be changed by this endpoint.
+        CUSTOMER_ADMIN can change only CUSTOMER_USER accounts of its own customer.
       x-permissions: [user:manage]
-      x-user-types: [TENANT_STAFF]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       requestBody:
         required: true
         content:
@@ -348,12 +352,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UserProfile' }
-        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '422':
-          description: Invalid status transition
+        '400':
+          description: Invalid input or status transition
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApiError' }
@@ -418,10 +421,12 @@ paths:
         Returns the user's identity snapshot for the calling service.
         The caller's token must carry a `tenant_id`; if the user does not
         belong to that tenant the endpoint returns 404 (ids cannot be probed).
+        The caller must have userType `TENANT_STAFF`.
 
         PLATFORM_STAFF tokens (null tenant_id) are rejected with 403
         `TENANT_SCOPE_REQUIRED`.
       x-internal: true
+      x-user-types: [TENANT_STAFF]
       responses:
         '200':
           description: User identity snapshot
@@ -440,10 +445,12 @@ paths:
         Returns users within the caller's tenant, optionally filtered by role
         code and/or status. Used by, for example, Work Order Service to
         resolve assignable technicians.
+        The caller must have userType `TENANT_STAFF`.
 
         Pagination matches the standard `page` / `pageSize` convention.
         Maximum `pageSize` is 200 (internal callers are allowed a larger page).
       x-internal: true
+      x-user-types: [TENANT_STAFF]
       parameters:
         - $ref: '#/components/parameters/Page'
         - name: pageSize
@@ -469,7 +476,7 @@ paths:
                     properties:
                       items:
                         type: array
-                        items: { $ref: '#/components/schemas/UserSnapshot' }
+                        items: { $ref: '#/components/schemas/InternalUserListItem' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -500,7 +507,7 @@ components:
     Q:
       name: q
       in: query
-      description: Free-text search (email or full name prefix)
+      description: Free-text search (email or full name substring)
       schema: { type: string, maxLength: 100 }
 
   schemas:
@@ -663,6 +670,17 @@ components:
         fullName:
           type: string
 
+    InternalUserListItem:
+      type: object
+      required: [id, email, fullName, roles]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+
     InviteUserInput:
       type: object
       additionalProperties: false
@@ -709,7 +727,7 @@ components:
       properties:
         token:
           type: string
-          description: The activation token returned by `POST /users/invite`.
+          description: The activation token returned by `POST /users`.
         password:
           type: string
           minLength: 8

@@ -1,10 +1,10 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { CurrentUser } from '@pbl6/auth';
+import { AllowUserTypes, CurrentUser } from '@pbl6/auth';
 import type { Principal } from '@pbl6/auth';
 import type { Page } from '@pbl6/service-kit';
 import { InternalUsersService } from './internal-users.service';
 import { ListInternalUsersDto } from './dto/list-internal-users.dto';
-import type { UserSnapshot } from '../users/users.types';
+import type { InternalUserListItem, UserSnapshot } from '../users/users.types';
 
 /**
  * Internal API consumed by peer services (ADR 0004).
@@ -12,6 +12,7 @@ import type { UserSnapshot } from '../users/users.types';
  * Scoped to the caller's tenantId; returns 404 if outside tenant.
  */
 @Controller('internal/users')
+@AllowUserTypes('TENANT_STAFF')
 export class InternalUsersController {
   constructor(private readonly service: InternalUsersService) {}
 
@@ -29,7 +30,7 @@ export class InternalUsersController {
   listUserSnapshots(
     @CurrentUser() principal: Principal,
     @Query() query: ListInternalUsersDto,
-  ): Promise<Page<UserSnapshot>> {
+  ): Promise<Page<InternalUserListItem>> {
     return this.service.listUserSnapshots(principal, query);
   }
 }

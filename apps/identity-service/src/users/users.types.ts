@@ -42,3 +42,11 @@ export interface UserSnapshot {
   email: string;
   fullName: string;
 }
+
+/** Minimal internal directory result for role-based recipient lookup. */
+export interface InternalUserListItem {
+  id: string;
+  email: string;
+  fullName: string;
+  roles: string[];
+}

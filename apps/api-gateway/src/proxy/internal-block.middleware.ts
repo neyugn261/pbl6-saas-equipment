@@ -10,12 +10,14 @@ import type { Request, Response, NextFunction } from 'express';
 @Injectable()
 export class InternalBlockMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
-    const path = req.path;
-    if (
-      path === '/internal' ||
-      path.startsWith('/internal/') ||
-      path.includes('/internal/')
-    ) {
+    const rawPath = req.originalUrl.split('?')[0];
+    let path = rawPath;
+    try {
+      path = decodeURIComponent(rawPath);
+    } catch {
+      // An invalid escape cannot resolve to a valid internal API route.
+    }
+    if (/(?:^|\/)internal(?:\/|$)/i.test(path)) {
       res.status(404).json({ code: 'NOT_FOUND', message: 'Not found' });
       return;
     }
