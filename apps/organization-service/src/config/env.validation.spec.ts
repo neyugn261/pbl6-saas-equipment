@@ -13,7 +13,14 @@ describe('validateEnv', () => {
       PORT: 3006,
       JWT_ISSUER: 'pbl6-identity',
       JWT_AUDIENCE: 'pbl6',
+      RABBITMQ_URL: undefined,
     });
+  });
+
+  it('accepts an AMQP broker URL and refuses other schemes', () => {
+    const url = 'amqp://user:pass@localhost:5672';
+    expect(validateEnv({ ...valid, RABBITMQ_URL: url }).RABBITMQ_URL).toBe(url);
+    expect(() => validateEnv({ ...valid, RABBITMQ_URL: 'http://localhost' })).toThrow('RABBITMQ_URL');
   });
 
   it('reads the service-specific port variable', () => {

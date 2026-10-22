@@ -9,10 +9,11 @@ Tenants, branches, customers, sites, locations, contacts, customer memberships. 
 
 ## Status
 
-M1 master data (PR 1):
+M1 master data and tenants:
 
 | Area | Endpoints | Permissions |
 |---|---|---|
+| Tenants | `GET/POST /tenants`, `GET/PATCH /tenants/{id}`, `POST /tenants/{id}/status` | `tenant:read` / `tenant:manage`, Platform Admin only |
 | Branches | `GET/POST /branches`, `GET/PATCH/DELETE /branches/{id}` | `branch:read` / `branch:manage`, staff only |
 | Customers | `GET/POST /customers`, `GET/PATCH/DELETE /customers/{id}` | `customer:read` / `customer:manage` |
 | Sites | `GET/POST /customers/{id}/sites`, `GET/PATCH/DELETE /sites/{id}` | same |
@@ -29,7 +30,14 @@ M1 master data (PR 1):
   must be in the same site and a move may not create a cycle (the site row is
   locked during tree changes), a location with children cannot be deleted, a
   branch used by a site or a staff assignment cannot be deleted.
-- Next PRs: tenant API + events, memberships and branch staff, dev seed.
+- Events: creating a tenant writes `TenantCreated`, a status change writes
+  `TenantStatusChanged`, in the same transaction as the change
+  (`outbox_events`, ADR 0005). With `RABBITMQ_URL` set the service runs
+  `OutboxRelay` and publishes them; Identity consumes them into
+  `tenant_directory`. Without it the events stay PENDING until a broker is
+  configured. The tenant code never changes; a status change to the current
+  status is 409 `INVALID_STATE_TRANSITION`.
+- Next: memberships and branch staff, dev seed.
 
 `GET /health` is public (`200 {status:'ok', database:'up'}` or 503); every
 other route requires an access token. Errors follow `{code, message, details?}`.

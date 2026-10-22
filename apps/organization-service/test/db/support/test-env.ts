@@ -18,5 +18,7 @@ export function applyTestEnv(): void {
   Object.assign(process.env, testJwtEnv(), {
     NODE_ENV: 'test',
     ORGANIZATION_DATABASE_URL: testDatabaseUrl(),
+    // No broker: suites read outbox_events directly or run the relay by hand.
+    RABBITMQ_URL: '',
   });
 }

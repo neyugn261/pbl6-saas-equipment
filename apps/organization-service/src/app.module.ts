@@ -6,10 +6,12 @@ import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { BranchesModule } from './branches/branches.module';
 import { validateEnv } from './config/env.validation';
 import { CustomersModule } from './customers/customers.module';
+import { EventsModule } from './events/events.module';
 import { InternalModule } from './internal/internal.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 import { SitesModule } from './sites/sites.module';
+import { TenantsModule } from './tenants/tenants.module';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { SitesModule } from './sites/sites.module';
       inject: [PrismaService],
       useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
+    EventsModule,
+    TenantsModule,
     BranchesModule,
     CustomersModule,
     SitesModule,

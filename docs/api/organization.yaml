@@ -120,7 +120,9 @@ paths:
       summary: Suspend, re-activate or disable a tenant
       description: |
         Writes `TenantStatusChanged`; Identity then refuses logins and refreshes
-        of that tenant (tenant_directory).
+        of that tenant (tenant_directory). Changing to the current status is
+        409 INVALID_STATE_TRANSITION. `reason` is written to the service log
+        (no column keeps it).
       x-permissions: [tenant:manage]
       x-user-types: [PLATFORM_STAFF]
       x-events: [TenantStatusChanged.v1]

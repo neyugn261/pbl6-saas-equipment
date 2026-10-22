@@ -5,6 +5,8 @@ export interface AppEnv extends JwtEnv {
   NODE_ENV: NodeEnv;
   PORT: number;
   ORGANIZATION_DATABASE_URL: string;
+  /** Unset: the outbox is filled but not published (tests, offline work). */
+  RABBITMQ_URL: string | undefined;
 }
 
 export const PORT_VARIABLE = 'ORGANIZATION_SERVICE_PORT';
@@ -20,6 +22,7 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
     NODE_ENV: env.nodeEnv(),
     PORT: env.port(PORT_VARIABLE, DEFAULT_PORT),
     ORGANIZATION_DATABASE_URL: env.postgresUrl('ORGANIZATION_DATABASE_URL'),
+    RABBITMQ_URL: env.optionalUrl('RABBITMQ_URL', ['amqp:', 'amqps:']),
     ...readJwtEnv(env),
   });
 }
