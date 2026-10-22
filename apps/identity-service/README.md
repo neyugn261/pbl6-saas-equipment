@@ -19,9 +19,17 @@ against a real PostgreSQL.
 | `POST` | `/auth/refresh` | — | `{refreshToken}` | `200` new token pair |
 | `POST` | `/auth/logout` | — | `{refreshToken}` | `204` (always) |
 | `GET` | `/auth/me` | Bearer | — | `200` profile |
+| `GET` | `/users` | Bearer + `user:read` | Query filters | Tenant or customer-scoped page |
+| `POST` | `/users` | Bearer + `user:manage` | Invite input | `201` INVITED user + activation token |
+| `POST` | `/users/activate` | Activation token | `{token, password}` | `200` tokens + ACTIVE profile |
+| `GET` | `/users/:id` | Bearer + `user:read` | — | `200` profile / `404` outside scope |
+| `PATCH` | `/users/:id/roles` | Bearer + `role:assign` | `{roles}` | `200` updated profile |
+| `POST` | `/users/:id/status` | Bearer + `user:manage` | `{status}` | `200` updated profile |
+| `GET` | `/internal/users/:id` | Tenant staff token | — | Tenant-scoped identity snapshot |
+| `GET` | `/internal/users` | Tenant staff token | `role`, `status`, pagination | Tenant-scoped minimal user page |
 
-`/health` and the three `/auth` POST routes are `@Public()`; every other
-route needs a token (global guards of `@pbl6/auth`). The profile returned by
+`/health`, the three `/auth` POST routes, and `/users/activate` are `@Public()`;
+every other route needs a token (global guards of `@pbl6/auth`). The profile returned by
 login and `/auth/me` includes `customerId` (ADR 0003).
 
 Errors carry a stable `code`: `INVALID_CREDENTIALS` (401), `ACCOUNT_NOT_ACTIVE`
@@ -112,10 +120,21 @@ Demo accounts after `db:seed:dev` (password = `SEED_DEMO_PASSWORD`):
 are linked to customer `DEMO-CUST-01` (`docs/api/fixtures.md`), so their
 tokens carry `customer_id`.
 
-## Not implemented yet
+## User management (M1)
 
-User invitation / activation and password reset (`account_tokens` exists),
-role assignment API with the assigner matrix (ADR 0001 open point #2),
-user lookup API for other services (validate a technician / customer
-account), login rate limiting (planned at the gateway in M1, ISS-14), outbox
-for Identity's own events.
+Tenant Admin may invite and assign the fixed staff and customer roles listed in
+ADR 0006, including Technician and Customer User, but cannot grant Tenant Admin.
+Customer Admin can invite Customer User and manage only Customer User accounts
+with an active link to its own customer. New Customer Users invited by a
+Customer Admin need to be linked through Organization's membership API before
+customer-scoped access works. The service uses the shared
+`ASSIGNABLE_ROLES` and `dataScope` rules from `@pbl6/auth`.
+
+The raw activation token is returned once by the invite endpoint for the MVP.
+Activation consumes it once and sets the password. Locking an account revokes
+its Identity sessions. The OpenAPI contract is
+[`docs/api/identity.yaml`](../../docs/api/identity.yaml).
+
+The gateway enforces the login rate limit and returns 404 for external
+`/internal/*` requests. Password reset and Identity event outbox are not part
+of this M1 implementation.
