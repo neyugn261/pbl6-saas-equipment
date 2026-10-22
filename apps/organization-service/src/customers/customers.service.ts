@@ -35,10 +35,13 @@ export class CustomersService {
     return toCustomerResponse(await this.customers.update(id, input));
   }
 
-  /** Soft delete; its sites, locations and contacts are hidden with it. */
+  /**
+   * Soft delete; its sites, locations and contacts are hidden with it and its
+   * memberships are deactivated.
+   */
   async remove(scope: DataScope, id: string): Promise<void> {
     await this.load(scope, id);
-    await this.customers.update(id, { deletedAt: new Date() });
+    await this.customers.softDelete(id);
   }
 
   /** A live customer of the tenant that the caller may see, else 404. */

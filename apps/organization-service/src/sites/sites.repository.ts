@@ -43,6 +43,17 @@ export class SitesRepository {
     return this.prisma.customerSite.update({ where: { id }, data });
   }
 
+  /** Soft-deletes the site; contacts tied to it stay with the customer, without a site. */
+  softDeleteSite(id: string): Promise<void> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.customerSite.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.customerContact.updateMany({
+        where: { customerSiteId: id },
+        data: { customerSiteId: null },
+      });
+    });
+  }
+
   listLocations(tenantId: string, siteId: string): Promise<Location[]> {
     return this.prisma.location.findMany({
       where: { tenantId, customerSiteId: siteId, deletedAt: null },

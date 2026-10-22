@@ -6,6 +6,7 @@ import {
   CustomerContact,
   Prisma,
 } from '../generated/prisma/client.js';
+import { enqueueMembershipChanged } from '../memberships/membership-events';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Data access for customers and their contacts. Soft-deleted rows are never returned. */
@@ -46,6 +47,27 @@ export class CustomersRepository {
 
   update(id: string, data: Prisma.CustomerUncheckedUpdateInput): Promise<Customer> {
     return this.prisma.customer.update({ where: { id }, data });
+  }
+
+  /**
+   * Soft-deletes the customer and deactivates its active memberships in the
+   * same transaction, each with `CustomerMembershipChanged`: its accounts
+   * lose the `customer_id` claim at their next token refresh (ADR 0003).
+   */
+  softDelete(id: string): Promise<void> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.customer.update({ where: { id }, data: { deletedAt: new Date() } });
+      const active = await tx.customerUserMembership.findMany({
+        where: { customerId: id, status: 'ACTIVE' },
+      });
+      for (const membership of active) {
+        const updated = await tx.customerUserMembership.update({
+          where: { id: membership.id },
+          data: { status: 'INACTIVE' },
+        });
+        await enqueueMembershipChanged(tx, updated);
+      }
+    });
   }
 
   listContacts(tenantId: string, customerId: string): Promise<CustomerContact[]> {

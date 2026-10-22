@@ -49,6 +49,13 @@ describe('Customers and contacts (e2e, organization_test_db)', () => {
       expect((await manager().get('/customers').expect(200)).body.total).toBe(1);
     });
 
+    it('treats % and _ in the search text literally', async () => {
+      await manager().post('/customers', { code: 'C3', name: '100% Service_Co' }).expect(201);
+      expect((await manager().get('/customers?q=%25').expect(200)).body.total).toBe(1);
+      expect((await manager().get('/customers?q=e_C').expect(200)).body.total).toBe(1);
+      expect((await manager().get('/customers?q=_').expect(200)).body.total).toBe(1);
+    });
+
     it('limits a CUSTOMER account to its own customer (other customer → 404)', async () => {
       const list = await customerUser().get('/customers').expect(200);
       expect(list.body.items.map((c: { id: string }) => c.id)).toEqual([own]);

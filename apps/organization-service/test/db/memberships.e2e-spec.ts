@@ -134,6 +134,21 @@ describe('Customer memberships and branch staff (e2e, organization_test_db)', ()
       expect((await events()).map((e) => e.status)).toEqual(['ACTIVE', 'INACTIVE', 'ACTIVE']);
     });
 
+    it('deactivates the memberships of a deleted customer and never re-activates them', async () => {
+      const userId = customerUserAccount();
+      const link = await tenantAdmin().post(`/customers/${own}/memberships`, { userId }).expect(201);
+      await tenantAdmin().delete(`/customers/${own}`).expect(204);
+
+      expect((await events()).map((e) => [e.membershipId, e.status])).toEqual([
+        [link.body.id, 'ACTIVE'],
+        [link.body.id, 'INACTIVE'],
+      ]);
+      const res = await tenantAdmin().post(`/memberships/${link.body.id}/status`, { status: 'ACTIVE' }).expect(404);
+      expect(res.body.code).toBe('CUSTOMER_NOT_FOUND');
+      // The account can still be linked to a live customer.
+      await tenantAdmin().post(`/customers/${other}/memberships`, { userId }).expect(201);
+    });
+
     it('limits a Customer Admin to CUSTOMER_USER memberships of its own customer', async () => {
       const admin = customerAdmin();
       const ownAdminLink = await tenantAdmin().post(`/customers/${own}/memberships`, { userId: admin.id }).expect(201);

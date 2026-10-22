@@ -1,5 +1,6 @@
 import { enqueueEvent, Events } from '@pbl6/event-contracts';
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
+import { enqueueMembershipChanged } from '../../src/memberships/membership-events';
 
 /**
  * DEVELOPMENT-ONLY demo data with the fixed ids of docs/api/fixtures.md, so
@@ -132,17 +133,7 @@ export async function seedDemoData(
       const created = await tx.customerUserMembership.create({
         data: { id: membership.id, tenantId, customerId: membership.customerId, userId },
       });
-      await enqueueEvent(tx, Events.CustomerMembershipChanged, {
-        tenantId,
-        aggregateId: created.id,
-        payload: {
-          membershipId: created.id,
-          userId,
-          customerId: created.customerId,
-          status: 'ACTIVE',
-          changedAt: created.updatedAt.toISOString(),
-        },
-      });
+      await enqueueMembershipChanged(tx, created);
     });
     memberships += 1;
   }

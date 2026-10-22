@@ -28,13 +28,22 @@ export class ListQueryDto extends PaginationQueryDto {
   status?: ActiveStatus;
 }
 
+/**
+ * Prisma passes `contains` to ILIKE as is, so `%` and `_` in user input would
+ * act as wildcards (`?q=%` matching everything). Escapes them literally.
+ */
+export function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 /** Prisma `where` fragment: `q` matches code or name, case-insensitive. */
 export function codeOrNameMatches(q: string | undefined) {
   if (!q) return {};
+  const contains = escapeLike(q);
   return {
     OR: [
-      { code: { contains: q, mode: 'insensitive' as const } },
-      { name: { contains: q, mode: 'insensitive' as const } },
+      { code: { contains, mode: 'insensitive' as const } },
+      { name: { contains, mode: 'insensitive' as const } },
     ],
   };
 }

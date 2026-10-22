@@ -1,12 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { enqueueEvent, Events } from '@pbl6/event-contracts';
-import { getCorrelationId } from '@pbl6/service-kit';
 import type { ActiveStatus } from '../common/validation';
-import {
-  CustomerUserMembership,
-  Prisma,
-} from '../generated/prisma/client.js';
+import { CustomerUserMembership } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { enqueueMembershipChanged } from './membership-events';
 
 export type LinkOutcome =
   | { result: 'linked' | 'unchanged'; membership: CustomerUserMembership }
@@ -50,7 +46,7 @@ export class MembershipsRepository {
         const created = await tx.customerUserMembership.create({
           data: { tenantId, customerId, userId },
         });
-        await this.enqueue(tx, created);
+        await enqueueMembershipChanged(tx, created);
         return { result: 'linked', membership: created };
       }
       const sameCustomer = existing.customerId === customerId;
@@ -64,7 +60,7 @@ export class MembershipsRepository {
         where: { id: existing.id },
         data: { customerId, status: 'ACTIVE' },
       });
-      await this.enqueue(tx, updated);
+      await enqueueMembershipChanged(tx, updated);
       return { result: 'linked', membership: updated };
     });
   }
@@ -79,27 +75,8 @@ export class MembershipsRepository {
         where: { id },
         data: { status },
       });
-      await this.enqueue(tx, updated);
+      await enqueueMembershipChanged(tx, updated);
       return updated;
-    });
-  }
-
-  private async enqueue(
-    tx: Prisma.TransactionClient,
-    membership: CustomerUserMembership,
-  ): Promise<void> {
-    await enqueueEvent(tx, Events.CustomerMembershipChanged, {
-      tenantId: membership.tenantId,
-      aggregateId: membership.id,
-      payload: {
-        membershipId: membership.id,
-        userId: membership.userId,
-        customerId: membership.customerId,
-        status: membership.status as ActiveStatus,
-        // Identity ignores an event older than the last one it applied.
-        changedAt: membership.updatedAt.toISOString(),
-      },
-      correlationId: getCorrelationId(),
     });
   }
 }

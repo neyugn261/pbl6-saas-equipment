@@ -88,6 +88,15 @@ describe('Sites, locations and internal lookups (e2e, organization_test_db)', ()
       await manager().patch(`/locations/${room.body.id}`, { name: 'x' }).expect(404);
     });
 
+    it('keeps the contacts of a deleted site, without the site', async () => {
+      const contact = await manager()
+        .post(`/customers/${own}/contacts`, { name: 'An', customerSiteId: site })
+        .expect(201);
+      await manager().delete(`/sites/${site}`).expect(204);
+      const contacts = (await manager().get(`/customers/${own}/contacts`).expect(200)).body;
+      expect(contacts).toEqual([expect.objectContaining({ id: contact.body.id, customerSiteId: null })]);
+    });
+
     it('answers 404 for a site of another tenant', async () => {
       await api(app, bearer('SERVICE_MANAGER', tenantB)).get(`/sites/${site}`).expect(404);
       await api(app, bearer('SERVICE_MANAGER', tenantB)).delete(`/sites/${site}`).expect(404);

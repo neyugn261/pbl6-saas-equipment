@@ -52,10 +52,10 @@ export class SitesService {
     return toSiteResponse(await this.sites.updateSite(id, input));
   }
 
-  /** Soft delete; its locations and site contacts are hidden with it. */
+  /** Soft delete; its locations are hidden with it, its contacts lose the site. */
   async remove(scope: DataScope, id: string): Promise<void> {
     await this.load(scope, id);
-    await this.sites.updateSite(id, { deletedAt: new Date() });
+    await this.sites.softDeleteSite(id);
   }
 
   /** A live site (of a live customer) that the caller may see, else 404. */

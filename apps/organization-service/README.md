@@ -26,7 +26,9 @@ M1 master data and tenants:
 - Reads under a customer are open to CUSTOMER accounts for **their own
   customer only** (ADR 0003); any other id answers 404. Writes are staff only.
 - `DELETE` is a soft delete. A deleted customer hides its sites, locations and
-  contacts; a deleted site hides its locations.
+  contacts and deactivates its memberships (with `CustomerMembershipChanged`);
+  a deleted site hides its locations and its contacts lose the site.
+- `q` searches code and name; `%` and `_` are matched literally.
 - Business rules: one primary contact per customer (setting `isPrimary` moves
   it), a contact's site must belong to the same customer, a location's parent
   must be in the same site and a move may not create a cycle (the site row is

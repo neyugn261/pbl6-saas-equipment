@@ -83,6 +83,10 @@ export class MembershipsService {
       );
       assertCanManageUser(caller, user);
     }
+    if (input.status === 'ACTIVE') {
+      // Never re-link an account to a deleted customer.
+      await this.customers.load(scope, membership.customerId);
+    }
     const updated = await this.memberships.changeStatus(id, input.status);
     if (!updated) {
       throw conflict('INVALID_STATE_TRANSITION', `The membership is already ${input.status}`);
