@@ -1,0 +1,12 @@
+meta {
+  name: Confirm resolution
+  type: http
+  seq: 12
+}
+post {
+  url: {{requests}}/service-requests/{{requestId}}/confirm
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

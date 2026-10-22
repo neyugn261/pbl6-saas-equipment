@@ -1,0 +1,16 @@
+meta {
+  name: Create request
+  type: http
+  seq: 2
+}
+post {
+  url: {{requests}}/service-requests
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"equipmentId":"{{equipmentId}}","type":"REPAIR","priority":"NORMAL","title":"Thiết bị báo lỗi","description":"Thiết bị ngừng hoạt động và cần kiểm tra","customerId":"{{customerId}}"}
+}

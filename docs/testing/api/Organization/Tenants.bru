@@ -1,0 +1,12 @@
+meta {
+  name: List tenants
+  type: http
+  seq: 4
+}
+get {
+  url: {{organization}}/tenants?page=1&pageSize=20
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

@@ -1,0 +1,16 @@
+meta {
+  name: Create customer
+  type: http
+  seq: 3
+}
+post {
+  url: {{organization}}/customers
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"code":"DEMO-CUST-M1","name":"Khách hàng thử M1","email":"m1@example.invalid"}
+}

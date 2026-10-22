@@ -1,0 +1,12 @@
+meta {
+  name: List requests
+  type: http
+  seq: 1
+}
+get {
+  url: {{requests}}/service-requests?page=1&pageSize=20
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}
