@@ -8,6 +8,7 @@ export interface IdentityEnv extends JwtEnv {
   JWT_ACCESS_TTL_SECONDS: number;
   REFRESH_TOKEN_TTL_DAYS: number;
   BCRYPT_COST: number;
+  IDENTITY_EXPOSE_ACTIVATION_TOKEN: boolean;
   /** Unset = event consumers disabled (e2e tests, running without RabbitMQ). */
   RABBITMQ_URL: string | undefined;
 }
@@ -26,6 +27,14 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
   const jwt = readJwtEnv(env);
   // Low bcrypt costs are only allowed in tests, where they keep the suite fast.
   const minBcryptCost = nodeEnv === 'test' ? 4 : 10;
+  const exposeValue = raw.IDENTITY_EXPOSE_ACTIVATION_TOKEN ?? 'false';
+  if (exposeValue !== 'true' && exposeValue !== 'false') {
+    env.fail('IDENTITY_EXPOSE_ACTIVATION_TOKEN must be true or false');
+  }
+  const exposeActivationToken = exposeValue === 'true';
+  if (nodeEnv === 'production' && exposeActivationToken) {
+    env.fail('IDENTITY_EXPOSE_ACTIVATION_TOKEN cannot be enabled in production');
+  }
 
   return env.done({
     NODE_ENV: nodeEnv,
@@ -47,6 +56,7 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
       min: minBcryptCost,
       max: 15,
     }),
+    IDENTITY_EXPOSE_ACTIVATION_TOKEN: exposeActivationToken,
     RABBITMQ_URL: env.optionalUrl('RABBITMQ_URL', ['amqp:', 'amqps:']),
   });
 }

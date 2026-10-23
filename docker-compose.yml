@@ -7,7 +7,7 @@ services:
 
     environment:
       POSTGRES_USER: pbl6
-      POSTGRES_PASSWORD: pbl6_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pbl6_dev_password}
       POSTGRES_DB: postgres
 
     ports:

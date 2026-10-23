@@ -3,12 +3,16 @@
 Public entry point for the PBL6 services. Configuration comes from the root
 `.env` or this service's `.env`; see the root [`.env.example`](../../.env.example).
 `API_GATEWAY_PORT` defaults to `3000`.
+All eight `<SERVICE>_SERVICE_URL` settings are required at startup and must be
+absolute HTTP(S) URLs. Populate them from the root `.env.example` before
+starting the gateway.
 
 ## Routes
 
 | Public prefix | Upstream URL setting | Upstream path |
 | --- | --- | --- |
 | `/api/auth/*`, `/api/identity/*` | `IDENTITY_SERVICE_URL` | `/*` |
+| `/api/platform/*` | `IDENTITY_SERVICE_URL` | `/platform/*` |
 | `/api/organization/*` | `ORGANIZATION_SERVICE_URL` | `/*` |
 | `/api/assets/*` | `ASSET_SERVICE_URL` | `/*` |
 | `/api/service-requests/*` | `SERVICE_REQUEST_SERVICE_URL` | `/service-requests/*` |

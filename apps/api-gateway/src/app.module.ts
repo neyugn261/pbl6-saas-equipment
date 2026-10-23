@@ -13,6 +13,7 @@ import { CorrelationIdMiddleware } from './proxy/correlation-id.middleware.js';
 import {
   IdentityProxyMiddleware,
   AuthAliasProxyMiddleware,
+  PlatformProxyMiddleware,
   OrganizationProxyMiddleware,
   AssetProxyMiddleware,
   ServiceRequestProxyMiddleware,
@@ -50,6 +51,10 @@ export class AppModule implements NestModule {
     consumer
       .apply(AuthAliasProxyMiddleware)
       .forRoutes({ path: 'api/auth/*path', method: RequestMethod.ALL });
+
+    consumer
+      .apply(PlatformProxyMiddleware)
+      .forRoutes({ path: 'api/platform/*path', method: RequestMethod.ALL });
 
     consumer.apply(OrganizationProxyMiddleware).forRoutes({
       path: 'api/organization/*path',

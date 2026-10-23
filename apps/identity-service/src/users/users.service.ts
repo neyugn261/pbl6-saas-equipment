@@ -7,6 +7,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
 import { ROLE_USER_TYPES, canAssignRole, dataScope } from '@pbl6/auth';
 import type { Principal, RoleCode } from '@pbl6/auth';
@@ -20,11 +21,15 @@ import type { AssignRolesDto } from './dto/assign-roles.dto';
 import type { UpdateStatusDto } from './dto/update-status.dto';
 import type { ActivateAccountDto } from './dto/activate-account.dto';
 import type { ListUsersDto } from './dto/list-users.dto';
+import type { InviteTenantAdminDto } from './dto/invite-tenant-admin.dto';
 import type { Page } from '@pbl6/service-kit';
 import type { UserProfile, UserSummary } from './users.types';
+import type { InviteUserResult } from './users.types';
+import type { IdentityEnv } from '../config/env.validation';
 import type { UserWithRoles } from './users.repository';
+import { isCustomerAdminVisible } from './customer-admin-scope';
 
-const ACTIVATION_TOKEN_TTL_HOURS = 72;
+const ACTIVATION_TOKEN_TTL_HOURS = 24;
 
 @Injectable()
 export class UsersService {
@@ -35,6 +40,7 @@ export class UsersService {
     private readonly authRepo: AuthRepository,
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
+    private readonly config: ConfigService<IdentityEnv, true>,
   ) {}
 
   /** List users in the caller's tenant. */
@@ -43,14 +49,18 @@ export class UsersService {
     query: ListUsersDto,
   ): Promise<Page<UserSummary>> {
     const scope = dataScope(principal);
-    return this.usersRepo.findUsers(scope.tenantId, query, scope.customerId);
+    return this.usersRepo.findUsers(
+      scope.tenantId,
+      query,
+      scope.customerId,
+      scope.customerId === null ? null : principal.userId,
+    );
   }
 
   /** Get a single user by id. 404 if not in the caller's tenant. */
   async getUser(principal: Principal, userId: string): Promise<UserProfile> {
-    const scope = dataScope(principal);
     const user = await this.usersRepo.findUserById(userId);
-    this.assertInScope(user, scope);
+    this.assertInScope(user, principal);
     return this.usersRepo.toProfile(user);
   }
 
@@ -61,7 +71,7 @@ export class UsersService {
   async inviteUser(
     principal: Principal,
     dto: InviteUserDto,
-  ): Promise<{ user: UserProfile; activationToken: string }> {
+  ): Promise<InviteUserResult> {
     const scope = dataScope(principal);
     const tenantId = scope.tenantId;
 
@@ -84,6 +94,60 @@ export class UsersService {
     }
     this.validateRoleAssignment(principal, dto.roles ?? [], dto.userType);
 
+    return this.createInvitation(principal.userId, tenantId, dto);
+  }
+
+  /** Only Platform Admin provisions a Tenant Admin for a known active tenant. */
+  async inviteTenantAdmin(
+    principal: Principal,
+    tenantId: string,
+    dto: InviteTenantAdminDto,
+  ): Promise<InviteUserResult> {
+    this.assertPlatformAdmin(principal);
+    const tenant = await this.authRepo.findTenantById(tenantId);
+    if (!tenant) {
+      throw new NotFoundException({
+        code: 'TENANT_NOT_FOUND',
+        message: 'Tenant not found',
+      });
+    }
+    if (tenant.status !== 'ACTIVE') {
+      throw new ConflictException({
+        code: 'TENANT_NOT_ACTIVE',
+        message: 'Tenant must be active before inviting an admin',
+      });
+    }
+    this.validateRoleAssignment(principal, ['TENANT_ADMIN'], 'TENANT_STAFF');
+    const rawToken = randomBytes(32).toString('hex');
+    const userId = await this.usersRepo.createOrRenewTenantAdminInvitation({
+      tenantId,
+      email: dto.email,
+      fullName: dto.fullName,
+      phone: dto.phone ?? null,
+      assignedBy: principal.userId,
+      tokenHash: this.hashToken(rawToken),
+      expiresAt: this.activationExpiry(),
+    });
+    if (!userId) {
+      throw new ConflictException({
+        code: 'EMAIL_ALREADY_EXISTS',
+        message: 'This email belongs to another account in the tenant',
+      });
+    }
+    const user = await this.usersRepo.findUserById(userId);
+    if (!user) throw new Error('Tenant Admin not found after invitation');
+    this.logger.log(`Invited Tenant Admin ${userId} in tenant ${tenantId}`);
+    return this.inviteResult(this.usersRepo.toProfile(user), rawToken);
+  }
+
+  private async createInvitation(
+    inviterId: string,
+    tenantId: string,
+    dto: Pick<
+      InviteUserDto,
+      'email' | 'fullName' | 'phone' | 'userType' | 'roles'
+    >,
+  ): Promise<InviteUserResult> {
     // Check email uniqueness in the tenant
     const existing = await this.usersRepo.findUserByEmail(tenantId, dto.email);
     if (existing) {
@@ -96,10 +160,8 @@ export class UsersService {
     // Create the account, roles and token together so a failed invitation
     // never leaves an unactivatable account behind.
     const rawToken = randomBytes(32).toString('hex');
-    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(
-      Date.now() + ACTIVATION_TOKEN_TTL_HOURS * 60 * 60 * 1000,
-    );
+    const tokenHash = this.hashToken(rawToken);
+    const expiresAt = this.activationExpiry();
     const created = await this.usersRepo.createInvitation({
       tenantId,
       userType: dto.userType,
@@ -107,7 +169,7 @@ export class UsersService {
       fullName: dto.fullName,
       phone: dto.phone ?? null,
       roleCodes: dto.roles ?? [],
-      assignedBy: principal.userId,
+      assignedBy: inviterId,
       tokenHash,
       expiresAt,
     });
@@ -119,10 +181,21 @@ export class UsersService {
     }
 
     this.logger.log(`Invited user ${created.id} in tenant ${tenantId}`);
-    return {
-      user: this.usersRepo.toProfile(userWithRoles),
-      activationToken: rawToken,
-    };
+    return this.inviteResult(this.usersRepo.toProfile(userWithRoles), rawToken);
+  }
+
+  private inviteResult(user: UserProfile, token: string): InviteUserResult {
+    return this.config.get('IDENTITY_EXPOSE_ACTIVATION_TOKEN', { infer: true })
+      ? { user, activationToken: token }
+      : { user };
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private activationExpiry(): Date {
+    return new Date(Date.now() + ACTIVATION_TOKEN_TTL_HOURS * 60 * 60 * 1000);
   }
 
   /**
@@ -212,9 +285,15 @@ export class UsersService {
     userId: string,
     dto: AssignRolesDto,
   ): Promise<UserProfile> {
-    const scope = dataScope(principal);
     const user = await this.usersRepo.findUserById(userId);
-    this.assertInScope(user, scope);
+    this.assertInScope(user, principal);
+
+    if (principal.userId === userId) {
+      throw new ForbiddenException({
+        code: 'SELF_MANAGEMENT_NOT_ALLOWED',
+        message: 'You cannot change your own roles',
+      });
+    }
 
     this.assertMayChangeExistingRoles(principal, user);
     this.validateRoleAssignment(principal, dto.roles, user.userType);
@@ -233,27 +312,130 @@ export class UsersService {
   ): Promise<UserProfile> {
     const scope = dataScope(principal);
     const user = await this.usersRepo.findUserById(userId);
-    this.assertInScope(user, scope);
+    this.assertInScope(user, principal);
+    if (principal.userId === userId) {
+      throw new ForbiddenException({
+        code: 'SELF_MANAGEMENT_NOT_ALLOWED',
+        message: 'You cannot change your own status',
+      });
+    }
+    if (user.roles.some((entry) => entry.role.code === 'TENANT_ADMIN')) {
+      throw new ForbiddenException({
+        code: 'PROTECTED_TENANT_ADMIN',
+        message: 'Only Platform Admin may change a Tenant Admin status',
+      });
+    }
     if (scope.customerId !== null) {
       this.assertMayChangeExistingRoles(principal, user);
     }
 
-    const allowedTransitions: Record<string, string[]> = {
-      ACTIVE: ['SUSPENDED'],
-      SUSPENDED: ['ACTIVE'],
-    };
-    if (!allowedTransitions[user.status]?.includes(dto.status)) {
-      throw new BadRequestException({
-        code: 'INVALID_STATUS_TRANSITION',
-        message: `Cannot transition from ${user.status} to ${dto.status}`,
+    this.assertStatusTransition(user.status, dto.status);
+    const outcome = await this.usersRepo.changeUserStatus(
+      userId,
+      scope.tenantId,
+      user.status,
+      dto.status,
+    );
+    if (outcome === 'stale') {
+      throw new ConflictException({
+        code: 'STATUS_CHANGED',
+        message: 'User status changed during the request',
       });
     }
+    const updated = await this.usersRepo.findUserById(userId);
+    return this.usersRepo.toProfile(updated!);
+  }
 
-    if (dto.status === 'SUSPENDED') {
-      await this.authRepo.revokeAllSessions(userId);
+  /** Platform Admin alone may change Tenant Admin status. */
+  async updateTenantAdminStatus(
+    principal: Principal,
+    tenantId: string,
+    userId: string,
+    dto: UpdateStatusDto,
+  ): Promise<UserProfile> {
+    this.assertPlatformAdmin(principal);
+    const user = await this.usersRepo.findUserById(userId);
+    if (
+      !user ||
+      user.tenantId !== tenantId ||
+      !user.roles.some((entry) => entry.role.code === 'TENANT_ADMIN')
+    ) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'User not found',
+      });
     }
+    this.assertStatusTransition(user.status, dto.status);
+    const outcome = await this.usersRepo.changeUserStatus(
+      userId,
+      tenantId,
+      user.status,
+      dto.status,
+      true,
+    );
+    if (outcome === 'last-admin') {
+      throw new ConflictException({
+        code: 'LAST_ACTIVE_TENANT_ADMIN',
+        message: 'Cannot suspend the last active Tenant Admin',
+      });
+    }
+    if (outcome === 'stale') {
+      throw new ConflictException({
+        code: 'STATUS_CHANGED',
+        message: 'User status changed during the request',
+      });
+    }
+    const updated = await this.usersRepo.findUserById(userId);
+    return this.usersRepo.toProfile(updated!);
+  }
 
-    const updated = await this.usersRepo.updateUserStatus(userId, dto.status);
+  /** Platform Admin may add or remove the fixed Tenant Admin role. */
+  async updateTenantAdminRoles(
+    principal: Principal,
+    tenantId: string,
+    userId: string,
+    dto: AssignRolesDto,
+  ): Promise<UserProfile> {
+    this.assertPlatformAdmin(principal);
+    if (
+      dto.roles.length > 1 ||
+      dto.roles.some((role) => role !== 'TENANT_ADMIN')
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_TENANT_ADMIN_ROLES',
+        message: 'Only the TENANT_ADMIN role may be changed on this route',
+      });
+    }
+    const user = await this.usersRepo.findUserById(userId);
+    if (
+      !user ||
+      user.tenantId !== tenantId ||
+      user.userType !== 'TENANT_STAFF'
+    ) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'User not found',
+      });
+    }
+    const outcome = await this.usersRepo.setTenantAdminRole(
+      userId,
+      tenantId,
+      dto.roles,
+      principal.userId,
+    );
+    if (outcome === 'last-admin') {
+      throw new ConflictException({
+        code: 'LAST_ACTIVE_TENANT_ADMIN',
+        message: 'Cannot remove the last active Tenant Admin',
+      });
+    }
+    if (outcome === 'stale') {
+      throw new ConflictException({
+        code: 'ROLES_CHANGED',
+        message: 'User roles changed during the request',
+      });
+    }
+    const updated = await this.usersRepo.findUserById(userId);
     return this.usersRepo.toProfile(updated!);
   }
 
@@ -296,17 +478,39 @@ export class UsersService {
     }
   }
 
+  private assertStatusTransition(current: string, next: string): void {
+    if (
+      (current !== 'ACTIVE' || next !== 'SUSPENDED') &&
+      (current !== 'SUSPENDED' || next !== 'ACTIVE')
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: `Cannot transition from ${current} to ${next}`,
+      });
+    }
+  }
+
+  private assertPlatformAdmin(principal: Principal): void {
+    if (
+      principal.userType !== 'PLATFORM_STAFF' ||
+      !principal.roles.includes('PLATFORM_ADMIN')
+    ) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Platform Admin permission is required',
+      });
+    }
+  }
+
   private assertInScope(
     user: UserWithRoles | null,
-    scope: { tenantId: string; customerId: string | null },
+    principal: Principal,
   ): asserts user is UserWithRoles {
+    const scope = dataScope(principal);
     if (
       !user ||
       user.tenantId !== scope.tenantId ||
-      (scope.customerId !== null &&
-        (user.userType !== 'CUSTOMER' ||
-          user.customerLink?.status !== 'ACTIVE' ||
-          user.customerLink.customerId !== scope.customerId))
+      (scope.customerId !== null && !isCustomerAdminVisible(user, principal))
     ) {
       throw new NotFoundException({
         code: 'NOT_FOUND',

@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { signTestAccessToken } from '@pbl6/testing';
@@ -24,6 +25,8 @@ describe('Identity Users & Internal API (e2e)', () => {
   let tenantAdminTokenB: string;
   let customerAdminTokenA: string;
   let techTokenA: string;
+  let platformAdminToken: string;
+  let adminUserIdA: string;
 
   const http = () => request(app.getHttpServer());
 
@@ -47,6 +50,7 @@ describe('Identity Users & Internal API (e2e)', () => {
       password: PASSWORD,
       roles: ['TENANT_ADMIN'],
     });
+    adminUserIdA = adminUserA;
 
     const adminUserB = await createUser(prisma, {
       tenantId: tenantB,
@@ -96,6 +100,227 @@ describe('Identity Users & Internal API (e2e)', () => {
     techTokenA = signTestAccessToken({
       role: 'TECHNICIAN',
       tenantId: tenantA,
+    });
+    const platformAdminId = await createUser(prisma, {
+      tenantId: null,
+      userType: 'PLATFORM_STAFF',
+      email: 'platform.admin@pbl6.local',
+      password: PASSWORD,
+      roles: ['PLATFORM_ADMIN'],
+    });
+    platformAdminToken = signTestAccessToken({
+      role: 'PLATFORM_ADMIN',
+      userId: platformAdminId,
+    });
+  });
+
+  describe('Platform tenant provisioning', () => {
+    it('prevents a Tenant Admin from changing their own roles', async () => {
+      await http()
+        .patch(`/users/${adminUserIdA}/roles`)
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ roles: [] })
+        .expect(403);
+    });
+
+    it('invites a Tenant Admin and activates the account', async () => {
+      const invited = await http()
+        .post(`/platform/tenants/${tenantA}/admins`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ email: 'new.admin@tenant-a.com', fullName: 'New Admin' })
+        .expect(201);
+      expect(invited.body.user).toMatchObject({
+        tenantId: tenantA,
+        userType: 'TENANT_STAFF',
+        status: 'INVITED',
+        roles: ['TENANT_ADMIN'],
+      });
+      await http()
+        .post('/users/activate')
+        .send({ token: invited.body.activationToken, password: PASSWORD })
+        .expect(200);
+      const login = await http()
+        .post('/auth/login')
+        .send({
+          tenantCode: 'TENANT-A',
+          email: 'new.admin@tenant-a.com',
+          password: PASSWORD,
+        })
+        .expect(200);
+      expect(login.body.user.roles).toContain('TENANT_ADMIN');
+    });
+
+    it('reinvites an INVITED Tenant Admin with the same account and rotates its token', async () => {
+      const path = `/platform/tenants/${tenantA}/admins`;
+      const body = {
+        email: 'repeat.admin@tenant-a.com',
+        fullName: 'Repeat Admin',
+      };
+      const first = await http()
+        .post(path)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send(body)
+        .expect(201);
+      const second = await http()
+        .post(path)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send(body)
+        .expect(201);
+      expect(second.body.user.id).toBe(first.body.user.id);
+      expect(second.body.activationToken).not.toBe(first.body.activationToken);
+      await http()
+        .post('/users/activate')
+        .send({ token: first.body.activationToken, password: PASSWORD })
+        .expect(422);
+      await http()
+        .post('/users/activate')
+        .send({ token: second.body.activationToken, password: PASSWORD })
+        .expect(200);
+      await http()
+        .post(path)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send(body)
+        .expect(409);
+    });
+
+    it('omits activation token from invitation responses when exposure is disabled', async () => {
+      const config = app.get(ConfigService);
+      config.set('IDENTITY_EXPOSE_ACTIVATION_TOKEN', false);
+      try {
+        const invited = await http()
+          .post(`/platform/tenants/${tenantA}/admins`)
+          .set('Authorization', `Bearer ${platformAdminToken}`)
+          .send({
+            email: 'hidden.admin@tenant-a.com',
+            fullName: 'Hidden Admin',
+          })
+          .expect(201);
+        expect(invited.body.user.status).toBe('INVITED');
+        expect(invited.body).not.toHaveProperty('activationToken');
+      } finally {
+        config.set('IDENTITY_EXPOSE_ACTIVATION_TOKEN', true);
+      }
+    });
+
+    it('rejects unknown or inactive tenants and non-platform callers', async () => {
+      await http()
+        .post(`/platform/tenants/${tenantA}/admins`)
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ email: 'forbidden@tenant-a.com', fullName: 'Forbidden' })
+        .expect(403);
+      await http()
+        .post('/platform/tenants/00000000-0000-4000-8000-000000000999/admins')
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ email: 'missing@tenant-a.com', fullName: 'Missing' })
+        .expect(404);
+      await prisma.tenantDirectory.update({
+        where: { tenantId: tenantB },
+        data: { status: 'SUSPENDED' },
+      });
+      await http()
+        .post(`/platform/tenants/${tenantB}/admins`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ email: 'inactive@tenant-b.com', fullName: 'Inactive' })
+        .expect(409);
+    });
+
+    it('protects the last active Tenant Admin and permits platform recovery', async () => {
+      await http()
+        .post(`/users/${adminUserIdA}/status`)
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ status: 'SUSPENDED' })
+        .expect(403);
+      const protectedResult = await http()
+        .post(`/platform/tenants/${tenantA}/admins/${adminUserIdA}/status`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ status: 'SUSPENDED' })
+        .expect(409);
+      expect(protectedResult.body.code).toBe('LAST_ACTIVE_TENANT_ADMIN');
+
+      const secondAdmin = await createUser(prisma, {
+        tenantId: tenantA,
+        userType: 'TENANT_STAFF',
+        email: 'second.admin@tenant-a.com',
+        password: PASSWORD,
+        roles: ['TENANT_ADMIN'],
+      });
+      await http()
+        .post(`/users/${secondAdmin}/status`)
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ status: 'SUSPENDED' })
+        .expect(403);
+      await http()
+        .post(`/platform/tenants/${tenantA}/admins/${secondAdmin}/status`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ status: 'SUSPENDED' })
+        .expect(200);
+      await http()
+        .post(`/platform/tenants/${tenantA}/admins/${secondAdmin}/status`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ status: 'ACTIVE' })
+        .expect(200);
+    });
+
+    it('keeps one active Tenant Admin during concurrent suspensions', async () => {
+      const secondAdmin = await createUser(prisma, {
+        tenantId: tenantA,
+        userType: 'TENANT_STAFF',
+        email: 'concurrent.admin@tenant-a.com',
+        password: PASSWORD,
+        roles: ['TENANT_ADMIN'],
+      });
+      const results = await Promise.all(
+        [adminUserIdA, secondAdmin].map((id) =>
+          http()
+            .post(`/platform/tenants/${tenantA}/admins/${id}/status`)
+            .set('Authorization', `Bearer ${platformAdminToken}`)
+            .send({ status: 'SUSPENDED' }),
+        ),
+      );
+      expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(
+        await prisma.user.count({
+          where: {
+            tenantId: tenantA,
+            status: 'ACTIVE',
+            roles: { some: { role: { code: 'TENANT_ADMIN' } } },
+          },
+        }),
+      ).toBe(1);
+    });
+
+    it('reserves Tenant Admin role changes for Platform Admin and protects the last admin', async () => {
+      const path = `/platform/tenants/${tenantA}/admins/${adminUserIdA}/roles`;
+      await http()
+        .patch(path)
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ roles: [] })
+        .expect(403);
+      const last = await http()
+        .patch(path)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ roles: [] })
+        .expect(409);
+      expect(last.body.code).toBe('LAST_ACTIVE_TENANT_ADMIN');
+      const secondAdmin = await createUser(prisma, {
+        tenantId: tenantA,
+        userType: 'TENANT_STAFF',
+        email: 'role.admin@tenant-a.com',
+        password: PASSWORD,
+        roles: ['TENANT_ADMIN'],
+      });
+      const removed = await http()
+        .patch(`/platform/tenants/${tenantA}/admins/${secondAdmin}/roles`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ roles: [] })
+        .expect(200);
+      expect(removed.body.roles).toEqual([]);
+      const restored = await http()
+        .patch(`/platform/tenants/${tenantA}/admins/${secondAdmin}/roles`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ roles: ['TENANT_ADMIN'] })
+        .expect(200);
+      expect(restored.body.roles).toEqual(['TENANT_ADMIN']);
     });
   });
 
@@ -757,15 +982,169 @@ describe('Identity Users & Internal API (e2e)', () => {
         .expect(404);
     });
 
-    it('rejects CUSTOMER tokens on the internal directory', async () => {
+    it('does not expose staff or list users to Customer Admin', async () => {
       await http()
         .get(`/internal/users/${techId}`)
         .set('Authorization', `Bearer ${customerAdminTokenA}`)
-        .expect(403);
+        .expect(404);
       await http()
         .get('/internal/users?role=TECHNICIAN')
         .set('Authorization', `Bearer ${customerAdminTokenA}`)
         .expect(403);
+    });
+
+    it('lets Customer Admin manage only its own invited or linked Customer Users', async () => {
+      const invited = await http()
+        .post('/users')
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .send({
+          email: 'invited.by.customer@tenant-a.com',
+          fullName: 'Invited Customer User',
+          userType: 'CUSTOMER',
+          roles: ['CUSTOMER_USER'],
+        })
+        .expect(201);
+      const id: string = invited.body.user.id;
+      await http()
+        .get(`/users/${id}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(200);
+      await http()
+        .get(`/internal/users/${id}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(200);
+      const list = await http()
+        .get('/users?q=invited.by.customer')
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(200);
+      expect(list.body.items.map((item: { id: string }) => item.id)).toContain(
+        id,
+      );
+
+      const peerAdminId = await createUser(prisma, {
+        tenantId: tenantA,
+        userType: 'CUSTOMER',
+        email: 'peer.customer.admin@tenant-a.com',
+        password: PASSWORD,
+        roles: ['CUSTOMER_ADMIN'],
+      });
+      await prisma.userCustomerLink.create({
+        data: {
+          userId: peerAdminId,
+          tenantId: tenantA,
+          customerId: CUSTOMER_A,
+          membershipId: '00000000-0000-4000-8000-000000000207',
+          status: 'ACTIVE',
+          sourceChangedAt: new Date(),
+        },
+      });
+      const peerToken = signTestAccessToken({
+        role: 'CUSTOMER_ADMIN',
+        tenantId: tenantA,
+        customerId: CUSTOMER_A,
+        userId: peerAdminId,
+      });
+      const peerInvite = await http()
+        .post('/users')
+        .set('Authorization', `Bearer ${peerToken}`)
+        .send({
+          email: 'peer.invitee@tenant-a.com',
+          fullName: 'Peer Invitee',
+          userType: 'CUSTOMER',
+          roles: ['CUSTOMER_USER'],
+        })
+        .expect(201);
+      await http()
+        .get(`/users/${peerInvite.body.user.id}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(404);
+      await http()
+        .get(`/internal/users/${peerInvite.body.user.id}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(404);
+      await http()
+        .get(`/users/${peerAdminId}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(404);
+
+      const otherAdminId = await createUser(prisma, {
+        tenantId: tenantA,
+        userType: 'CUSTOMER',
+        email: 'other.customer.admin@tenant-a.com',
+        password: PASSWORD,
+        roles: ['CUSTOMER_ADMIN'],
+      });
+      await prisma.userCustomerLink.create({
+        data: {
+          userId: otherAdminId,
+          tenantId: tenantA,
+          customerId: CUSTOMER_OTHER,
+          membershipId: '00000000-0000-4000-8000-000000000205',
+          status: 'ACTIVE',
+          sourceChangedAt: new Date(),
+        },
+      });
+      const otherToken = signTestAccessToken({
+        role: 'CUSTOMER_ADMIN',
+        tenantId: tenantA,
+        customerId: CUSTOMER_OTHER,
+        userId: otherAdminId,
+      });
+      await http()
+        .get(`/internal/users/${id}`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+
+      await prisma.userCustomerLink.create({
+        data: {
+          userId: id,
+          tenantId: tenantA,
+          customerId: CUSTOMER_A,
+          membershipId: '00000000-0000-4000-8000-000000000206',
+          status: 'ACTIVE',
+          sourceChangedAt: new Date(),
+        },
+      });
+      await http()
+        .get(`/internal/users/${id}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(200);
+      await prisma.userCustomerLink.update({
+        where: { userId: id },
+        data: { customerId: CUSTOMER_OTHER },
+      });
+      await http()
+        .get(`/internal/users/${id}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(404);
+      await http()
+        .get(`/users/${id}`)
+        .set('Authorization', `Bearer ${customerAdminTokenA}`)
+        .expect(404);
+    });
+
+    it('validates UUID path parameters', async () => {
+      for (const path of ['/users/not-a-uuid', '/internal/users/not-a-uuid']) {
+        await http()
+          .get(path)
+          .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+          .expect(400);
+      }
+      await http()
+        .patch('/users/not-a-uuid/roles')
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ roles: [] })
+        .expect(400);
+      await http()
+        .post('/users/not-a-uuid/status')
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ status: 'SUSPENDED' })
+        .expect(400);
+      await http()
+        .post('/platform/tenants/not-a-uuid/admins')
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ email: 'bad@tenant-a.com', fullName: 'Bad' })
+        .expect(400);
     });
 
     it('GET /internal/users?role=TECHNICIAN&status=ACTIVE returns list in tenant', async () => {

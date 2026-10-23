@@ -1,8 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { requireTenantId } from '@pbl6/auth';
 import type { Principal } from '@pbl6/auth';
 import type { Page } from '@pbl6/service-kit';
 import { UsersRepository } from '../users/users.repository';
+import { isCustomerAdminManageable } from '../users/customer-admin-scope';
 import type { ListInternalUsersDto } from './dto/list-internal-users.dto';
 import type { InternalUserListItem, UserSnapshot } from '../users/users.types';
 
@@ -15,9 +20,23 @@ export class InternalUsersService {
     principal: Principal,
     userId: string,
   ): Promise<UserSnapshot> {
+    if (
+      principal.userType === 'CUSTOMER' &&
+      !principal.roles.includes('CUSTOMER_ADMIN')
+    ) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Customer User cannot use the internal user lookup',
+      });
+    }
     const tenantId = requireTenantId(principal);
     const user = await this.usersRepo.findUserById(userId);
-    if (!user || user.tenantId !== tenantId) {
+    if (
+      !user ||
+      user.tenantId !== tenantId ||
+      (principal.userType === 'CUSTOMER' &&
+        !isCustomerAdminManageable(user, principal))
+    ) {
       throw new NotFoundException({
         code: 'NOT_FOUND',
         message: 'User not found',

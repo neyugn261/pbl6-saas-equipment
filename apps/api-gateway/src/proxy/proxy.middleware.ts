@@ -76,6 +76,22 @@ export class AuthAliasProxyMiddleware implements NestMiddleware {
   }
 }
 
+/** Public platform administration route; Identity enforces PLATFORM_ADMIN. */
+@Injectable()
+export class PlatformProxyMiddleware implements NestMiddleware {
+  private readonly proxy: ReturnType<typeof createProxyMiddleware>;
+  constructor(config: ConfigService<AppEnv, true>) {
+    this.proxy = buildProxy(
+      config.get('IDENTITY_SERVICE_URL', { infer: true }),
+      '/api/platform',
+      '/platform',
+    );
+  }
+  use(req: Request, res: Response, next: NextFunction): void {
+    this.proxy(req, res, next);
+  }
+}
+
 @Injectable()
 export class OrganizationProxyMiddleware implements NestMiddleware {
   private readonly proxy: ReturnType<typeof createProxyMiddleware>;

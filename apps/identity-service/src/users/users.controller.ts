@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Put,
@@ -26,7 +27,7 @@ import { ActivateAccountDto } from './dto/activate-account.dto';
 import { AssignRolesDto } from './dto/assign-roles.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { ListUsersDto } from './dto/list-users.dto';
-import type { UserProfile, UserSummary } from './users.types';
+import type { InviteUserResult, UserProfile, UserSummary } from './users.types';
 import type { LoginResult } from '../auth/auth.types';
 import type { ClientContext } from '../auth/auth.types';
 
@@ -59,7 +60,7 @@ export class UsersController {
   @RequirePermissions('user:read')
   getUser(
     @CurrentUser() principal: Principal,
-    @Param('id') userId: string,
+    @Param('id', ParseUUIDPipe) userId: string,
   ): Promise<UserProfile> {
     return this.users.getUser(principal, userId);
   }
@@ -74,7 +75,7 @@ export class UsersController {
   inviteUser(
     @CurrentUser() principal: Principal,
     @Body() body: InviteUserDto,
-  ): Promise<{ user: UserProfile; activationToken: string }> {
+  ): Promise<InviteUserResult> {
     return this.users.inviteUser(principal, body);
   }
 
@@ -84,7 +85,7 @@ export class UsersController {
   inviteUserAlias(
     @CurrentUser() principal: Principal,
     @Body() body: InviteUserDto,
-  ): Promise<{ user: UserProfile; activationToken: string }> {
+  ): Promise<InviteUserResult> {
     return this.users.inviteUser(principal, body);
   }
 
@@ -107,7 +108,7 @@ export class UsersController {
   @RequirePermissions('role:assign')
   assignRoles(
     @CurrentUser() principal: Principal,
-    @Param('id') userId: string,
+    @Param('id', ParseUUIDPipe) userId: string,
     @Body() body: AssignRolesDto,
   ): Promise<UserProfile> {
     return this.users.assignRoles(principal, userId, body);
@@ -118,7 +119,7 @@ export class UsersController {
   @RequirePermissions('role:assign')
   assignRolesPut(
     @CurrentUser() principal: Principal,
-    @Param('id') userId: string,
+    @Param('id', ParseUUIDPipe) userId: string,
     @Body() body: AssignRolesDto,
   ): Promise<UserProfile> {
     return this.users.assignRoles(principal, userId, body);
@@ -131,7 +132,7 @@ export class UsersController {
   @RequirePermissions('user:manage')
   updateStatus(
     @CurrentUser() principal: Principal,
-    @Param('id') userId: string,
+    @Param('id', ParseUUIDPipe) userId: string,
     @Body() body: UpdateStatusDto,
   ): Promise<UserProfile> {
     return this.users.updateStatus(principal, userId, body);
@@ -142,7 +143,7 @@ export class UsersController {
   @RequirePermissions('user:manage')
   updateStatusPatch(
     @CurrentUser() principal: Principal,
-    @Param('id') userId: string,
+    @Param('id', ParseUUIDPipe) userId: string,
     @Body() body: UpdateStatusDto,
   ): Promise<UserProfile> {
     return this.users.updateStatus(principal, userId, body);

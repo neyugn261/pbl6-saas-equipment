@@ -25,7 +25,14 @@ against a real PostgreSQL.
 | `GET` | `/users/:id` | Bearer + `user:read` | — | `200` profile / `404` outside scope |
 | `PATCH` | `/users/:id/roles` | Bearer + `role:assign` | `{roles}` | `200` updated profile |
 | `POST` | `/users/:id/status` | Bearer + `user:manage` | `{status}` | `200` updated profile |
-| `GET` | `/internal/users/:id` | Tenant staff token | — | Tenant-scoped identity snapshot |
+| `POST` | `/platform/tenants/:tenantId/admins` | Platform Admin | `{email, fullName, phone?}` | `201` INVITED Tenant Admin + token |
+| `POST` | `/platform/tenants/:tenantId/admins/:id/status` | Platform Admin | `{status}` | `200` updated Tenant Admin / `409` last active admin |
+| `PATCH` | `/platform/tenants/:tenantId/admins/:id/roles` | Platform Admin | `{roles: []}` or `{roles: ["TENANT_ADMIN"]}` | `200` updated roles / `409` last active admin |
+
+Invitation tokens expire after 24 hours. `IDENTITY_EXPOSE_ACTIVATION_TOKEN`
+defaults to `false`; set it to `true` only for local development or tests that
+need to copy the token. The service rejects this setting in production.
+| `GET` | `/internal/users/:id` | Tenant staff or scoped Customer Admin token | — | Tenant-scoped identity snapshot |
 | `GET` | `/internal/users` | Tenant staff token | `role`, `status`, pagination | Tenant-scoped minimal user page |
 
 `/health`, the three `/auth` POST routes, and `/users/activate` are `@Public()`;
@@ -124,13 +131,20 @@ tokens carry `customer_id`.
 
 Tenant Admin may invite and assign the fixed staff and customer roles listed in
 ADR 0006, including Technician and Customer User, but cannot grant Tenant Admin.
-Customer Admin can invite Customer User and manage only Customer User accounts
-with an active link to its own customer. New Customer Users invited by a
-Customer Admin need to be linked through Organization's membership API before
-customer-scoped access works. The service uses the shared
+Customer Admin can invite Customer User and manage Customer User accounts
+with active links to its own customer, or unlinked accounts it
+invited. The internal user lookup applies the same narrow rule so Organization
+can verify the membership request. A link to another customer returns 404 even
+when this admin originally invited the user. New Customer Users must be linked
+through Organization's membership API before customer-scoped access works.
+Platform Admin can invite a Tenant Admin only for an active tenant in the local
+tenant directory. Users cannot change their own role or status; only Platform
+Admin can suspend or reactivate Tenant Admin, and the last active Tenant Admin
+cannot be suspended. The service uses the shared
 `ASSIGNABLE_ROLES` and `dataScope` rules from `@pbl6/auth`.
 
-The raw activation token is returned once by the invite endpoint for the MVP.
+The raw activation token is returned by the invite endpoint only when
+`IDENTITY_EXPOSE_ACTIVATION_TOKEN=true` outside production.
 Activation consumes it once and sets the password. Locking an account revokes
 its Identity sessions. The OpenAPI contract is
 [`docs/api/identity.yaml`](../../docs/api/identity.yaml).
