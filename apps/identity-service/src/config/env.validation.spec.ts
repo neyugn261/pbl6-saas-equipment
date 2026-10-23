@@ -13,6 +13,7 @@ describe('validateEnv', () => {
       JWT_ACCESS_TTL_SECONDS: 900,
       REFRESH_TOKEN_TTL_DAYS: 7,
       BCRYPT_COST: 12,
+      IDENTITY_EXPOSE_ACTIVATION_TOKEN: false,
     });
   });
 
@@ -48,5 +49,25 @@ describe('validateEnv', () => {
     expect(() =>
       validateEnv({ ...valid, IDENTITY_DATABASE_URL: 'mysql://localhost/db' }),
     ).toThrow('postgresql://');
+  });
+
+  it('permits token exposure only outside production', () => {
+    expect(
+      validateEnv({
+        ...valid,
+        NODE_ENV: 'test',
+        IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'true',
+      }).IDENTITY_EXPOSE_ACTIVATION_TOKEN,
+    ).toBe(true);
+    expect(() =>
+      validateEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'true',
+      }),
+    ).toThrow('IDENTITY_EXPOSE_ACTIVATION_TOKEN');
+    expect(() =>
+      validateEnv({ ...valid, IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'yes' }),
+    ).toThrow('IDENTITY_EXPOSE_ACTIVATION_TOKEN');
   });
 });

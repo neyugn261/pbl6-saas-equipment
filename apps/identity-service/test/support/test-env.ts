@@ -25,6 +25,7 @@ export function applyTestEnv(): void {
   process.env.JWT_ACCESS_TTL_SECONDS = '900';
   process.env.REFRESH_TOKEN_TTL_DAYS = '7';
   process.env.BCRYPT_COST = '4';
+  process.env.IDENTITY_EXPOSE_ACTIVATION_TOKEN = 'true';
   // No broker in e2e: the directory consumer is exercised by calling its handler.
   process.env.RABBITMQ_URL = '';
 }

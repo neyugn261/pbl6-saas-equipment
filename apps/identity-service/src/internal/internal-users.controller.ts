@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { AllowUserTypes, CurrentUser } from '@pbl6/auth';
 import type { Principal } from '@pbl6/auth';
 import type { Page } from '@pbl6/service-kit';
@@ -12,21 +12,22 @@ import type { InternalUserListItem, UserSnapshot } from '../users/users.types';
  * Scoped to the caller's tenantId; returns 404 if outside tenant.
  */
 @Controller('internal/users')
-@AllowUserTypes('TENANT_STAFF')
 export class InternalUsersController {
   constructor(private readonly service: InternalUsersService) {}
 
   /** Get a single user snapshot. Validates tenantId against the caller's token. */
   @Get(':id')
+  @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
   getUserSnapshot(
     @CurrentUser() principal: Principal,
-    @Param('id') userId: string,
+    @Param('id', ParseUUIDPipe) userId: string,
   ): Promise<UserSnapshot> {
     return this.service.getUserSnapshot(principal, userId);
   }
 
   /** List user snapshots in the caller's tenant. */
   @Get()
+  @AllowUserTypes('TENANT_STAFF')
   listUserSnapshots(
     @CurrentUser() principal: Principal,
     @Query() query: ListInternalUsersDto,

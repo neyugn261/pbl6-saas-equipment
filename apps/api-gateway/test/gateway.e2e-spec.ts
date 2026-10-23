@@ -46,6 +46,10 @@ describe('API Gateway (e2e)', () => {
       ORGANIZATION_SERVICE_URL: upstreamUrl,
       ASSET_SERVICE_URL: upstreamUrl,
       SERVICE_REQUEST_SERVICE_URL: upstreamUrl,
+      WORKORDER_SERVICE_URL: upstreamUrl,
+      MAINTENANCE_SERVICE_URL: upstreamUrl,
+      INVENTORY_SERVICE_URL: upstreamUrl,
+      NOTIFICATION_SERVICE_URL: upstreamUrl,
       CORS_ORIGINS: 'http://localhost:5173',
       LOGIN_RATE_LIMIT: '5',
       LOGIN_RATE_LIMIT_WINDOW_MS: '60000',
@@ -150,6 +154,11 @@ describe('API Gateway (e2e)', () => {
   it('routes M1 contract paths to their owning services', async () => {
     const routes = [
       ['/api/identity/users?page=2', '/users?page=2'],
+      [
+        '/api/identity/platform/tenants/123/admins',
+        '/platform/tenants/123/admins',
+      ],
+      ['/api/platform/tenants/123/admins', '/platform/tenants/123/admins'],
       ['/api/organization/customers', '/customers'],
       ['/api/assets/equipment', '/equipment'],
       ['/api/service-requests', '/service-requests'],

@@ -14,7 +14,8 @@ info:
     requests to `/internal/*` with 404 (ADR 0004).
 
     Activation token delivery: for MVP the token is returned in the 201
-      response body (`activationToken`); a real deployment would email it.
+      response body (`activationToken`) only when IDENTITY_EXPOSE_ACTIVATION_TOKEN=true
+      outside production. Production never exposes this token in the API response.
       The field will be removed once Notification Service is wired.
     Role assignment follows ADR 0006 and `ASSIGNABLE_ROLES` in
     `packages/auth/src/catalog.ts`.
@@ -138,7 +139,8 @@ paths:
       description: |
         Returns a paginated list of users in the caller's tenant.
         TENANT_STAFF with `user:read` can see all users. CUSTOMER_ADMIN sees
-        only CUSTOMER accounts linked to its own customer.
+        only CUSTOMER_USER accounts actively linked to its own customer and unlinked CUSTOMER_USER
+        accounts that it invited. A link to another customer excludes the user.
       x-permissions: [user:read]
       x-user-types: [TENANT_STAFF, CUSTOMER]
       parameters:
@@ -180,9 +182,8 @@ paths:
         Creates the user record with status `INVITED` and generates an
         activation token (purpose `ACCOUNT_ACTIVATION`).
 
-        **MVP note**: the `activationToken` is returned in the response body
-        so the frontend can display or copy it. In production it would be
-        emailed by Notification Service and the field removed from this response.
+        In development and tests, `activationToken` is returned only when
+        `IDENTITY_EXPOSE_ACTIVATION_TOKEN=true`. Production rejects that setting.
 
         **Role matrix** (ADR 0006): TENANT_ADMIN may invite TENANT_STAFF
         with SERVICE_MANAGER, DISPATCHER, INVENTORY_STAFF or TECHNICIAN,
@@ -230,7 +231,7 @@ paths:
       description: |
         Validates the one-time activation token, sets the password hash,
         transitions the user from `INVITED` to `ACTIVE`, and marks the token
-        as used. The token expires after 72 hours.
+        as used. The token expires after 24 hours.
       security: []
       requestBody:
         required: true
@@ -261,7 +262,10 @@ paths:
       summary: Get a user
       description: |
         Returns the full user profile. Users outside the caller's tenant
-        return 404 (ids cannot be probed).
+        return 404 (ids cannot be probed). CUSTOMER_ADMIN may also read an
+        unlinked CUSTOMER_USER account it invited, or an actively linked CUSTOMER_USER
+        account of its own customer; a link to another customer
+        excludes the account.
       x-permissions: [user:read]
       x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
@@ -289,7 +293,9 @@ paths:
         - The caller may change only roles in `ASSIGNABLE_ROLES` (ADR 0006),
           including roles being removed from the target.
         - TENANT_ADMIN cannot grant or remove TENANT_ADMIN through this API.
-        - CUSTOMER_ADMIN manages CUSTOMER_USER accounts linked to its own customer.
+        - CUSTOMER_ADMIN manages CUSTOMER_USER accounts actively linked to its own
+          customer or unlinked accounts it invited.
+        - A caller cannot change its own roles.
         - Empty `roles` array removes all roles.
       x-permissions: [role:assign]
       x-user-types: [TENANT_STAFF, CUSTOMER]
@@ -333,7 +339,10 @@ paths:
 
         Suspending an account immediately revokes all active sessions.
         `INVITED` and `DISABLED` accounts cannot be changed by this endpoint.
-        CUSTOMER_ADMIN can change only CUSTOMER_USER accounts of its own customer.
+        CUSTOMER_ADMIN can change only CUSTOMER_USER accounts of its own
+        customer or unlinked accounts it invited. No caller can change its own
+        status. Only Platform Admin may change a Tenant Admin's status, using
+        the platform endpoint below; the last active Tenant Admin is protected.
       x-permissions: [user:manage]
       x-user-types: [TENANT_STAFF, CUSTOMER]
       requestBody:
@@ -363,6 +372,107 @@ paths:
               example:
                 code: INVALID_STATUS_TRANSITION
                 message: Cannot transition from INVITED to ACTIVE via this endpoint
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /platform/tenants/{tenantId}/admins:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Users]
+      summary: Invite a Tenant Admin for an active tenant
+      description: |
+        Platform Admin provisions a Tenant Admin for a tenant present in the
+        Identity tenant directory. The invitation returns a one-time activation
+        token for the M1 flow when exposure is enabled. The account starts as
+        INVITED. Reinviting an INVITED Tenant Admin with the same email returns
+        the same account and invalidates its previous activation token.
+      x-permissions: [tenant:manage]
+      x-user-types: [PLATFORM_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InviteTenantAdminInput' }
+      responses:
+        '201':
+          description: Invited Tenant Admin and activation token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InviteUserResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /platform/tenants/{tenantId}/admins/{id}/status:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/UserId'
+    post:
+      tags: [Users]
+      summary: Suspend or reactivate a Tenant Admin
+      description: |
+        Only Platform Admin may change a Tenant Admin's status. Suspending the
+        last ACTIVE Tenant Admin of a tenant returns 409. Suspending an account
+        revokes its active Identity sessions.
+      x-permissions: [tenant:manage]
+      x-user-types: [PLATFORM_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateStatusInput' }
+      responses:
+        '200':
+          description: Updated Tenant Admin profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserProfile' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /platform/tenants/{tenantId}/admins/{id}/roles:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      tags: [Users]
+      summary: Add or remove a Tenant Admin role
+      description: |
+        Only Platform Admin may change the TENANT_ADMIN role. The role set may
+        be empty or contain TENANT_ADMIN. Removing the last ACTIVE Tenant Admin
+        returns 409. Changing this role revokes the user's Identity sessions.
+      x-permissions: [tenant:manage]
+      x-user-types: [PLATFORM_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignRolesInput' }
+      responses:
+        '200':
+          description: Updated Tenant Admin profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserProfile' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   # ──────────────────────────────────────────────────────────────────
   # Roles — fixed catalog
@@ -421,12 +531,15 @@ paths:
         Returns the user's identity snapshot for the calling service.
         The caller's token must carry a `tenant_id`; if the user does not
         belong to that tenant the endpoint returns 404 (ids cannot be probed).
-        The caller must have userType `TENANT_STAFF`.
+        TENANT_STAFF may look up users of its tenant. CUSTOMER_ADMIN may look
+        up only CUSTOMER_USER accounts actively linked to its customer or unlinked
+        accounts it invited, so Organization can verify a membership request.
+        A user linked to another customer returns 404.
 
         PLATFORM_STAFF tokens (null tenant_id) are rejected with 403
         `TENANT_SCOPE_REQUIRED`.
       x-internal: true
-      x-user-types: [TENANT_STAFF]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
         '200':
           description: User identity snapshot
@@ -681,6 +794,15 @@ components:
           type: array
           items: { $ref: '#/components/schemas/RoleCode' }
 
+    InviteTenantAdminInput:
+      type: object
+      additionalProperties: false
+      required: [email, fullName]
+      properties:
+        email: { type: string, format: email, maxLength: 255 }
+        fullName: { type: string, minLength: 1, maxLength: 150 }
+        phone: { type: string, maxLength: 30 }
+
     InviteUserInput:
       type: object
       additionalProperties: false
@@ -709,15 +831,16 @@ components:
 
     InviteUserResult:
       type: object
-      required: [user, activationToken]
+      required: [user]
       properties:
         user:
           $ref: '#/components/schemas/UserProfile'
         activationToken:
           type: string
           description: |
-            One-time activation token (MVP only — will be replaced by email delivery).
-            Expires in 72 hours.
+              One-time activation token, present only when
+              IDENTITY_EXPOSE_ACTIVATION_TOKEN=true outside production.
+              Expires in 24 hours.
           example: a1b2c3d4e5f6...
 
     ActivateAccountInput:

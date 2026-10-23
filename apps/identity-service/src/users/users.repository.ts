@@ -38,6 +38,7 @@ export class UsersRepository {
     tenantId: string,
     query: ListUsersDto,
     customerId: string | null,
+    invitedByUserId: string | null,
   ): Promise<Page<UserSummary>> {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
@@ -54,15 +55,44 @@ export class UsersRepository {
     const where: Prisma.UserWhereInput = { tenantId };
     if (customerId !== null) {
       where.userType = 'CUSTOMER';
-      where.customerLink = { is: { customerId, status: 'ACTIVE' } };
+      where.AND = [
+        {
+          roles: {
+            some: { role: { code: 'CUSTOMER_USER' } },
+            every: { role: { code: 'CUSTOMER_USER' } },
+          },
+        },
+        {
+          OR: [
+            { customerLink: { is: { customerId, status: 'ACTIVE' } } },
+            ...(invitedByUserId
+              ? [
+                  {
+                    customerLink: { is: null },
+                    roles: {
+                      some: {
+                        assignedBy: invitedByUserId,
+                        role: { code: 'CUSTOMER_USER' },
+                      },
+                      every: { role: { code: 'CUSTOMER_USER' } },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+      ];
     }
     if (query.status) where.status = query.status;
     if (query.userType) where.userType = query.userType;
     if (query.q) {
-      where.OR = [
-        { fullName: { contains: query.q, mode: 'insensitive' } },
-        { email: { contains: query.q, mode: 'insensitive' } },
-      ];
+      const search = {
+        OR: [
+          { fullName: { contains: query.q, mode: 'insensitive' as const } },
+          { email: { contains: query.q, mode: 'insensitive' as const } },
+        ],
+      };
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : []), search];
     }
     if (query.role) {
       where.roles = {
@@ -208,6 +238,84 @@ export class UsersRepository {
     });
   }
 
+  /** Serializes platform invitations per tenant and rotates an unused token. */
+  async createOrRenewTenantAdminInvitation(data: {
+    tenantId: string;
+    email: string;
+    fullName: string;
+    phone: string | null;
+    assignedBy: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<string | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT tenant_id FROM tenant_directory
+        WHERE tenant_id = ${data.tenantId}::uuid FOR UPDATE`;
+      const matches = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM users WHERE tenant_id = ${data.tenantId}::uuid
+        AND lower(email) = lower(${data.email})`;
+      const existing = matches.length
+        ? await tx.user.findUnique({
+            where: { id: matches[0].id },
+            ...userWithRoles,
+          })
+        : null;
+      if (existing) {
+        if (
+          existing.status !== 'INVITED' ||
+          existing.userType !== 'TENANT_STAFF' ||
+          existing.roles.length !== 1 ||
+          existing.roles[0].role.code !== 'TENANT_ADMIN'
+        )
+          return null;
+        await tx.accountToken.updateMany({
+          where: {
+            userId: existing.id,
+            purpose: 'ACCOUNT_ACTIVATION',
+            usedAt: null,
+          },
+          data: { usedAt: new Date() },
+        });
+        await tx.accountToken.create({
+          data: {
+            userId: existing.id,
+            purpose: 'ACCOUNT_ACTIVATION',
+            tokenHash: data.tokenHash,
+            expiresAt: data.expiresAt,
+          },
+        });
+        return existing.id;
+      }
+      const role = await tx.role.findUniqueOrThrow({
+        where: { code: 'TENANT_ADMIN' },
+      });
+      const user = await tx.user.create({
+        data: {
+          tenantId: data.tenantId,
+          userType: 'TENANT_STAFF',
+          email: data.email,
+          fullName: data.fullName,
+          phone: data.phone,
+          status: 'INVITED',
+          passwordHash: null,
+        },
+      });
+      await tx.userRole.create({
+        data: { userId: user.id, roleId: role.id, assignedBy: data.assignedBy },
+      });
+      await tx.accountToken.create({
+        data: {
+          userId: user.id,
+          purpose: 'ACCOUNT_ACTIVATION',
+          tokenHash: data.tokenHash,
+          expiresAt: data.expiresAt,
+        },
+      });
+      return user.id;
+    });
+  }
+
   /** Replaces the user's roles atomically; assignedBy is the caller's userId. */
   async setRoles(
     userId: string,
@@ -230,12 +338,111 @@ export class UsersRepository {
     ]);
   }
 
-  async updateUserStatus(
+  /** Platform role changes share the same tenant lock as admin suspensions. */
+  async setTenantAdminRole(
+    userId: string,
+    tenantId: string,
+    roleCodes: string[],
+    assignedBy: string,
+  ): Promise<'updated' | 'last-admin' | 'stale'> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT tenant_id FROM tenant_directory
+        WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
+      await tx.$queryRaw`
+        SELECT u.id FROM users u
+        JOIN user_roles ur ON ur.user_id = u.id
+        JOIN roles r ON r.id = ur.role_id
+        WHERE u.tenant_id = ${tenantId}::uuid AND r.code = 'TENANT_ADMIN'
+        ORDER BY u.id FOR UPDATE OF u`;
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        ...userWithRoles,
+      });
+      if (
+        !user ||
+        user.tenantId !== tenantId ||
+        user.userType !== 'TENANT_STAFF'
+      ) {
+        return 'stale';
+      }
+      const currentRoles = toRoleCodes(user);
+      if (currentRoles.some((code) => code !== 'TENANT_ADMIN')) return 'stale';
+      if (
+        currentRoles.includes('TENANT_ADMIN') &&
+        !roleCodes.includes('TENANT_ADMIN') &&
+        user.status === 'ACTIVE'
+      ) {
+        const activeAdmins = await tx.user.count({
+          where: {
+            tenantId,
+            status: 'ACTIVE',
+            roles: { some: { role: { code: 'TENANT_ADMIN' } } },
+          },
+        });
+        if (activeAdmins <= 1) return 'last-admin';
+      }
+      await tx.userRole.deleteMany({ where: { userId } });
+      if (roleCodes.includes('TENANT_ADMIN')) {
+        const role = await tx.role.findUniqueOrThrow({
+          where: { code: 'TENANT_ADMIN' },
+        });
+        await tx.userRole.create({
+          data: { userId, roleId: role.id, assignedBy },
+        });
+      }
+      await tx.authSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return 'updated';
+    });
+  }
+
+  /** Status change and session revocation share one transaction. */
+  async changeUserStatus(
     id: string,
-    status: string,
-  ): Promise<UserWithRoles | null> {
-    await this.prisma.user.update({ where: { id }, data: { status } });
-    return this.findUserById(id);
+    tenantId: string,
+    currentStatus: string,
+    nextStatus: string,
+    protectLastTenantAdmin = false,
+  ): Promise<'updated' | 'last-admin' | 'stale'> {
+    return this.prisma.$transaction(async (tx) => {
+      if (protectLastTenantAdmin && nextStatus === 'SUSPENDED') {
+        // Serialize platform admin changes within a tenant. Counting without
+        // this lock would let two concurrent requests suspend both admins.
+        await tx.$queryRaw`
+          SELECT tenant_id FROM tenant_directory
+          WHERE tenant_id = ${tenantId}::uuid FOR UPDATE`;
+        await tx.$queryRaw`
+          SELECT u.id FROM users u
+          JOIN user_roles ur ON ur.user_id = u.id
+          JOIN roles r ON r.id = ur.role_id
+          WHERE u.tenant_id = ${tenantId}::uuid AND r.code = 'TENANT_ADMIN'
+          ORDER BY u.id FOR UPDATE OF u`;
+        const activeAdmins = await tx.user.count({
+          where: {
+            tenantId,
+            status: 'ACTIVE',
+            roles: { some: { role: { code: 'TENANT_ADMIN' } } },
+          },
+        });
+        if (activeAdmins <= 1) return 'last-admin';
+      }
+
+      const changed = await tx.user.updateMany({
+        where: { id, tenantId, status: currentStatus },
+        data: { status: nextStatus },
+      });
+      if (changed.count !== 1) return 'stale';
+      if (nextStatus === 'SUSPENDED') {
+        await tx.authSession.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+      return 'updated';
+    });
   }
 
   async setPasswordAndActivate(

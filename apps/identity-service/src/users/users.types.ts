@@ -16,6 +16,11 @@ export interface UserProfile {
   lastLoginAt: Date | null;
 }
 
+export interface InviteUserResult {
+  user: UserProfile;
+  activationToken?: string;
+}
+
 /** Compact view used in list responses. */
 export interface UserSummary {
   id: string;
