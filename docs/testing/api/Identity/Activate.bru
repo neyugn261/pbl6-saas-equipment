@@ -1,0 +1,15 @@
+meta {
+  name: Activate invited user
+  type: http
+  seq: 6
+}
+post {
+  url: {{identity}}/users/activate
+  body: json
+}
+headers {
+  Content-Type: application/json
+}
+body:json {
+  {"token":"{{activationToken}}","password":"{{newPassword}}"}
+}

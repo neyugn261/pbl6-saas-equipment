@@ -1,0 +1,16 @@
+meta {
+  name: Invite customer user
+  type: http
+  seq: 5
+}
+post {
+  url: {{identity}}/users
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"email":"new.customer@example.test","fullName":"New Customer User","userType":"CUSTOMER","roles":["CUSTOMER_USER"]}
+}

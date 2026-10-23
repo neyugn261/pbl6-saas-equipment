@@ -4,11 +4,15 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useParams,
 } from 'react-router-dom'
 import { api, ApiError, isMockMode } from './api/client'
 import { creators, has, home, menu } from './auth/access'
+import ActivatePage from './routes/ActivatePage'
+import InvitePage from './routes/InvitePage'
+import QrPage from './routes/QrPage'
 import {
   login,
   logout,
@@ -29,7 +33,7 @@ import type {
 import './App.css'
 
 const actionLabels: Record<string, string> = {
-  'start-review': 'Bắt đầu xem xét',
+  review: 'Xem xét và kiểm tra bảo hành',
   'request-info': 'Yêu cầu bổ sung',
   'warranty-check': 'Kiểm tra bảo hành',
   accept: 'Tiếp nhận',
@@ -67,13 +71,19 @@ function Gate({ roles, children }: { roles: string[]; children: ReactNode }) {
 function LoginPage() {
   const { profile, setProfile } = useSession()
   const navigate = useNavigate()
+  const location = useLocation()
+  const requestedNext = new URLSearchParams(location.search).get('next')
+  const next =
+    requestedNext?.startsWith('/portal/qr/') && !requestedNext.startsWith('//')
+      ? requestedNext
+      : null
   const [tenantCode, setTenantCode] = useState('DEMO')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [platform, setPlatform] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
-  if (profile) return <Navigate to={home(profile.roles)} replace />
+  if (profile) return <Navigate to={next ?? home(profile.roles)} replace />
   async function submit(event: FormEvent) {
     event.preventDefault()
     setBusy(true)
@@ -85,7 +95,7 @@ function LoginPage() {
         ...(platform ? {} : { tenantCode }),
       })
       setProfile(user)
-      navigate(home(user.roles), { replace: true })
+      navigate(next ?? home(user.roles), { replace: true })
     } catch (cause) {
       setError(cause)
     } finally {
@@ -610,7 +620,7 @@ function RequestDetailPage() {
     }
   }
   const actions = [
-    'start-review',
+    'review',
     'request-info',
     'warranty-check',
     'accept',
@@ -700,11 +710,22 @@ function RequestDetailPage() {
 function NewRequestPage() {
   const { profile } = useSession()
   const navigate = useNavigate()
-  const data = useLoad<Page<EquipmentRecord>>(
-    () => api.asset('/equipment?page=1&pageSize=100'),
-    'request-equipment',
+  const location = useLocation()
+  const requestedEquipmentId = new URLSearchParams(location.search).get(
+    'equipmentId',
   )
-  const [equipmentId, setEquipmentId] = useState('')
+  const data = useLoad<Page<EquipmentRecord>>(
+    () =>
+      requestedEquipmentId
+        ? api
+            .asset<EquipmentRecord>(
+              `/equipment/${encodeURIComponent(requestedEquipmentId)}`,
+            )
+            .then((item) => ({ items: [item], page: 1, pageSize: 1, total: 1 }))
+        : api.asset('/equipment?page=1&pageSize=100'),
+    `request-equipment-${requestedEquipmentId ?? 'list'}`,
+  )
+  const [equipmentId, setEquipmentId] = useState(requestedEquipmentId ?? '')
   const [type, setType] = useState('REPAIR')
   const [priority, setPriority] = useState('NORMAL')
   const [title, setTitle] = useState('')
@@ -837,7 +858,13 @@ function Message({ code, title }: { code: string; title: string }) {
 }
 function Authenticated() {
   const { profile } = useSession()
-  if (!profile) return <Navigate to="/login" replace />
+  const location = useLocation()
+  if (!profile) {
+    const target = location.pathname.startsWith('/portal/qr/')
+      ? `/login?next=${encodeURIComponent(location.pathname)}`
+      : '/login'
+    return <Navigate to={target} replace />
+  }
   return (
     <Layout>
       <Routes>
@@ -910,6 +937,22 @@ function Authenticated() {
           }
         />
         <Route
+          path="/users/invite"
+          element={
+            <Gate roles={menu[4].roles}>
+              <InvitePage />
+            </Gate>
+          }
+        />
+        <Route
+          path="/portal/qr/:token"
+          element={
+            <Gate roles={menu[1].roles}>
+              <QrPage />
+            </Gate>
+          }
+        />
+        <Route
           path="/403"
           element={<Message code="403" title="Không có quyền truy cập" />}
         />
@@ -944,6 +987,7 @@ function Content() {
   ) : (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/activate" element={<ActivatePage />} />
       <Route path="/*" element={<Authenticated />} />
     </Routes>
   )

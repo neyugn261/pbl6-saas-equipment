@@ -1,4 +1,6 @@
 import { getAccessToken, refresh } from '../auth/session'
+import { bases } from './config'
+export { isMockMode } from './config'
 
 export class ApiError extends Error {
   status: number
@@ -9,23 +11,7 @@ export class ApiError extends Error {
     this.code = code
   }
 }
-type Area = 'organization' | 'asset' | 'requests'
-const mode = import.meta.env.VITE_M1_API_MODE || 'mock'
-export const isMockMode = mode !== 'gateway'
-const bases: Record<Area, string> =
-  mode === 'gateway'
-    ? {
-        organization: `${import.meta.env.VITE_GATEWAY_API_URL || '/gateway'}/api/organization`,
-        asset: `${import.meta.env.VITE_GATEWAY_API_URL || '/gateway'}/api/assets`,
-        requests: `${import.meta.env.VITE_GATEWAY_API_URL || '/gateway'}/api/service-requests`,
-      }
-    : {
-        organization:
-          import.meta.env.VITE_ORGANIZATION_API_URL || '/mock/organization',
-        asset: import.meta.env.VITE_ASSET_API_URL || '/mock/asset',
-        requests:
-          import.meta.env.VITE_SERVICE_REQUEST_API_URL || '/mock/requests',
-      }
+type Area = keyof typeof bases
 
 async function request<T>(
   area: Area,
@@ -62,6 +48,8 @@ async function request<T>(
     : (response.json() as Promise<T>)
 }
 export const api = {
+  identity: <T>(path: string, options?: { method?: string; body?: unknown }) =>
+    request<T>('identity', path, options),
   organization: <T>(
     path: string,
     options?: { method?: string; body?: unknown },

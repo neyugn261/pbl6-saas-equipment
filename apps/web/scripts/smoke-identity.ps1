@@ -1,4 +1,4 @@
-param([string]$BaseUrl = 'http://localhost:3001')
+param([string]$BaseUrl = 'http://localhost:3000/api/identity')
 
 $envFile = Join-Path $PSScriptRoot '..\..\..\.env'
 $passwordLine = Get-Content -LiteralPath $envFile | Where-Object { $_ -match '^SEED_DEMO_PASSWORD=' } | Select-Object -First 1

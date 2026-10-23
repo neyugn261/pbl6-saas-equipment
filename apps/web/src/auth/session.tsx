@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { identityBase } from '../api/config'
 
 export interface Profile {
   id: string
@@ -20,7 +21,7 @@ interface Tokens {
   accessToken: string
   refreshToken: string
 }
-const base = import.meta.env.VITE_IDENTITY_API_URL || '/identity'
+const base = identityBase
 const key = 'pbl6.session.refresh'
 let accessToken = ''
 let refreshPromise: Promise<string> | null = null
@@ -54,6 +55,22 @@ export async function login(input: {
   tenantCode?: string
 }): Promise<Profile> {
   const result = await json<Tokens & { user: Profile }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  store(result)
+  try {
+    return await me()
+  } catch (error) {
+    clearTokens()
+    throw error
+  }
+}
+export async function activate(input: {
+  token: string
+  password: string
+}): Promise<Profile> {
+  const result = await json<Tokens & { user: Profile }>('/users/activate', {
     method: 'POST',
     body: JSON.stringify(input),
   })

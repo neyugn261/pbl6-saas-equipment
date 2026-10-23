@@ -1,0 +1,12 @@
+meta {
+  name: Resolve QR
+  type: http
+  seq: 4
+}
+get {
+  url: {{asset}}/qr/{{qrToken}}
+  body: none
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+}

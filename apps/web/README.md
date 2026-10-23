@@ -1,39 +1,18 @@
 # Web M1
 
-Web dùng React + Vite. Identity chạy thật; Organization, Asset và Service Request chạy với mock server tạo từ OpenAPI trong giai đoạn phát triển M1. Các trang prototype M2/M3 còn trong source để tham khảo nhưng không được route từ `App.tsx`.
+Web React + Vite gọi Identity, Organization, Asset và Service Request qua API Gateway theo mặc định. Menu lấy vai trò từ `/auth/me`; backend quyết định quyền và phạm vi tenant/customer. Các trang M1 gồm khách hàng, thiết bị, yêu cầu dịch vụ, mời người dùng và đường dẫn QR `/portal/qr/{token}`.
 
 ## Chạy local
 
-1. Chạy Identity, migration và seed theo README ở root.
-2. Sao chép `apps/web/.env.example` thành `apps/web/.env.local`.
-3. Mở ba terminal ở root:
+1. Chạy hạ tầng và các service M1 theo README ở root, migrate và seed DEMO.
+2. Sao chép `apps/web/.env.example` thành `apps/web/.env.local`. Nếu đã có `.env.local` từ trước, đổi `VITE_M1_API_MODE=gateway` và bỏ `VITE_IDENTITY_API_URL=/identity` để Identity cũng đi qua gateway.
+3. Chạy `pnpm dev:web` từ root, mở `http://localhost:5173`.
 
-   ```powershell
-   pnpm dlx @stoplight/prism-cli mock docs/api/organization.yaml -p 4010
-   pnpm dlx @stoplight/prism-cli mock docs/api/asset.yaml -p 4011
-   pnpm dlx @stoplight/prism-cli mock docs/api/service-request.yaml -p 4012
-   ```
+Vite chuyển tiếp `/gateway` đến `GATEWAY_PROXY_TARGET` (mặc định `http://localhost:3000`). Các API dùng `/api/identity`, `/api/organization`, `/api/assets` và `/api/service-requests`. Cấu hình `ASSET_QR_PORTAL_BASE_URL` của Asset phải trỏ đến origin web, ví dụ `http://localhost:5173/`; Asset phát link `<origin>/portal/qr/<token>`.
 
-4. Chạy `pnpm dev:web`, mở `http://localhost:5173`. Dùng tám tài khoản trong README root. Mật khẩu do `SEED_DEMO_PASSWORD` của máy quy định.
+Phiên giữ access token trong bộ nhớ và refresh token trong `sessionStorage` của tab. Khi tải lại trang, web refresh rồi lấy `/auth/me`. Các request cùng lúc dùng chung một lần refresh. QR chỉ là mã nhận diện: trang QR luôn xác thực và gọi Asset `/qr/{token}` theo phạm vi của tài khoản.
 
-Vite chuyển tiếp `/identity` đến Identity và `/mock/*` đến ba mock server, nên trình duyệt chỉ gọi cùng origin. Prism trả dữ liệu mẫu theo schema và không giữ trạng thái sau POST; bước tích hợp cần dùng backend thật để chạy trọn luồng.
-Nếu `pnpm dlx` không tải được CLI trên máy, có thể thay từng lệnh bằng `npm exec --yes --package @stoplight/prism-cli -- prism mock <file.yaml> -p <port>`.
-
-Kiểm tra nhanh sau khi cả bốn server và Vite đã chạy:
-
-```powershell
-./apps/web/scripts/smoke-identity.ps1 -BaseUrl http://127.0.0.1:5173/identity
-./apps/web/scripts/smoke-mocks.ps1
-./apps/identity-service/node_modules/.bin/tsx.ps1 apps/web/scripts/check-role-menu.ts
-```
-
-Hai smoke script chỉ in trạng thái ca thử, không in mật khẩu hay token. Script Identity đọc `SEED_DEMO_PASSWORD` từ `.env` ở root. Bài kiểm tra menu đối chiếu tám vai trò với RBAC catalog.
-
-## Tích hợp qua gateway
-
-Đặt `VITE_M1_API_MODE=gateway` trong `.env.local`, sau đó khởi động lại Vite. Vite chuyển tiếp `/gateway` đến `GATEWAY_PROXY_TARGET` (mặc định `http://localhost:3000`); ba module M1 dùng `/api/organization`, `/api/assets`, `/api/service-requests` theo các OpenAPI hiện có. Identity vẫn chạy thật qua `/identity`. Kiểm tra lại route thực tế khi gateway của Member D được merge. Kết quả kiểm thử ghi vào `docs/testing/m1-test-cases.md`.
-
-Phiên dùng access token trong bộ nhớ và refresh token trong `sessionStorage` của tab. Khi tải lại trang, web refresh rồi lấy `/auth/me`. Các request cùng lúc dùng chung một lần refresh đang chạy. Backend vẫn là nơi quyết định quyền và phạm vi tenant/customer.
+Màn hình mời user nhận response có hoặc không có `activationToken`. Chỉ khi backend trả token (dev/test) web mới hiển thị link `/activate#token=…`; fragment không được gửi trong HTTP request. Customer Admin còn gắn tài khoản mới vào customer của mình qua Organization; nếu bước gắn lỗi, web giữ kết quả lời mời và cho thử lại. Luồng này phụ thuộc cập nhật Identity/Organization theo ADR 0008 D1 và D8.
 
 ## Kiểm tra
 
@@ -41,4 +20,12 @@ Phiên dùng access token trong bộ nhớ và refresh token trong `sessionStora
 pnpm --filter web lint
 pnpm --filter web typecheck
 pnpm --filter web build
+./apps/identity-service/node_modules/.bin/tsx.ps1 apps/web/scripts/check-role-menu.ts
+pnpm smoke:m1
 ```
+
+`pnpm smoke:m1` cần stack thật. Các ca kiểm thử và kết quả ghi trong `docs/testing/m1-test-cases.md`.
+
+## Mock contract tùy chọn
+
+Chỉ dùng để kiểm tra giao diện khi service chưa chạy. Đặt `VITE_M1_API_MODE=mock` và `VITE_IDENTITY_API_URL=/identity` trong `.env.local`, rồi chạy ba Prism server trên cổng 4010–4012 theo `docs/api/{organization,asset,service-request}.yaml`. Sau đó có thể chạy `apps/web/scripts/smoke-mocks.ps1`. Prism không lưu thay đổi sau POST và không thay thế smoke test qua gateway.
