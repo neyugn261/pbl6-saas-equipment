@@ -110,8 +110,9 @@ model WorkOrder {
   scheduledStart    DateTime?                @map("scheduled_start") @db.Timestamptz(6)
   scheduledEnd      DateTime?                @map("scheduled_end") @db.Timestamptz(6)
   status            String                   @default("CREATED") @db.VarChar(30)
-  /// Logical reference to identity_db.users.id
-  createdBy         String                   @map("created_by") @db.Uuid
+  /// Logical reference to identity_db.users.id. NULL = created by the system
+  /// from an event (ADR 0008, D5).
+  createdBy         String?                  @map("created_by") @db.Uuid
   createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   startedAt         DateTime?                @map("started_at") @db.Timestamptz(6)
