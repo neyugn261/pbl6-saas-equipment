@@ -13,10 +13,12 @@ Chạy với seed DEMO (`docs/api/fixtures.md`). Mỗi ca ghi `Pass/Fail`, thờ
 | AUTH-05 | Inventory Staff, `DEMO` | Đăng nhập, mở menu | Chỉ thấy Thiết bị trong phạm vi M1. |
 | AUTH-06 | Technician, `DEMO` | Đăng nhập, mở menu | Thấy Khách hàng, Thiết bị và Yêu cầu dịch vụ dạng đọc. |
 | AUTH-07 | Customer Admin, `DEMO` | Đăng nhập, mở menu | Thấy Khách hàng, Thiết bị, Yêu cầu dịch vụ; chỉ dữ liệu customer của mình. |
-| AUTH-08 | Customer User, `DEMO` | Đăng nhập, mở menu | Thấy Thiết bị và Yêu cầu dịch vụ; không thấy Khách hàng. |
+| AUTH-08 | Customer User, `DEMO` | Đăng nhập, mở menu | Thấy Khách hàng (chỉ customer của mình), Thiết bị và Yêu cầu dịch vụ, đúng quyền `customer:read` trong catalog. |
 | AUTH-09 | Bất kỳ | Đăng xuất rồi dùng Back / refresh | `/auth/logout` thu hồi phiên, web quay về đăng nhập. |
 | AUTH-10 | Bất kỳ | Gọi nhiều API khi access token hết hạn | Chỉ một lần `/auth/refresh` đang chạy; các request dùng token mới. |
 | AUTH-11 | Bất kỳ | Mở URL sai và URL không có quyền | Lần lượt nhận trang 404 và 403. |
+| AUTH-12 | Tenant Admin hoặc Customer Admin | Mời người dùng ở môi trường tắt trả activation token | Lời mời vẫn thành công; không hiển thị link kích hoạt khi response thiếu token. Customer Admin gắn Customer User với customer của mình hoặc thấy lỗi gắn và có thể thử lại. |
+| AUTH-13 | Tenant Admin hoặc Customer Admin | Mời người dùng ở dev/test có activation token | Chỉ lúc response có token mới hiển thị link `/activate#token=…`; mở link và đặt mật khẩu hợp lệ để kích hoạt. |
 
 Email demo xem README gốc; mật khẩu lấy từ `SEED_DEMO_PASSWORD` cục bộ, không ghi vào báo cáo.
 
@@ -26,14 +28,14 @@ Email demo xem README gốc; mật khẩu lấy từ `SEED_DEMO_PASSWORD` cục 
 | --- | --- | --- | --- |
 | SR-01 | Customer User, thiết bị của DEMO-CUST-01 | Chọn thiết bị, tạo SR | 201, `NEW`, `requestNo` duy nhất, customerId lấy từ token. |
 | SR-02 | Service Manager, thiết bị cùng tenant | Tạo SR thay khách hàng | 201, `NEW`, customerId đúng thiết bị. |
-| SR-03 | Service Manager, SR `NEW` | `start-review` | `REVIEWING`; thêm history và event. |
+| SR-03 | Service Manager, SR `NEW` | `review` | `REVIEWING`, kiểm tra và lưu snapshot bảo hành cùng người kiểm tra là Service Manager trong một transaction; thêm history và event. |
 | SR-04 | Service Manager, SR `REVIEWING` | `request-info` với reason | `AWAITING_INFO`; comment CUSTOMER hiện cho khách. |
 | SR-05 | Customer User cùng customer, SR `AWAITING_INFO` | Gửi comment CUSTOMER | `REVIEWING`. |
-| SR-06 | Service Manager, SR `REVIEWING` | `warranty-check` | Trạng thái giữ nguyên; snapshot `IN_WARRANTY`/`OUT_OF_WARRANTY`/`NO_WARRANTY` đúng Asset. |
+| SR-06 | Service Manager, SR `REVIEWING` | `warranty-check` lần nữa | Trạng thái giữ nguyên; snapshot `IN_WARRANTY`/`OUT_OF_WARRANTY`/`NO_WARRANTY` được cập nhật đúng Asset. |
 | SR-07 | Service Manager, snapshot `IN_WARRANTY` | `accept` | `ACCEPTED`. |
 | SR-08 | Service Manager, SR `NEW`, `REVIEWING`, `AWAITING_INFO` | `reject` với reason ở từng trạng thái | `REJECTED`, reason customer thấy; từ đây mọi transition bị 409. |
 | SR-09 | Customer User, SR `NEW`, `AWAITING_INFO`, `AWAITING_CUSTOMER_APPROVAL`, `COST_REJECTED` | `cancel` ở từng trạng thái | `CANCELLED`; từ đây mọi transition bị 409. |
-| SR-10 | Service Manager, SR `NEW`, `REVIEWING`, `AWAITING_INFO`, `AWAITING_CUSTOMER_APPROVAL`, `COST_REJECTED`, `ACCEPTED` | `cancel` ở từng trạng thái | `CANCELLED`; `ACCEPTED` chỉ khi chưa có Work Order đang mở. |
+| SR-10 | Service Manager, SR `NEW`, `REVIEWING`, `AWAITING_INFO`, `AWAITING_CUSTOMER_APPROVAL`, `COST_REJECTED`, `ACCEPTED` | `cancel` ở từng trạng thái | `CANCELLED`; SR `PROCESSING` trả 409 và yêu cầu huỷ Work Order trước. |
 | SR-11 | Fixture SR `RESOLVED`, Customer User cùng customer | `confirm` | `CLOSED`; trạng thái cuối. |
 | SR-12 | Fixture SR `RESOLVED`, Customer User cùng customer | `reopen` với reason | `ACCEPTED`. |
 | SR-13 | Fixture SR `ACCEPTED` | Phát `WorkOrderCreated` | `PROCESSING` (kiểm tra ở M2 khi consumer có thật). |
@@ -41,7 +43,8 @@ Email demo xem README gốc; mật khẩu lấy từ `SEED_DEMO_PASSWORD` cục 
 | SR-15 | Fixture SR `PROCESSING` | Phát `WorkOrderCancelled` hoặc hoàn tất UNRESOLVED | `ACCEPTED` (M2). |
 | SR-16 | Fixture SR `REVIEWING`, snapshot ngoài bảo hành | Gọi `accept` | 422 `ESTIMATE_REQUIRED`; không đổi trạng thái. Báo giá thuộc M2. |
 | SR-17 | Fixture SR `REVIEWING`, chưa có snapshot | Gọi `accept` | 422 `WARRANTY_CHECK_REQUIRED`. |
-| SR-18 | Dispatcher, SR `NEW` | `start-review` | 403. |
+| SR-18 | Dispatcher, SR `NEW` | `review` | 403. |
+| SR-26 | Customer User tạo SR `NEW`, Service Manager mở chi tiết | So sánh `warrantyCheckedBy` trước và sau `review` | Trước review là null; sau review là ID Service Manager, không phải người tạo. |
 | SR-19 | Bất kỳ, sai trạng thái | Lặp transition không hợp lệ | 409 `INVALID_STATE_TRANSITION`, không thêm history. |
 | SR-20 | Customer User | Đọc comment INTERNAL của SR thuộc customer | Không có comment INTERNAL trong response. |
 | SR-21 | Fixture SR `REVIEWING` ngoài bảo hành | Gửi estimate | `AWAITING_CUSTOMER_APPROVAL` (M2: Cost Estimate). |
@@ -57,7 +60,7 @@ Mỗi dòng là một cạnh của `docs/architecture/state-machines.md`; tạo 
 | Từ | Hành động | Đến | Case | Giai đoạn |
 | --- | --- | --- | --- | --- |
 | — | create | NEW | SR-01/02 | M1 |
-| NEW | start-review | REVIEWING | SR-03 | M1 |
+| NEW | review + kiểm tra bảo hành | REVIEWING | SR-03/26 | M1 |
 | REVIEWING | request-info | AWAITING_INFO | SR-04 | M1 |
 | AWAITING_INFO | customer comment | REVIEWING | SR-05 | M1 |
 | REVIEWING | accept (in warranty) | ACCEPTED | SR-07 | M1 |
@@ -79,7 +82,7 @@ Mỗi dòng là một cạnh của `docs/architecture/state-machines.md`; tạo 
 | AWAITING_INFO | cancel | CANCELLED | SR-09/10 | M1 |
 | AWAITING_CUSTOMER_APPROVAL | cancel | CANCELLED | SR-09/10 | M2 fixture |
 | COST_REJECTED | cancel | CANCELLED | SR-09/10 | M2 fixture |
-| ACCEPTED | cancel (staff, no active WO) | CANCELLED | SR-10 | M1 |
+| ACCEPTED | cancel (staff) | CANCELLED | SR-10 | M1 |
 
 ## Cách ly tenant/customer và tích hợp
 
@@ -90,7 +93,9 @@ Mỗi dòng là một cạnh của `docs/architecture/state-machines.md`; tạo 
 | ISO-03 | Customer User thay `customerId` trong body tạo SR, chọn equipment customer B | Không tạo được SR customer B; 400/404/422 theo contract. |
 | ISO-04 | Thay `tenantId` trong query/body public | 400 validation; tenant luôn từ token. |
 | ISO-05 | Gọi `/internal/*` qua gateway | 404. |
-| ISO-06 | Mở web ở chế độ gateway, thực hiện login → list Equipment → tạo SR → review → warranty-check → accept | Mọi request đi qua gateway; chỉ accept khi bảo hành hợp lệ. |
+| ISO-06 | Mở web ở chế độ gateway, thực hiện login → list Equipment → tạo SR → review → accept | Mọi request đi qua gateway; review đã lưu snapshot bảo hành, chỉ accept khi bảo hành hợp lệ. |
+| QR-01 | Mở URL `/portal/qr/{token}` khi chưa đăng nhập | Sau đăng nhập trở lại đúng URL QR, gọi Asset `GET /qr/{token}` qua gateway; không hiển thị thiết bị khi trả 404. |
+| QR-02 | QR hợp lệ trong phạm vi khách hàng | Mở thiết bị hoặc tạo SR với thiết bị đã chọn sẵn; QR thiết bị RETIRED không hiện nút tạo SR. |
 
 ## Kết quả chạy
 
@@ -99,4 +104,6 @@ Mỗi dòng là một cạnh của `docs/architecture/state-machines.md`; tạo 
 | 2026-10-22 | Identity thật qua Vite `/identity`, seed DEMO | AUTH-01–08 (login, `/auth/me`, refresh, logout ở API) | Pass | `apps/web/scripts/smoke-identity.ps1`: 8/8. Menu trên trình duyệt chưa kiểm bằng đăng nhập tương tác. |
 | 2026-10-22 | Catalog RBAC hiện hành so với menu web | AUTH-01–08 (menu, route mặc định, quyền tạo SR) | Pass | `apps/web/scripts/check-role-menu.ts`: 8/8 vai trò, gồm vai trò không hợp lệ. |
 | 2026-10-22 | Ba Prism mock từ OpenAPI qua Vite `/mock/*` | List/detail Organization, Asset, SR; POST tạo SR; history/comment/action review | Pass | `apps/web/scripts/smoke-mocks.ps1`: 5/5. Prism không lưu POST. |
-| Chưa chạy | Gateway và ba service M1 vẫn ở scaffold | AUTH-09–11, SR-01–25, ISO-01–06 trên backend thật | Pending | Chờ API nghiệp vụ và routing gateway được merge. |
+| 2026-10-24 | Web mặc định gateway, code theo ADR 0008 | Menu 8 vai trò; lint, typecheck, build; mở QR khi chưa đăng nhập; form kích hoạt có/không có token mẫu | Pass | `check-role-menu.ts`: 8/8; web lint/typecheck/build đạt; browser chuyển `/portal/qr/testtoken` sang login kèm `next`, `/activate` báo link thiếu token và `/activate#token=test` hiện form. Chưa gửi lời mời hay kích hoạt tài khoản thật. |
+| 2026-10-24 | Ba Prism mock từ OpenAPI qua Vite ở chế độ mock tạm thời | List/detail Organization, Asset, SR; POST tạo SR; history/comment và `POST /review` | Pass | `apps/web/scripts/smoke-mocks.ps1`: 5/5. Prism không lưu POST và vẫn còn endpoint cũ trong contract của owner Service Request. |
+| Chưa chạy | Backend đang đổi theo ADR 0008 D1–D4/D8 | AUTH-09–13, SR-01–26, ISO-01–06, QR-01–02 trên backend thật | Pending | Chờ Identity và Service Request cập nhật contract/implementation, rồi chạy nghiệm thu M1 trên `develop`. Các kết quả mock ngày 22/10 không chứng minh luồng gateway hiện tại. |

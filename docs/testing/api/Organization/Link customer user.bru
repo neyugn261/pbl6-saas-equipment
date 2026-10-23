@@ -1,0 +1,16 @@
+meta {
+  name: Link customer user
+  type: http
+  seq: 5
+}
+post {
+  url: {{organization}}/customers/{{customerId}}/memberships
+  body: json
+}
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+body:json {
+  {"userId":"{{userId}}"}
+}

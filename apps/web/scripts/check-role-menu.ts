@@ -7,6 +7,7 @@ const permissionByPath = {
   '/equipment': 'equipment:read',
   '/requests': 'service_request:read',
   '/tenants': 'tenant:read',
+  '/users/invite': 'user:manage',
 } as const
 
 assert.deepEqual(
@@ -16,10 +17,14 @@ assert.deepEqual(
 
 for (const role of ROLE_CODES) {
   const permissions = permissionsOf([role])
-  const visible = menu.filter((item) => has([role], item.roles)).map((item) => item.path)
+  const visible = menu
+    .filter((item) => has([role], item.roles))
+    .map((item) => item.path)
   const expected = menu
     .filter((item) =>
-      permissions.has(permissionByPath[item.path as keyof typeof permissionByPath]),
+      permissions.has(
+        permissionByPath[item.path as keyof typeof permissionByPath],
+      ),
     )
     .map((item) => item.path)
 
