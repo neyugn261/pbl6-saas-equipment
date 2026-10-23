@@ -49,6 +49,12 @@ describe('Customers and contacts (e2e, organization_test_db)', () => {
       expect((await manager().get('/customers').expect(200)).body.total).toBe(1);
     });
 
+    it('keeps the code of a deleted customer reserved (ADR 0008 D10)', async () => {
+      await manager().delete(`/customers/${other}`).expect(204);
+      const res = await manager().post('/customers', { code: 'C2', name: 'Beta again' }).expect(409);
+      expect(res.body.code).toBe('UNIQUE_VIOLATION');
+    });
+
     it('treats % and _ in the search text literally', async () => {
       await manager().post('/customers', { code: 'C3', name: '100% Service_Co' }).expect(201);
       expect((await manager().get('/customers?q=%25').expect(200)).body.total).toBe(1);

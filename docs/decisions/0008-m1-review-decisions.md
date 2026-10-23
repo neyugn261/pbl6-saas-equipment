@@ -25,13 +25,16 @@ the work was split; the team accepted the proposals of the review for them.
 
 - Identity stays the only service that creates and manages accounts. Account
   creation is not moved to Organization.
-- A CUSTOMER_ADMIN may read and link only a CUSTOMER_USER account of its own
-  tenant that it invited itself (`user_roles.assigned_by` = the caller) while
-  the account is not linked to any customer yet, or that is already linked to
-  the caller's customer (`user_customer_links`).
+- A CUSTOMER_ADMIN sees an account of its own tenant only when it is a
+  CUSTOMER account already linked to the caller's customer
+  (`user_customer_links`), or a CUSTOMER_USER account it invited itself
+  (`user_roles.assigned_by` = the caller) that is not linked to any customer
+  yet.
 - `GET /users/{id}` and `GET /internal/users/{id}` of Identity accept a
   CUSTOMER_ADMIN token under this rule. Any other account answers 404, so a
-  Customer Admin cannot probe accounts outside its scope.
+  Customer Admin cannot probe accounts outside its scope. Seeing a Customer
+  Admin of its own customer does not allow managing it: only CUSTOMER_USER
+  accounts are managed (`ASSIGNABLE_ROLES`).
 - Organization keeps its own checks when linking: CUSTOMER_USER only
   (`ROLE_NOT_ASSIGNABLE`), never an account linked to another customer
   (`USER_LINKED_TO_OTHER_CUSTOMER`).
