@@ -39,11 +39,10 @@ paths:
       tags: [Models]
       summary: List equipment models of the tenant
       description: |
-        Includes ACTIVE and INACTIVE models. A CUSTOMER account may read the
-        tenant's model catalog under the current RBAC catalog; confirm this
-        visibility with the team before implementation.
+        Includes ACTIVE and INACTIVE models. Only TENANT_STAFF may list the
+        tenant's model catalog; CUSTOMER accounts receive 403.
       x-permissions: [equipment:read]
-      x-user-types: [TENANT_STAFF, CUSTOMER]
+      x-user-types: [TENANT_STAFF]
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'

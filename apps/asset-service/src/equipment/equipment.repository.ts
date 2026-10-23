@@ -111,7 +111,9 @@ export class EquipmentRepository {
     });
   }
 
-  async patchWithHistory(scope: DataScope, id: string, actorId: string, input: PatchEquipmentDto): Promise<Equipment> {
+  async patchWithHistory(
+    scope: DataScope, id: string, actorId: string, input: PatchEquipmentDto, validatedSiteId?: string,
+  ): Promise<Equipment> {
     return this.prisma.$transaction(async (tx) => {
       // Serialize concurrent patches before reading old values, including RETIRED.
       await tx.$queryRaw`SELECT id FROM equipments WHERE tenant_id = ${scope.tenantId}::uuid AND id = ${id}::uuid FOR UPDATE`;
@@ -119,6 +121,9 @@ export class EquipmentRepository {
       if (!before) throw missing();
       if (before.status === 'RETIRED') {
         throw new ConflictException({ code: 'EQUIPMENT_RETIRED', message: 'Retired equipment cannot be changed' });
+      }
+      if (validatedSiteId !== undefined && before.customerSiteId !== validatedSiteId) {
+        throw new ConflictException({ code: 'EQUIPMENT_SITE_CHANGED', message: 'Equipment site changed; retry the request' });
       }
       const siteId = input.customerSiteId ?? before.customerSiteId;
       const locationId = input.locationId !== undefined ? input.locationId

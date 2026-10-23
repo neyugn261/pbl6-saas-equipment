@@ -13,7 +13,7 @@ export interface EquipmentResponse {
   status: string; createdAt: string; updatedAt: string;
 }
 
-function equipmentResponse(row: Equipment): EquipmentResponse {
+export function equipmentResponse(row: Equipment): EquipmentResponse {
   return {
     id: row.id, modelId: row.modelId, customerId: row.customerId,
     customerSiteId: row.customerSiteId, locationId: row.locationId,
@@ -71,6 +71,13 @@ export class EquipmentService {
       warranty: this.warrantyResponse(id, date, warranty), hasActiveQr: row.qrCodes.length > 0 };
   }
 
+  async warrantyStatus(principal: Principal, id: string, date = todayInVietnam()) {
+    const scope = dataScope(principal);
+    assertInScope(scope, await this.repository.findScoped(scope, id), 'EQUIPMENT_NOT_FOUND');
+    const warranty = await this.repository.warrantyAt(scope.tenantId, id, date);
+    return this.warrantyResponse(id, date, warranty);
+  }
+
   private warrantyResponse(equipmentId: string, date: string, warranty: Warranty | null) {
     const result = !warranty ? 'NO_WARRANTY'
       : dateString(warranty.startDate)! <= date && date <= dateString(warranty.endDate)!
@@ -94,7 +101,11 @@ export class EquipmentService {
       await this.validateSite(before.customerId, input.customerSiteId ?? before.customerSiteId,
         input.locationId ?? undefined, principal);
     }
-    return equipmentResponse(await this.repository.patchWithHistory(scope, id, principal.userId, input));
+    // A location-only PATCH was validated against this site. Detect a site
+    // change between the Organization lookup and the locked database write.
+    const validatedSiteId = input.customerSiteId === undefined && input.locationId != null
+      ? before.customerSiteId : undefined;
+    return equipmentResponse(await this.repository.patchWithHistory(scope, id, principal.userId, input, validatedSiteId));
   }
 
   async reference(principal: Principal, id: string) {

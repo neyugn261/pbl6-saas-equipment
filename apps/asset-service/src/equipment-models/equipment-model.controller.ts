@@ -11,7 +11,7 @@ export class EquipmentModelController {
 
   @Get()
   @RequirePermissions('equipment:read')
-  // CUSTOMER model-catalog visibility is pending group review; staff only for A2.
+  // The catalog is staff-only; CUSTOMER can read only scoped equipment.
   @AllowUserTypes('TENANT_STAFF')
   list(@CurrentUser() principal: Principal, @Query() query: ListEquipmentModelsQueryDto) {
     return this.models.list(principal, query);

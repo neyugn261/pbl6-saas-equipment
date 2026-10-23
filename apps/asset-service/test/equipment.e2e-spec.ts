@@ -8,6 +8,8 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { EquipmentModelRepository } from '../src/equipment-models/equipment-model.repository';
 import { EquipmentRepository } from '../src/equipment/equipment.repository';
+import { WarrantyRepository } from '../src/warranties/warranty.repository';
+import { QrRepository } from '../src/qr/qr.repository';
 import { ORGANIZATION_CLIENT } from '../src/organization/organization-client';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { FakeOrganizationClient } from './support/fake-organization-client';
@@ -47,6 +49,8 @@ describe('equipment HTTP contract (e2e)', () => {
     list: jest.fn(), findScoped: jest.fn(), findDetail: jest.fn(), warrantyAt: jest.fn(),
     createWithHistory: jest.fn(), patchWithHistory: jest.fn(), history: jest.fn(),
   };
+  const warranties = { list: jest.fn(), add: jest.fn(), void: jest.fn() };
+  const qrCodes = { issue: jest.fn(), revoke: jest.fn(), resolve: jest.fn() };
   const fakePrisma = { $connect: async () => undefined, $disconnect: async () => undefined,
     $queryRawUnsafe: async () => [{ '?column?': 1 }] };
 
@@ -55,6 +59,8 @@ describe('equipment HTTP contract (e2e)', () => {
       .overrideProvider(PrismaService).useValue(fakePrisma)
       .overrideProvider(EquipmentModelRepository).useValue(models)
       .overrideProvider(EquipmentRepository).useValue(repository)
+      .overrideProvider(WarrantyRepository).useValue(warranties)
+      .overrideProvider(QrRepository).useValue(qrCodes)
       .overrideProvider(ORGANIZATION_CLIENT).useValue(organization)
       .compile();
     app = moduleRef.createNestApplication({ logger: false });
@@ -83,6 +89,19 @@ describe('equipment HTTP contract (e2e)', () => {
       total: scope.tenantId === tenantA && scope.customerId !== customerB ? 1 : 0,
     }));
     repository.warrantyAt.mockResolvedValue(null);
+    warranties.list.mockResolvedValue([]);
+    warranties.add.mockImplementation(async (_scope: object, id: string, _actor: string, input: Record<string, string>) => ({
+      id: randomUUID(), equipmentId: id, startDate: new Date(`${input.startDate}T00:00:00.000Z`),
+      endDate: new Date(`${input.endDate}T00:00:00.000Z`), warrantyType: input.warrantyType,
+      terms: input.terms ?? null, status: 'ACTIVE',
+    }));
+    warranties.void.mockResolvedValue({ id: randomUUID(), equipmentId, startDate: now,
+      endDate: now, warrantyType: 'STANDARD', terms: null, status: 'VOID' });
+    qrCodes.issue.mockImplementation(async (_scope: object, id: string, _actor: string, token: string) => ({
+      id: randomUUID(), equipmentId: id, token, createdAt: now,
+    }));
+    qrCodes.revoke.mockResolvedValue(undefined);
+    qrCodes.resolve.mockResolvedValue(equipmentRow());
     repository.createWithHistory.mockImplementation(async (_tenantId: string, _actorId: string, input: Record<string, unknown>) => equipmentRow(input));
     repository.patchWithHistory.mockImplementation(async (_scope: object, _id: string, _actorId: string, input: Record<string, unknown>) => equipmentRow(input));
     repository.history.mockImplementation(async (scope: {tenantId: string; customerId: string | null}) => {
@@ -187,7 +206,11 @@ describe('equipment HTTP contract (e2e)', () => {
     await request(app.getHttpServer()).patch(`/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${staff}`).send({ customerSiteId: siteB }).expect(200);
     expect(repository.patchWithHistory).toHaveBeenCalledWith(
-      { tenantId: tenantA, customerId: null }, equipmentId, expect.any(String), { customerSiteId: siteB });
+      { tenantId: tenantA, customerId: null }, equipmentId, expect.any(String), { customerSiteId: siteB }, undefined);
+    await request(app.getHttpServer()).patch(`/equipment/${equipmentId}`)
+      .set('authorization', `Bearer ${staff}`).send({ locationId: locationA }).expect(200);
+    expect(repository.patchWithHistory).toHaveBeenCalledWith(
+      { tenantId: tenantA, customerId: null }, equipmentId, expect.any(String), { locationId: locationA }, siteA);
     const badLocation = await request(app.getHttpServer()).patch(`/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${staff}`).send({ customerSiteId: siteB, locationId: locationA }).expect(422);
     expect(badLocation.body.code).toBe('LOCATION_NOT_IN_SITE');
@@ -226,5 +249,57 @@ describe('equipment HTTP contract (e2e)', () => {
     const ended = await request(app.getHttpServer()).get(`/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${staff}`).expect(200);
     expect(ended.body.warranty).toMatchObject({ result: 'OUT_OF_WARRANTY', endDate: '1901-01-31' });
+  });
+
+  it('checks warranty status and enforces warranty mutation permissions and date validation', async () => {
+    const status = await request(app.getHttpServer()).get(`/equipment/${equipmentId}/warranty-status?date=2028-02-29`)
+      .set('authorization', `Bearer ${customer}`).expect(200);
+    expect(status.body).toEqual({ equipmentId, date: '2028-02-29', result: 'NO_WARRANTY',
+      warrantyId: null, endDate: null });
+    expect(repository.warrantyAt).toHaveBeenCalledWith(tenantA, equipmentId, '2028-02-29');
+    await request(app.getHttpServer()).get(`/equipment/${equipmentId}/warranty-status?date=2027-02-29`)
+      .set('authorization', `Bearer ${staff}`).expect(400);
+    await request(app.getHttpServer()).get(`/equipment/${equipmentId}/warranty-status`)
+      .set('authorization', `Bearer ${otherCustomer}`).expect(404);
+    await request(app.getHttpServer()).get(`/equipment/${equipmentId}/warranties`)
+      .set('authorization', `Bearer ${customer}`).expect(200, []);
+    await request(app.getHttpServer()).post(`/equipment/${equipmentId}/warranties`)
+      .set('authorization', `Bearer ${customer}`).send({ startDate: '2028-02-28', endDate: '2028-02-29', warrantyType: 'STANDARD' }).expect(403);
+    const created = await request(app.getHttpServer()).post(`/equipment/${equipmentId}/warranties`)
+      .set('authorization', `Bearer ${staff}`).send({ startDate: '2028-02-28', endDate: '2028-02-29', warrantyType: 'STANDARD' }).expect(201);
+    expect(created.body).toMatchObject({ startDate: '2028-02-28', endDate: '2028-02-29', status: 'ACTIVE' });
+    await request(app.getHttpServer()).post(`/equipment/${equipmentId}/warranties`)
+      .set('authorization', `Bearer ${staff}`).send({ startDate: '2028-03-01', endDate: '2028-02-29', warrantyType: 'STANDARD' }).expect(400);
+    await request(app.getHttpServer()).post(`/equipment/${equipmentId}/warranties`)
+      .set('authorization', `Bearer ${staff}`).send({ startDate: '2028-02-30', endDate: '2028-03-01', warrantyType: 'STANDARD' }).expect(400);
+    await request(app.getHttpServer()).post(`/warranties/${created.body.id}/void`)
+      .set('authorization', `Bearer ${customer}`).send({ reason: 'test' }).expect(403);
+    await request(app.getHttpServer()).post(`/warranties/${created.body.id}/void`)
+      .set('authorization', `Bearer ${staff}`).send({ reason: 'test' }).expect(200);
+    expect(warranties.void).toHaveBeenCalledWith({ tenantId: tenantA, customerId: null }, created.body.id,
+      expect.any(String), 'test');
+  });
+
+  it('requires QR permissions and scope, and returns an opaque portal URL', async () => {
+    await request(app.getHttpServer()).post(`/equipment/${equipmentId}/qr-codes`)
+      .set('authorization', `Bearer ${customer}`).expect(403);
+    await request(app.getHttpServer()).post(`/equipment/${equipmentId}/qr-codes`)
+      .set('authorization', `Bearer ${dispatcher}`).expect(403);
+    const issued = await request(app.getHttpServer()).post(`/equipment/${equipmentId}/qr-codes`)
+      .set('authorization', `Bearer ${staff}`).expect(201);
+    expect(issued.body.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(issued.body.url).toBe(`http://portal.test/portal/qr/${issued.body.token}`);
+    expect(qrCodes.issue).toHaveBeenCalledWith({ tenantId: tenantA, customerId: null }, equipmentId,
+      expect.any(String), issued.body.token);
+    await request(app.getHttpServer()).get(`/qr/${issued.body.token}`).expect(401);
+    await request(app.getHttpServer()).get('/qr/short')
+      .set('authorization', `Bearer ${staff}`).expect(400);
+    await request(app.getHttpServer()).get(`/qr/${issued.body.token}`)
+      .set('authorization', `Bearer ${customer}`).expect(200);
+    expect(qrCodes.resolve).toHaveBeenCalledWith({ tenantId: tenantA, customerId: customerA }, issued.body.token);
+    await request(app.getHttpServer()).delete(`/equipment/${equipmentId}/qr-codes`)
+      .set('authorization', `Bearer ${customer}`).expect(403);
+    await request(app.getHttpServer()).delete(`/equipment/${equipmentId}/qr-codes`)
+      .set('authorization', `Bearer ${staff}`).expect(204);
   });
 });
