@@ -788,7 +788,9 @@ CREATE TABLE work_orders (
     status VARCHAR(30) NOT NULL DEFAULT 'CREATED'
         CHECK (status IN ('CREATED', 'ASSIGNED', 'ACCEPTED', 'TRAVELLING', 'IN_PROGRESS',
                          'ON_HOLD', 'COMPLETED', 'CANCELLED')),
-    created_by UUID NOT NULL, -- Logical reference to identity_db.users.id
+    -- ADR 0008 (D5, workorder_db 0003): NULL = created by the system from an
+    -- event (Maintenance Task); a Work Order created through the API records the caller.
+    created_by UUID NULL, -- Logical reference to identity_db.users.id
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     started_at TIMESTAMPTZ,
