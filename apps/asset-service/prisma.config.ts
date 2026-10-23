@@ -10,6 +10,7 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
+    seed: 'node prisma/seed.mjs',
   },
   datasource: {
     // Not wrapped in env(): `prisma generate` must work without a database URL (CI).

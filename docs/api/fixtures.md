@@ -19,6 +19,10 @@ together. Add a row here in the same PR that adds the seed.
 | Location Tòa A → Tầng 3 → Phòng chẩn đoán hình ảnh | `…501` → `…502` → `…503` | `A`, `A-3`, `A-301` in DEMO-SITE-01 | organization | asset |
 | Location Khu gia công | `00000000-0000-4000-8000-000000000504` | `X1` in DEMO-SITE-03 | organization | asset |
 | Contacts | `…601` (DEMO-CUST-01), `…602` (DEMO-CUST-02) | primary contact of each customer | organization | — |
+| Equipment models | `…1001`, `…1002` | Demo Medical US-100; Demo Industrial PUMP-200 | asset | asset equipment |
+| Equipment | `…1101`, `…1102`, `…1103` | DEMO-ASSET-01 in warranty; DEMO-ASSET-02 expired; DEMO-ASSET-03 of DEMO-CUST-02 without warranty | asset | service-request, web |
+| Warranties | `…1201`, `…1202` | 2020–2099 active; 2020–2021 expired | asset | service-request |
+| Equipment registration history | `…1301`, `…1302`, `…1303` | seeded REGISTERED events, no invented actor | asset | asset history |
 
 Reserved ranges (last 12 hex digits) for the next seeds:
 
