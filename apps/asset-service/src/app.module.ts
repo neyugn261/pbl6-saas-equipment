@@ -5,6 +5,7 @@ import { HealthModule } from '@pbl6/service-kit';
 import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { validateEnv } from './config/env.validation';
 import { EquipmentModelModule } from './equipment-models/equipment-model.module';
+import { EquipmentModule } from './equipment/equipment.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
@@ -20,6 +21,7 @@ import { PrismaService } from './prisma/prisma.service';
     PrismaModule,
     OrganizationModule,
     EquipmentModelModule,
+    EquipmentModule,
     // Global JwtAuthGuard + PermissionsGuard: every route needs a token unless @Public().
     AuthModule.forRootAsync({
       inject: [ConfigService],
