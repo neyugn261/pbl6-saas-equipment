@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { DataScope } from '@pbl6/auth';
 import { scopeWhere } from '@pbl6/auth';
 import { Prisma, type Equipment, type EquipmentHistory, type Warranty } from '../generated/prisma/client.js';
@@ -85,6 +85,18 @@ export class EquipmentRepository {
 
   async createWithHistory(tenantId: string, actorId: string, input: CreateEquipmentDto): Promise<Equipment> {
     return this.prisma.$transaction(async (tx) => {
+      // A model may be deactivated after the API's initial check while
+      // Organization is called. Hold a shared row lock until registration commits.
+      const models = await tx.$queryRaw<{ status: string }[]>`
+        SELECT status FROM equipment_models
+        WHERE tenant_id = ${tenantId}::uuid AND id = ${input.modelId}::uuid
+        FOR SHARE`;
+      if (models.length === 0) {
+        throw new UnprocessableEntityException({ code: 'MODEL_NOT_FOUND', message: 'Reference cannot be validated' });
+      }
+      if (models[0].status !== 'ACTIVE') {
+        throw new UnprocessableEntityException({ code: 'MODEL_INACTIVE', message: 'Reference cannot be validated' });
+      }
       const equipment = await tx.equipment.create({ data: {
         tenantId, modelId: input.modelId, customerId: input.customerId,
         customerSiteId: input.customerSiteId, locationId: input.locationId ?? null,

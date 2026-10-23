@@ -51,16 +51,31 @@ describe('EquipmentRepository', () => {
   it('writes REGISTERED in the same transaction and rejects failed history without returning equipment', async () => {
     const create = jest.fn().mockResolvedValue(base());
     const historyCreate = jest.fn().mockRejectedValue(new Error('history failure'));
+    const lockModel = jest.fn().mockResolvedValue([{ status: 'ACTIVE' }]);
     const transaction = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({ equipment: { create }, equipmentHistory: { create: historyCreate } }));
+      fn({ $queryRaw: lockModel, equipment: { create }, equipmentHistory: { create: historyCreate } }));
     const repo = new EquipmentRepository({ $transaction: transaction } as unknown as PrismaService);
     await expect(repo.createWithHistory(tenantId, actorId, {
       modelId, customerId, customerSiteId: siteId, assetCode: 'A', serialNumber: 'S',
     })).rejects.toThrow('history failure');
     expect(transaction).toHaveBeenCalledTimes(1);
+    expect(lockModel).toHaveBeenCalledTimes(1);
     expect(historyCreate).toHaveBeenCalledWith({ data: {
       tenantId, equipmentId, eventType: 'REGISTERED', createdBy: actorId,
     } });
+  });
+
+  it('rechecks model status under lock so a deactivated model cannot be registered', async () => {
+    const create = jest.fn();
+    const lockModel = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ status: 'INACTIVE' }]);
+    const repo = new EquipmentRepository({ $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ $queryRaw: lockModel, equipment: { create } }) } as unknown as PrismaService);
+    for (const code of ['MODEL_NOT_FOUND', 'MODEL_INACTIVE']) {
+      await expect(repo.createWithHistory(tenantId, actorId, {
+        modelId, customerId, customerSiteId: siteId, assetCode: 'A', serialNumber: 'S',
+      })).rejects.toMatchObject({ response: { code } });
+    }
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('clears the old location when moving site and records every changed category after row lock', async () => {

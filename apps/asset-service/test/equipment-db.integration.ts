@@ -44,6 +44,11 @@ afterAll(async () => {
 it('rolls back registration if history fails, and enforces both uniqueness keys under concurrent inserts', async () => {
   await expect(repo.createWithHistory(tenantId, 'invalid-uuid', input('rollback', 'S-rollback'))).rejects.toThrow();
   expect(await prisma.equipment.count({ where: { tenantId, assetCode: 'rollback' } })).toBe(0);
+  await prisma.equipmentModel.update({ where: { id: modelId }, data: { status: 'INACTIVE' } });
+  await expect(repo.createWithHistory(tenantId, actorId, input('inactive-model', 'S-inactive')))
+    .rejects.toMatchObject({ status: 422, response: { code: 'MODEL_INACTIVE' } });
+  expect(await prisma.equipment.count({ where: { tenantId, assetCode: 'inactive-model' } })).toBe(0);
+  await prisma.equipmentModel.update({ where: { id: modelId }, data: { status: 'ACTIVE' } });
   const sameAsset = await Promise.allSettled([
     repo.createWithHistory(tenantId, actorId, input('same-asset', 'S-1')),
     repo.createWithHistory(tenantId, actorId, input('same-asset', 'S-2')),
@@ -94,4 +99,10 @@ it('evaluates real ACTIVE warranties and stable list predicates, ignoring VOID a
   const listed = await repo.list({ tenantId, customerId }, { page: 1, pageSize: 20,
     sort: '-createdAt', warranty: 'OUT_OF_WARRANTY' });
   expect(listed.rows.some((item) => item.id === row.id)).toBe(true);
+  const searched = await repo.list({ tenantId, customerId }, { page: 1, pageSize: 20,
+    sort: '-createdAt', q: 'pump' });
+  expect(searched.rows.some((item) => item.id === row.id)).toBe(true);
+  const outsideCustomer = await repo.list({ tenantId, customerId: randomUUID() }, { page: 1,
+    pageSize: 20, sort: '-createdAt', q: 'pump' });
+  expect(outsideCustomer.rows).toHaveLength(0);
 });
