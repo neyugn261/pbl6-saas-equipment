@@ -133,21 +133,33 @@ export interface WorkOrderAssignedV1 {
   scheduledStart: string | null;
 }
 
-export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
+/**
+ * v2 (ADR 0008 D6a): adds `customerSummary`, shown to the customer on the
+ * Service Request. v1 was never published and is gone.
+ */
+export interface WorkOrderCompletedV2 extends WorkOrderOrigin {
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
   customerId: string;
   serviceReportId: string;
   result: (typeof REPORT_RESULTS)[number];
+  /** Written by the technician for the customer; never internal notes. */
+  customerSummary: string;
   completedAt: string;
 }
 
-export interface WorkOrderCancelledV1 extends WorkOrderOrigin {
+/**
+ * v2 (ADR 0008 D4a): adds `cancelServiceRequest`. True: the Service Request
+ * becomes CANCELLED; false: it returns to ACCEPTED. Always false for a Work
+ * Order of a Maintenance Task. v1 was never published and is gone.
+ */
+export interface WorkOrderCancelledV2 extends WorkOrderOrigin {
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
   reason: string | null;
+  cancelServiceRequest: boolean;
   cancelledAt: string;
 }
 
@@ -272,9 +284,9 @@ export const Events = {
       scheduledStart: is.nullable(is.isoDateTime),
     },
   }),
-  WorkOrderCompleted: define<WorkOrderCompletedV1>({
+  WorkOrderCompleted: define<WorkOrderCompletedV2>({
     type: 'WorkOrderCompleted',
-    version: 1,
+    version: 2,
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
@@ -286,12 +298,13 @@ export const Events = {
       customerId: is.uuid,
       serviceReportId: is.uuid,
       result: is.oneOf(REPORT_RESULTS),
+      customerSummary: is.string(2000),
       completedAt: is.isoDateTime,
     },
   }),
-  WorkOrderCancelled: define<WorkOrderCancelledV1>({
+  WorkOrderCancelled: define<WorkOrderCancelledV2>({
     type: 'WorkOrderCancelled',
-    version: 1,
+    version: 2,
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
@@ -301,6 +314,7 @@ export const Events = {
       maintenanceTaskId: is.nullable(is.uuid),
       equipmentId: is.uuid,
       reason: is.nullable(is.string(2000)),
+      cancelServiceRequest: is.boolean,
       cancelledAt: is.isoDateTime,
     },
   }),

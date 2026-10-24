@@ -24,6 +24,7 @@ export const is = {
     !Number.isNaN(Date.parse(value))) as Check,
   /** Decimal as a string, e.g. "12.50" (money and quantities never travel as floats). */
   decimal: ((value) => typeof value === 'string' && /^-?\d{1,12}(\.\d{1,4})?$/.test(value)) as Check,
+  boolean: ((value) => typeof value === 'boolean') as Check,
   nullable:
     (check: Check): Check =>
     (value) =>

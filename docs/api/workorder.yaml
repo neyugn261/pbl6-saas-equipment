@@ -1,0 +1,975 @@
+openapi: 3.1.0
+info:
+  title: PBL6 Work Order Service
+  version: 0.2.0
+  description: |
+    Contract for M2 — owner: Work Order owner. Decisions: ADR 0006 and ADR 0008
+    (D4/D4a cancellation, D5 `createdBy`, D6/D6a customer summary, D11
+    technician status, C5 gateway path).
+    Conventions: docs/api/conventions.md. Transitions, who may call them and
+    their side effects: docs/architecture/state-machines.md (Accepted).
+    A transition not allowed from the current status returns
+    409 `INVALID_STATE_TRANSITION` with `details: { from, action }`.
+
+    Gateway: `/api/workorders/*` with the prefix stripped, e.g.
+    `/api/workorders/work-orders/{id}`, `/api/workorders/technicians` (C5).
+
+    Scope:
+    - Staff only. CUSTOMER accounts have no `work_order:*` permission: a
+      customer follows the result through the summary on its Service Request
+      (ADR 0008 D6), never through this API.
+    - A caller whose only Work Order permission is `work_order:execute`
+      (TECHNICIAN) sees only Work Orders it is or was assigned to; any other id
+      answers 404. Dispatcher and Service Manager see the whole tenant.
+
+    Calls to other services (ADR 0004, caller's token forwarded):
+    - Service Request `GET /internal/service-requests/{id}`: status,
+      customerId, equipmentId, type, priority, title.
+    - Asset `GET /internal/equipment/{id}`: customerSiteId, locationId.
+    - Organization `GET /internal/branches/{id}`: technician's branch.
+    - Identity `GET /internal/users/{id}`: technician account (TENANT_STAFF
+      holding TECHNICIAN).
+    Service Request never calls this service to check or cancel a Work Order
+    (ADR 0008 D4).
+
+    Events (packages/event-contracts):
+    - Produces `WorkOrderCreated.v1`, `WorkOrderAssigned.v1`,
+      `WorkOrderCompleted.v2` (adds `customerSummary`) and
+      `WorkOrderCancelled.v2` (adds `cancelServiceRequest`). The v1 of the last
+      two is never published.
+    - Consumes `MaintenanceTaskDue.v1` (creates a MAINTENANCE Work Order with
+      `createdBy` NULL, D5) and `ServiceRequestStatusChanged.v1` with
+      `toStatus` CANCELLED (D4): a live Work Order of the request in CREATED,
+      ASSIGNED or ACCEPTED is cancelled with `cancelServiceRequest` true and
+      reason "Service request cancelled"; one already TRAVELLING, IN_PROGRESS
+      or ON_HOLD is left as it is and a warning is logged for the Service
+      Manager (Notification sends it from M3).
+      Race with `POST /work-orders`: both take a transaction-level advisory
+      lock on the service request id, and create reads the request from
+      Service Request only after taking it. Service Request publishes the
+      cancel only after its commit (outbox), so either create sees CANCELLED
+      and refuses (422), or the consumer runs after the create and finds the
+      Work Order. No Work Order outlives a cancelled request.
+    - Consumers are idempotent through the inbox (ADR 0005).
+
+    Changes made by the system from an event (create from a Maintenance Task,
+    cancel after a cancelled request) write `work_order_status_history` with
+    `changedBy` NULL and no `work_logs` row: `work_logs.actor_user_id` is NOT
+    NULL and D5 forbids a placeholder user.
+
+    Technician status (D11): BUSY / AVAILABLE are kept by the service, OFF_DUTY
+    / INACTIVE are set by `technician:manage`; see `PATCH /technicians/{id}`.
+
+    Out of M2: attachments (M3, MinIO, `visibility` per ADR 0006), parts used
+    (Inventory, M3), reports.
+servers:
+  - url: http://localhost:3004
+    description: Local service (through the gateway at /api/workorders, prefix stripped)
+security:
+  - bearer: []
+tags:
+  - name: Work orders
+  - name: Transitions
+    description: State changes of docs/architecture/state-machines.md
+  - name: Activity
+  - name: Technicians
+  - name: Skills
+  - name: Internal
+    description: Called by other services with the caller's token; not exposed by the gateway.
+paths:
+  /work-orders:
+    get:
+      tags: [Work orders]
+      summary: List work orders
+      description: A technician gets only its own Work Orders (see Scope).
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: q
+          in: query
+          description: Search in work order number and title
+          schema: { type: string, maxLength: 100 }
+        - name: status
+          in: query
+          description: Comma-separated statuses
+          schema: { type: string, examples: ['ASSIGNED,ACCEPTED,IN_PROGRESS'] }
+        - name: type
+          in: query
+          schema: { $ref: '#/components/schemas/WorkOrderType' }
+        - name: priority
+          in: query
+          schema: { $ref: '#/components/schemas/Priority' }
+        - name: technicianId
+          in: query
+          description: Current assignment
+          schema: { type: string, format: uuid }
+        - name: mine
+          in: query
+          description: Only Work Orders currently assigned to the caller (mobile app)
+          schema: { type: boolean }
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: equipmentId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: serviceRequestId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: scheduledFrom
+          in: query
+          schema: { type: string, format: date-time }
+        - name: scheduledTo
+          in: query
+          schema: { type: string, format: date-time }
+        - name: sort
+          in: query
+          description: createdAt, scheduledStart or priority; `-` for descending
+          schema: { type: string, default: -createdAt }
+      responses:
+        '200':
+          description: Page of work orders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/WorkOrder' } }
+    post:
+      tags: [Work orders]
+      summary: Create a work order from an ACCEPTED service request
+      description: |
+        The request is read from Service Request (`GET /internal/service-requests/{id}`)
+        and must be ACCEPTED; `equipmentId`, `customerId`, `type`, `priority`
+        and the default `title` are copied from it (read after taking the
+        advisory lock of the request, see the race in the description), site
+        and location from Asset
+        (`GET /internal/equipment/{id}`). `workOrderNo` = `WO-<year>-<0001>`
+        from `document_sequences`; `createdBy` = the caller. Writes
+        `WorkOrderCreated`; Service Request then moves the request to
+        PROCESSING. If the request was cancelled meanwhile, Service Request
+        ignores the event and this service cancels the Work Order when the
+        cancel event arrives (ADR 0008 D4).
+        Work Orders of maintenance tasks are not created here (MaintenanceTaskDue).
+      x-permissions: [work_order:manage]
+      x-user-types: [TENANT_STAFF]
+      x-events: [WorkOrderCreated.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWorkOrder' }
+      responses:
+        '201':
+          description: Created with status CREATED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkOrderDetail' }
+        '404':
+          description: SERVICE_REQUEST_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: ACTIVE_WORK_ORDER_EXISTS — the request already has a non-terminal Work Order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: SERVICE_REQUEST_NOT_ACCEPTED or INVALID_SCHEDULE (scheduledEnd ≤ scheduledStart)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /work-orders/{workOrderId}:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    get:
+      tags: [Work orders]
+      summary: Work order detail with its current assignment and allowed actions
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkOrderDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Work orders]
+      summary: Update title, description, priority or schedule (non-terminal only)
+      x-permissions: [work_order:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkOrderPatch' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkOrderDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/assign:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: CREATED → ASSIGNED, or reassign from ASSIGNED / ACCEPTED
+      description: |
+        The technician must be AVAILABLE or BUSY, of the same tenant. A
+        reassign marks the previous assignment REMOVED (`unassigned_at`) in the
+        same transaction; when that assignment was ACCEPTED, the previous
+        technician's status is recomputed (D11). Writes `WorkOrderAssigned`.
+      x-permissions: [work_order:assign]
+      x-user-types: [TENANT_STAFF]
+      x-events: [WorkOrderAssigned.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [technicianId]
+              properties:
+                technicianId: { type: string, format: uuid }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422':
+          description: TECHNICIAN_NOT_FOUND or TECHNICIAN_UNAVAILABLE (OFF_DUTY / INACTIVE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /work-orders/{workOrderId}/accept:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: ASSIGNED → ACCEPTED by the assigned technician
+      description: The assignment becomes ACCEPTED and an AVAILABLE technician becomes BUSY, in the same transaction (D11).
+      x-permissions: [work_order:execute]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '403': { $ref: '#/components/responses/NotAssignee' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/reject:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: ASSIGNED → CREATED by the assigned technician (reason required)
+      x-permissions: [work_order:execute]
+      x-user-types: [TENANT_STAFF]
+      requestBody: { $ref: '#/components/requestBodies/RequiredReason' }
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '403': { $ref: '#/components/responses/NotAssignee' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/start-travel:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: ACCEPTED → TRAVELLING (optional step)
+      x-permissions: [work_order:execute]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '403': { $ref: '#/components/responses/NotAssignee' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/start:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: ACCEPTED / TRAVELLING → IN_PROGRESS (`startedAt` set the first time)
+      x-permissions: [work_order:execute]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '403': { $ref: '#/components/responses/NotAssignee' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/hold:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: IN_PROGRESS → ON_HOLD (assigned technician or work_order:manage; reason required)
+      description: Needs `work_order:execute` as the assigned technician, or `work_order:manage`.
+      x-permissions: []
+      x-user-types: [TENANT_STAFF]
+      requestBody: { $ref: '#/components/requestBodies/RequiredReason' }
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '403': { $ref: '#/components/responses/NotAssignee' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/resume:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: ON_HOLD → IN_PROGRESS (assigned technician or work_order:manage)
+      x-permissions: []
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '403': { $ref: '#/components/responses/NotAssignee' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/complete:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: IN_PROGRESS → COMPLETED with the service report
+      description: |
+        Only the assigned technician. In one transaction: the service report
+        is created, the assignment becomes COMPLETED, the technician's status
+        is recomputed (D11), `completedAt` is set and `WorkOrderCompleted.v2`
+        (report `result` and `customerSummary`) is written. Service Request
+        moves to RESOLVED (RESOLVED / PARTIALLY_RESOLVED) or back to ACCEPTED
+        (UNRESOLVED) and stores the customer summary (D6a); Asset records
+        equipment history.
+      x-permissions: [work_order:execute, service_report:submit]
+      x-user-types: [TENANT_STAFF]
+      x-events: [WorkOrderCompleted.v2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceReportInput' }
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '403': { $ref: '#/components/responses/NotAssignee' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /work-orders/{workOrderId}/cancel:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Transitions]
+      summary: Any non-terminal status → CANCELLED (reason required)
+      description: |
+        The active assignment becomes REMOVED and the technician's status is
+        recomputed (D11). Writes `WorkOrderCancelled.v2`. For a Work Order of a
+        Service Request, `cancelServiceRequest` decides what happens to the
+        request (ADR 0008 D4a): true → CANCELLED (the only way to cancel a
+        PROCESSING request), false → back to ACCEPTED so a new Work Order can
+        be created. Maintenance releases the task (ADR 0002).
+      x-permissions: [work_order:manage]
+      x-user-types: [TENANT_STAFF]
+      x-events: [WorkOrderCancelled.v2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 2000 }
+                cancelServiceRequest:
+                  type: boolean
+                  default: false
+                  description: Also cancel the Service Request. Only for a Work Order of a Service Request.
+      responses:
+        '200': { $ref: '#/components/responses/WorkOrder' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422':
+          description: NOT_A_SERVICE_REQUEST_WORK_ORDER — `cancelServiceRequest` true on a Work Order of a Maintenance Task
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /work-orders/{workOrderId}/service-report:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    get:
+      tags: [Activity]
+      summary: Service report of a completed work order
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceReport' }
+        '404':
+          description: WORK_ORDER_NOT_FOUND or SERVICE_REPORT_NOT_FOUND (not completed yet)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /work-orders/{workOrderId}/history:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    get:
+      tags: [Activity]
+      summary: Status history (oldest first)
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/StatusChange' } }
+  /work-orders/{workOrderId}/assignments:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    get:
+      tags: [Activity]
+      summary: Assignment history (newest first)
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Assignments
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Assignment' } }
+  /work-orders/{workOrderId}/logs:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    get:
+      tags: [Activity]
+      summary: Activity log (oldest first); transitions also write a log entry
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Log
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/WorkLog' } }
+    post:
+      tags: [Activity]
+      summary: Add a note (assigned technician, Dispatcher or Service Manager)
+      description: Needs `work_order:execute` as the assigned technician, `work_order:assign` or `work_order:manage`. Refused on a terminal Work Order.
+      x-permissions: []
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [note]
+              properties:
+                note: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201':
+          description: Added (eventType NOTE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkLog' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /technicians:
+    get:
+      tags: [Technicians]
+      summary: List technician profiles (for assignment)
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: q
+          in: query
+          description: Search in employee code
+          schema: { type: string, maxLength: 100 }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TechnicianStatus' }
+        - name: skillId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Page of technicians
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Technician' } }
+    post:
+      tags: [Technicians]
+      summary: Create the technician profile of a staff account
+      description: |
+        `userId` must be a TENANT_STAFF account holding TECHNICIAN (Identity),
+        `branchId` a live branch (Organization). One profile per account.
+      x-permissions: [technician:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TechnicianInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Technician' }
+        '409':
+          description: UNIQUE_VIOLATION (account already has a profile, or employee code taken)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: USER_NOT_TECHNICIAN, USER_NOT_FOUND or BRANCH_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /technicians/me:
+    get:
+      tags: [Technicians]
+      summary: The caller's own technician profile (mobile app)
+      x-permissions: [work_order:execute]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Technician' }
+        '404':
+          description: TECHNICIAN_PROFILE_MISSING
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /technicians/{technicianId}:
+    parameters: [{ $ref: '#/components/parameters/TechnicianId' }]
+    get:
+      tags: [Technicians]
+      summary: Technician profile with skills
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Technician' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Technicians]
+      summary: Change branch, employee code or status
+      description: |
+        Status (ADR 0008 D11): only OFF_DUTY, INACTIVE or AVAILABLE can be
+        set; BUSY is kept by the service (422 `TECHNICIAN_STATUS_AUTOMATIC`).
+        Setting AVAILABLE stores BUSY when the technician still has an
+        ACCEPTED assignment. OFF_DUTY and INACTIVE are never changed by the
+        service; existing assignments are not touched (reassign them).
+      x-permissions: [technician:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                branchId: { type: string, format: uuid }
+                employeeCode: { type: string, maxLength: 50 }
+                status: { $ref: '#/components/schemas/ManualTechnicianStatus' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Technician' }
+        '422':
+          description: BRANCH_NOT_FOUND or TECHNICIAN_STATUS_AUTOMATIC
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /technicians/{technicianId}/skills:
+    parameters: [{ $ref: '#/components/parameters/TechnicianId' }]
+    put:
+      tags: [Technicians]
+      summary: Replace the technician's skills
+      x-permissions: [technician:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 50
+              items: { $ref: '#/components/schemas/TechnicianSkill' }
+      responses:
+        '200':
+          description: Profile with the new skills
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Technician' }
+        '422':
+          description: SKILL_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /skills:
+    get:
+      tags: [Skills]
+      summary: Skill catalog of the tenant
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Skills
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Skill' } }
+    post:
+      tags: [Skills]
+      summary: Add a skill
+      x-permissions: [technician:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkillInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Skill' }
+        '409':
+          description: UNIQUE_VIOLATION (code)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /skills/{skillId}:
+    parameters:
+      - name: skillId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Skills]
+      summary: Rename a skill (the code never changes)
+      x-permissions: [technician:manage]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 100 }
+                description: { type: [string, 'null'] }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Skill' }
+  /internal/work-orders/{workOrderId}:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    get:
+      tags: [Internal]
+      summary: Work order reference for other services
+      description: |
+        Used by Inventory (M3: parts are issued only to a non-terminal Work
+        Order). Service Request does not call it (ADR 0008 D4). The technician
+        scope of the forwarded token applies.
+      x-permissions: [work_order:read]
+      responses:
+        '200':
+          description: Reference
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkOrderRef' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    WorkOrderId:
+      name: workOrderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TechnicianId:
+      name: technicianId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  requestBodies:
+    RequiredReason:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [reason]
+            properties:
+              reason: { type: string, minLength: 1, maxLength: 2000 }
+  responses:
+    WorkOrder:
+      description: The work order after the transition
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/WorkOrderDetail' }
+    NotFound:
+      description: Not found or outside the caller's scope (WORK_ORDER_NOT_FOUND, TECHNICIAN_NOT_FOUND)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InvalidTransition:
+      description: INVALID_STATE_TRANSITION (details.from, details.action)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotAssignee:
+      description: NOT_ASSIGNED_TECHNICIAN — only the currently assigned technician may do this
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: {}
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    WorkOrderStatus:
+      type: string
+      enum: [CREATED, ASSIGNED, ACCEPTED, TRAVELLING, IN_PROGRESS, ON_HOLD, COMPLETED, CANCELLED]
+    WorkOrderType:
+      type: string
+      enum: [REPAIR, WARRANTY, MAINTENANCE, INSPECTION]
+    Priority:
+      type: string
+      enum: [LOW, NORMAL, HIGH, URGENT]
+    AssignmentStatus:
+      type: string
+      enum: [ASSIGNED, ACCEPTED, REJECTED, REMOVED, COMPLETED]
+    TechnicianStatus:
+      type: string
+      enum: [AVAILABLE, BUSY, OFF_DUTY, INACTIVE]
+      description: BUSY = at least one ACCEPTED assignment, kept by the service (ADR 0008 D11)
+    ManualTechnicianStatus:
+      type: string
+      enum: [AVAILABLE, OFF_DUTY, INACTIVE]
+      description: Statuses a manager may set (ADR 0008 D11)
+    ReportResult:
+      type: string
+      enum: [RESOLVED, PARTIALLY_RESOLVED, UNRESOLVED]
+    WorkOrder:
+      type: object
+      required: [id, workOrderNo, equipmentId, customerId, type, title, priority, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        workOrderNo: { type: string, examples: [WO-2026-0001] }
+        serviceRequestId: { type: [string, 'null'], format: uuid }
+        maintenanceTaskId: { type: [string, 'null'], format: uuid }
+        equipmentId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        customerSiteId: { type: [string, 'null'], format: uuid }
+        locationId: { type: [string, 'null'], format: uuid }
+        type: { $ref: '#/components/schemas/WorkOrderType' }
+        title: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        status: { $ref: '#/components/schemas/WorkOrderStatus' }
+        scheduledStart: { type: [string, 'null'], format: date-time }
+        scheduledEnd: { type: [string, 'null'], format: date-time }
+        currentTechnicianId: { type: [string, 'null'], format: uuid, description: Technician of the ASSIGNED / ACCEPTED assignment }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorkOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/WorkOrder'
+        - type: object
+          properties:
+            description: { type: [string, 'null'] }
+            createdBy: { type: [string, 'null'], format: uuid, description: NULL when created by the system from MaintenanceTaskDue (ADR 0008 D5) }
+            startedAt: { type: [string, 'null'], format: date-time }
+            completedAt: { type: [string, 'null'], format: date-time }
+            cancelledAt: { type: [string, 'null'], format: date-time }
+            currentAssignment:
+              oneOf:
+                - $ref: '#/components/schemas/Assignment'
+                - type: 'null'
+            serviceReportId: { type: [string, 'null'], format: uuid }
+            allowedActions:
+              type: array
+              description: Actions the caller may perform now (drives the web and mobile buttons)
+              items: { type: string, examples: [assign, accept, start, complete, cancel] }
+    CreateWorkOrder:
+      type: object
+      additionalProperties: false
+      required: [serviceRequestId]
+      properties:
+        serviceRequestId: { type: string, format: uuid }
+        title: { type: string, maxLength: 200, description: 'Default: the request title (Service Request reference)' }
+        description: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        scheduledStart: { type: string, format: date-time }
+        scheduledEnd: { type: string, format: date-time }
+    WorkOrderPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: [string, 'null'] }
+        priority: { $ref: '#/components/schemas/Priority' }
+        scheduledStart: { type: [string, 'null'], format: date-time }
+        scheduledEnd: { type: [string, 'null'], format: date-time }
+    Assignment:
+      type: object
+      required: [id, technicianId, assignedBy, status, assignedAt]
+      properties:
+        id: { type: string, format: uuid }
+        technicianId: { type: string, format: uuid }
+        technicianUserId: { type: string, format: uuid }
+        assignedBy: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/AssignmentStatus' }
+        assignedAt: { type: string, format: date-time }
+        acceptedAt: { type: [string, 'null'], format: date-time }
+        rejectedAt: { type: [string, 'null'], format: date-time }
+        unassignedAt: { type: [string, 'null'], format: date-time }
+        rejectionReason: { type: [string, 'null'] }
+    StatusChange:
+      type: object
+      required: [id, newStatus, changedAt]
+      properties:
+        id: { type: string, format: uuid }
+        oldStatus: { oneOf: [{ $ref: '#/components/schemas/WorkOrderStatus' }, { type: 'null' }] }
+        newStatus: { $ref: '#/components/schemas/WorkOrderStatus' }
+        changedBy: { type: [string, 'null'], format: uuid, description: NULL when changed by an event }
+        reason: { type: [string, 'null'] }
+        changedAt: { type: string, format: date-time }
+    WorkLog:
+      type: object
+      required: [id, actorUserId, eventType, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        actorUserId: { type: string, format: uuid }
+        technicianId: { type: [string, 'null'], format: uuid }
+        eventType: { type: string, description: 'NOTE, or the transition name (ASSIGN, ACCEPT, START, HOLD, …)' }
+        note: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    ServiceReportInput:
+      type: object
+      additionalProperties: false
+      required: [problemDescription, solution, result, customerSummary]
+      properties:
+        problemDescription: { type: string, minLength: 1, maxLength: 5000 }
+        rootCause: { type: string, maxLength: 5000 }
+        solution: { type: string, minLength: 1, maxLength: 5000 }
+        result: { $ref: '#/components/schemas/ReportResult' }
+        customerSummary:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: |
+            What was done, written for the customer (ADR 0008 D6a); shown on the
+            Service Request. Never internal notes. Stored in
+            `service_reports.customer_note`.
+    ServiceReport:
+      type: object
+      required: [id, workOrderId, technicianId, problemDescription, solution, result, customerSummary, submittedAt]
+      properties:
+        id: { type: string, format: uuid }
+        workOrderId: { type: string, format: uuid }
+        technicianId: { type: string, format: uuid }
+        problemDescription: { type: string }
+        rootCause: { type: [string, 'null'] }
+        solution: { type: string }
+        result: { $ref: '#/components/schemas/ReportResult' }
+        customerSummary: { type: string }
+        submittedAt: { type: string, format: date-time }
+    Technician:
+      type: object
+      required: [id, userId, branchId, employeeCode, status, skills]
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        employeeCode: { type: string }
+        status: { $ref: '#/components/schemas/TechnicianStatus' }
+        skills: { type: array, items: { $ref: '#/components/schemas/TechnicianSkillView' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TechnicianInput:
+      type: object
+      additionalProperties: false
+      required: [userId, branchId, employeeCode]
+      properties:
+        userId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        employeeCode: { type: string, maxLength: 50 }
+        status: { $ref: '#/components/schemas/ManualTechnicianStatus' }
+    TechnicianSkill:
+      type: object
+      additionalProperties: false
+      required: [skillId]
+      properties:
+        skillId: { type: string, format: uuid }
+        level: { type: [integer, 'null'], minimum: 1, maximum: 5 }
+    TechnicianSkillView:
+      type: object
+      required: [skillId, code, name]
+      properties:
+        skillId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        level: { type: [integer, 'null'] }
+    Skill:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+    SkillInput:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{0,49}$' }
+        name: { type: string, maxLength: 100 }
+        description: { type: string }
+    WorkOrderRef:
+      type: object
+      required: [id, workOrderNo, status, equipmentId, customerId]
+      properties:
+        id: { type: string, format: uuid }
+        workOrderNo: { type: string }
+        status: { $ref: '#/components/schemas/WorkOrderStatus' }
+        serviceRequestId: { type: [string, 'null'], format: uuid }
+        maintenanceTaskId: { type: [string, 'null'], format: uuid }
+        equipmentId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        currentTechnicianId: { type: [string, 'null'], format: uuid }

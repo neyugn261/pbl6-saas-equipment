@@ -57,9 +57,40 @@ describe('event catalog', () => {
         customerId: id,
         serviceReportId: id,
         result: 'RESOLVED',
+        customerSummary: 'Replaced the pump seal; the unit runs normally.',
         completedAt: '2026-10-17T03:00:00Z',
       }),
     ).toEqual([]);
+    const cancelled = {
+      workOrderId: id,
+      workOrderNo: 'WO-2026-0001',
+      serviceRequestId: id,
+      maintenanceTaskId: null,
+      equipmentId: id,
+      reason: 'Service request cancelled',
+      cancelServiceRequest: true,
+      cancelledAt: '2026-10-17T03:00:00Z',
+    };
+    expect(payloadProblems(Events.WorkOrderCancelled, cancelled)).toEqual([]);
+    // v2 fields of ADR 0008 (D4a, D6a) are required.
+    expect(
+      payloadProblems(Events.WorkOrderCancelled, { ...cancelled, cancelServiceRequest: 'yes' }),
+    ).toEqual(['cancelServiceRequest is missing or invalid']);
+    const { customerSummary: _, ...noSummary } = {
+      workOrderId: id,
+      workOrderNo: 'WO-2026-0001',
+      serviceRequestId: id,
+      maintenanceTaskId: null,
+      equipmentId: id,
+      customerId: id,
+      serviceReportId: id,
+      result: 'RESOLVED',
+      customerSummary: 'x',
+      completedAt: '2026-10-17T03:00:00Z',
+    };
+    expect(payloadProblems(Events.WorkOrderCompleted, noSummary)).toEqual([
+      'customerSummary is missing or invalid',
+    ]);
     expect(
       payloadProblems(Events.MaintenanceTaskDue, {
         maintenanceTaskId: id,
