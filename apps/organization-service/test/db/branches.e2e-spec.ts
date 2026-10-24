@@ -51,6 +51,10 @@ describe('Branches (e2e, organization_test_db)', () => {
     await admin().get(`/branches/${id}`).expect(404);
     const after = await admin().get('/branches').expect(200);
     expect(after.body.total).toBe(0);
+
+    // The code of a deleted branch stays reserved (ADR 0008 D10).
+    const reused = await admin().post('/branches', branch).expect(409);
+    expect(reused.body.code).toBe('UNIQUE_VIOLATION');
   });
 
   it('answers 404 for a branch of another tenant', async () => {

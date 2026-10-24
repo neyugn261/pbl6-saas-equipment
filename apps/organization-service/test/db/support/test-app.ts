@@ -13,27 +13,56 @@ import {
 } from '../../../src/identity/identity.client';
 import { PrismaService } from '../../../src/prisma/prisma.service';
 
+/** What Identity knows besides the profile: who invited the account, its customer link. */
+interface FakeAccount {
+  user: IdentityUser;
+  invitedBy: string | null;
+  customerId: string | null;
+}
+
 /**
- * Identity's `GET /internal/users/{id}` as agreed in the M1 contract: only
- * users of the caller's tenant are found (the token is decoded for it).
+ * Identity's `GET /internal/users/{id}` as agreed in the contract: only users
+ * of the caller's tenant are found (the token is decoded for it). A CUSTOMER
+ * caller (Customer Admin, ADR 0008 D1) only finds CUSTOMER accounts linked to
+ * its own customer, or CUSTOMER_USER accounts it invited that are not linked
+ * to any customer yet; any other account is not found.
  */
 export class FakeIdentityClient extends IdentityClient {
-  private readonly users = new Map<string, IdentityUser>();
+  private readonly accounts = new Map<string, FakeAccount>();
 
-  add(user: Partial<IdentityUser> & Pick<IdentityUser, 'tenantId' | 'userType' | 'roles'>): string {
+  add(
+    user: Partial<IdentityUser> & Pick<IdentityUser, 'tenantId' | 'userType' | 'roles'>,
+    meta: { invitedBy?: string; customerId?: string } = {},
+  ): string {
     const id = user.id ?? randomUUID();
-    this.users.set(id, { id, status: 'ACTIVE', email: `${id}@example.com`, fullName: 'Test', ...user });
+    this.accounts.set(id, {
+      user: { id, status: 'ACTIVE', email: `${id}@example.com`, fullName: 'Test', ...user },
+      invitedBy: meta.invitedBy ?? null,
+      customerId: meta.customerId ?? null,
+    });
     return id;
   }
 
+  /** Identity's copy of a membership (CustomerMembershipChanged, ADR 0003). */
+  linkTo(userId: string, customerId: string | null): void {
+    const account = this.accounts.get(userId);
+    if (account) account.customerId = customerId;
+  }
+
   clear(): void {
-    this.users.clear();
+    this.accounts.clear();
   }
 
   async findUser(userId: string, accessToken: string): Promise<IdentityUser | null> {
     const claims = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString());
-    const user = this.users.get(userId);
-    return user && user.tenantId === claims.tenant_id ? user : null;
+    const account = this.accounts.get(userId);
+    if (!account || account.user.tenantId !== claims.tenant_id) return null;
+    if (claims.user_type !== 'CUSTOMER') return account.user;
+    const { user, invitedBy, customerId } = account;
+    if (user.userType !== 'CUSTOMER') return null;
+    if (customerId !== null) return customerId === claims.customer_id ? user : null;
+    const invitedUser = invitedBy === claims.sub && user.roles.every((role) => role === 'CUSTOMER_USER');
+    return invitedUser ? user : null;
   }
 }
 

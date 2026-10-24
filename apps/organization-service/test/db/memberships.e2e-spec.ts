@@ -29,11 +29,11 @@ describe('Customer memberships and branch staff (e2e, organization_test_db)', ()
 
   const tenantAdmin = () => api(app, bearer('TENANT_ADMIN', tenantA));
   const customerAdmin = (customerId = own) => {
-    const id = identity.add({ tenantId: tenantA, userType: 'CUSTOMER', roles: ['CUSTOMER_ADMIN'] });
+    const id = identity.add({ tenantId: tenantA, userType: 'CUSTOMER', roles: ['CUSTOMER_ADMIN'] }, { customerId });
     return { id, http: api(app, bearer('CUSTOMER_ADMIN', tenantA, customerId, id)) };
   };
-  const customerUserAccount = (tenantId = tenantA) =>
-    identity.add({ tenantId, userType: 'CUSTOMER', roles: ['CUSTOMER_USER'] });
+  const customerUserAccount = (tenantId = tenantA, meta: { invitedBy?: string; customerId?: string } = {}) =>
+    identity.add({ tenantId, userType: 'CUSTOMER', roles: ['CUSTOMER_USER'] }, meta);
   const events = async () =>
     (await prisma.outboxEvent.findMany({ orderBy: { occurredAt: 'asc' } }))
       .filter((e) => e.eventType === 'CustomerMembershipChanged')
@@ -93,29 +93,49 @@ describe('Customer memberships and branch staff (e2e, organization_test_db)', ()
     });
   });
 
-  describe('linking by a Customer Admin (ADR 0006)', () => {
-    it('links CUSTOMER_USER accounts to its own customer only', async () => {
-      const { http } = customerAdmin();
-      const userId = customerUserAccount();
-      await http.post(`/customers/${own}/memberships`, { userId }).expect(201);
-      expect((await http.get(`/customers/${own}/memberships`).expect(200)).body).toHaveLength(1);
+  describe('linking by a Customer Admin (ADR 0006, ADR 0008 D1)', () => {
+    it('links a CUSTOMER_USER it invited to its own customer only', async () => {
+      const admin = customerAdmin();
+      const userId = customerUserAccount(tenantA, { invitedBy: admin.id });
+      await admin.http.post(`/customers/${own}/memberships`, { userId }).expect(201);
+      expect((await admin.http.get(`/customers/${own}/memberships`).expect(200)).body).toHaveLength(1);
 
-      const res = await http.post(`/customers/${other}/memberships`, { userId: customerUserAccount() }).expect(404);
+      const invited = customerUserAccount(tenantA, { invitedBy: admin.id });
+      const res = await admin.http.post(`/customers/${other}/memberships`, { userId: invited }).expect(404);
       expect(res.body.code).toBe('CUSTOMER_NOT_FOUND');
-      await http.get(`/customers/${other}/memberships`).expect(404);
+      await admin.http.get(`/customers/${other}/memberships`).expect(404);
     });
 
-    it('never manages another Customer Admin', async () => {
+    it('never finds an account it did not invite, nor a staff account', async () => {
+      const admin = customerAdmin();
+      const byOtherAdmin = customerUserAccount(tenantA, { invitedBy: customerAdmin().id });
+      const byNobody = customerUserAccount();
+      const staff = identity.add({ tenantId: tenantA, userType: 'TENANT_STAFF', roles: ['TECHNICIAN'] });
+      for (const userId of [byOtherAdmin, byNobody, staff]) {
+        const res = await admin.http.post(`/customers/${own}/memberships`, { userId }).expect(422);
+        expect(res.body.code).toBe('USER_NOT_FOUND');
+      }
+      expect(await events()).toEqual([]);
+    });
+
+    it('never manages another Customer Admin of its customer', async () => {
       const { http } = customerAdmin();
-      const admin = identity.add({ tenantId: tenantA, userType: 'CUSTOMER', roles: ['CUSTOMER_ADMIN'] });
-      const res = await http.post(`/customers/${own}/memberships`, { userId: admin }).expect(403);
+      const colleague = customerAdmin().id;
+      const res = await http.post(`/customers/${own}/memberships`, { userId: colleague }).expect(403);
       expect(res.body).toMatchObject({ code: 'ROLE_NOT_ASSIGNABLE', details: { roles: ['CUSTOMER_ADMIN'] } });
     });
 
     it('never takes an account away from another customer', async () => {
-      const userId = customerUserAccount();
+      const admin = customerAdmin();
+      // Identity already knows the account belongs to the other customer: not found.
+      const linked = customerUserAccount(tenantA, { invitedBy: admin.id, customerId: other });
+      const hidden = await admin.http.post(`/customers/${own}/memberships`, { userId: linked }).expect(422);
+      expect(hidden.body.code).toBe('USER_NOT_FOUND');
+
+      // Identity's copy of the membership lags behind: Organization still refuses.
+      const userId = customerUserAccount(tenantA, { invitedBy: admin.id });
       await tenantAdmin().post(`/customers/${other}/memberships`, { userId }).expect(201);
-      const res = await customerAdmin().http.post(`/customers/${own}/memberships`, { userId }).expect(409);
+      const res = await admin.http.post(`/customers/${own}/memberships`, { userId }).expect(409);
       expect(res.body.code).toBe('USER_LINKED_TO_OTHER_CUSTOMER');
       expect((await events()).map((e) => e.customerId)).toEqual([other]);
     });
@@ -152,7 +172,9 @@ describe('Customer memberships and branch staff (e2e, organization_test_db)', ()
     it('limits a Customer Admin to CUSTOMER_USER memberships of its own customer', async () => {
       const admin = customerAdmin();
       const ownAdminLink = await tenantAdmin().post(`/customers/${own}/memberships`, { userId: admin.id }).expect(201);
-      const user = await tenantAdmin().post(`/customers/${own}/memberships`, { userId: customerUserAccount() }).expect(201);
+      const user = await tenantAdmin()
+        .post(`/customers/${own}/memberships`, { userId: customerUserAccount(tenantA, { customerId: own }) })
+        .expect(201);
       const foreign = await tenantAdmin().post(`/customers/${other}/memberships`, { userId: customerUserAccount() }).expect(201);
 
       await admin.http.post(`/memberships/${user.body.id}/status`, { status: 'INACTIVE' }).expect(200);

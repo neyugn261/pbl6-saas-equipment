@@ -88,7 +88,7 @@ the outbox).
 
 | Limitation | Effect | Way out |
 |---|---|---|
-| Unique codes (`branches`, `customers`, `customer_sites`, `locations`) also count soft-deleted rows | A deleted branch or customer code cannot be reused (409 `UNIQUE_VIOLATION`) | Team decision; a migration replacing the constraints with partial unique indexes `WHERE deleted_at IS NULL` |
+| Unique codes (`branches`, `customers`, `customer_sites`, `locations`) also count soft-deleted rows | A deleted branch or customer code cannot be reused (409 `UNIQUE_VIOLATION`) | Decided for the MVP (ADR 0008 D10); change only on a new demo or business need, with partial unique indexes `WHERE deleted_at IS NULL` |
 | Deleting a customer or site does not check equipment in Asset | Asset may keep equipment pointing at a deleted customer/site; Organization lookups for it answer 404 | Accepted for MVP (cross-service data); Asset can react if a `CustomerDeleted` event is added later |
 | A SUSPENDED / DISABLED tenant is not checked by this service | Its staff can still write until their access token expires (≤ 15 min); Identity refuses the next refresh | Accepted in ADR 0004 |
-| Membership and branch staff endpoints call Identity `GET /internal/users/{id}` | Until Identity ships it (M1, Member D) they answer 422 `USER_NOT_FOUND` on a real setup; e2e suites use a fake following the contract | Real smoke test once the endpoint exists |
+| Membership endpoints of a Customer Admin call Identity `GET /internal/users/{id}` with a CUSTOMER token | Identity still accepts TENANT_STAFF tokens only, so a Customer Admin gets 502 on a real setup. The e2e suites use a fake that follows ADR 0008 D1: a Customer Admin finds CUSTOMER accounts of its own customer and CUSTOMER_USER accounts it invited that are not linked yet; anything else is 422 `USER_NOT_FOUND` | Identity ships D1 (N2), then a real smoke test of the Customer Admin flow |
