@@ -303,7 +303,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Warranty' }
         '409':
-          description: WARRANTY_OVERLAP — the period shares a day with an ACTIVE warranty
+          description: "WARRANTY_OVERLAP when a period shares a day with an ACTIVE warranty; EQUIPMENT_RETIRED when no new warranty is allowed"
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -399,7 +399,8 @@ paths:
         active codes. The previous token stops resolving after commit. Return
         the new token and portal deep-link URL, not an image or print file.
         First issue writes QR_CREATED history; re-print writes QR_REPRINTED
-        history. Never store the token in history metadata.
+        history. Never store the token in history metadata. RETIRED equipment
+        cannot receive a new code (409 EQUIPMENT_RETIRED).
       x-permissions: [qr:manage]
       x-user-types: [TENANT_STAFF]
       responses:
@@ -412,6 +413,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/EquipmentNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
     delete:
       tags: [QR codes]
       summary: Revoke the active QR code
@@ -439,8 +441,8 @@ paths:
       description: |
         The QR only identifies equipment; the caller must still be logged in
         and the equipment must be in the caller's scope (else 404, also for a
-        revoked or unknown token). QR behavior after equipment retirement needs
-        team review; Service Request already rejects RETIRED equipment from
+        revoked or unknown token). An existing QR remains readable after
+        equipment retirement; Service Request rejects RETIRED equipment from
         EquipmentRef when creating new work.
       x-permissions: [equipment:read]
       x-user-types: [TENANT_STAFF, CUSTOMER]
@@ -527,12 +529,12 @@ components:
     ModelQ:
       name: q
       in: query
-      description: Case-insensitive search in manufacturer, modelCode and name
+      description: Case-insensitive literal search in manufacturer, modelCode and name; % and _ are not wildcards
       schema: { type: string, maxLength: 100 }
     EquipmentQ:
       name: q
       in: query
-      description: Case-insensitive search in assetCode, serialNumber and model name
+      description: Case-insensitive literal search in assetCode, serialNumber and model name; % and _ are not wildcards
       schema: { type: string, maxLength: 100 }
     EquipmentId:
       name: equipmentId
@@ -541,52 +543,52 @@ components:
       schema: { type: string, format: uuid }
   responses:
     BadRequest:
-      description: VALIDATION_FAILED — malformed UUID/date, invalid filter, empty or unknown request field (including tenantId)
+      description: "VALIDATION_FAILED — malformed UUID/date, invalid filter, empty or unknown request field (including tenantId)"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
-      description: INVALID_ACCESS_TOKEN — absent, invalid or expired bearer token
+      description: "INVALID_ACCESS_TOKEN — absent, invalid or expired bearer token"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: FORBIDDEN, TENANT_SCOPE_REQUIRED or CUSTOMER_SCOPE_MISSING
+      description: "FORBIDDEN, TENANT_SCOPE_REQUIRED or CUSTOMER_SCOPE_MISSING"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     ModelNotFound:
-      description: MODEL_NOT_FOUND — absent model or model outside the caller's tenant scope
+      description: "MODEL_NOT_FOUND — absent model or model outside the caller's tenant scope"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     EquipmentNotFound:
-      description: EQUIPMENT_NOT_FOUND — absent equipment or equipment outside the caller's tenant/customer scope
+      description: "EQUIPMENT_NOT_FOUND — absent equipment or equipment outside the caller's tenant/customer scope"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     WarrantyNotFound:
-      description: WARRANTY_NOT_FOUND — absent warranty or warranty outside the caller's tenant scope
+      description: "WARRANTY_NOT_FOUND — absent warranty or warranty outside the caller's tenant scope"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     QrNotFound:
-      description: QR_NOT_FOUND — unknown/revoked token or equipment outside the caller's scope
+      description: "QR_NOT_FOUND — unknown/revoked token or equipment outside the caller's scope"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Conflict:
-      description: UNIQUE_VIOLATION (asset code in the tenant, serial number in the model) or INVALID_STATE_TRANSITION
+      description: "UNIQUE_VIOLATION (asset code in the tenant, serial number in the model), INVALID_STATE_TRANSITION or EQUIPMENT_RETIRED"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     UpstreamError:
-      description: UPSTREAM_ERROR — Organization returned an unexpected error while validating a customer, site or location
+      description: "UPSTREAM_ERROR — Organization returned an unexpected error while validating a customer, site or location"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     UpstreamUnavailable:
-      description: UPSTREAM_UNAVAILABLE — Organization could not be reached; no write is committed
+      description: "UPSTREAM_UNAVAILABLE — Organization could not be reached; no write is committed"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
