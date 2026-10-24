@@ -60,6 +60,10 @@ function hasPermission(
   return principal.permissions.has(permission);
 }
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 function publicRequest(request: ServiceRequest) {
   return {
     id: request.id,
@@ -72,6 +76,10 @@ function publicRequest(request: ServiceRequest) {
     title: request.title,
     description: request.description,
     status: request.status,
+    resolutionResult: request.resolutionResult,
+    resolutionSummary: request.resolutionSummary,
+    resolvedWorkOrderNo: request.resolvedWorkOrderNo,
+    resolutionCompletedAt: request.resolutionCompletedAt,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
     resolvedAt: request.resolvedAt,
@@ -113,10 +121,7 @@ function allowedActions(
 
   if (
     (isCustomer && CUSTOMER_CANCEL_STATUSES.includes(status)) ||
-    (!isCustomer &&
-      canReview &&
-      STAFF_CANCEL_STATUSES.includes(status) &&
-      status !== 'ACCEPTED')
+    (!isCustomer && canReview && STAFF_CANCEL_STATUSES.includes(status))
   ) {
     actions.push('cancel');
   }
@@ -163,8 +168,13 @@ export class ServiceRequestsService {
       ...(query.q
         ? {
             OR: [
-              { requestNo: { contains: query.q, mode: 'insensitive' } },
-              { title: { contains: query.q, mode: 'insensitive' } },
+              {
+                requestNo: {
+                  contains: escapeLike(query.q),
+                  mode: 'insensitive',
+                },
+              },
+              { title: { contains: escapeLike(query.q), mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -254,19 +264,9 @@ export class ServiceRequestsService {
         message: 'A service request cannot be created for retired equipment',
       });
     }
-    const warranty = await this.assets.getWarrantyStatus(
-      equipment.id,
-      principal.accessToken,
-    );
-    if (!warranty) {
-      throw new UnprocessableEntityException({
-        code: 'EQUIPMENT_NOT_FOUND',
-        message: 'The equipment warranty is not available in the caller scope',
-      });
-    }
-    this.validateWarrantyStatus(warranty, equipment.id);
-
-    const customerId = isCustomer ? scope.customerId : input.customerId;
+    const customerId = isCustomer
+      ? scope.customerId
+      : (input.customerId ?? equipment.customerId);
     if (!customerId) {
       throw new UnprocessableEntityException({
         code: 'CUSTOMER_REQUIRED',
@@ -314,13 +314,6 @@ export class ServiceRequestsService {
           priority: input.priority ?? 'NORMAL',
           title: input.title,
           description: input.description,
-          warrantyCheckResult: warranty.result,
-          warrantyId: warranty.warrantyId,
-          warrantyEndDate: warranty.endDate
-            ? new Date(`${warranty.endDate}T00:00:00.000Z`)
-            : null,
-          warrantyCheckedBy: principal.userId,
-          warrantyCheckedAt: new Date(),
         },
       });
       await tx.requestStatusHistory.create({
@@ -498,19 +491,6 @@ export class ServiceRequestsService {
     });
   }
 
-  async startReview(principal: Principal, requestId: string) {
-    return this.transition(
-      principal,
-      requestId,
-      'start-review',
-      ['NEW'],
-      'REVIEWING',
-      {
-        reviewStartedAt: new Date(),
-      },
-    );
-  }
-
   async review(principal: Principal, requestId: string) {
     const scope = dataScope(principal);
     const initial = await this.findRequest(principal, requestId);
@@ -587,6 +567,7 @@ export class ServiceRequestsService {
       id: request.id,
       requestNo: request.requestNo,
       status: request.status,
+      title: request.title,
       customerId: request.customerId,
       equipmentId: request.equipmentId,
       type: request.type,
@@ -849,21 +830,17 @@ export class ServiceRequestsService {
     const scope = dataScope(principal);
     return this.prisma.$transaction(async (tx) => {
       const current = await this.lockRequest(tx, scope, requestId);
+      if (action === 'cancel' && current.status === 'PROCESSING') {
+        throw new ConflictException({
+          code: 'WORK_ORDER_CANCELLATION_REQUIRED',
+          message:
+            'Cancel the active work order before cancelling this service request',
+        });
+      }
       if (!fromStatuses.includes(current.status as RequestStatus)) {
         throw invalidTransition(current.status, action);
       }
       validate?.(current);
-      if (
-        action === 'cancel' &&
-        current.status === 'ACCEPTED' &&
-        principal.userType !== 'CUSTOMER'
-      ) {
-        throw new ConflictException({
-          code: 'WORK_ORDER_CHECK_REQUIRED',
-          message:
-            'An accepted request can only be cancelled after verifying its active work orders',
-        });
-      }
 
       const updated = await tx.serviceRequest.update({
         where: { id: current.id },

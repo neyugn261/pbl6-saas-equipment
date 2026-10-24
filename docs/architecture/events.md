@@ -1,4 +1,4 @@
-# Event catalog v1
+# Versioned event catalog
 
 Transport, envelope and guarantees: [ADR 0005](../decisions/0005-event-transport.md).
 The executable contract is `Events` in
@@ -21,14 +21,17 @@ where it is the aggregate).
 Defined ahead of their milestone (so producers and consumers can be built in
 parallel; the producer may still refine them through a PR before first use).
 `WorkOrderCompleted` and `WorkOrderCancelled` start at v2 (ADR 0008 D4a, D6a):
-their v1 was never published, so it was replaced instead of kept:
+their v1 was never published. Consumers retain v1 validation for compatibility
+with pre-release or already queued messages; producers publish v2:
 
 | Event (routing key) | Producer | Milestone | Payload | Consumers |
 |---|---|---|---|---|
 | `WorkOrderCreated.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, type, priority` | service-request (→ PROCESSING), maintenance (task ↔ WO) |
 | `WorkOrderAssigned.v1` | workorder-service | M2 | `workOrderId, workOrderNo, technicianId, technicianUserId, assignedBy, scheduledStart\|null` | notification (M3) |
-| `WorkOrderCompleted.v2` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, serviceReportId, result, customerSummary, completedAt` | service-request (→ RESOLVED / ACCEPTED, stores the customer summary, ADR 0008 D6a), asset (`equipment_history`), maintenance |
-| `WorkOrderCancelled.v2` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelServiceRequest, cancelledAt` | service-request (→ CANCELLED when `cancelServiceRequest`, else → ACCEPTED; ADR 0008 D4a), maintenance (release task, ADR 0002) |
+| `WorkOrderCompleted.v1` | — (compatibility only) | legacy compatibility | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, serviceReportId, result, completedAt` | service-request (→ RESOLVED / ACCEPTED), asset (`equipment_history`), maintenance |
+| `WorkOrderCompleted.v2` | workorder-service | M2 | `WorkOrderCompleted.v1` fields + `customerSummary` | service-request (→ RESOLVED / ACCEPTED, stores the customer summary, ADR 0008 D6a), asset (`equipment_history`), maintenance |
+| `WorkOrderCancelled.v1` | — (compatibility only) | legacy compatibility | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelledAt` | service-request (→ ACCEPTED), maintenance (release task, ADR 0002) |
+| `WorkOrderCancelled.v2` | workorder-service | M2 | `WorkOrderCancelled.v1` fields + `cancelServiceRequest` | service-request (→ CANCELLED when `cancelServiceRequest`, else → ACCEPTED; ADR 0008 D4a), maintenance |
 | `MaintenanceTaskDue.v1` | maintenance-service | M2 | `maintenanceTaskId, maintenancePlanId, equipmentId, customerId, customerSiteId\|null, scheduledDate (YYYY-MM-DD), title` | workorder (create WO) |
 | `LowStockDetected.v1` | inventory-service | M3 | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
 
@@ -51,6 +54,7 @@ snapshot on the plan.
 | Queue | Service | Handles |
 |---|---|---|
 | `identity-service.directory` | identity-service | TenantCreated v1, TenantStatusChanged v1, CustomerMembershipChanged v1 |
+| `service-request-service.work-orders` | service-request-service | WorkOrderCreated v1, WorkOrderCompleted v1/v2, WorkOrderCancelled v1/v2 |
 
 Each queue has `<queue>.retry` and `<queue>.dlq`.
 

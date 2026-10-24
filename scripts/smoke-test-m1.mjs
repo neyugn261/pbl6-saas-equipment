@@ -231,16 +231,20 @@ async function main() {
   });
   if (!created.id || created.status !== "NEW")
     throw new Error("Service Request was not created as NEW");
+  if (created.warrantyCheck !== null) {
+    throw new Error(
+      "New Service Request must not contain a warranty snapshot before review",
+    );
+  }
 
   const requestPath = `/api/service-requests/${created.id}`;
   const { data: reviewing } = await call("POST", `${requestPath}/review`, {
     token: managerToken,
   });
-  if (
-    reviewing.status !== "REVIEWING" ||
-    reviewing.warrantyCheck?.result !== "IN_WARRANTY"
-  ) {
-    throw new Error("Service Request review did not check warranty");
+  if (reviewing.status !== "REVIEWING")
+    throw new Error("Service Request did not enter REVIEWING");
+  if (reviewing.warrantyCheck?.result !== "IN_WARRANTY") {
+    throw new Error("Review did not record the current warranty snapshot");
   }
   const { data: accepted } = await call("POST", `${requestPath}/accept`, {
     token: managerToken,

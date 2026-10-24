@@ -25,8 +25,12 @@ describe('event catalog', () => {
   });
 
   it('checks payloads against the contract', () => {
-    expect(payloadProblems(Events.TenantCreated, envelope().payload)).toEqual([]);
-    expect(payloadProblems(Events.TenantCreated, { tenantId: 'x', code: 'A' })).toEqual([
+    expect(payloadProblems(Events.TenantCreated, envelope().payload)).toEqual(
+      [],
+    );
+    expect(
+      payloadProblems(Events.TenantCreated, { tenantId: 'x', code: 'A' }),
+    ).toEqual([
       'tenantId is missing or invalid',
       'name is missing or invalid',
       'status is missing or invalid',
@@ -47,20 +51,27 @@ describe('event catalog', () => {
 
   it('accepts the work order and stock contracts and their invariants', () => {
     const id = TENANT;
+    const completedV1 = {
+      workOrderId: id,
+      workOrderNo: 'WO-2026-0001',
+      serviceRequestId: id,
+      maintenanceTaskId: null,
+      equipmentId: id,
+      customerId: id,
+      serviceReportId: id,
+      result: 'RESOLVED',
+      completedAt: '2026-10-17T03:00:00Z',
+    };
+    expect(payloadProblems(Events.WorkOrderCompleted, completedV1)).toEqual([]);
     expect(
-      payloadProblems(Events.WorkOrderCompleted, {
-        workOrderId: id,
-        workOrderNo: 'WO-2026-0001',
-        serviceRequestId: id,
-        maintenanceTaskId: null,
-        equipmentId: id,
-        customerId: id,
-        serviceReportId: id,
-        result: 'RESOLVED',
+      payloadProblems(Events.WorkOrderCompletedV2, {
+        ...completedV1,
         customerSummary: 'Replaced the pump seal; the unit runs normally.',
-        completedAt: '2026-10-17T03:00:00Z',
       }),
     ).toEqual([]);
+    expect(payloadProblems(Events.WorkOrderCompletedV2, completedV1)).toEqual([
+      'customerSummary is missing or invalid',
+    ]);
     const cancelled = {
       workOrderId: id,
       workOrderNo: 'WO-2026-0001',
@@ -71,10 +82,21 @@ describe('event catalog', () => {
       cancelServiceRequest: true,
       cancelledAt: '2026-10-17T03:00:00Z',
     };
-    expect(payloadProblems(Events.WorkOrderCancelled, cancelled)).toEqual([]);
+    expect(
+      payloadProblems(Events.WorkOrderCancelled, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0001',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        reason: 'Service request cancelled',
+        cancelledAt: '2026-10-17T03:00:00Z',
+      }),
+    ).toEqual([]);
+    expect(payloadProblems(Events.WorkOrderCancelledV2, cancelled)).toEqual([]);
     // v2 fields of ADR 0008 (D4a, D6a) are required.
     expect(
-      payloadProblems(Events.WorkOrderCancelled, { ...cancelled, cancelServiceRequest: 'yes' }),
+      payloadProblems(Events.WorkOrderCancelledV2, { ...cancelled, cancelServiceRequest: 'yes' }),
     ).toEqual(['cancelServiceRequest is missing or invalid']);
     const { customerSummary: _, ...noSummary } = {
       workOrderId: id,
@@ -88,9 +110,48 @@ describe('event catalog', () => {
       customerSummary: 'x',
       completedAt: '2026-10-17T03:00:00Z',
     };
-    expect(payloadProblems(Events.WorkOrderCompleted, noSummary)).toEqual([
+    expect(payloadProblems(Events.WorkOrderCompletedV2, noSummary)).toEqual([
       'customerSummary is missing or invalid',
     ]);
+    expect(
+      payloadProblems(Events.WorkOrderCompletedV2, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0002',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        customerId: id,
+        serviceReportId: id,
+        result: 'PARTIALLY_RESOLVED',
+        completedAt: '2026-10-17T03:00:00Z',
+        customerSummary: 'Customer-facing completion summary',
+      }),
+    ).toEqual([]);
+    expect(
+      payloadProblems(Events.WorkOrderCompletedV2, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0002',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        customerId: id,
+        serviceReportId: id,
+        result: 'PARTIALLY_RESOLVED',
+        completedAt: '2026-10-17T03:00:00Z',
+      }),
+    ).toEqual(['customerSummary is missing or invalid']);
+    expect(
+      payloadProblems(Events.WorkOrderCancelledV2, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0003',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        reason: null,
+        cancelledAt: '2026-10-17T03:00:00Z',
+        cancelServiceRequest: true,
+      }),
+    ).toEqual([]);
     expect(
       payloadProblems(Events.MaintenanceTaskDue, {
         maintenanceTaskId: id,
@@ -134,7 +195,10 @@ describe('parseEnvelope', () => {
     ['not JSON', 'nope'],
     ['bad event id', JSON.stringify(envelope({ eventId: '1' }))],
     ['unknown version', JSON.stringify(envelope({ eventVersion: 9 }))],
-    ['payload breaking the contract', JSON.stringify(envelope({ payload: { tenantId: TENANT } }))],
+    [
+      'payload breaking the contract',
+      JSON.stringify(envelope({ payload: { tenantId: TENANT } })),
+    ],
     ['bad timestamp', JSON.stringify(envelope({ occurredAt: 'yesterday' }))],
   ])('rejects %s', (_name, body) => {
     expect(() => parseEnvelope(body)).toThrow(InvalidEventError);

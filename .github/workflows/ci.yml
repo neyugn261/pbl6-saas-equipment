@@ -132,6 +132,9 @@ jobs:
       - name: Service Request e2e tests
         working-directory: apps/service-request-service
         run: pnpm test:e2e
+      - name: Service Request database e2e tests
+        working-directory: apps/service-request-service
+        run: pnpm test:e2e:db
       - name: M1 vertical slice through API Gateway
         env:
           NODE_ENV: development

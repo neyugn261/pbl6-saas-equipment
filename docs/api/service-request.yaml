@@ -9,9 +9,10 @@ info:
     A transition not allowed from the current status returns
     409 `INVALID_STATE_TRANSITION` with `details: { from, action }`.
     CUSTOMER accounts only see requests of their own customer (ADR 0003) and
-    only `CUSTOMER` comments. The `review` operation is an additive convenience
-    that starts review and records the warranty snapshot in one status-change
-    transaction; the separate M0 operations remain available.
+    only `CUSTOMER` comments. Creating a request validates the equipment but
+    does not snapshot its warranty; `review` starts review and records the
+    warranty snapshot atomically. Customer-visible resolution summaries are
+    populated from `WorkOrderCompleted.v2`.
 servers:
   - url: http://localhost:3007
     description: Local service (through the gateway later at /api/service-requests)
@@ -68,11 +69,12 @@ paths:
       summary: Create a service request
       description: |
         CUSTOMER accounts create for their own customer (`customerId` omitted,
-        taken from the token) and their own equipment. Staff pass `customerId`.
+        taken from the token) and their own equipment. Staff may omit
+        `customerId`; in that case it is taken from the equipment reference.
         Equipment is validated through Asset (`GET /internal/equipment/{id}`
-        with the caller's token). The current warranty decision is also
-        requested from Asset and stored as a snapshot. Writes
-        `ServiceRequestCreated` and initial `ServiceRequestStatusChanged`.
+        with the caller's token). Warranty is checked and snapshotted when a
+        staff member reviews the request. Writes `ServiceRequestCreated` and
+        initial `ServiceRequestStatusChanged`.
       x-permissions: [service_request:create]
       x-events: [ServiceRequestCreated.v1, ServiceRequestStatusChanged.v1]
       requestBody:
@@ -132,12 +134,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ServiceRequest' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
-  /internal/service-requests/{requestId}:
+  /internal/service-requests/{id}:
     parameters:
-      - $ref: '#/components/parameters/RequestId'
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
     get:
       tags: [Requests]
-      summary: Minimal request reference for another authenticated service
+      summary: Request reference for another authenticated service
+      description: Includes title for the Work Order Service Request snapshot.
       x-permissions: [service_request:read]
       x-user-types: [TENANT_STAFF]
       responses:
@@ -160,21 +166,12 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/HistoryEntry' } }
-  /service-requests/{requestId}/start-review:
-    parameters: [{ $ref: '#/components/parameters/RequestId' }]
-    post:
-      tags: [Transitions]
-      summary: NEW → REVIEWING
-      x-permissions: [service_request:review]
-      responses:
-        '200': { $ref: '#/components/responses/Request' }
-        '409': { $ref: '#/components/responses/InvalidTransition' }
   /service-requests/{requestId}/review:
     parameters: [{ $ref: '#/components/parameters/RequestId' }]
     post:
       tags: [Transitions]
       summary: NEW → REVIEWING and record current warranty snapshot
-      description: Calls Asset warranty-status before the transaction.
+      description: Calls Asset warranty-status; the review transition and initial warranty snapshot are saved atomically.
       x-permissions: [service_request:review]
       responses:
         '200':
@@ -242,6 +239,7 @@ paths:
     post:
       tags: [Transitions]
       summary: Cancel (requester side or service_request:review; allowed statuses in state-machines.md)
+      description: Staff may cancel ACCEPTED requests. PROCESSING requests return 409 WORK_ORDER_CANCELLATION_REQUIRED; cancel the active Work Order first.
       x-permissions: [service_request:read]
       requestBody: { $ref: '#/components/requestBodies/OptionalReason' }
       responses:
@@ -252,7 +250,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '409':
-          description: INVALID_STATE_TRANSITION or WORK_ORDER_CHECK_REQUIRED
+          description: INVALID_STATE_TRANSITION or WORK_ORDER_CANCELLATION_REQUIRED
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -510,7 +508,7 @@ components:
       additionalProperties: false
       required: [equipmentId, type, title, description]
       properties:
-        customerId: { type: string, format: uuid, description: Staff only; CUSTOMER accounts use their own }
+        customerId: { type: string, format: uuid, description: Optional for staff (derived from equipment); CUSTOMER accounts use their own }
         equipmentId: { type: string, format: uuid }
         type: { $ref: '#/components/schemas/Type' }
         priority: { $ref: '#/components/schemas/Priority' }
@@ -518,7 +516,7 @@ components:
         description: { type: string, maxLength: 10000 }
     ServiceRequest:
       type: object
-      required: [id, requestNo, customerId, equipmentId, requesterId, type, priority, title, status, createdAt, updatedAt]
+      required: [id, requestNo, customerId, equipmentId, requesterId, type, priority, title, status, resolutionResult, resolutionSummary, resolvedWorkOrderNo, resolutionCompletedAt, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         requestNo: { type: string, examples: [SR-2026-0001] }
@@ -530,17 +528,22 @@ components:
         title: { type: string }
         description: { type: string }
         status: { $ref: '#/components/schemas/Status' }
+        resolutionResult: { type: [string, 'null'], enum: [RESOLVED, PARTIALLY_RESOLVED, UNRESOLVED, null] }
+        resolutionSummary: { type: [string, 'null'], maxLength: 2000, description: Customer-visible summary only; internal Work Order and Service Report content is not returned. }
+        resolvedWorkOrderNo: { type: [string, 'null'] }
+        resolutionCompletedAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         resolvedAt: { type: [string, 'null'], format: date-time }
         closedAt: { type: [string, 'null'], format: date-time }
     ServiceRequestRef:
       type: object
-      required: [id, requestNo, status, customerId, equipmentId, type, priority]
+      required: [id, requestNo, status, title, customerId, equipmentId, type, priority]
       properties:
         id: { type: string, format: uuid }
         requestNo: { type: string }
         status: { $ref: '#/components/schemas/Status' }
+        title: { type: string }
         customerId: { type: string, format: uuid }
         equipmentId: { type: string, format: uuid }
         type: { $ref: '#/components/schemas/Type' }
@@ -565,7 +568,7 @@ components:
             allowedActions:
               type: array
               description: Actions the caller may perform now (drives the UI buttons)
-              items: { type: string, examples: [start-review, accept, cancel] }
+              items: { type: string, examples: [review, accept, cancel] }
     StatusChange:
       type: object
       required: [kind, id, newStatus, changedAt]

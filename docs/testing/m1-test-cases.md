@@ -27,26 +27,28 @@ Email demo xem README gốc; mật khẩu lấy từ `SEED_DEMO_PASSWORD` cục 
 | ID | Vai trò / dữ liệu | Bước | Kết quả mong đợi |
 | --- | --- | --- | --- |
 | SR-01 | Customer User, thiết bị của DEMO-CUST-01 | Chọn thiết bị, tạo SR | 201, `NEW`, `requestNo` duy nhất, customerId lấy từ token. |
-| SR-02 | Service Manager, thiết bị cùng tenant | Tạo SR thay khách hàng | 201, `NEW`, customerId đúng thiết bị. |
-| SR-03 | Service Manager, SR `NEW` | `review` | `REVIEWING`, kiểm tra và lưu snapshot bảo hành cùng người kiểm tra là Service Manager trong một transaction; thêm history và event. |
+| SR-02 | Service Manager, thiết bị cùng tenant | Tạo SR thay khách hàng | 201, `NEW`, customerId đúng thiết bị, warranty snapshot và checker chưa được ghi. |
+| SR-03 | Service Manager, SR `NEW` | `review` | `REVIEWING`; kiểm tra và lưu snapshot bảo hành cùng transition, thêm history và event. |
 | SR-04 | Service Manager, SR `REVIEWING` | `request-info` với reason | `AWAITING_INFO`; comment CUSTOMER hiện cho khách. |
 | SR-05 | Customer User cùng customer, SR `AWAITING_INFO` | Gửi comment CUSTOMER | `REVIEWING`. |
-| SR-06 | Service Manager, SR `REVIEWING` | `warranty-check` lần nữa | Trạng thái giữ nguyên; snapshot `IN_WARRANTY`/`OUT_OF_WARRANTY`/`NO_WARRANTY` được cập nhật đúng Asset. |
-| SR-07 | Service Manager, snapshot `IN_WARRANTY` | `accept` | `ACCEPTED`. |
+| SR-06 | Service Manager, SR `REVIEWING` | `warranty-check` | Kiểm tra lại; trạng thái giữ nguyên và snapshot `IN_WARRANTY`/`OUT_OF_WARRANTY`/`NO_WARRANTY` đúng Asset. |
+| SR-07 | Service Manager, chưa có snapshot | `accept` | 422 `WARRANTY_CHECK_REQUIRED`; không đổi trạng thái. |
+| SR-07a | Service Manager, snapshot `IN_WARRANTY` | `accept` | `ACCEPTED`. |
 | SR-08 | Service Manager, SR `NEW`, `REVIEWING`, `AWAITING_INFO` | `reject` với reason ở từng trạng thái | `REJECTED`, reason customer thấy; từ đây mọi transition bị 409. |
 | SR-09 | Customer User, SR `NEW`, `AWAITING_INFO`, `AWAITING_CUSTOMER_APPROVAL`, `COST_REJECTED` | `cancel` ở từng trạng thái | `CANCELLED`; từ đây mọi transition bị 409. |
-| SR-10 | Service Manager, SR `NEW`, `REVIEWING`, `AWAITING_INFO`, `AWAITING_CUSTOMER_APPROVAL`, `COST_REJECTED`, `ACCEPTED` | `cancel` ở từng trạng thái | `CANCELLED`; SR `PROCESSING` trả 409 và yêu cầu huỷ Work Order trước. |
+| SR-10 | Service Manager, SR `NEW`, `REVIEWING`, `AWAITING_INFO`, `AWAITING_CUSTOMER_APPROVAL`, `COST_REJECTED`, `ACCEPTED` | `cancel` ở từng trạng thái | `CANCELLED`; huỷ ở `ACCEPTED` không gọi Work Order đồng bộ. |
 | SR-11 | Fixture SR `RESOLVED`, Customer User cùng customer | `confirm` | `CLOSED`; trạng thái cuối. |
 | SR-12 | Fixture SR `RESOLVED`, Customer User cùng customer | `reopen` với reason | `ACCEPTED`. |
-| SR-13 | Fixture SR `ACCEPTED` | Phát `WorkOrderCreated` | `PROCESSING` (kiểm tra ở M2 khi consumer có thật). |
-| SR-14 | Fixture SR `PROCESSING` | Phát `WorkOrderCompleted` result RESOLVED/PARTIALLY_RESOLVED | `RESOLVED` (M2). |
-| SR-15 | Fixture SR `PROCESSING` | Phát `WorkOrderCancelled` hoặc hoàn tất UNRESOLVED | `ACCEPTED` (M2). |
+| SR-13 | Fixture SR `ACCEPTED` | Phát `WorkOrderCreated.v1` | `PROCESSING`; nếu SR đã `CANCELLED` thì event bị bỏ qua. |
+| SR-14 | Fixture SR `PROCESSING` | Phát `WorkOrderCompleted.v2` result RESOLVED/PARTIALLY_RESOLVED | `RESOLVED`; lưu customer summary, work order number và completion time. |
+| SR-15 | Fixture SR `PROCESSING` | Phát `WorkOrderCancelled.v2` hoặc hoàn tất UNRESOLVED | `ACCEPTED` hoặc `CANCELLED` theo `cancelServiceRequest`. |
 | SR-16 | Fixture SR `REVIEWING`, snapshot ngoài bảo hành | Gọi `accept` | 422 `ESTIMATE_REQUIRED`; không đổi trạng thái. Báo giá thuộc M2. |
 | SR-17 | Fixture SR `REVIEWING`, chưa có snapshot | Gọi `accept` | 422 `WARRANTY_CHECK_REQUIRED`. |
 | SR-18 | Dispatcher, SR `NEW` | `review` | 403. |
-| SR-26 | Customer User tạo SR `NEW`, Service Manager mở chi tiết | So sánh `warrantyCheckedBy` trước và sau `review` | Trước review là null; sau review là ID Service Manager, không phải người tạo. |
+| SR-27 | Customer User tạo SR `NEW`, Service Manager mở chi tiết | So sánh `warrantyCheckedBy` trước và sau `review` | Trước review là null; sau review là ID Service Manager, không phải người tạo. |
 | SR-19 | Bất kỳ, sai trạng thái | Lặp transition không hợp lệ | 409 `INVALID_STATE_TRANSITION`, không thêm history. |
-| SR-20 | Customer User | Đọc comment INTERNAL của SR thuộc customer | Không có comment INTERNAL trong response. |
+| SR-20 | Customer User | Đọc comment INTERNAL của SR thuộc customer qua comments và history | Không có comment INTERNAL trong response; được thấy comment CUSTOMER. (DB E2E) |
+| SR-26 | Service Manager, SR `PROCESSING` | `cancel` | 409 `WORK_ORDER_CANCELLATION_REQUIRED`; hướng dẫn huỷ Work Order trước, không đổi trạng thái/history. |
 | SR-21 | Fixture SR `REVIEWING` ngoài bảo hành | Gửi estimate | `AWAITING_CUSTOMER_APPROVAL` (M2: Cost Estimate). |
 | SR-22 | Fixture SR `AWAITING_CUSTOMER_APPROVAL` | Customer duyệt estimate | `ACCEPTED` (M2). |
 | SR-23 | Fixture SR `AWAITING_CUSTOMER_APPROVAL` | Customer từ chối estimate | `COST_REJECTED` (M2). |
@@ -60,7 +62,7 @@ Mỗi dòng là một cạnh của `docs/architecture/state-machines.md`; tạo 
 | Từ | Hành động | Đến | Case | Giai đoạn |
 | --- | --- | --- | --- | --- |
 | — | create | NEW | SR-01/02 | M1 |
-| NEW | review + kiểm tra bảo hành | REVIEWING | SR-03/26 | M1 |
+| NEW | review + initial warranty check | REVIEWING | SR-03/27 | M1 |
 | REVIEWING | request-info | AWAITING_INFO | SR-04 | M1 |
 | AWAITING_INFO | customer comment | REVIEWING | SR-05 | M1 |
 | REVIEWING | accept (in warranty) | ACCEPTED | SR-07 | M1 |
@@ -69,9 +71,10 @@ Mỗi dòng là một cạnh của `docs/architecture/state-machines.md`; tạo 
 | AWAITING_CUSTOMER_APPROVAL | reject estimate | COST_REJECTED | SR-23 | M2 |
 | AWAITING_CUSTOMER_APPROVAL | revise estimate | REVIEWING | SR-24 | M2 |
 | COST_REJECTED | send new revision | AWAITING_CUSTOMER_APPROVAL | SR-25 | M2 |
-| ACCEPTED | WorkOrderCreated | PROCESSING | SR-13 | M2 |
-| PROCESSING | WorkOrderCompleted resolved | RESOLVED | SR-14 | M2 |
-| PROCESSING | WorkOrderCancelled / unresolved | ACCEPTED | SR-15 | M2 |
+| ACCEPTED | WorkOrderCreated.v1 | PROCESSING | SR-13 | M1 consumer / M2 producer |
+| PROCESSING | WorkOrderCompleted.v2 resolved | RESOLVED | SR-14 | M2-prep consumer contract |
+| PROCESSING | WorkOrderCancelled.v2 (`cancelServiceRequest=false`) / unresolved | ACCEPTED | SR-15 | M2-prep |
+| PROCESSING | WorkOrderCancelled.v2 (`cancelServiceRequest=true`) | CANCELLED | SR-15 | M2-prep |
 | RESOLVED | confirm | CLOSED | SR-11 | M1 fixture, M2 end-to-end |
 | RESOLVED | reopen | ACCEPTED | SR-12 | M1 fixture, M2 end-to-end |
 | NEW | reject | REJECTED | SR-08 | M1 |

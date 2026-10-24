@@ -104,9 +104,17 @@ export interface ServiceRequestStatusChangedV1 {
   reason: string | null;
 }
 
-
-export const WORK_ORDER_TYPES = ['REPAIR', 'WARRANTY', 'MAINTENANCE', 'INSPECTION'] as const;
-export const REPORT_RESULTS = ['RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED'] as const;
+export const WORK_ORDER_TYPES = [
+  'REPAIR',
+  'WARRANTY',
+  'MAINTENANCE',
+  'INSPECTION',
+] as const;
+export const REPORT_RESULTS = [
+  'RESOLVED',
+  'PARTIALLY_RESOLVED',
+  'UNRESOLVED',
+] as const;
 
 // Exactly one of serviceRequestId / maintenanceTaskId is set (work_orders CHECK).
 interface WorkOrderOrigin {
@@ -133,34 +141,35 @@ export interface WorkOrderAssignedV1 {
   scheduledStart: string | null;
 }
 
-/**
- * v2 (ADR 0008 D6a): adds `customerSummary`, shown to the customer on the
- * Service Request. v1 was never published and is gone.
- */
-export interface WorkOrderCompletedV2 extends WorkOrderOrigin {
+export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
   customerId: string;
   serviceReportId: string;
   result: (typeof REPORT_RESULTS)[number];
-  /** Written by the technician for the customer; never internal notes. */
-  customerSummary: string;
   completedAt: string;
 }
 
 /**
- * v2 (ADR 0008 D4a): adds `cancelServiceRequest`. True: the Service Request
- * becomes CANCELLED; false: it returns to ACCEPTED. Always false for a Work
- * Order of a Maintenance Task. v1 was never published and is gone.
+ * Adds the customer-facing resolution summary (D6a); internal notes are never
+ * included in the event.
  */
-export interface WorkOrderCancelledV2 extends WorkOrderOrigin {
+export interface WorkOrderCompletedV2 extends WorkOrderCompletedV1 {
+  customerSummary: string;
+}
+
+export interface WorkOrderCancelledV1 extends WorkOrderOrigin {
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
   reason: string | null;
-  cancelServiceRequest: boolean;
   cancelledAt: string;
+}
+
+export interface WorkOrderCancelledV2 extends WorkOrderCancelledV1 {
+  /** True cancels the Service Request; false returns it to ACCEPTED. */
+  cancelServiceRequest: boolean;
 }
 
 export interface MaintenanceTaskDueV1 {
@@ -284,7 +293,24 @@ export const Events = {
       scheduledStart: is.nullable(is.isoDateTime),
     },
   }),
-  WorkOrderCompleted: define<WorkOrderCompletedV2>({
+  WorkOrderCompleted: define<WorkOrderCompletedV1>({
+    type: 'WorkOrderCompleted',
+    version: 1,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      serviceRequestId: is.nullable(is.uuid),
+      maintenanceTaskId: is.nullable(is.uuid),
+      equipmentId: is.uuid,
+      customerId: is.uuid,
+      serviceReportId: is.uuid,
+      result: is.oneOf(REPORT_RESULTS),
+      completedAt: is.isoDateTime,
+    },
+  }),
+  WorkOrderCompletedV2: define<WorkOrderCompletedV2>({
     type: 'WorkOrderCompleted',
     version: 2,
     aggregateType: 'WorkOrder',
@@ -298,11 +324,26 @@ export const Events = {
       customerId: is.uuid,
       serviceReportId: is.uuid,
       result: is.oneOf(REPORT_RESULTS),
-      customerSummary: is.string(2000),
       completedAt: is.isoDateTime,
+      customerSummary: is.string(2000),
     },
   }),
-  WorkOrderCancelled: define<WorkOrderCancelledV2>({
+  WorkOrderCancelled: define<WorkOrderCancelledV1>({
+    type: 'WorkOrderCancelled',
+    version: 1,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      serviceRequestId: is.nullable(is.uuid),
+      maintenanceTaskId: is.nullable(is.uuid),
+      equipmentId: is.uuid,
+      reason: is.nullable(is.string(2000)),
+      cancelledAt: is.isoDateTime,
+    },
+  }),
+  WorkOrderCancelledV2: define<WorkOrderCancelledV2>({
     type: 'WorkOrderCancelled',
     version: 2,
     aggregateType: 'WorkOrder',
@@ -314,8 +355,8 @@ export const Events = {
       maintenanceTaskId: is.nullable(is.uuid),
       equipmentId: is.uuid,
       reason: is.nullable(is.string(2000)),
-      cancelServiceRequest: is.boolean,
       cancelledAt: is.isoDateTime,
+      cancelServiceRequest: (value) => typeof value === 'boolean',
     },
   }),
   MaintenanceTaskDue: define<MaintenanceTaskDueV1>({
@@ -373,6 +414,8 @@ export function payloadProblems(
 export const EVENTS_EXCHANGE = 'pbl6.events';
 
 /** `TenantCreated.v1` — consumers bind exactly the versions they understand. */
-export function routingKey(definition: Pick<EventDefinition, 'type' | 'version'>): string {
+export function routingKey(
+  definition: Pick<EventDefinition, 'type' | 'version'>,
+): string {
   return `${definition.type}.v${definition.version}`;
 }

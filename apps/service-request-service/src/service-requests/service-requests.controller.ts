@@ -77,16 +77,6 @@ export class ServiceRequestsController {
     return this.requests.history(principal, requestId);
   }
 
-  @Post(':requestId/start-review')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermissions('service_request:review')
-  startReview(
-    @CurrentUser() principal: Principal,
-    @Param('requestId', new ParseUUIDPipe()) requestId: string,
-  ) {
-    return this.requests.startReview(principal, requestId);
-  }
-
   @Post(':requestId/review')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('service_request:review')
@@ -196,12 +186,12 @@ export class ServiceRequestsController {
 export class InternalServiceRequestsController {
   constructor(private readonly requests: ServiceRequestsService) {}
 
-  @Get(':requestId')
+  @Get(':id')
   @RequirePermissions('service_request:read')
   getReference(
     @CurrentUser() principal: Principal,
-    @Param('requestId', new ParseUUIDPipe()) requestId: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
   ) {
-    return this.requests.internalReference(principal, requestId);
+    return this.requests.internalReference(principal, id);
   }
 }

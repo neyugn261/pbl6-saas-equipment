@@ -35,7 +35,7 @@ try {
   $history = Invoke-RestMethod -Uri "$BaseUrl/mock/requests/service-requests/$id/history" -Headers $headers -TimeoutSec 10
   $comments = Invoke-RestMethod -Uri "$BaseUrl/mock/requests/service-requests/$id/comments" -Headers $headers -TimeoutSec 10
   $transition = Invoke-RestMethod -Uri "$BaseUrl/mock/requests/service-requests/$id/review" -Method Post -Headers $headers -TimeoutSec 10
-  $valid = [bool]$detail.id -and $null -ne $history -and $null -ne $comments -and [bool]$transition.id
+  $valid = $detail.allowedActions -contains 'review' -and $null -ne $history -and $null -ne $comments -and [bool]$transition.id
   $results += [pscustomobject]@{ Area = 'Service Request'; Scenario = 'Activity and review action'; Result = $(if ($valid) { 'PASS' } else { 'FAIL' }) }
 } catch {
   $results += [pscustomobject]@{ Area = 'Service Request'; Scenario = 'Activity and review action'; Result = 'ERROR' }

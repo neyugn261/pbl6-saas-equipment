@@ -42,6 +42,10 @@ function serviceRequest(
     title: 'Equipment stopped',
     description: 'The equipment no longer starts.',
     status: 'NEW',
+    resolutionResult: null,
+    resolutionSummary: null,
+    resolvedWorkOrderNo: null,
+    resolutionCompletedAt: null,
     warrantyCheckResult: null,
     warrantyId: null,
     warrantyEndDate: null,
@@ -59,40 +63,6 @@ function serviceRequest(
 }
 
 describe('ServiceRequestsService', () => {
-  it('records a transition, history and outbox event in the same transaction', async () => {
-    const row = serviceRequest();
-    const tx = {
-      $queryRawUnsafe: jest.fn().mockResolvedValue([{ id: REQUEST_ID }]),
-      $executeRawUnsafe: jest.fn().mockResolvedValue(1),
-      serviceRequest: {
-        findFirst: jest.fn().mockResolvedValue(row),
-        update: jest.fn().mockResolvedValue({ ...row, status: 'REVIEWING' }),
-      },
-      requestStatusHistory: { create: jest.fn().mockResolvedValue({}) },
-    };
-    const prisma = {
-      $transaction: jest.fn(
-        (work: (transaction: typeof tx) => Promise<unknown>) => work(tx),
-      ),
-    } as unknown as PrismaService;
-    const service = new ServiceRequestsService(prisma, new FakeAssetClient());
-
-    const result = await service.startReview(principal(), REQUEST_ID);
-
-    expect(result.status).toBe('REVIEWING');
-    expect(tx.requestStatusHistory.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        oldStatus: 'NEW',
-        newStatus: 'REVIEWING',
-        changedBy: USER_ID,
-      }),
-    });
-    expect(tx.$executeRawUnsafe).toHaveBeenCalledTimes(1);
-    expect(tx.$executeRawUnsafe.mock.calls[0][0]).toContain(
-      'INSERT INTO outbox_events',
-    );
-  });
-
   it('rejects invalid transitions without writing history or events', async () => {
     const row = serviceRequest({ status: 'CLOSED' });
     const tx = {
@@ -105,6 +75,7 @@ describe('ServiceRequestsService', () => {
       requestStatusHistory: { create: jest.fn() },
     };
     const prisma = {
+      serviceRequest: { findFirst: jest.fn().mockResolvedValue(row) },
       $transaction: jest.fn(
         (work: (transaction: typeof tx) => Promise<unknown>) => work(tx),
       ),
@@ -112,7 +83,7 @@ describe('ServiceRequestsService', () => {
     const service = new ServiceRequestsService(prisma, new FakeAssetClient());
 
     await expect(
-      service.startReview(principal(), REQUEST_ID),
+      service.review(principal(), REQUEST_ID),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(tx.serviceRequest.update).not.toHaveBeenCalled();
     expect(tx.requestStatusHistory.create).not.toHaveBeenCalled();
@@ -125,6 +96,7 @@ describe('ServiceRequestsService', () => {
       serviceRequest: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     const prisma = {
+      serviceRequest: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(
         (work: (transaction: typeof tx) => Promise<unknown>) => work(tx),
       ),
@@ -132,19 +104,12 @@ describe('ServiceRequestsService', () => {
     const service = new ServiceRequestsService(prisma, new FakeAssetClient());
 
     await expect(
-      service.startReview(principal('CUSTOMER'), REQUEST_ID),
+      service.internalReference(principal('CUSTOMER'), REQUEST_ID),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('uses the customer claim and sequence table when creating a request', async () => {
-    const row = serviceRequest({
-      requestNo: 'SR-2026-0007',
-      warrantyCheckResult: 'IN_WARRANTY',
-      warrantyId: '00000000-0000-4000-8000-000000001201',
-      warrantyEndDate: new Date('2027-01-01T00:00:00.000Z'),
-      warrantyCheckedBy: USER_ID,
-      warrantyCheckedAt: new Date('2026-10-21T00:00:00.000Z'),
-    });
+  it('derives the staff customer from equipment and defers warranty snapshot until review', async () => {
+    const row = serviceRequest({ requestNo: 'SR-2026-0007' });
     const tx = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([{ last_value: 7n }]),
       $executeRawUnsafe: jest.fn().mockResolvedValue(1),
@@ -177,9 +142,9 @@ describe('ServiceRequestsService', () => {
       endDate: '2027-01-01',
     });
     const service = new ServiceRequestsService(prisma, assets);
+    const warrantyLookup = jest.spyOn(assets, 'getWarrantyStatus');
 
-    const result = await service.create(principal('CUSTOMER'), {
-      customerId: '00000000-0000-4000-8000-000000000999',
+    const result = await service.create(principal(), {
       equipmentId: EQUIPMENT_ID,
       type: 'REPAIR',
       title: 'Equipment stopped',
@@ -187,18 +152,19 @@ describe('ServiceRequestsService', () => {
     });
 
     expect(result.requestNo).toMatch(/^SR-\d{4}-0007$/);
-    expect(result.warrantyCheck?.result).toBe('IN_WARRANTY');
+    expect(result.warrantyCheck).toBeNull();
+    expect(warrantyLookup).not.toHaveBeenCalled();
     expect(tx.serviceRequest.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         tenantId: TENANT_ID,
         customerId: CUSTOMER_ID,
         equipmentId: EQUIPMENT_ID,
         requesterId: USER_ID,
-        warrantyCheckResult: 'IN_WARRANTY',
-        warrantyId: '00000000-0000-4000-8000-000000001201',
-        warrantyCheckedBy: USER_ID,
       }),
     });
+    expect(tx.serviceRequest.create.mock.calls[0][0].data).not.toHaveProperty(
+      'warrantyCheckedBy',
+    );
     expect(tx.$executeRawUnsafe.mock.calls.map((call) => call[5])).toEqual([
       'ServiceRequestCreated',
       'ServiceRequestStatusChanged',
@@ -305,11 +271,73 @@ describe('ServiceRequestsService', () => {
       id: REQUEST_ID,
       requestNo: request.requestNo,
       status: request.status,
+      title: request.title,
       customerId: CUSTOMER_ID,
       equipmentId: EQUIPMENT_ID,
       type: request.type,
       priority: request.priority,
     });
+  });
+
+  it('allows staff to cancel an ACCEPTED request', async () => {
+    const accepted = serviceRequest({ status: 'ACCEPTED' });
+    const cancelled = serviceRequest({ status: 'CANCELLED' });
+    const tx = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([{ id: REQUEST_ID }]),
+      $executeRawUnsafe: jest.fn().mockResolvedValue(1),
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue(accepted),
+        update: jest.fn().mockResolvedValue(cancelled),
+      },
+      requestStatusHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn(
+        (work: (transaction: typeof tx) => Promise<unknown>) => work(tx),
+      ),
+    } as unknown as PrismaService;
+    const service = new ServiceRequestsService(prisma, new FakeAssetClient());
+
+    await expect(
+      service.cancel(principal(), REQUEST_ID),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+    expect(tx.requestStatusHistory.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        oldStatus: 'ACCEPTED',
+        newStatus: 'CANCELLED',
+      }),
+    });
+  });
+
+  it('requires cancelling the active work order before a PROCESSING request', async () => {
+    const processing = serviceRequest({ status: 'PROCESSING' });
+    const tx = {
+      $queryRawUnsafe: jest.fn().mockResolvedValue([{ id: REQUEST_ID }]),
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue(processing),
+        update: jest.fn(),
+      },
+      requestStatusHistory: { create: jest.fn() },
+      $executeRawUnsafe: jest.fn(),
+    };
+    const prisma = {
+      $transaction: jest.fn(
+        (work: (transaction: typeof tx) => Promise<unknown>) => work(tx),
+      ),
+    } as unknown as PrismaService;
+    const service = new ServiceRequestsService(prisma, new FakeAssetClient());
+
+    await expect(service.cancel(principal(), REQUEST_ID)).rejects.toMatchObject(
+      {
+        response: expect.objectContaining({
+          code: 'WORK_ORDER_CANCELLATION_REQUIRED',
+          message: expect.stringContaining('active work order'),
+        }),
+      },
+    );
+    expect(tx.serviceRequest.update).not.toHaveBeenCalled();
+    expect(tx.requestStatusHistory.create).not.toHaveBeenCalled();
+    expect(tx.$executeRawUnsafe).not.toHaveBeenCalled();
   });
 
   it('never includes internal comments for CUSTOMER accounts', async () => {
@@ -367,7 +395,9 @@ describe('ServiceRequestsService', () => {
     ];
     const findManyComments = jest.fn().mockResolvedValue(comments);
     const prisma = {
-      serviceRequest: { findFirst: jest.fn().mockResolvedValue(serviceRequest()) },
+      serviceRequest: {
+        findFirst: jest.fn().mockResolvedValue(serviceRequest()),
+      },
       requestStatusHistory: {
         findMany: jest.fn().mockResolvedValue(statusChanges),
       },
