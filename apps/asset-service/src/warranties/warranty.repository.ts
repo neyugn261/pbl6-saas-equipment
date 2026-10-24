@@ -27,6 +27,9 @@ export class WarrantyRepository {
       await tx.$queryRaw`SELECT id FROM equipments WHERE tenant_id = ${scope.tenantId}::uuid AND id = ${equipmentId}::uuid FOR UPDATE`;
       const equipment = await tx.equipment.findFirst({ where: { ...scopeWhere(scope), id: equipmentId } });
       if (!equipment) throw equipmentMissing();
+      if (equipment.status === 'RETIRED') {
+        throw new ConflictException({ code: 'EQUIPMENT_RETIRED', message: 'Retired equipment cannot receive a new warranty' });
+      }
       const overlap = await tx.warranty.findFirst({ where: {
         tenantId: scope.tenantId, equipmentId, status: 'ACTIVE',
         startDate: { lte: dbDate(input.endDate) }, endDate: { gte: dbDate(input.startDate) },

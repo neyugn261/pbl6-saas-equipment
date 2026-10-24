@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { scopeWhere, type DataScope } from '@pbl6/auth';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -14,6 +14,9 @@ export class QrRepository {
       await tx.$queryRaw`SELECT id FROM equipments WHERE tenant_id = ${scope.tenantId}::uuid AND id = ${equipmentId}::uuid FOR UPDATE`;
       const equipment = await tx.equipment.findFirst({ where: { ...scopeWhere(scope), id: equipmentId } });
       if (!equipment) throw missingEquipment();
+      if (equipment.status === 'RETIRED') {
+        throw new ConflictException({ code: 'EQUIPMENT_RETIRED', message: 'Retired equipment cannot receive a new QR code' });
+      }
       const previous = await tx.equipmentQrCode.findFirst({ where: {
         tenantId: scope.tenantId, equipmentId, revokedAt: null,
       } });

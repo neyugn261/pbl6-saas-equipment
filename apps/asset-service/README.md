@@ -27,13 +27,13 @@ real ACTIVE warranty rows from `asset_db` and use today's date in
 - `GET /equipment` — TENANT_STAFF or CUSTOMER with `equipment:read`. Token scope
   limits tenant and, for CUSTOMER, customer. Supports pagination, search,
   customer/site/status/warranty filters, and stable sort per `asset.yaml`.
+  Search treats `%` and `_` as literal characters.
 - `POST /equipment` — TENANT_STAFF with `equipment:manage`. Requires an ACTIVE
   model in the token tenant and Organization-validated customer, site and
   optional location. Equipment and REGISTERED history commit together. The
   database enforces unique asset code per tenant and serial per tenant/model.
 - `GET /equipment/:equipmentId` — scoped detail with current model, a genuine
-  local warranty result, and whether an active QR row exists. The standalone
-  warranty-status API remains A4.
+  local warranty result, and whether an active QR row exists.
 - `PATCH /equipment/:equipmentId` — TENANT_STAFF with `equipment:manage`.
   Moves stay within the existing customer; changing site without a location
   clears the old location. RETIRED is final. Effective changes write MOVED,
@@ -49,14 +49,16 @@ real ACTIVE warranty rows from `asset_db` and use today's date in
   newest start date first; `expired` is derived for today in Vietnam.
 - `POST /equipment/:equipmentId/warranties` — staff with `warranty:manage`;
   locks equipment, rejects inclusive overlap with ACTIVE periods, and writes
-  WARRANTY_ADDED history atomically.
+  WARRANTY_ADDED history atomically. RETIRED equipment returns 409
+  `EQUIPMENT_RETIRED`.
 - `POST /warranties/:warrantyId/void` — staff with `warranty:manage`;
   preserves the row and writes WARRANTY_VOIDED history. Repeating it returns 409.
 - `GET /equipment/:equipmentId/warranty-status?date=YYYY-MM-DD` — scoped;
   date defaults to today in Vietnam. Returns covering ACTIVE period, latest
   ended ACTIVE period, or null warranty fields per the contract.
 - `POST /equipment/:equipmentId/qr-codes` — staff with `qr:manage`; creates or
-  reprints one active random token and returns its portal URL.
+  reprints one active random token and returns its portal URL. RETIRED
+  equipment returns 409 `EQUIPMENT_RETIRED`.
 - `DELETE /equipment/:equipmentId/qr-codes` — staff with `qr:manage`; revokes
   the active token, returns 204 even when already revoked.
 - `GET /qr/:token` — authenticated, scoped equipment lookup; revoked, unknown
@@ -86,7 +88,8 @@ reference errors and error formatting. `test:db` calls
 `requireTestDatabaseUrl('ASSET_TEST_DATABASE_URL')` before connecting and
 uses only its own temporary tenant rows; it verifies transaction rollback,
 unique keys, concurrent writes, history, and warranty date boundaries. The
-test database needs Asset's existing migrations (`0001` and `0002`) deployed.
+`test:db` applies Asset's migrations to the dedicated test database before the
+suite runs.
 
 The dev seed owns only `asset_db`; run Organization's demo seed separately for
 the referenced customers, sites and locations. Fixed Asset IDs are listed in

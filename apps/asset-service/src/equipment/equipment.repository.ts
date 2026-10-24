@@ -3,6 +3,7 @@ import type { DataScope } from '@pbl6/auth';
 import { scopeWhere } from '@pbl6/auth';
 import { Prisma, type Equipment, type EquipmentHistory, type Warranty } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeLikePattern } from '../common/search';
 import type { CreateEquipmentDto, ListEquipmentQueryDto, PatchEquipmentDto } from './dto/equipment.dto';
 
 const missing = () => new NotFoundException({ code: 'EQUIPMENT_NOT_FOUND', message: 'Equipment not found' });
@@ -31,15 +32,16 @@ export class EquipmentRepository {
     const covering: Prisma.WarrantyWhereInput = { status: 'ACTIVE', startDate: { lte: date }, endDate: { gte: date } };
     const ended: Prisma.WarrantyWhereInput = { status: 'ACTIVE', endDate: { lt: date } };
     const q = query.q?.trim();
+    const search = q ? escapeLikePattern(q) : undefined;
     const where: Prisma.EquipmentWhereInput = {
       ...scopeWhere(scope),
       ...(scope.customerId === null && query.customerId ? { customerId: query.customerId } : {}),
       ...(query.siteId ? { customerSiteId: query.siteId } : {}),
       ...(query.status ? { status: query.status } : {}),
-      ...(q ? { OR: [
-        { assetCode: { contains: q, mode: 'insensitive' } },
-        { serialNumber: { contains: q, mode: 'insensitive' } },
-        { model: { name: { contains: q, mode: 'insensitive' } } },
+      ...(search ? { OR: [
+        { assetCode: { contains: search, mode: 'insensitive' } },
+        { serialNumber: { contains: search, mode: 'insensitive' } },
+        { model: { name: { contains: search, mode: 'insensitive' } } },
       ] } : {}),
       ...(query.warranty === 'IN_WARRANTY' ? { warranties: { some: covering } } : {}),
       ...(query.warranty === 'OUT_OF_WARRANTY' ? { AND: [
