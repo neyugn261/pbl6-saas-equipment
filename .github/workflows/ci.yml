@@ -131,3 +131,6 @@ jobs:
       - name: Service Request e2e tests
         working-directory: apps/service-request-service
         run: pnpm test:e2e
+      - name: Service Request e2e tests (service_request_test_db)
+        working-directory: apps/service-request-service
+        run: pnpm test:e2e:db

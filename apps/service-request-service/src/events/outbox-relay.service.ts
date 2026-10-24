@@ -5,9 +5,10 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OutboxRelay, RabbitMqEventBus } from '@pbl6/event-contracts';
+import { Events, OutboxRelay, RabbitMqEventBus } from '@pbl6/event-contracts';
 import type { AppEnv } from '../config/env.validation';
 import { PrismaService } from '../prisma/prisma.service';
+import { WorkOrderEventsConsumer } from './work-order-events.consumer';
 
 @Injectable()
 export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
@@ -18,6 +19,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService<AppEnv, true>,
     private readonly prisma: PrismaService,
+    private readonly workOrderEvents: WorkOrderEventsConsumer,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -30,6 +32,17 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.bus = new RabbitMqEventBus({ url, logger: this.logger });
+    this.bus.subscribe({
+      queue: 'service-request-service.work-orders',
+      events: [
+        Events.WorkOrderCreated,
+        Events.WorkOrderCompleted,
+        Events.WorkOrderCompletedV2,
+        Events.WorkOrderCancelled,
+        Events.WorkOrderCancelledV2,
+      ],
+      handler: (envelope) => this.workOrderEvents.handle(envelope),
+    });
     await this.bus.start();
     this.relay = new OutboxRelay({
       db: this.prisma,

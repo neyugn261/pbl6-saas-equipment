@@ -20,30 +20,33 @@ isolated tests.
 - Implemented: create/list/detail/update requests, status history, comments
   with CUSTOMER/INTERNAL visibility, warranty checks, and M1 review, accept,
   reject, cancel, confirm and reopen transitions.
-- Request creation snapshots the current warranty result. `POST
-  /service-requests/{id}/review` begins review and refreshes the snapshot in the
-  same transaction as the status history and status event. The existing
-  `start-review` and `warranty-check` endpoints remain available separately.
-- `GET /internal/service-requests/{id}` returns only the minimal scoped
-  Service Request reference and requires a tenant-staff access token and
+- Request creation validates the equipment but does not snapshot its warranty;
+  staff may omit `customerId` and use the equipment's customer.
+  `POST /service-requests/{id}/review` starts review and records the initial
+  warranty snapshot in the same transaction as the status history and event.
+- `POST /service-requests/{id}/warranty-check` refreshes the warranty snapshot
+  while the request is in `REVIEWING`.
+- `GET /internal/service-requests/{id}` returns a scoped Service Request
+  reference including its title and requires a tenant-staff access token and
   `service_request:read`.
 - Request number allocation, status history and `ServiceRequestCreated` /
   `ServiceRequestStatusChanged` outbox writes share database transactions.
   `OutboxRelay` publishes them to RabbitMQ when `RABBITMQ_URL` is configured.
-- Cost Estimate endpoints and Work Order event consumers remain later
-  milestone work; out-of-warranty requests cannot be accepted without an
-  approved estimate.
-- Staff cancellation from `ACCEPTED` is deliberately unavailable until the
-  Work Order service can verify that no non-terminal work order exists.
-  This is also reported as `WORK_ORDER_CHECK_REQUIRED`; no uncontracted
-  cross-service endpoint is assumed before the Work Order contract is ready.
+- The idempotent `service-request-service.work-orders` consumer handles
+  WorkOrderCreated, WorkOrderCompleted v1/v2 and WorkOrderCancelled v1/v2.
+  It ignores WorkOrderCreated for an already-cancelled request and writes
+  customer-safe completion summary fields from v2 events.
+- Staff may cancel an `ACCEPTED` request. A `PROCESSING` request returns 409
+  `WORK_ORDER_CANCELLATION_REQUIRED`; cancel its Work Order first. Out-of-
+  warranty requests cannot be accepted without an approved estimate.
 - Errors follow `{code, message, details?}`; logs are JSON lines with the
   correlation id.
 
 Set `ASSET_SERVICE_URL` to the Asset Service base URL. It is validated at
 startup and is already listed in the root `.env.example`.
 For local runs without RabbitMQ, leave `RABBITMQ_URL` empty; events are retained
-in the outbox until the relay is enabled. Production requires the broker URL.
+in the outbox until the relay is enabled, and Work Order events are not consumed.
+Production requires the broker URL.
 
 ## Commands
 
@@ -52,6 +55,7 @@ in the outbox until the relay is enabled. Production requires the broker URL.
 pnpm dev:service-request
 pnpm --filter service-request-service test
 pnpm --filter service-request-service test:e2e
+pnpm --filter service-request-service test:e2e:db
 pnpm --filter service-request-service lint
 pnpm --filter service-request-service typecheck
 pnpm --filter service-request-service db:migrate
@@ -60,3 +64,5 @@ pnpm --filter service-request-service db:check-drift
 
 `pnpm start:dev` is a service-local command, not a root workspace script. To
 use it directly, first change directory to `apps/service-request-service`.
+The database-backed E2E suite migrates and truncates `SERVICE_REQUEST_TEST_DATABASE_URL`;
+it refuses to run unless the database name contains `test`.

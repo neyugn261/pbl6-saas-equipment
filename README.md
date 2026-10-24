@@ -269,9 +269,16 @@ pnpm lint                   # oxlint (services, packages) + eslint (web); warnin
 pnpm typecheck
 pnpm test                   # unit test, không cần database
 pnpm test:e2e               # e2e; Identity dùng IDENTITY_TEST_DATABASE_URL trong .env
+pnpm --filter service-request-service test:e2e:db  # Service Request E2E trên service_request_test_db
 pnpm build
 pnpm build:packages         # build packages/* (typecheck/test/dev:* ở root tự gọi; cần khi chạy lệnh trong một service sau khi sửa package)
 ```
+
+Kiểm thử tích hợp luồng M1 qua Gateway (Identity → Asset → Service Request):
+khởi động Identity, Organization, Asset, Service Request và Gateway, seed dữ liệu
+demo theo README của từng service, đặt `$env:SEED_DEMO_PASSWORD` theo `.env`, rồi
+chạy `pnpm smoke:m1`. Smoke test xác nhận request mới chưa có snapshot bảo hành;
+snapshot được tạo khi Service Manager gọi `/review`.
 
 Test truyền tải sự kiện với RabbitMQ thật (cần `pnpm infra:up`):
 
@@ -281,7 +288,7 @@ RABBITMQ_TEST_URL=amqp://pbl6:pbl6_dev_password@localhost:5672 pnpm --filter @pb
 
 - E2E của Identity **xoá dữ liệu** trong database test, nên chỉ chạy khi tên database có chữ `test` (mặc định `identity_test_db`).
 - Jest chạy với `--experimental-vm-modules` vì NestJS 12 chỉ phát hành dạng ESM; các script `test` đã có sẵn cờ này.
-- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR (kèm RabbitMQ cho test truyền tải và e2e khởi động của Organization/Asset/Service Request), cộng migration + drift check của cả 8 database và seed + e2e của Identity trên PostgreSQL 17.
+- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR (kèm RabbitMQ cho test truyền tải, e2e khởi động và database-backed e2e của Service Request), cộng migration + drift check của cả 8 database và seed + e2e của Identity, Organization trên PostgreSQL 17.
 
 Lệnh database ở root: `pnpm db:migrate` (mọi service), `pnpm db:check-drift` (mọi service). Mỗi service có cùng bộ lệnh `db:migrate`, `db:check-drift`, `db:migrate:dev`, `prisma:generate` (chạy trong `apps/<service>`); quy tắc migration: [apps/identity-service/prisma/README.md](apps/identity-service/prisma/README.md).
 

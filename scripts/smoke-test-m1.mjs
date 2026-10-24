@@ -110,14 +110,19 @@ async function main() {
     status: 201,
   });
   if (!created.id || created.status !== 'NEW') throw new Error('Service Request was not created as NEW');
+  if (created.warrantyCheck !== null) {
+    throw new Error('New Service Request must not contain a warranty snapshot before review');
+  }
 
   const requestPath = `/api/service-requests/${created.id}`;
-  const { data: reviewing } = await call('POST', `${requestPath}/start-review`, {
+  const { data: reviewing } = await call('POST', `${requestPath}/review`, {
     token: managerToken,
   });
   if (reviewing.status !== 'REVIEWING') throw new Error('Service Request did not enter REVIEWING');
+  if (reviewing.warrantyCheck?.result !== 'IN_WARRANTY') {
+    throw new Error('Review did not record the current warranty snapshot');
+  }
 
-  await call('POST', `${requestPath}/warranty-check`, { token: managerToken });
   const { data: accepted } = await call('POST', `${requestPath}/accept`, {
     token: managerToken,
   });

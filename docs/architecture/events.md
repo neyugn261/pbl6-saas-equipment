@@ -1,4 +1,4 @@
-# Event catalog v1
+# Versioned event catalog
 
 Transport, envelope and guarantees: [ADR 0005](../decisions/0005-event-transport.md).
 The executable contract is `Events` in
@@ -27,7 +27,9 @@ first use):
 | `WorkOrderCreated.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, type, priority` | service-request (→ PROCESSING), maintenance (task ↔ WO) |
 | `WorkOrderAssigned.v1` | workorder-service | M2 | `workOrderId, workOrderNo, technicianId, technicianUserId, assignedBy, scheduledStart\|null` | notification (M3) |
 | `WorkOrderCompleted.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, serviceReportId, result, completedAt` | service-request (→ RESOLVED / ACCEPTED), asset (`equipment_history`), maintenance |
+| `WorkOrderCompleted.v2` | workorder-service | M2-prep | `WorkOrderCompleted.v1` fields + `customerSummary` | service-request (stores customer-safe resolution summary), asset, maintenance |
 | `WorkOrderCancelled.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelledAt` | service-request (→ ACCEPTED), maintenance (release task, ADR 0002) |
+| `WorkOrderCancelled.v2` | workorder-service | M2-prep | `WorkOrderCancelled.v1` fields + `cancelServiceRequest` | service-request (→ CANCELLED or ACCEPTED), maintenance |
 | `MaintenanceTaskDue.v1` | maintenance-service | M2 | `maintenanceTaskId, maintenancePlanId, equipmentId, customerId, customerSiteId\|null, scheduledDate (YYYY-MM-DD), title` | workorder (create WO) |
 | `LowStockDetected.v1` | inventory-service | M3 | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
 
@@ -50,6 +52,7 @@ snapshot on the plan.
 | Queue | Service | Handles |
 |---|---|---|
 | `identity-service.directory` | identity-service | TenantCreated v1, TenantStatusChanged v1, CustomerMembershipChanged v1 |
+| `service-request-service.work-orders` | service-request-service | WorkOrderCreated v1, WorkOrderCompleted v1/v2, WorkOrderCancelled v1/v2 |
 
 Each queue has `<queue>.retry` and `<queue>.dlq`.
 

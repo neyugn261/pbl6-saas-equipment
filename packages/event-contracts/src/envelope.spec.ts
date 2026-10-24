@@ -25,8 +25,12 @@ describe('event catalog', () => {
   });
 
   it('checks payloads against the contract', () => {
-    expect(payloadProblems(Events.TenantCreated, envelope().payload)).toEqual([]);
-    expect(payloadProblems(Events.TenantCreated, { tenantId: 'x', code: 'A' })).toEqual([
+    expect(payloadProblems(Events.TenantCreated, envelope().payload)).toEqual(
+      [],
+    );
+    expect(
+      payloadProblems(Events.TenantCreated, { tenantId: 'x', code: 'A' }),
+    ).toEqual([
       'tenantId is missing or invalid',
       'name is missing or invalid',
       'status is missing or invalid',
@@ -58,6 +62,45 @@ describe('event catalog', () => {
         serviceReportId: id,
         result: 'RESOLVED',
         completedAt: '2026-10-17T03:00:00Z',
+      }),
+    ).toEqual([]);
+    expect(
+      payloadProblems(Events.WorkOrderCompletedV2, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0002',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        customerId: id,
+        serviceReportId: id,
+        result: 'PARTIALLY_RESOLVED',
+        completedAt: '2026-10-17T03:00:00Z',
+        customerSummary: 'Customer-facing completion summary',
+      }),
+    ).toEqual([]);
+    expect(
+      payloadProblems(Events.WorkOrderCompletedV2, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0002',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        customerId: id,
+        serviceReportId: id,
+        result: 'PARTIALLY_RESOLVED',
+        completedAt: '2026-10-17T03:00:00Z',
+      }),
+    ).toEqual(['customerSummary is missing or invalid']);
+    expect(
+      payloadProblems(Events.WorkOrderCancelledV2, {
+        workOrderId: id,
+        workOrderNo: 'WO-2026-0003',
+        serviceRequestId: id,
+        maintenanceTaskId: null,
+        equipmentId: id,
+        reason: null,
+        cancelledAt: '2026-10-17T03:00:00Z',
+        cancelServiceRequest: true,
       }),
     ).toEqual([]);
     expect(
@@ -103,7 +146,10 @@ describe('parseEnvelope', () => {
     ['not JSON', 'nope'],
     ['bad event id', JSON.stringify(envelope({ eventId: '1' }))],
     ['unknown version', JSON.stringify(envelope({ eventVersion: 9 }))],
-    ['payload breaking the contract', JSON.stringify(envelope({ payload: { tenantId: TENANT } }))],
+    [
+      'payload breaking the contract',
+      JSON.stringify(envelope({ payload: { tenantId: TENANT } })),
+    ],
     ['bad timestamp', JSON.stringify(envelope({ occurredAt: 'yesterday' }))],
   ])('rejects %s', (_name, body) => {
     expect(() => parseEnvelope(body)).toThrow(InvalidEventError);

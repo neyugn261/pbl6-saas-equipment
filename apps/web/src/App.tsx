@@ -29,7 +29,7 @@ import type {
 import './App.css'
 
 const actionLabels: Record<string, string> = {
-  'start-review': 'Bắt đầu xem xét',
+  review: 'Xét duyệt & kiểm tra bảo hành',
   'request-info': 'Yêu cầu bổ sung',
   'warranty-check': 'Kiểm tra bảo hành',
   accept: 'Tiếp nhận',
@@ -610,7 +610,7 @@ function RequestDetailPage() {
     }
   }
   const actions = [
-    'start-review',
+    'review',
     'request-info',
     'warranty-check',
     'accept',

@@ -12,6 +12,10 @@ never be dropped by a later migration.
 Notes for this database:
 
 - `cost_estimate_items.amount` is a `GENERATED ALWAYS ... STORED` column. `schema.prisma` declares it with `@default(dbgenerated("round((quantity * unit_price), 2)"))` so the drift check matches; it is read-only — never set it in `create`/`update`.
+- Migration `0003_work_order_resolution` adds the customer-safe resolution
+  snapshot populated from `WorkOrderCompleted.v2`. The original v3.1 ERD and
+  `0001_init` remain the immutable baseline; later schema changes are additive
+  migrations.
 
 ## Commands (run in `apps/service-request-service`)
 

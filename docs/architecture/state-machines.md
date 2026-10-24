@@ -16,7 +16,7 @@
 ```mermaid
 stateDiagram-v2
   [*] --> NEW: create
-  NEW --> REVIEWING: start review
+  NEW --> REVIEWING: review + initial warranty check
   REVIEWING --> AWAITING_INFO: request info
   AWAITING_INFO --> REVIEWING: info provided
   REVIEWING --> ACCEPTED: accept (IN_WARRANTY)
@@ -27,7 +27,8 @@ stateDiagram-v2
   COST_REJECTED --> AWAITING_CUSTOMER_APPROVAL: send new revision
   ACCEPTED --> PROCESSING: WorkOrderCreated
   PROCESSING --> RESOLVED: WorkOrderCompleted (resolved)
-  PROCESSING --> ACCEPTED: WorkOrderCancelled / unresolved
+  PROCESSING --> ACCEPTED: WorkOrderCancelled (cancelServiceRequest=false) / unresolved
+  PROCESSING --> CANCELLED: WorkOrderCancelled (cancelServiceRequest=true)
   RESOLVED --> CLOSED: customer confirms
   RESOLVED --> ACCEPTED: reopen
   NEW --> REJECTED: reject
@@ -38,7 +39,7 @@ stateDiagram-v2
   REVIEWING --> CANCELLED: cancel
   AWAITING_CUSTOMER_APPROVAL --> CANCELLED: cancel
   COST_REJECTED --> CANCELLED: cancel
-  ACCEPTED --> CANCELLED: cancel
+  ACCEPTED --> CANCELLED: staff cancel
   CLOSED --> [*]
   REJECTED --> [*]
   CANCELLED --> [*]
@@ -47,24 +48,27 @@ stateDiagram-v2
 | From | Action | Who | To | Rules and side effects |
 |---|---|---|---|---|
 | — | create | `service_request:create`; CUSTOMER only for its own customer and its own equipment; staff for any customer of the tenant | NEW | Equipment validated through Asset (`tenant_id`, `customer_id`, not `RETIRED`). `request_no` = `SR-<year>-<0001>` from `document_sequences`. Event `ServiceRequestCreated`. |
-| NEW | start review | `service_request:review` | REVIEWING | `review_started_at = now()`. |
+| NEW | review | `service_request:review` | REVIEWING | Calls Asset warranty-status and atomically stores `review_started_at`, warranty snapshot, and checker. Creating the request does not write warranty checker fields. |
 | REVIEWING | request info | `service_request:review` | AWAITING_INFO | Reason required, stored as a `CUSTOMER` comment. |
 | AWAITING_INFO | info provided | requester side (own customer) by adding a `CUSTOMER` comment, or `service_request:review` | REVIEWING | — |
-| REVIEWING | record warranty check | `service_request:review` | (unchanged) | Calls Asset `warranty-status` for today; stores the snapshot (`warranty_check_result`, `warranty_id`, `warranty_end_date`, `warranty_checked_by/at`). Can be repeated while REVIEWING. |
-| REVIEWING | accept | `service_request:review` | ACCEPTED | Only when the snapshot is `IN_WARRANTY`. Out of warranty goes through an estimate. |
+| REVIEWING | record warranty check | `service_request:review` | (unchanged) | Calls Asset `warranty-status` again and refreshes the snapshot. |
+| REVIEWING | accept | `service_request:review` | ACCEPTED | Requires a warranty snapshot made by staff. Only `IN_WARRANTY` can be accepted without an approved estimate. |
 | REVIEWING | send estimate | `cost_estimate:manage` | AWAITING_CUSTOMER_APPROVAL | Snapshot required and not `IN_WARRANTY`; the DRAFT revision becomes SENT. A free repair out of warranty is an estimate with `total_amount = 0` and goes through the same approval. |
 | AWAITING_CUSTOMER_APPROVAL | customer approves | `cost_estimate:respond`, own customer | ACCEPTED | Estimate SENT → APPROVED; `responded_by/at`. Refused when `valid_until` has passed (estimate → EXPIRED). |
 | AWAITING_CUSTOMER_APPROVAL | customer rejects | `cost_estimate:respond`, own customer | COST_REJECTED | Estimate SENT → REJECTED; reason stored as a `CUSTOMER` comment. |
 | AWAITING_CUSTOMER_APPROVAL | revise estimate | `cost_estimate:manage` | REVIEWING | SENT revision → SUPERSEDED; a new DRAFT revision `n+1` is created. |
 | COST_REJECTED | send new revision | `cost_estimate:manage` | AWAITING_CUSTOMER_APPROVAL | New revision `n+1` (DRAFT → SENT); earlier revisions are kept as history. |
-| ACCEPTED | WorkOrderCreated (event) | system (`changed_by` NULL) | PROCESSING | Only one non-terminal WO per request (`uq_active_workorder_per_request`). |
-| PROCESSING | WorkOrderCompleted with report `RESOLVED` or `PARTIALLY_RESOLVED` (event) | system | RESOLVED | `resolved_at = now()`. |
-| PROCESSING | WorkOrderCompleted with `UNRESOLVED`, or WorkOrderCancelled (event) | system | ACCEPTED | A new Work Order can be created. |
+| ACCEPTED | WorkOrderCreated (event) | system (`changed_by` NULL) | PROCESSING | Only one non-terminal WO per request (`uq_active_workorder_per_request`). If the request is already CANCELLED, the event is consumed without changing the request. |
+| PROCESSING | WorkOrderCompleted.v2 with `RESOLVED` or `PARTIALLY_RESOLVED` (event) | system | RESOLVED | Stores `resolution_result`, customer-safe `resolution_summary`, `resolved_work_order_no`, and completion time; `resolved_at` is set. |
+| PROCESSING | WorkOrderCompleted with `UNRESOLVED` (event) | system | ACCEPTED | Stores the latest outcome summary and completion time; a new Work Order can be created. |
+| PROCESSING | WorkOrderCancelled.v2 (`cancelServiceRequest=false`) | system | ACCEPTED | The Work Order was cancelled without cancelling the Service Request. |
+| PROCESSING | WorkOrderCancelled.v2 (`cancelServiceRequest=true`) | system | CANCELLED | Records the cancellation reason. |
 | RESOLVED | confirm | requester side (own customer, `service_request:create`) or `service_request:review` on behalf of the customer | CLOSED | `confirmed_by/at`, `closed_at`. Never closed automatically: a RESOLVED request waits for the confirmation. |
 | RESOLVED | reopen | requester side (own customer) or `service_request:review` | ACCEPTED | Reason required. |
 | NEW, REVIEWING, AWAITING_INFO | reject | `service_request:review` | REJECTED | Reason required, visible to the customer. |
 | NEW, AWAITING_INFO, AWAITING_CUSTOMER_APPROVAL, COST_REJECTED | cancel | requester side (own customer) | CANCELLED | Reason optional. |
-| NEW, REVIEWING, AWAITING_INFO, AWAITING_CUSTOMER_APPROVAL, COST_REJECTED, ACCEPTED | cancel | `service_request:review` | CANCELLED | From ACCEPTED only when no non-terminal Work Order exists. |
+| NEW, REVIEWING, AWAITING_INFO, AWAITING_CUSTOMER_APPROVAL, COST_REJECTED, ACCEPTED | cancel | `service_request:review` | CANCELLED | Accepted requests are cancelled through the event workflow; no synchronous Work Order lookup. A later `WorkOrderCreated` is ignored. |
+| PROCESSING | cancel | any caller allowed to cancel | no change | 409 `WORK_ORDER_CANCELLATION_REQUIRED`; cancel the active Work Order first. |
 
 Every status change publishes `ServiceRequestStatusChanged` (from, to,
 changedBy, reason). Terminal: CLOSED, REJECTED, CANCELLED — no transition

@@ -1,6 +1,7 @@
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { configureApp } from '@pbl6/service-kit';
+import { signTestAccessToken } from '@pbl6/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
@@ -70,5 +71,18 @@ describe('service-request-service bootstrap (e2e)', () => {
       .get('/internal/service-requests/00000000-0000-4000-8000-000000002001')
       .expect(401);
     expect(res.body.code).toBe('INVALID_ACCESS_TOKEN');
+  });
+
+  it('does not expose the removed start-review action', async () => {
+    const token = signTestAccessToken({
+      role: 'SERVICE_MANAGER',
+      tenantId: '00000000-0000-4000-8000-000000000001',
+    });
+    await request(app.getHttpServer())
+      .post(
+        '/service-requests/00000000-0000-4000-8000-000000002001/start-review',
+      )
+      .set('authorization', `Bearer ${token}`)
+      .expect(404);
   });
 });

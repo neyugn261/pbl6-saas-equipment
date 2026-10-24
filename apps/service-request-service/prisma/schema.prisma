@@ -37,37 +37,41 @@ model DocumentSequence {
 /// The warranty_* columns are the decision snapshot frozen at review time;
 /// warranty_check_result: IN_WARRANTY | OUT_OF_WARRANTY | NO_WARRANTY.
 model ServiceRequest {
-  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String                 @map("tenant_id") @db.Uuid
-  requestNo           String                 @map("request_no") @db.VarChar(50)
+  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String                 @map("tenant_id") @db.Uuid
+  requestNo             String                 @map("request_no") @db.VarChar(50)
   /// Logical reference to organization_db.customers.id
-  customerId          String                 @map("customer_id") @db.Uuid
+  customerId            String                 @map("customer_id") @db.Uuid
   /// Logical reference to asset_db.equipments.id
-  equipmentId         String                 @map("equipment_id") @db.Uuid
+  equipmentId           String                 @map("equipment_id") @db.Uuid
   /// Logical reference to identity_db.users.id
-  requesterId         String                 @map("requester_id") @db.Uuid
-  type                String                 @db.VarChar(30)
-  priority            String                 @default("NORMAL") @db.VarChar(20)
-  title               String                 @db.VarChar(200)
-  description         String
-  status              String                 @default("NEW") @db.VarChar(40)
-  warrantyCheckResult String?                @map("warranty_check_result") @db.VarChar(30)
+  requesterId           String                 @map("requester_id") @db.Uuid
+  type                  String                 @db.VarChar(30)
+  priority              String                 @default("NORMAL") @db.VarChar(20)
+  title                 String                 @db.VarChar(200)
+  description           String
+  status                String                 @default("NEW") @db.VarChar(40)
+  warrantyCheckResult   String?                @map("warranty_check_result") @db.VarChar(30)
   /// Logical reference to asset_db.warranties.id
-  warrantyId          String?                @map("warranty_id") @db.Uuid
-  warrantyEndDate     DateTime?              @map("warranty_end_date") @db.Date
-  warrantyCheckedBy   String?                @map("warranty_checked_by") @db.Uuid
-  warrantyCheckedAt   DateTime?              @map("warranty_checked_at") @db.Timestamptz(6)
-  reviewStartedAt     DateTime?              @map("review_started_at") @db.Timestamptz(6)
-  resolvedAt          DateTime?              @map("resolved_at") @db.Timestamptz(6)
-  confirmedBy         String?                @map("confirmed_by") @db.Uuid
-  confirmedAt         DateTime?              @map("confirmed_at") @db.Timestamptz(6)
-  closedAt            DateTime?              @map("closed_at") @db.Timestamptz(6)
-  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  attachments         RequestAttachment[]
-  comments            RequestComment[]
-  statusHistory       RequestStatusHistory[]
-  costEstimates       CostEstimate[]
+  warrantyId            String?                @map("warranty_id") @db.Uuid
+  warrantyEndDate       DateTime?              @map("warranty_end_date") @db.Date
+  warrantyCheckedBy     String?                @map("warranty_checked_by") @db.Uuid
+  warrantyCheckedAt     DateTime?              @map("warranty_checked_at") @db.Timestamptz(6)
+  reviewStartedAt       DateTime?              @map("review_started_at") @db.Timestamptz(6)
+  resolvedAt            DateTime?              @map("resolved_at") @db.Timestamptz(6)
+  resolutionResult      String?                @map("resolution_result") @db.VarChar(30)
+  resolutionSummary     String?                @map("resolution_summary")
+  resolvedWorkOrderNo   String?                @map("resolved_work_order_no") @db.VarChar(50)
+  resolutionCompletedAt DateTime?              @map("resolution_completed_at") @db.Timestamptz(6)
+  confirmedBy           String?                @map("confirmed_by") @db.Uuid
+  confirmedAt           DateTime?              @map("confirmed_at") @db.Timestamptz(6)
+  closedAt              DateTime?              @map("closed_at") @db.Timestamptz(6)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attachments           RequestAttachment[]
+  comments              RequestComment[]
+  statusHistory         RequestStatusHistory[]
+  costEstimates         CostEstimate[]
 
   @@unique([tenantId, requestNo])
   @@unique([tenantId, id])

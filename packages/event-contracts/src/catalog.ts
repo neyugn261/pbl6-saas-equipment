@@ -104,9 +104,17 @@ export interface ServiceRequestStatusChangedV1 {
   reason: string | null;
 }
 
-
-export const WORK_ORDER_TYPES = ['REPAIR', 'WARRANTY', 'MAINTENANCE', 'INSPECTION'] as const;
-export const REPORT_RESULTS = ['RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED'] as const;
+export const WORK_ORDER_TYPES = [
+  'REPAIR',
+  'WARRANTY',
+  'MAINTENANCE',
+  'INSPECTION',
+] as const;
+export const REPORT_RESULTS = [
+  'RESOLVED',
+  'PARTIALLY_RESOLVED',
+  'UNRESOLVED',
+] as const;
 
 // Exactly one of serviceRequestId / maintenanceTaskId is set (work_orders CHECK).
 interface WorkOrderOrigin {
@@ -143,12 +151,22 @@ export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
   completedAt: string;
 }
 
+export interface WorkOrderCompletedV2 extends WorkOrderCompletedV1 {
+  /** Customer-facing summary; internal technician notes are never included. */
+  customerSummary: string;
+}
+
 export interface WorkOrderCancelledV1 extends WorkOrderOrigin {
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
   reason: string | null;
   cancelledAt: string;
+}
+
+export interface WorkOrderCancelledV2 extends WorkOrderCancelledV1 {
+  /** False returns an unfinished request to ACCEPTED; true cancels it. */
+  cancelServiceRequest: boolean;
 }
 
 export interface MaintenanceTaskDueV1 {
@@ -289,6 +307,24 @@ export const Events = {
       completedAt: is.isoDateTime,
     },
   }),
+  WorkOrderCompletedV2: define<WorkOrderCompletedV2>({
+    type: 'WorkOrderCompleted',
+    version: 2,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      serviceRequestId: is.nullable(is.uuid),
+      maintenanceTaskId: is.nullable(is.uuid),
+      equipmentId: is.uuid,
+      customerId: is.uuid,
+      serviceReportId: is.uuid,
+      result: is.oneOf(REPORT_RESULTS),
+      completedAt: is.isoDateTime,
+      customerSummary: is.string(2000),
+    },
+  }),
   WorkOrderCancelled: define<WorkOrderCancelledV1>({
     type: 'WorkOrderCancelled',
     version: 1,
@@ -302,6 +338,22 @@ export const Events = {
       equipmentId: is.uuid,
       reason: is.nullable(is.string(2000)),
       cancelledAt: is.isoDateTime,
+    },
+  }),
+  WorkOrderCancelledV2: define<WorkOrderCancelledV2>({
+    type: 'WorkOrderCancelled',
+    version: 2,
+    aggregateType: 'WorkOrder',
+    producer: 'workorder-service',
+    fields: {
+      workOrderId: is.uuid,
+      workOrderNo: is.string(50),
+      serviceRequestId: is.nullable(is.uuid),
+      maintenanceTaskId: is.nullable(is.uuid),
+      equipmentId: is.uuid,
+      reason: is.nullable(is.string(2000)),
+      cancelledAt: is.isoDateTime,
+      cancelServiceRequest: (value) => typeof value === 'boolean',
     },
   }),
   MaintenanceTaskDue: define<MaintenanceTaskDueV1>({
@@ -359,6 +411,8 @@ export function payloadProblems(
 export const EVENTS_EXCHANGE = 'pbl6.events';
 
 /** `TenantCreated.v1` — consumers bind exactly the versions they understand. */
-export function routingKey(definition: Pick<EventDefinition, 'type' | 'version'>): string {
+export function routingKey(
+  definition: Pick<EventDefinition, 'type' | 'version'>,
+): string {
   return `${definition.type}.v${definition.version}`;
 }
