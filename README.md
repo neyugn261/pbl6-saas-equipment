@@ -30,21 +30,21 @@ Nền tảng SaaS quản lý bảo hành, bảo trì và điều phối kỹ thu
 apps/
   api-gateway/              :3000  scaffold
   identity-service/         :3001  ✅ auth (login/refresh/logout/me), claim customer_id, consumer tenant/membership events
-  asset-service/            :3002  ✅ nối packages/ (health, auth guard) + schema asset_db; chưa có API nghiệp vụ
+  asset-service/            :3002  ✅ Equipment Model, Equipment, Warranty, QR và lịch sử; tenant/customer scope
   maintenance-service/      :3003  scaffold + schema maintenance_db
   workorder-service/        :3004  scaffold + schema workorder_db
   notification-service/     :3005  scaffold + schema notification_db
-  organization-service/     :3006  ✅ nối packages/ + schema organization_db; chưa có API nghiệp vụ
+  organization-service/     :3006  ✅ Tenant, Branch, Customer, Site, Location và membership
   service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox
   inventory-service/        :3008  scaffold + schema inventory_db
-  web/                      :5173  prototype UI, dữ liệu mock (chưa nối API)
+  web/                      :5173  React UI kết nối API qua Gateway
   mobile/                          Flutter template
 packages/                   thư viện dùng chung: service-kit, auth, event-contracts, testing (packages/README.md)
 infrastructure/postgres/    init.sql (8 database của service), dev-databases.sql (shadow/test DB)
 docs/                       SRS, ADR, ERD, API contract, kiến trúc (event, state machine)
 ```
 
-Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; Identity thêm `0002_user_customer_links`). Identity và Service Request có API nghiệp vụ; các service còn lại đang được triển khai theo ownership trong [CONTRIBUTING.md](CONTRIBUTING.md). Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
+Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; các migration tiếp theo thuộc từng service). Identity, Organization, Asset và Service Request có API nghiệp vụ; các service còn lại đang được triển khai theo ownership trong [CONTRIBUTING.md](CONTRIBUTING.md). Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
 
 Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác thực token và phân quyền theo catalog RBAC, phạm vi tenant/customer, định dạng lỗi `{code, message}`, log JSON có correlation id, `/health`, outbox/inbox và RabbitMQ. Quy trình làm việc nhóm: [CONTRIBUTING.md](CONTRIBUTING.md).
 

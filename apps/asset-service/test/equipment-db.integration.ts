@@ -4,6 +4,7 @@ import { requireTestDatabaseUrl } from '@pbl6/testing';
 import { createPrismaAdapter } from '@pbl6/service-kit/prisma';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 import { EquipmentRepository, dbDate } from '../src/equipment/equipment.repository';
+import { EquipmentModelRepository } from '../src/equipment-models/equipment-model.repository';
 import { WarrantyRepository } from '../src/warranties/warranty.repository';
 import { QrRepository } from '../src/qr/qr.repository';
 import type { PrismaService } from '../src/prisma/prisma.service';
@@ -148,6 +149,41 @@ it('serializes overlapping warranty writes, keeps VOID history, and respects cus
   const history = await prisma.equipmentHistory.findMany({ where: { tenantId, equipmentId: row.id } });
   expect(history.filter((entry) => entry.eventType === 'WARRANTY_ADDED')).toHaveLength(2);
   expect(history.filter((entry) => entry.eventType === 'WARRANTY_VOIDED')).toHaveLength(1);
+});
+
+it('rejects new warranty and QR writes after retirement while preserving existing records', async () => {
+  const row = await repo.createWithHistory(tenantId, actorId, input('retired-write', 'S-retired-write'));
+  const scope = { tenantId, customerId: null };
+  const warranty = { startDate: '2029-01-01', endDate: '2029-01-01', warrantyType: 'STANDARD' };
+  await warranties.add(scope, row.id, actorId, warranty);
+  await qrCodes.issue(scope, row.id, actorId, 'r'.repeat(43));
+  await repo.patchWithHistory(scope, row.id, actorId, { status: 'RETIRED' });
+  await expect(warranties.add(scope, row.id, actorId, { ...warranty, startDate: '2030-01-01', endDate: '2030-01-01' }))
+    .rejects.toMatchObject({ status: 409, response: { code: 'EQUIPMENT_RETIRED' } });
+  await expect(qrCodes.issue(scope, row.id, actorId, 's'.repeat(43)))
+    .rejects.toMatchObject({ status: 409, response: { code: 'EQUIPMENT_RETIRED' } });
+  expect(await warranties.list(scope, row.id)).toHaveLength(1);
+  expect(await qrCodes.resolve(scope, 'r'.repeat(43))).toMatchObject({ id: row.id });
+  expect(await prisma.equipmentQrCode.count({ where: { tenantId, equipmentId: row.id } })).toBe(1);
+  expect(await prisma.equipmentHistory.count({ where: { tenantId, equipmentId: row.id } })).toBe(4);
+});
+
+it('treats percent and underscore as literal search characters', async () => {
+  const model = await prisma.equipmentModel.create({ data: {
+    tenantId, manufacturer: 'Search', modelCode: randomUUID(), name: 'P%_literal',
+  } });
+  const row = await repo.createWithHistory(tenantId, actorId, input('literal%asset', 'S_under_score', model.id));
+  const scope = { tenantId, customerId: null };
+  for (const q of ['%', '_']) {
+    const result = await repo.list(scope, { page: 1, pageSize: 100, sort: '-createdAt', q });
+    expect(result.rows.map((item) => item.id)).toEqual([row.id]);
+  }
+  // The model query uses the same Prisma LIKE escaping as equipment search.
+  const models = new EquipmentModelRepository(prisma as unknown as PrismaService);
+  for (const q of ['%', '_']) {
+    const result = await models.list(tenantId, { page: 1, pageSize: 100, sort: '-createdAt', q });
+    expect(result.rows.map((item) => item.id)).toEqual([model.id]);
+  }
 });
 
 it('reprints QR atomically, leaves one active code, and scopes resolution', async () => {

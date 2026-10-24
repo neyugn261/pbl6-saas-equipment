@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { type EquipmentModel, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeLikePattern } from '../common/search';
 import type { CreateEquipmentModelDto } from './dto/create-equipment-model.dto';
 import type { ListEquipmentModelsQueryDto } from './dto/list-equipment-models-query.dto';
 import type { UpdateEquipmentModelDto } from './dto/update-equipment-model.dto';
@@ -14,15 +15,16 @@ export class EquipmentModelRepository {
     query: ListEquipmentModelsQueryDto,
   ): Promise<{ rows: EquipmentModel[]; total: number }> {
     const q = query.q?.trim();
+    const search = q ? escapeLikePattern(q) : undefined;
     const where: Prisma.EquipmentModelWhereInput = {
       tenantId,
       ...(query.status ? { status: query.status } : {}),
-      ...(q
+      ...(search
         ? {
             OR: [
-              { manufacturer: { contains: q, mode: 'insensitive' } },
-              { modelCode: { contains: q, mode: 'insensitive' } },
-              { name: { contains: q, mode: 'insensitive' } },
+              { manufacturer: { contains: search, mode: 'insensitive' } },
+              { modelCode: { contains: search, mode: 'insensitive' } },
+              { name: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
