@@ -126,9 +126,7 @@ jobs:
         run: pnpm test:e2e
       - name: Asset integration tests (asset_test_db)
         working-directory: apps/asset-service
-        run: |
-          ASSET_DATABASE_URL="$ASSET_TEST_DATABASE_URL" pnpm db:migrate
-          pnpm test:db
+        run: pnpm test:db
       - name: Service Request e2e tests
         working-directory: apps/service-request-service
         run: pnpm test:e2e
