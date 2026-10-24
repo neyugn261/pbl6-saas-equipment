@@ -151,7 +151,11 @@ Order tracks the technical work, the Service Request tracks the request, and
 `workorder_db` keeps the ERD v3.1 statuses (no VERIFIED or CLOSED).
 
 Terminal: COMPLETED, CANCELLED. Every change writes
-`work_order_status_history` and a `work_logs` row with `actor_user_id`.
+`work_order_status_history` and a `work_logs` row with `actor_user_id`, except
+changes the system makes from an event (create from a Maintenance Task, cancel
+after a cancelled request): they write the history row with `changed_by` NULL
+and no `work_logs` row, since `work_logs.actor_user_id` is NOT NULL and no
+placeholder user is used (ADR 0008 D5).
 
 ## Technician status (D11)
 

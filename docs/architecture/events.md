@@ -13,21 +13,22 @@ this page and that file must change in the same PR.
 | `TenantStatusChanged.v1` | organization-service | Tenant | `tenantId, code, status, previousStatus, changedAt` | identity-service.directory → `tenant_directory` |
 | `CustomerMembershipChanged.v1` | organization-service | CustomerUserMembership | `membershipId, userId, customerId, status (ACTIVE\|INACTIVE), changedAt` | identity-service.directory → `user_customer_links` (ADR 0003) |
 | `ServiceRequestCreated.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, requesterId, type, priority` | notification (M3) |
-| `ServiceRequestStatusChanged.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, fromStatus, toStatus, changedBy, reason` | notification (M3), asset history (M2) |
+| `ServiceRequestStatusChanged.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, fromStatus, toStatus, changedBy, reason` | notification (M3), asset history (M2), workorder (toStatus CANCELLED → cancels the live Work Order, ADR 0008 D4) |
 
 `tenantId` is in the envelope, not repeated in payloads (except tenant events,
 where it is the aggregate).
 
-Defined ahead of their milestone (v1 contracts, so producers and consumers can
-be built in parallel; the producer may still refine them through a PR before
-first use):
+Defined ahead of their milestone (so producers and consumers can be built in
+parallel; the producer may still refine them through a PR before first use).
+`WorkOrderCompleted` and `WorkOrderCancelled` start at v2 (ADR 0008 D4a, D6a):
+their v1 was never published, so it was replaced instead of kept:
 
 | Event (routing key) | Producer | Milestone | Payload | Consumers |
 |---|---|---|---|---|
 | `WorkOrderCreated.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, type, priority` | service-request (→ PROCESSING), maintenance (task ↔ WO) |
 | `WorkOrderAssigned.v1` | workorder-service | M2 | `workOrderId, workOrderNo, technicianId, technicianUserId, assignedBy, scheduledStart\|null` | notification (M3) |
-| `WorkOrderCompleted.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, serviceReportId, result, completedAt` | service-request (→ RESOLVED / ACCEPTED), asset (`equipment_history`), maintenance |
-| `WorkOrderCancelled.v1` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelledAt` | service-request (→ ACCEPTED), maintenance (release task, ADR 0002) |
+| `WorkOrderCompleted.v2` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, customerId, serviceReportId, result, customerSummary, completedAt` | service-request (→ RESOLVED / ACCEPTED, stores the customer summary, ADR 0008 D6a), asset (`equipment_history`), maintenance |
+| `WorkOrderCancelled.v2` | workorder-service | M2 | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelServiceRequest, cancelledAt` | service-request (→ CANCELLED when `cancelServiceRequest`, else → ACCEPTED; ADR 0008 D4a), maintenance (release task, ADR 0002) |
 | `MaintenanceTaskDue.v1` | maintenance-service | M2 | `maintenanceTaskId, maintenancePlanId, equipmentId, customerId, customerSiteId\|null, scheduledDate (YYYY-MM-DD), title` | workorder (create WO) |
 | `LowStockDetected.v1` | inventory-service | M3 | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
 
