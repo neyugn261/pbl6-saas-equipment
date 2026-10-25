@@ -71,7 +71,7 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
     })}`;
 
   const staff = (tenantId = tenantA) =>
-    request(app.getHttpServer()).set(
+    request.agent(app.getHttpServer()).set(
       'authorization',
       authorization('SERVICE_MANAGER', tenantId),
     );
@@ -229,7 +229,7 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
       .send({ visibility: 'CUSTOMER', content: 'Customer-visible test note' })
       .expect(201);
 
-    const customer = request(app.getHttpServer()).set(
+    const customer = request.agent(app.getHttpServer()).set(
       'authorization',
       authorization('CUSTOMER_USER', tenantA, customerA),
     );
