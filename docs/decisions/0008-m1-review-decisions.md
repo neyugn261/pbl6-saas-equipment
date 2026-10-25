@@ -7,7 +7,7 @@
   technician status), ERD v3.1 (`work_orders.created_by`)
 - Review decisions: D1 – D11, and D4a, D6a, D7a, C5 settled with the team the
   same day. D12a – e (maintenance) are recorded in
-  [ADR 0007](0007-maintenance-snapshot-draft.md).
+  [ADR 0007](0007-maintenance-snapshot.md).
 
 ## Context
 

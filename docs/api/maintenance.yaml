@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: Maintenance Service API
-  version: 0.1.0-draft
+  version: 0.2.0
   description: |
-    A7 proposal for M2 implementation. No Maintenance business endpoint is
-    implemented in M1. Snapshot, recurrence, cancellation and retry decisions
-    remain open in docs/decisions/0007-maintenance-snapshot-draft.md.
+    M2 contract following accepted ADR 0007. No Maintenance business endpoint
+    is implemented in M1. The snapshot migration, EquipmentMoved event,
+    scheduler and Work Order consumer belong to M2 implementation.
 servers:
   - url: /
 security:
@@ -45,8 +45,8 @@ paths:
       description: |
         Validate Equipment through Asset with the forwarded user token and
         correlation id; derive tenant/customer/site from the scoped EquipmentRef.
-        The caller cannot supply snapshot IDs. Eligibility of RETIRED equipment
-        and the first due date are pending A7 decisions.
+        The caller cannot supply snapshot IDs. RETIRED equipment is ineligible.
+        The plan follows later Equipment moves as defined by ADR 0007.
       x-permissions: [maintenance:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -88,8 +88,9 @@ paths:
       tags: [Plans]
       summary: Update plan details, schedule or status
       description: |
-        Proposed fields only. Exact ACTIVE/PAUSED/INACTIVE transitions, whether
-        equipmentId may change, and recalculation of nextDueDate need the A7
+        A PAUSED plan generates no tasks; on resumption its schedule restarts
+        from the resume day without backfilling paused periods (ADR 0007).
+        INACTIVE transitions and edits after tasks exist require a separate
         decision before implementation. No arbitrary customer/site input.
       x-permissions: [maintenance:manage]
       x-user-types: [TENANT_STAFF]
@@ -199,19 +200,23 @@ components:
         nextDueDate: { type: string, format: date }
         status: { $ref: '#/components/schemas/PlanStatus' }
     Plan:
-      allOf:
-        - $ref: '#/components/schemas/PlanInput'
-        - type: object
-          required: [id, tenantId, customerId, customerSiteId, status, lastCompletedAt, createdAt, updatedAt]
-          properties:
-            id: { type: string, format: uuid }
-            tenantId: { type: string, format: uuid }
-            customerId: { type: string, format: uuid, description: Proposed Asset snapshot; requires a new migration }
-            customerSiteId: { type: [string, 'null'], format: uuid, description: Proposed Asset snapshot; requires a new migration }
-            status: { $ref: '#/components/schemas/PlanStatus' }
-            lastCompletedAt: { type: [string, 'null'], format: date-time }
-            createdAt: { type: string, format: date-time }
-            updatedAt: { type: string, format: date-time }
+      type: object
+      additionalProperties: false
+      required: [id, equipmentId, name, description, frequencyUnit, frequencyValue, nextDueDate, customerId, customerSiteId, status, lastCompletedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        equipmentId: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: [string, 'null'] }
+        frequencyUnit: { $ref: '#/components/schemas/FrequencyUnit' }
+        frequencyValue: { type: integer, minimum: 1 }
+        nextDueDate: { type: string, format: date }
+        customerId: { type: string, format: uuid, description: Asset snapshot stored on the plan by an M2 migration }
+        customerSiteId: { type: [string, 'null'], format: uuid, description: Asset snapshot stored on the plan by an M2 migration }
+        status: { $ref: '#/components/schemas/PlanStatus' }
+        lastCompletedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     Task:
       type: object
       required: [id, maintenancePlanId, scheduledDate, workOrderId, status, attemptCount, lastError, completedAt, createdAt, updatedAt]
