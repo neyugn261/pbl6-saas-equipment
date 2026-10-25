@@ -37,7 +37,9 @@ with pre-release or already queued messages; producers publish v2:
 
 `MaintenanceTaskDue` carries a customer snapshot because event consumers do
 not call other services synchronously (ADR 0004); Maintenance keeps that
-snapshot on the plan.
+snapshot on the plan. Its payload has no `createdBy`: the scheduler creates
+the task, and Work Order records `created_by = NULL` for the resulting
+system-created order (ADR 0007 D12e and ADR 0008 D5).
 
 ## Adding or changing an event
 
