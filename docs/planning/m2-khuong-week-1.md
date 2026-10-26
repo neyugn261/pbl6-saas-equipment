@@ -192,8 +192,9 @@ review cùng luồng đã chạy; dependency vẫn tách riêng. Đây là đi�
 đóng gói, không tự thay đổi ownership hay bỏ yêu cầu review.
 
 Hai nhánh đã push; #21 đang dựa trên nhánh #20. Merge #20 trước rồi đổi base
-#21 về `develop`. Chưa có review/merge hoặc kết quả CI được ghi nhận tại đây;
-chỉ cập nhật trạng thái khi có bằng chứng remote.
+#21 về `develop`. Review/merge còn chờ. CI của dependency `cf54470` và
+implementation `7e4aa75` đã xanh cả hai job; run cụ thể được lưu trong
+[bảng bằng chứng](../testing/m2-week1-test-cases.md). Head mới nhất xem tại PR.
 
 ## 4. Những đầu vào cần phối hợp ngay
 
@@ -214,7 +215,7 @@ chỉ cập nhật trạng thái khi có bằng chứng remote.
 | 2 | Đã code/test local | `2aecbe7` | 5 unit + 2 bootstrap test; health/auth/env/HTTP forwarding đạt | Chờ review/merge |
 | 3 | Đã code/test local | `2aecbe7` | Profile/Skill/PATCH/me có DB test; smoke references thật đạt | Chờ review/merge |
 | 4 | Đã code/test local | `2aecbe7` | Create/list/detail/patch/history/internal + outbox; có helper advisory lock | K5 consumer/race chưa triển khai |
-| 5 | Kiểm chứng local đạt | `2aecbe7` | 16 DB test; lint/typecheck/build toàn repo; 183 test; smoke M1/M2 và drift đạt | Theo dõi CI remote/review; không đánh dấu merge khi chưa merge |
+| 5 | Local và CI đạt | `2aecbe7` (code), `7e4aa75` (CI) | 16 DB test; lint/typecheck/build toàn repo; 183 test; smoke M1/M2 và drift đạt; hai job CI xanh | Chờ owner review/merge; chưa merge |
 
 Cuối mỗi ngày cập nhật dòng tương ứng, checklist đã chứng minh và mục **Việc
 tiếp theo** trong kế hoạch tổng. Chỉ tick toàn K1/K2/K3 sau khi đạt đủ phạm vi

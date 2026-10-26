@@ -4,8 +4,8 @@
 - Code nghiệp vụ: **`2aecbe7`**, dependency: **`cf54470`**.
 - Môi trường: local, Node **24.20.0**, PostgreSQL **17** và RabbitMQ **4** qua
   Docker Compose; sáu service NestJS chạy bản build thật.
-- Trạng thái: **các kiểm tra local bên dưới đạt; chưa phải nghiệm thu M2 toàn
-  nhóm hoặc kết quả CI GitHub**. Không có kết quả assignment/complete/Maintenance.
+- Trạng thái: **kiểm tra local và hai job CI GitHub đã đạt**; chưa phải nghiệm
+  thu M2 toàn nhóm. Không có kết quả assignment/complete/Maintenance.
 - PR: [dependency #20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20),
   [implementation #21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21),
   đều draft; implementation dựa trên nhánh dependency, chưa merge.
@@ -24,6 +24,8 @@
 | Drift WO | `pnpm --filter workorder-service db:check-drift` | Pass: No difference detected |
 | Regression M1 | `pnpm smoke:m1` | Pass: account flows, Gateway và luồng SR tới ACCEPTED |
 | Luồng tuần 1 | `pnpm smoke:m2:week1` | Pass: profile + create WO + event thật + scope |
+| CI dependency | [Run 40332043876](https://github.com/neyugn261/pbl6-saas-equipment/actions/runs/40332043876), commit `cf54470` | Pass cả hai job |
+| CI implementation | [Run 40332441109](https://github.com/neyugn261/pbl6-saas-equipment/actions/runs/40332441109), commit `7e4aa75` (code nghiệp vụ `2aecbe7`) | Pass cả hai job, gồm WO DB suite và smoke M1 + M2 tuần 1 |
 
 Trong phiên local, lệnh test/smoke được gọi qua wrapper tạm đọc `.env` vào
 process env mà không in credential. Wrapper đặt test URL về `workorder_test_db`
@@ -87,8 +89,9 @@ Script giữ SR/WO làm bằng chứng. Không có token/password trong tài li�
 - Workflow assignment/execute/complete/report (K4), WO bảo trì và thay thế (K6).
 - Event cũ của WO trước không ghi đè trạng thái WO mới ở consumer SR; còn phối
   hợp Huy trước nghiệm thu nhánh thay thế.
-- CI GitHub và review Nguyên/consumer cho thay đổi dùng chung; cập nhật link
-  PR/check run khi có kết quả, không suy ra CI xanh từ test local.
+- Review Nguyên/consumer và merge cho thay đổi dùng chung còn chờ. CI đã được
+  xác minh qua các run ở mục 1, không suy ra từ test local; trạng thái head mới
+  nhất tiếp tục xem trong Checks của PR.
 
 ## 5. Chạy lại và bàn giao
 

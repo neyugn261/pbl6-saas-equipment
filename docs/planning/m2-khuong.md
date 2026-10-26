@@ -74,8 +74,9 @@ auth/validation/health/logger, HTTP references, outbox relay, toàn bộ API
 Technician/Skill và phần K3 create/list/detail/patch/history/internal reference.
 Đã thêm test DB/env, DB suite, smoke tuần 1 và cấu hình CI tương ứng. Local:
 lint/typecheck/build toàn repo, 183 test (có RabbitMQ thật), 2 bootstrap test,
-16 DB test, drift WO, smoke M1 và M2 tuần 1 đạt. Chưa xác nhận kết quả CI remote
-cho nhánh mới. Bằng chứng: [M2 tuần 1](../testing/m2-week1-test-cases.md).
+16 DB test, drift WO, smoke M1 và M2 tuần 1 đạt. CI dependency `cf54470` và
+implementation `7e4aa75` đều xanh cả hai job. Bằng chứng/run cụ thể:
+[M2 tuần 1](../testing/m2-week1-test-cases.md). Review/merge vẫn còn chờ.
 
 Nghiệm thu M1 toàn nhóm vẫn cần bảng kết quả và quyết định release. CODEOWNERS
 hiện còn comment; trạng thái branch protection/CI trên GitHub chưa được xác
@@ -107,7 +108,7 @@ minh trong lượt lập kế hoạch này. Những việc đó không tự đ�
 | Mã / nội dung | Người phối hợp | Chặn phần nào | Đầu ra cần có | Trạng thái |
 | --- | --- | --- | --- | --- |
 | M2-D01: đối chiếu permission M2 với bằng chứng duyệt, catalog và seed | Khương + Nguyên, consumer API | Giữ quyền hiện có cho tuần 1 | Khương đã chốt giữ nguyên catalog; không có role/quyền hoặc migration Identity mới | Khương chốt 2026-10-26; catalog trong code vẫn PROVISIONAL, cần review chung trước version hóa sau này |
-| M2-N2: test DB, env, bootstrap và CI cho WO | Khương chuẩn bị, Nguyên review | Review thay đổi dùng chung | Đã thêm `workorder_test_db`, test URL, script an toàn và CI DB/smoke | Đã triển khai/test local; chờ review/CI remote |
+| M2-N2: test DB, env, bootstrap và CI cho WO | Khương chuẩn bị, Nguyên review | Review thay đổi dùng chung | Đã thêm `workorder_test_db`, test URL, script an toàn và CI DB/smoke | Local/CI đã đạt; chờ owner review/merge |
 | M2-D04: ai yêu cầu WO bảo trì thay thế, operation/event, retry/backoff/giới hạn | Khương + Minh; Huy/Nguyên review | Contract kỹ thuật cho nhánh thay thế K6 | Khương chốt Service Manager chủ động yêu cầu, mỗi yêu cầu có định danh chống trùng; không tự động tạo lại | Khương chốt 2026-10-26; endpoint/event và quy tắc thứ tự còn cần review với các owner trước K6 |
 | M2-D06: làm rõ từ “reports” ngoài M2 trong mô tả contract | Khương + Nguyên/Hatsady và consumer liên quan | Review contract | Đã phân biệt Service Report M2 với thống kê/upload M3 | Đã sửa câu chữ tại `2aecbe7`; chờ consumer review |
 | H4: sự kiện của WO cũ đến muộn sau WO thay thế | Khương + Huy; Minh cho trường hợp Task | Nghiệm thu nhánh thay thế và consumer an toàn | Cách nhận diện WO hiện hành, xử lý event cũ và test sai thứ tự | Rủi ro từ đọc code; chưa chạy tái hiện |
@@ -316,6 +317,7 @@ Mỗi lần tiếp tục công việc:
 | --- | --- | --- | --- | --- |
 | 2026-10-26 | `e3acf49` — mốc code | Đọc code/contract/schema/ADR phục vụ lập kế hoạch | Repository local | Baseline trước triển khai; lúc lập kế hoạch chưa chạy kiểm tra M2 |
 | 2026-10-26 | `2aecbe7` / PR #21 | Lint/typecheck/build toàn repo; 183 test; 2 bootstrap + 16 DB test WO; drift; smoke M1 và M2 tuần 1 | PostgreSQL 17, RabbitMQ 4, sáu service thật | Pass local; [bằng chứng](../testing/m2-week1-test-cases.md); xem Checks của PR #21 cho trạng thái CI remote mới nhất |
+| 2026-10-26 | `cf54470`, `7e4aa75` / PR #20, #21 | Hai job CI của từng PR | GitHub Actions | Pass; run 40332043876 và 40332441109 được liên kết trong bảng bằng chứng tuần 1 |
 
 Những lệnh sẵn có để dùng khi triển khai (không phải bằng chứng đã chạy):
 
