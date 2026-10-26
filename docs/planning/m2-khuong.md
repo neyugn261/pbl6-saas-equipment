@@ -181,8 +181,8 @@ task vẫn chờ review/merge và K5 còn thiếu, không phải nghiệm thu M2
 - [x] Nối Prisma, JWT/permission guard toàn cục, validation, lỗi chuẩn, logger
   và correlation ID; health kiểm tra DB.
 - [x] Validate DB URL, JWT, service URL và broker theo nhu cầu thực tế; env mới
-  có tài liệu và PR cấu hình dùng chung được Nguyên review.
-- [x] Chuẩn bị test DB/CI cùng Nguyên; bootstrap test và negative test auth.
+  có tài liệu; PR cấu hình dùng chung đang chờ Nguyên review.
+- [x] Chuẩn bị test DB/CI để Nguyên review; bootstrap test và negative test auth đạt.
 - [x] Lint/typecheck/test/build liên quan đạt; không tạo lại migration D5.
 
 ### M2-K2 — Technician và Skill
