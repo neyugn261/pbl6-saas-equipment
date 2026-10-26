@@ -49,7 +49,8 @@ info:
       Service Request only after taking it. Service Request publishes the
       cancel only after its commit (outbox), so either create sees CANCELLED
       and refuses (422), or the consumer runs after the create and finds the
-      Work Order. No Work Order outlives a cancelled request.
+      Work Order. This coordinates creation and cancellation in CREATED,
+      ASSIGNED and ACCEPTED; the underway-work exception above still applies.
     - Consumers are idempotent through the inbox (ADR 0005).
 
     Changes made by the system from an event (create from a Maintenance Task,
@@ -61,7 +62,8 @@ info:
     / INACTIVE are set by `technician:manage`; see `PATCH /technicians/{id}`.
 
     Out of M2: attachments (M3, MinIO, `visibility` per ADR 0006), parts used
-    (Inventory, M3), reports.
+    (Inventory, M3), operational/statistical reports. Service Report submission
+    through `/complete` and reading `/service-report` belong to M2.
 servers:
   - url: http://localhost:3004
     description: Local service (through the gateway at /api/workorders, prefix stripped)
@@ -144,8 +146,8 @@ paths:
       summary: Create a work order from an ACCEPTED service request
       description: |
         The request is read from Service Request (`GET /internal/service-requests/{id}`)
-        and must be ACCEPTED; `equipmentId`, `customerId`, `type`, `priority`
-        and the default `title` are copied from it (read after taking the
+        and must be ACCEPTED; `equipmentId`, `customerId`, `type`, and defaults
+        for `priority` and `title` are copied from it (read after taking the
         advisory lock of the request, see the race in the description), site
         and location from Asset
         (`GET /internal/equipment/{id}`). `workOrderNo` = `WO-<year>-<0001>`
