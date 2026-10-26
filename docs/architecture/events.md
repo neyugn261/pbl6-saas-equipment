@@ -57,6 +57,7 @@ system-created order (ADR 0007 D12e and ADR 0008 D5).
 |---|---|---|
 | `identity-service.directory` | identity-service | TenantCreated v1, TenantStatusChanged v1, CustomerMembershipChanged v1 |
 | `service-request-service.work-orders` | service-request-service | WorkOrderCreated v1, WorkOrderCompleted v1/v2, WorkOrderCancelled v1/v2 |
+| `workorder-service.service-requests` | workorder-service | ServiceRequestStatusChanged v1; chỉ xử lý toStatus CANCELLED, inbox handler `workorder-service.service-request-cancellations` |
 
 Each queue has `<queue>.retry` and `<queue>.dlq`.
 
