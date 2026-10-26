@@ -16,6 +16,7 @@ import {
 } from './dto';
 import type { EquipmentRef, RequestRef } from '../references/references.client';
 import { allowedWorkOrderActions } from './work-order-policy';
+import { nextWorkOrderNumber } from './work-order-number';
 
 export type WorkOrderTx = Prisma.TransactionClient;
 export const currentAssignments = { status: { in: ['ASSIGNED', 'ACCEPTED'] } };
@@ -224,19 +225,10 @@ export class WorkOrdersRepository {
             'The request already has an active Work Order',
           );
         const { source, equipment } = await resolve();
-        const year = new Intl.DateTimeFormat('en', {
-          year: 'numeric',
-          timeZone: 'Asia/Ho_Chi_Minh',
-        }).format(new Date());
-        const key = 'WO-' + year;
-        const [sequence] = await tx.$queryRaw<
-          { last_value: bigint }[]
-        >`INSERT INTO document_sequences (tenant_id, sequence_key, last_value) VALUES (${tenantId}::uuid, ${key}, 1) ON CONFLICT (tenant_id, sequence_key) DO UPDATE SET last_value = document_sequences.last_value + 1 RETURNING last_value`;
         const row = await tx.workOrder.create({
           data: {
             tenantId,
-            workOrderNo:
-              key + '-' + String(sequence.last_value).padStart(4, '0'),
+            workOrderNo: await nextWorkOrderNumber(tx, tenantId),
             serviceRequestId: source.id,
             equipmentId: source.equipmentId,
             customerId: source.customerId,

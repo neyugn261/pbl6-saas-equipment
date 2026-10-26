@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Events, OutboxRelay, RabbitMqEventBus } from '@pbl6/event-contracts';
 import type { AppEnv } from '../config/env.validation';
 import { PrismaService } from '../prisma/prisma.service';
+import { MaintenanceEventsConsumer } from './maintenance-events.consumer';
 import { ServiceRequestEventsConsumer } from './service-request-events.consumer';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService<AppEnv, true>,
     private readonly db: PrismaService,
     private readonly requests: ServiceRequestEventsConsumer,
+    private readonly maintenance: MaintenanceEventsConsumer,
   ) {}
   async onModuleInit() {
     const url = this.config.get('RABBITMQ_URL', { infer: true });
@@ -33,6 +35,13 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       queue: REQUEST_CONSUMER_QUEUE,
       events: [Events.ServiceRequestStatusChanged],
       handler: (envelope) => this.requests.handle(envelope),
+    });
+    this.bus.subscribe({
+      queue: MAINTENANCE_CONSUMER_QUEUE,
+      events: [Events.MaintenanceTaskDue],
+      handler: async (envelope) => {
+        await this.maintenance.handle(envelope);
+      },
     });
     await this.bus.start();
     this.relay = new OutboxRelay({
@@ -49,3 +58,5 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   }
 }
 export const REQUEST_CONSUMER_QUEUE = 'workorder-service.service-requests';
+
+export const MAINTENANCE_CONSUMER_QUEUE = 'workorder-service.maintenance-tasks';
