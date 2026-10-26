@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
+import { HealthModule } from '@pbl6/service-kit';
+import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { validateEnv } from './config/env.validation';
+import { PrismaModule } from './prisma/prisma.module';
+import { PrismaService } from './prisma/prisma.service';
 
 @Module({
   imports: [
@@ -12,8 +15,15 @@ import { validateEnv } from './config/env.validation';
       envFilePath: ['.env', '../../.env'],
       validate: validateEnv,
     }),
+    PrismaModule,
+    AuthModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => jwtOptionsFromConfig(config),
+    }),
+    HealthModule.forRootAsync({
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
+    }),
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

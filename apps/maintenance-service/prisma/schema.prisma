@@ -22,6 +22,9 @@ model MaintenancePlan {
   tenantId        String            @map("tenant_id") @db.Uuid
   /// Logical reference to asset_db.equipments.id
   equipmentId     String            @map("equipment_id") @db.Uuid
+  /// Asset-owned customer snapshot; updated after EquipmentMoved is consumed.
+  customerId      String            @map("customer_id") @db.Uuid
+  customerSiteId  String?           @map("customer_site_id") @db.Uuid
   name            String            @db.VarChar(200)
   description     String?
   frequencyUnit   String            @map("frequency_unit") @db.VarChar(20)
@@ -36,6 +39,7 @@ model MaintenancePlan {
   @@unique([tenantId, id])
   @@index([tenantId, nextDueDate, status], map: "idx_maintenance_plans_due")
   @@index([tenantId, equipmentId], map: "idx_maintenance_plans_equipment")
+  @@index([tenantId, customerId], map: "idx_maintenance_plans_customer")
   @@map("maintenance_plans")
 }
 
