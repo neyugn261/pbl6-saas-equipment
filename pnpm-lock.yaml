@@ -172,9 +172,6 @@ importers:
 
   apps/api-gateway:
     dependencies:
-      '@pbl6/service-kit':
-        specifier: workspace:*
-        version: link:../../packages/service-kit
       '@nestjs/common':
         specifier: ^12.0.1
         version: 12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2)
@@ -187,6 +184,9 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.0.1)(supports-color@10.2.2)
+      '@pbl6/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.1(express@5.2.1(supports-color@10.2.2))
@@ -1066,12 +1066,27 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.0.1)(supports-color@10.2.2)
+      '@pbl6/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@pbl6/event-contracts':
+        specifier: workspace:*
+        version: link:../../packages/event-contracts
+      '@pbl6/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
       '@prisma/adapter-pg':
         specifier: 7.10.0
         version: 7.10.0
       '@prisma/client':
         specifier: 7.10.0
         version: 7.10.0(prisma@7.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@6.0.3))(typescript@6.0.3)
+      class-transformer:
+        specifier: ^0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: ^0.15.1
+        version: 0.15.1
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -1097,6 +1112,9 @@ importers:
       '@nestjs/testing':
         specifier: ^12.0.1
         version: 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.0.1)(@nestjs/platform-express@12.0.1)
+      '@pbl6/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.6

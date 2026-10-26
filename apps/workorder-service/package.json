@@ -26,6 +26,11 @@
     "db:check-drift": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code"
   },
   "dependencies": {
+    "@pbl6/auth": "workspace:*",
+    "@pbl6/event-contracts": "workspace:*",
+    "@pbl6/service-kit": "workspace:*",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.0.1",
@@ -38,6 +43,7 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@pbl6/testing": "workspace:*",
     "@nestjs/cli": "^12.0.0",
     "@nestjs/mau": "^0.2.6",
     "@nestjs/schematics": "^12.0.0",
