@@ -6,6 +6,8 @@
 | Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-26 |
 | Mốc code đã đối chiếu | `2aecbe7` — triển khai tuần 1, trên nhánh `feature/khuong-workorder-week1`; baseline `develop` là `e3acf49` |
 | Trạng thái tài liệu | Tuần 1 đã triển khai và kiểm tra local; chờ review/merge; chưa nghiệm thu M2 toàn nhóm |
+| PR dependency | [#20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20) — draft, base `develop` |
+| PR implementation | [#21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21) — draft, base nhánh dependency; merge #20 rồi đổi base #21 về `develop` |
 | Việc tiếp theo | Review dependency/implementation tuần 1; sau merge bắt đầu K4 assignment và triển khai K5 theo thiết kế khóa đã có |
 
 Tài liệu lưu kế hoạch, phụ thuộc, tiêu chí hoàn thành và bằng chứng để Khương,
@@ -132,7 +134,7 @@ phải yêu cầu gom toàn bộ một task lớn vào một PR.
 
 | Thứ tự | Phạm vi PR | Task | Đầu ra để người khác dùng | Trạng thái / PR |
 | --- | --- | --- | --- | --- |
-| 1 | Dependency riêng: package của WO + lockfile | K1 | Có thư viện dùng chung và validation cần thiết; Nguyên review | Đã commit `cf54470`, chờ review |
+| 1 | Dependency riêng: package của WO + lockfile | K1 | Có thư viện dùng chung và validation cần thiết; Nguyên review | Draft PR #20, commit `cf54470`, chờ review |
 | 2 | Bootstrap: Prisma, auth, validation, health, env, nền tảng event/test | K1 | Service khởi động và kiểm tra được; có test DB/CI | Đã code/test local tại `2aecbe7`, chờ review |
 | 3 | Technician/Skill, `/technicians/me` | K2 | Mobile nhận diện technician; web có dữ liệu phân công | Đã code/test local tại `2aecbe7`, chờ review |
 | 4 | Tạo/đọc/sửa/history/internal WO; thiết kế khóa tạo/hủy cùng K5 | K3 | Tạo WO từ SR ACCEPTED, phát Created v1 | Đã code/test local tại `2aecbe7`; K5 chưa triển khai |
@@ -159,6 +161,10 @@ review cùng nhau, bootstrap, Technician và create/read WO được gộp trong
 implementation, thay vì các PR dự kiến 2–4. Thay đổi test DB/CI/contract được
 liệt kê trong PR để Nguyên/consumer review. K4–K8 còn theo phạm vi tương ứng,
 chưa được coi hoàn thành vì có smoke tuần 1.
+
+Đã push hai nhánh và mở draft PR #20/#21; chưa merge, chưa có owner approval.
+Các phần implementation 2–4 nằm trong #21. Sau khi merge dependency #20, đổi
+base #21 về `develop` để review/merge implementation theo quy trình.
 
 ## 5. Checklist K1–K8
 

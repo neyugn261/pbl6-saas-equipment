@@ -6,6 +6,9 @@
   Docker Compose; sáu service NestJS chạy bản build thật.
 - Trạng thái: **các kiểm tra local bên dưới đạt; chưa phải nghiệm thu M2 toàn
   nhóm hoặc kết quả CI GitHub**. Không có kết quả assignment/complete/Maintenance.
+- PR: [dependency #20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20),
+  [implementation #21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21),
+  đều draft; implementation dựa trên nhánh dependency, chưa merge.
 
 ## 1. Lệnh và kết quả
 

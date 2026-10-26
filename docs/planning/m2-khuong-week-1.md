@@ -183,13 +183,17 @@ của người khác vào PR để chạy được.
 
 | PR | Nhánh gợi ý | Phạm vi chính | Trạng thái / link |
 | --- | --- | --- | --- |
-| Dependency | `feature/khuong-workorder-deps` | package WO + lockfile; Nguyên review | Đã commit `cf54470`, chờ review |
-| Implementation tuần 1 | `feature/khuong-workorder-week1` | Bootstrap, Technician/Skill, create/read/update/history/internal WO và kiểm thử | Đã code/test local tại `2aecbe7`, chờ review |
+| Dependency | `feature/khuong-workorder-deps` | package WO + lockfile; Nguyên review | [Draft #20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20), commit `cf54470` |
+| Implementation tuần 1 | `feature/khuong-workorder-week1` | Bootstrap, Technician/Skill, create/read/update/history/internal WO và kiểm thử | [Draft #21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21), code `2aecbe7` |
 | Contract clarification và Test DB / CI | Cùng nhánh implementation tuần 1 | Liệt kê riêng các file dùng chung để Nguyên/consumer review | Đã chuẩn bị; chưa có owner review |
 
 So với chia PR ban đầu, bootstrap/Technician/WO và phần cấu hình được gộp để
 review cùng luồng đã chạy; dependency vẫn tách riêng. Đây là điều chỉnh cách
 đóng gói, không tự thay đổi ownership hay bỏ yêu cầu review.
+
+Hai nhánh đã push; #21 đang dựa trên nhánh #20. Merge #20 trước rồi đổi base
+#21 về `develop`. Chưa có review/merge hoặc kết quả CI được ghi nhận tại đây;
+chỉ cập nhật trạng thái khi có bằng chứng remote.
 
 ## 4. Những đầu vào cần phối hợp ngay
 
