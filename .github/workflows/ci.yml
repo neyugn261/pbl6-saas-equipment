@@ -137,9 +137,11 @@ jobs:
       - name: Work Order database e2e tests
         working-directory: apps/workorder-service
         run: pnpm test:e2e:db
-      - name: M1 regression and M2 week 1 through API Gateway
+      - name: M1 regression and M2 workflows through API Gateway
         env:
           NODE_ENV: development
+          # Three smoke suites share one source IP and perform more than ten logins.
+          LOGIN_RATE_LIMIT: 50
           JWT_ACCESS_SECRET: ci-smoke-access-secret-0123456789abcdef
           SEED_DEMO_PASSWORD: ci-smoke-demo-password
           IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'true'
@@ -188,6 +190,7 @@ jobs:
           wait_health "$GATEWAY_URL"
           pnpm smoke:m1
           pnpm smoke:m2:week1
+          pnpm smoke:m2:week2
       - name: Stop Compose infrastructure
         if: always()
         run: docker compose down --volumes
