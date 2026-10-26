@@ -42,7 +42,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - name: Bootstrap e2e (no database) of the services wired to packages/*
-        run: pnpm --filter organization-service --filter asset-service --filter service-request-service test:e2e
+        run: pnpm --filter organization-service --filter asset-service --filter service-request-service --filter workorder-service test:e2e
       - name: API Gateway e2e tests
         working-directory: apps/api-gateway
         run: pnpm test:e2e
@@ -64,6 +64,7 @@ jobs:
       SERVICE_REQUEST_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_shadow_db
       WORKORDER_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/workorder_db
       WORKORDER_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/workorder_shadow_db
+      WORKORDER_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/workorder_test_db
       MAINTENANCE_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_db
       MAINTENANCE_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_shadow_db
       INVENTORY_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_db
@@ -83,9 +84,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:packages
-      - name: Start M1 PostgreSQL with Compose
+      - name: Start PostgreSQL and RabbitMQ with Compose
         run: |
-          docker compose up -d postgres
+          docker compose up -d postgres rabbitmq
           for attempt in $(seq 1 30); do
             if pg_isready -h 127.0.0.1 -p 5432 -U pbl6 -d postgres; then exit 0; fi
             sleep 2
@@ -133,7 +134,10 @@ jobs:
       - name: Service Request database e2e tests
         working-directory: apps/service-request-service
         run: pnpm test:e2e:db
-      - name: M1 vertical slice through API Gateway
+      - name: Work Order database e2e tests
+        working-directory: apps/workorder-service
+        run: pnpm test:e2e:db
+      - name: M1 regression and M2 week 1 through API Gateway
         env:
           NODE_ENV: development
           JWT_ACCESS_SECRET: ci-smoke-access-secret-0123456789abcdef
@@ -149,13 +153,19 @@ jobs:
           INVENTORY_SERVICE_URL: http://127.0.0.1:3008
           ASSET_QR_PORTAL_BASE_URL: http://127.0.0.1:5173
           GATEWAY_URL: http://127.0.0.1:3000
+          RABBITMQ_URL: amqp://pbl6:pbl6_dev_password@127.0.0.1:5672
         run: |
           set -euo pipefail
-          pnpm --filter identity-service --filter organization-service --filter asset-service --filter service-request-service --filter api-gateway build
+          for attempt in $(seq 1 30); do
+            if docker compose exec -T rabbitmq rabbitmq-diagnostics -q ping; then break; fi
+            if [ "$attempt" = 30 ]; then docker compose logs rabbitmq; exit 1; fi
+            sleep 2
+          done
+          pnpm --filter identity-service --filter organization-service --filter asset-service --filter service-request-service --filter workorder-service --filter api-gateway build
           pnpm --filter identity-service db:seed:dev
           pnpm --filter asset-service db:seed:dev
           pnpm --filter identity-service start:prod > /tmp/m1-identity.log 2>&1 & identity_pid=$!
-          trap 'kill $identity_pid ${organization_pid:-} ${asset_pid:-} ${request_pid:-} ${gateway_pid:-} 2>/dev/null || true' EXIT
+          trap 'kill $identity_pid ${organization_pid:-} ${asset_pid:-} ${request_pid:-} ${workorder_pid:-} ${gateway_pid:-} 2>/dev/null || true' EXIT
           wait_health() {
             for attempt in $(seq 1 30); do
               if curl --fail --silent "$1/health" > /dev/null; then return 0; fi
@@ -169,12 +179,15 @@ jobs:
           pnpm --filter organization-service start:prod > /tmp/m1-organization.log 2>&1 & organization_pid=$!
           pnpm --filter asset-service start:prod > /tmp/m1-asset.log 2>&1 & asset_pid=$!
           pnpm --filter service-request-service start:prod > /tmp/m1-request.log 2>&1 & request_pid=$!
+          pnpm --filter workorder-service start:prod > /tmp/m1-workorder.log 2>&1 & workorder_pid=$!
           wait_health "$ORGANIZATION_SERVICE_URL"
           wait_health "$ASSET_SERVICE_URL"
           wait_health "$SERVICE_REQUEST_SERVICE_URL"
+          wait_health "$WORKORDER_SERVICE_URL"
           pnpm --filter api-gateway start:prod > /tmp/m1-gateway.log 2>&1 & gateway_pid=$!
           wait_health "$GATEWAY_URL"
           pnpm smoke:m1
+          pnpm smoke:m2:week1
       - name: Stop Compose infrastructure
         if: always()
         run: docker compose down --volumes
