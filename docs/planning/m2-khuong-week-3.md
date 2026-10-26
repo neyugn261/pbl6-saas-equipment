@@ -16,6 +16,17 @@ SUCCESS. Implementation K6 bước đầu: `d658a56`.
 | K7 | Regression M1/M2 + maintenance fixture qua broker/Gateway đạt | Scheduler/Task state thật, Asset history, ngoài bảo hành/Estimate, UI Web/Android |
 | K8 | Chưa bắt đầu | Contract upload/visibility cho M3, review với consumer; chưa code MinIO |
 
+## PR review
+
+| PR | Base | Phạm vi |
+| --- | --- | --- |
+| [#26](https://github.com/neyugn261/pbl6-saas-equipment/pull/26) | develop | Consumer K6 tạo lần đầu, helper cấp số dùng chung, tests và bằng chứng |
+| [#27](https://github.com/neyugn261/pbl6-saas-equipment/pull/27) | develop | Queue registry dùng chung; Nguyên/Minh review |
+
+Cả hai đã push, mở draft PR và **cùng target develop**; không cần đổi base.
+Merge #26 trước hoặc cùng đợt #27. Chưa merge; CI mới nhất xem Checks của PR.
+Smoke Maintenance riêng đã chạy local, chưa phải bước CI.
+
 ## K6 đã triển khai
 
 - Queue `workorder-service.maintenance-tasks`, inbox handler

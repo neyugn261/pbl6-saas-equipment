@@ -3,6 +3,9 @@
 Ngày 2026-10-27; baseline develop `988dbe0`, code K6 `d658a56`.
 Node 24.20 / pnpm 11.26 / PostgreSQL 17 / RabbitMQ 4 trên local Docker.
 [Kế hoạch tuần 3](../planning/m2-khuong-week-3.md).
+PR implementation [#26](https://github.com/neyugn261/pbl6-saas-equipment/pull/26),
+queue documentation [#27](https://github.com/neyugn261/pbl6-saas-equipment/pull/27),
+cùng base develop; CI mới nhất xem Checks từng PR.
 
 ## Kết quả đã chạy
 
