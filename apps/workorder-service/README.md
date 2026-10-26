@@ -1,7 +1,7 @@
-# Work Order Service — M2 tuần 1
+# Work Order Service — M2 tuần 2
 
-Work Order sở hữu `workorder_db`, Technician và Skill. Tuần 1 triển khai nền
-tảng, API profile/skill, tạo/đọc/sửa WO và history/internal reference. API theo
+Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
+tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
 [OpenAPI](../../docs/api/workorder.yaml); trạng thái/quyền theo
 [state machine](../../docs/architecture/state-machines.md) và catalog chung.
 
@@ -53,7 +53,7 @@ Technician-only account chỉ đọc WO được hoặc từng được giao; `m
 lấy assignment hiện tại ASSIGNED/ACCEPTED. Nếu account có thêm role staff với
 quyền đọc toàn tenant thì role đó vẫn cấp phạm vi tương ứng. Không dùng filter
 `technicianId` hoặc `mine=false` để nới scope. Staff theo catalog hiện tại:
-Service Manager quản lý WO; Dispatcher phân công (API tuần 2); Tenant Admin
+Service Manager quản lý WO; Dispatcher phân công; Tenant Admin
 quản lý Technician và chỉ đọc WO.
 
 Tạo profile xác thực account TENANT_STAFF có TECHNICIAN và branch ACTIVE;
@@ -75,12 +75,50 @@ transaction: sequence, WO CREATED, status history, work log và
 `WorkOrderCreated.v1`. Transaction timeout 20 giây; mỗi HTTP call timeout 5 giây.
 Constraint SQL vẫn là lớp chặn tạo trùng cuối cùng. Không sửa migration cũ.
 
-Consumer hủy SR trong K5 phải dùng cùng helper `lockServiceRequest`, cùng khóa
-và thứ tự đọc. **Tuần 1 chưa có cancel consumer/API hoặc workflow assignment/
-execute/complete/Service Report.** `allowedActions` hiện chỉ quảng bá `update`
-khi được phép; không quảng bá transition chưa triển khai. Phạm vi cuối M2 vẫn
-theo OpenAPI; tuần 1 không phải triển khai toàn contract. Race create/cancel
-chưa được nghiệm thu cho tới K5.
+Workflow khóa theo thứ tự SR → WO → technician (ID chuẩn hóa chữ thường,
+sắp tăng dần). Tất cả thay đổi assignment/status/report/history/log/outbox
+nằm trong một transaction. BUSY tính từ các assignment ACCEPTED còn lại;
+OFF_DUTY/INACTIVE được giữ nguyên. `allowedActions` phản ánh các action đã
+triển khai; backend luôn kiểm tra lại quyền, assignment và trạng thái dưới khóa.
+
+| Endpoint dưới `/work-orders/{id}` | Quyền và trạng thái |
+| --- | --- |
+| `POST /assign` | `work_order:assign`; CREATED/ASSIGNED/ACCEPTED; body `{technicianId, note?}` |
+| `POST /accept`, `/reject` | Technician hiện được giao; ASSIGNED; reject cần `{reason}` |
+| `POST /start-travel` | Technician hiện được giao; ACCEPTED |
+| `POST /start` | Technician hiện được giao; ACCEPTED/TRAVELLING |
+| `POST /hold`, `/resume` | Manager **hoặc** technician hiện được giao; IN_PROGRESS/ON_HOLD tương ứng; hold cần `{reason}` |
+| `POST /complete` | Technician hiện được giao + `service_report:submit`; IN_PROGRESS |
+| `POST /cancel` | `work_order:manage`; chưa terminal; `{reason, cancelServiceRequest?: boolean}` |
+| `GET /assignments`, `/logs`, `/service-report` | `work_order:read`, cùng tenant/assignment scope đọc WO |
+| `POST /logs` | Manager, Dispatcher hoặc technician hiện được giao; chưa terminal; `{note}` |
+
+Các transition trả 200, POST log trả 201. Accept/start-travel/start/resume không
+cần body; field lạ bị từ chối. Complete nhận body:
+
+```json
+{
+  "problemDescription": "Thiết bị không hoạt động",
+  "rootCause": "Chẩn đoán nội bộ",
+  "solution": "Đã xử lý",
+  "result": "RESOLVED",
+  "customerSummary": "Thiết bị đã hoạt động bình thường"
+}
+```
+
+`result`: RESOLVED/PARTIALLY_RESOLVED/UNRESOLVED. Mỗi WO chỉ có một report.
+Completed v2 chỉ chứa summary dành cho khách, không sao chép chẩn đoán nội bộ.
+Cancelled v2 mặc định `cancelServiceRequest=false`; true chỉ dành cho WO nguồn
+SR. Không phát Completed/Cancelled v1. Không có API sửa report hoặc upload.
+
+Queue `workorder-service.service-requests` nhận ServiceRequestStatusChanged v1.
+Consumer CANCELLED dùng inbox và cùng source lock với create. WO CREATED/
+ASSIGNED/ACCEPTED tự hủy; history changedBy=NULL, không tạo log bằng user giả.
+WO TRAVELLING/IN_PROGRESS/ON_HOLD giữ nguyên, ghi cảnh báo cho quản lý; Notification
+thuộc M3. Consumer không gọi SR đồng bộ hoặc đọc DB SR.
+
+**Giới hạn:** Maintenance consumer còn ở K6. [H4 của SR](../../docs/testing/h4-stale-work-order-events.md)
+đã giao Huy sửa; chưa nghiệm thu event WO cũ tác động sau WO thay thế.
 
 ## Kiểm tra
 
@@ -111,9 +149,20 @@ pnpm smoke:m2:week1
 Script tạo profile Technician qua API nếu chưa có, dùng DEMO customer/equipment
 trong bảo hành, tạo SR → review → accept → tạo WO → chờ SR PROCESSING. Nó kiểm
 tra duplicate/auth/customer/technician scope và chặn internal qua Gateway.
-Script giữ lại SR/WO mới làm bằng chứng, không tự hủy vì K5 chưa triển khai.
+Script giữ lại SR/WO mới làm bằng chứng.
 Cấu hình tùy chọn: `GATEWAY_URL`, `TENANT_CODE`, `MANAGER_EMAIL`,
 `TECHNICIAN_EMAIL`, `CUSTOMER_EMAIL`, `M2_BRANCH_ID`. Không ghi token/password.
 
 Theo dõi quyết định và tiến độ tại [kế hoạch Khương](../../docs/planning/m2-khuong.md)
-và [tuần 1](../../docs/planning/m2-khuong-week-1.md).
+và [tuần 2](../../docs/planning/m2-khuong-week-2.md).
+
+Smoke tuần 2 dùng cùng stack, thêm Dispatcher fixture:
+
+```bash
+pnpm smoke:m2:week2
+```
+
+Kiểm tra assign → accept → travel → start → hold/resume → report → Completed v2
+→ SR summary → customer confirm/reopen; thêm UNRESOLVED và hai cancellation
+intent. Các ca chạy HTTP qua Gateway, PostgreSQL và RabbitMQ thật; chưa phải
+kiểm thử UI web/Android. [Bằng chứng tuần 2](../../docs/testing/m2-week2-test-cases.md).

@@ -6,8 +6,8 @@
 | Ngày tạo / cập nhật | 2026-10-26 / 2026-10-26 |
 | Mốc code đối chiếu | `2aecbe7` (implementation), `cf54470` (dependency); baseline trước triển khai `e3acf49` |
 | Giả định thời gian | 5 ngày làm việc từ khi bắt đầu, khoảng 5–6 giờ tập trung/ngày |
-| Trạng thái | Mục tiêu triển khai/test local tuần 1 đã đạt; chờ review/merge, chưa nghiệm thu M2 toàn nhóm |
-| Việc tiếp theo | Review thay đổi tuần 1 với Nguyên/consumer; sau merge bắt đầu K4 và consumer hủy của K5 |
+| Trạng thái | PR #20/#21 đã merge develop tại `b8935d1`; audit tuần 1 đạt phạm vi, chưa nghiệm thu M2 toàn nhóm |
+| Việc tiếp theo | Review K4/K5 tuần 2; Huy sửa H4 trước nghiệm thu nhánh WO thay thế |
 
 Đây là kế hoạch thực hiện K1 và phần ưu tiên của K2/K3, không phải cam kết
 hoàn tất mọi endpoint trong một tuần. Nếu chỉ có 2–3 giờ/ngày hoặc review chưa
@@ -183,18 +183,19 @@ của người khác vào PR để chạy được.
 
 | PR | Nhánh gợi ý | Phạm vi chính | Trạng thái / link |
 | --- | --- | --- | --- |
-| Dependency | `feature/khuong-workorder-deps` | package WO + lockfile; Nguyên review | [Draft #20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20), commit `cf54470` |
-| Implementation tuần 1 | `feature/khuong-workorder-week1` | Bootstrap, Technician/Skill, create/read/update/history/internal WO và kiểm thử | [Draft #21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21), code `2aecbe7` |
+| Dependency | `feature/khuong-workorder-deps` | package WO + lockfile; Nguyên review | [Merged #20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20), commit `cf54470` |
+| Implementation tuần 1 | `feature/khuong-workorder-week1` | Bootstrap, Technician/Skill, create/read/update/history/internal WO và kiểm thử | [Merged #21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21), code `2aecbe7` |
 | Contract clarification và Test DB / CI | Cùng nhánh implementation tuần 1 | Liệt kê riêng các file dùng chung để Nguyên/consumer review | Đã chuẩn bị; chưa có owner review |
 
 So với chia PR ban đầu, bootstrap/Technician/WO và phần cấu hình được gộp để
 review cùng luồng đã chạy; dependency vẫn tách riêng. Đây là điều chỉnh cách
 đóng gói, không tự thay đổi ownership hay bỏ yêu cầu review.
 
-Hai nhánh đã push; #21 đang dựa trên nhánh #20. Merge #20 trước rồi đổi base
-#21 về `develop`. Review/merge còn chờ. CI của dependency `cf54470` và
-implementation `7e4aa75` đã xanh cả hai job; run cụ thể được lưu trong
-[bảng bằng chứng](../testing/m2-week1-test-cases.md). Head mới nhất xem tại PR.
+PR #20 và #21 đã merge lên develop; CI `b8935d1` SUCCESS.
+[Audit sau merge](../testing/m2-week1-review.md) xác nhận đủ phạm vi tuần 1,
+đồng thời ghi bản sửa UUID `0b9405f` và H4 giao Huy.
+Các bảng theo ngày dưới đây là lịch sử tại thời điểm triển khai tuần 1;
+trạng thái hiện tại xem audit và [tuần 2](m2-khuong-week-2.md).
 
 ## 4. Những đầu vào cần phối hợp ngay
 
@@ -241,3 +242,5 @@ các phần tiếp theo. Các lệnh kiểm tra và nguồn kỹ thuật nằm t
 | --- | --- | --- |
 | 2026-10-26 | Codex, theo yêu cầu Khương | Chia tuần 1 thành 5 ngày; xác định mục tiêu ưu tiên, đầu ra, PR, phối hợp và bảng bằng chứng. Chưa triển khai code hoặc nghiệm thu task. |
 | 2026-10-26 | Codex; Khương chốt D01/D04 | Hoàn thiện triển khai và kiểm tra local tuần 1 tại `2aecbe7`; lưu bằng chứng, giữ rõ review/merge và trao đổi owner còn chờ. |
+
+| 2026-10-26 | Codex, Khương xác nhận merge | Cập nhật PR #20/#21 đã merge; audit tuần 1, fix UUID và chuyển K4/K5 tuần 2; H4 giao Huy. |

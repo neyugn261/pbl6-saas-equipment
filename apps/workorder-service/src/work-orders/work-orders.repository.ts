@@ -15,14 +15,18 @@ import {
   PatchWorkOrderDto,
 } from './dto';
 import type { EquipmentRef, RequestRef } from '../references/references.client';
+import { allowedWorkOrderActions } from './work-order-policy';
 
 export type WorkOrderTx = Prisma.TransactionClient;
 export const currentAssignments = { status: { in: ['ASSIGNED', 'ACCEPTED'] } };
-const include = {
+export const workOrderInclude = {
   assignments: { where: currentAssignments, include: { technician: true } },
   serviceReports: { select: { id: true } },
 };
-type WorkOrderRow = Prisma.WorkOrderGetPayload<{ include: typeof include }>;
+const include = workOrderInclude;
+export type WorkOrderRow = Prisma.WorkOrderGetPayload<{
+  include: typeof include;
+}>;
 /** A second staff role grants its own wider read scope; a technician-only account is assignment scoped. */
 export const isTechnicianOnly = (p: Principal) =>
   p.roles.length > 0 && p.roles.every((r) => r === 'TECHNICIAN');
@@ -52,10 +56,11 @@ export function assertSchedule(start?: Date | null, end?: Date | null) {
 }
 export function workOrderView(row: WorkOrderRow, p: Principal) {
   const assignment = row.assignments[0];
-  const live = !['COMPLETED', 'CANCELLED'].includes(row.status);
-  // Only actions currently implemented by this service are advertised.
-  const allowedActions =
-    live && p.permissions.has('work_order:manage') ? ['update'] : [];
+  const allowedActions = allowedWorkOrderActions(
+    p,
+    row.status,
+    assignment?.technician.userId,
+  );
   return {
     id: row.id,
     workOrderNo: row.workOrderNo,

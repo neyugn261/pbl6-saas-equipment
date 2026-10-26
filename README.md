@@ -32,7 +32,7 @@ apps/
   identity-service/         :3001  ✅ auth (login/refresh/logout/me), claim customer_id, consumer tenant/membership events
   asset-service/            :3002  ✅ Equipment Model, Equipment, Warranty, QR và lịch sử; tenant/customer scope
   maintenance-service/      :3003  scaffold + schema maintenance_db
-  workorder-service/        :3004  ✅ M2 tuần 1: Technician/Skill, tạo/đọc/sửa WO, history và outbox; workflow thực thi đang tiếp tục
+  workorder-service/        :3004  ✅ M2: Technician/Skill, WO, assignment, thực thi/report và cancel (tuần 2 chờ merge)
   notification-service/     :3005  scaffold + schema notification_db
   organization-service/     :3006  ✅ Tenant, Branch, Customer, Site, Location và membership
   service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox
@@ -44,7 +44,7 @@ infrastructure/postgres/    init.sql (8 database của service), dev-databases.s
 docs/                       SRS, ADR, ERD, API contract, kiến trúc (event, state machine)
 ```
 
-Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; các migration tiếp theo thuộc từng service). Identity, Organization, Asset, Service Request và phần tuần 1 của Work Order có API nghiệp vụ; các phần còn lại đang được triển khai theo ownership trong [CONTRIBUTING.md](CONTRIBUTING.md). Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
+Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; các migration tiếp theo thuộc từng service). Identity, Organization, Asset, Service Request và Work Order có API nghiệp vụ; các phần còn lại đang được triển khai theo ownership trong [CONTRIBUTING.md](CONTRIBUTING.md). Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
 
 Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác thực token và phân quyền theo catalog RBAC, phạm vi tenant/customer, định dạng lỗi `{code, message}`, log JSON có correlation id, `/health`, outbox/inbox và RabbitMQ. Quy trình làm việc nhóm: [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -404,3 +404,9 @@ pnpm identity:seed:dev
 - [docs/decisions/0002-workorder-maintenance-task-index.md](docs/decisions/0002-workorder-maintenance-task-index.md) — sửa index WO ↔ Maintenance Task (F07)
 - [apps/identity-service/README.md](apps/identity-service/README.md) — API và cơ chế xác thực
 - [docs/FRONTEND_IMPLEMENTATION.md](docs/FRONTEND_IMPLEMENTATION.md) — route và luồng demo của web
+
+M2 tuần 2: `pnpm smoke:m2:week2` kiểm tra workflow/report/cancel qua Gateway
+và RabbitMQ thật với cùng stack tuần 1. Khi chạy liên tiếp cả ba smoke,
+Gateway cần `LOGIN_RATE_LIMIT=50` trong môi trường kiểm thử (CI đã cấu hình);
+giá trị mặc định ứng dụng giữ nguyên. Xem [kế hoạch tuần 2](docs/planning/m2-khuong-week-2.md),
+[bằng chứng](docs/testing/m2-week2-test-cases.md) và [H4 giao Huy](docs/testing/h4-stale-work-order-events.md).
