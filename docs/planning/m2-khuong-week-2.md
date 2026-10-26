@@ -5,10 +5,15 @@ Code tuần 2: `687d911`, phụ thuộc bản sửa UUID `0b9405f`.
 Kế hoạch tổng: [M2 Khương](m2-khuong.md). Kiểm chứng:
 [bằng chứng tuần 2](../testing/m2-week2-test-cases.md).
 
+**Cập nhật 2026-10-27:** PR #22 vào develop; #23 và #24 đã merge vào các nhánh
+phụ thuộc. [PR #25](https://github.com/neyugn261/pbl6-saas-equipment/pull/25)
+đã đưa toàn bộ K4/K5 và CI vào develop `988dbe0`; [CI develop SUCCESS](https://github.com/neyugn261/pbl6-saas-equipment/actions/runs/40376976083).
+Đã sang [tuần 3/K6](m2-khuong-week-3.md). Phần mô tả PR/review bên dưới là lịch
+sử lúc chuẩn bị tuần 2; trạng thái hiện tại lấy từ cập nhật này.
+
 ## Mục tiêu và trạng thái
 
-**K4 đã triển khai/test local; K5 phía WO đã triển khai/test local.** Chờ review,
-CI của PR mới và merge. Chưa nghiệm thu M2 toàn nhóm hoặc app web/Android.
+**K4 và K5 phía WO đã merge develop qua #25; regression đạt.** Chưa nghiệm thu M2 toàn nhóm hoặc app web/Android.
 
 | Phần việc | Đầu ra đã có | Trạng thái |
 | --- | --- | --- |
@@ -59,6 +64,6 @@ của từng PR; kết quả local không tự chứng minh CI đã xanh.
 - [x] Lint/typecheck/build, DB/concurrency/rollback và smoke HTTP đã chạy.
 - [x] Giữ RBAC D01; không đổi migration/catalog hoặc đọc DB service khác.
 - [x] Ghi rõ H4 và phân biệt test dùng fake upstream với stack thật.
-- [ ] Reviewer/owner review và merge các PR tuần 2.
+- [x] Code tuần 2 đã merge develop qua #25; không suy diễn reviewer cụ thể từ trạng thái merge.
 - [ ] H4 và các ca replacement/event đảo thứ tự xuyên service được nghiệm thu.
 - [ ] Nguyên/Hatsady xác minh UI Android/Web với API thật; chưa có bằng chứng APK/UI.

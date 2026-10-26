@@ -1,4 +1,4 @@
-# Work Order Service — M2 tuần 2
+# Work Order Service — M2 (K6 tạo WO bảo trì lần đầu)
 
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
@@ -117,7 +117,21 @@ ASSIGNED/ACCEPTED tự hủy; history changedBy=NULL, không tạo log bằng us
 WO TRAVELLING/IN_PROGRESS/ON_HOLD giữ nguyên, ghi cảnh báo cho quản lý; Notification
 thuộc M3. Consumer không gọi SR đồng bộ hoặc đọc DB SR.
 
-**Giới hạn:** Maintenance consumer còn ở K6. [H4 của SR](../../docs/testing/h4-stale-work-order-events.md)
+Queue `workorder-service.maintenance-tasks` nhận MaintenanceTaskDue v1; inbox
+handler `workorder-service.maintenance-task-due`. Consumer kiểm tra catalog,
+producer/aggregate/tenant/task và ngày lịch; tạo MAINTENANCE/NORMAL từ snapshot,
+createdBy/history actor null, không log hệ thống, không gọi HTTP upstream.
+Inbox + WO + sequence + history + Created v1 cùng transaction, giữ correlation ID.
+Task UUID chuẩn hóa được advisory-lock theo key riêng; cấp số dùng chung với SR.
+
+scheduledDate được biểu diễn tại scheduledStart bằng 00:00 ngày đó ở +07:00,
+scheduledEnd null; đây là ngày lịch, chưa phải giờ hẹn khách. Ngày không có thật
+bị từ chối. Replay Due (kể cả event ID mới) không tạo thêm WO nếu task đã có WO,
+bao gồm CANCELLED/COMPLETED; không tự thay WO khi thiếu ý định Service Manager.
+Không đổi schema, permission hoặc contract v1.
+
+**Giới hạn:** yêu cầu WO thay thế chưa có contract kỹ thuật được review với Minh;
+Maintenance producer/Task-state consumer còn cần tích hợp thật. [H4 của SR](../../docs/testing/h4-stale-work-order-events.md)
 đã giao Huy sửa; chưa nghiệm thu event WO cũ tác động sau WO thay thế.
 
 ## Kiểm tra
@@ -166,3 +180,17 @@ Kiểm tra assign → accept → travel → start → hold/resume → report →
 → SR summary → customer confirm/reopen; thêm UNRESOLVED và hai cancellation
 intent. Các ca chạy HTTP qua Gateway, PostgreSQL và RabbitMQ thật; chưa phải
 kiểm thử UI web/Android. [Bằng chứng tuần 2](../../docs/testing/m2-week2-test-cases.md).
+
+K6 fixture smoke (sau smoke tuần 1/2 để có profile DEMO Technician):
+
+```bash
+NODE_ENV=development node apps/workorder-service/test/maintenance-smoke.cjs
+```
+
+Chạy từ root với RABBITMQ_URL, SEED_DEMO_PASSWORD và các service như trên.
+Script phát event fixture theo contract, kiểm tra WO qua Gateway và event
+Created/Completed/Cancelled qua broker thật; không truy cập DB. Script chỉ
+cho dev/test, dọn queue observer riêng và giữ record demo làm bằng chứng.
+Đây chưa phải scheduler Maintenance thật. CI hiện tự chạy DB cases mới;
+smoke K6 riêng chưa có trong job CI. Xem [tuần 3](../../docs/planning/m2-khuong-week-3.md)
+và [bằng chứng K6](../../docs/testing/m2-maintenance-test-cases.md).

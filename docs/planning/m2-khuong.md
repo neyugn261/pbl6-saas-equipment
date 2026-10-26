@@ -3,12 +3,12 @@
 | Thuộc tính | Giá trị |
 | --- | --- |
 | Người phụ trách | Khương — Member A theo bản phân công M2 người dùng cung cấp |
-| Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-26 |
-| Mốc code đã đối chiếu | `develop b8935d1` sau merge tuần 1; fix UUID `0b9405f`; K4/K5 `687d911` |
-| Trạng thái tài liệu | Tuần 1 đã merge/audit; K4/K5 tuần 2 đã code/test local, chờ review/merge |
+| Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-27 |
+| Mốc code đã đối chiếu | `develop 988dbe0` sau PR #25; K6 tạo lần đầu `d658a56` |
+| Trạng thái tài liệu | Tuần 2 đã merge develop qua #25; K6 tạo lần đầu đã code/test local, chờ review/merge |
 | PR dependency | [#20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20) — đã merge `fbbc97d` |
 | PR implementation | [#21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21) — đã merge `b8935d1` |
-| Việc tiếp theo | Review/merge K4/K5 tuần 2; Huy sửa H4 trước nghiệm thu nhánh thay thế; chuẩn bị K6 với Minh |
+| Việc tiếp theo | Review K6 tạo lần đầu; Minh tích hợp producer/Task state và review contract thay thế; Huy sửa H4; K7/K8 tiếp tục |
 
 Tài liệu lưu kế hoạch, phụ thuộc, tiêu chí hoàn thành và bằng chứng để Khương,
 thành viên nhóm hoặc AI tiếp tục cập nhật. Đây không phải biên bản nghiệm thu
@@ -145,11 +145,11 @@ phải yêu cầu gom toàn bộ một task lớn vào một PR.
 | 2 | Bootstrap: Prisma, auth, validation, health, env, nền tảng event/test | K1 | Service khởi động và kiểm tra được; có test DB/CI | Đã merge #21 tại `b8935d1` |
 | 3 | Technician/Skill, `/technicians/me` | K2 | Mobile nhận diện technician; web có dữ liệu phân công | Đã merge #21 tại `b8935d1` |
 | 4 | Tạo/đọc/sửa/history/internal WO; thiết kế khóa tạo/hủy cùng K5 | K3 | Tạo WO từ SR ACCEPTED, phát Created v1 | Đã merge #21; K5 đã code/test local tuần 2 |
-| 5 | Assign/reassign/accept/reject và cập nhật trạng thái technician | K4 | Web phân công, Android nhận việc | Đã code/test local `687d911`; chờ review/merge tuần 2 |
-| 6 | Start-travel/start/hold/resume và work log | K4 | Android thực hiện công việc | Đã code/test local `687d911`; chờ review/merge tuần 2 |
-| 7 | Complete, Service Report và Completed v2 | K4 | Huy/Minh nối consumer kết quả thật | Đã code/test local `687d911`; chờ review/merge tuần 2 |
-| 8 | Consumer hủy SR, cancel WO và Cancelled v2 | K5 | An toàn khi create/cancel chạy đồng thời; hoàn thiện trước nghiệm thu nhánh SR | Đã code/test local `687d911`; chờ review/merge tuần 2 |
-| 9 | MaintenanceTaskDue và WO thay thế sau khi D04 được chốt | K6 | Luồng bảo trì với Minh | Chưa bắt đầu / — |
+| 5 | Assign/reassign/accept/reject và cập nhật trạng thái technician | K4 | Web phân công, Android nhận việc | Đã merge develop `988dbe0` qua #25; regression đạt |
+| 6 | Start-travel/start/hold/resume và work log | K4 | Android thực hiện công việc | Đã merge develop `988dbe0` qua #25; regression đạt |
+| 7 | Complete, Service Report và Completed v2 | K4 | Huy/Minh nối consumer kết quả thật | Đã merge develop `988dbe0` qua #25; regression đạt |
+| 8 | Consumer hủy SR, cancel WO và Cancelled v2 | K5 | An toàn khi create/cancel chạy đồng thời; hoàn thiện trước nghiệm thu nhánh SR | Đã merge develop `988dbe0` qua #25; regression đạt |
+| 9 | MaintenanceTaskDue và WO thay thế sau khi D04 được chốt | K6 | Luồng bảo trì với Minh | K6 tạo lần đầu `d658a56` đã test local; replacement/producer thật chờ Minh |
 | 10 | Seed, hướng dẫn demo, tích hợp và bằng chứng cuối giai đoạn | K7 | Web/Android dùng Gateway và event thật | Đang làm: DB test/smoke và hướng dẫn tuần 1 đã đạt; nghiệm thu K4–K6 còn tiếp tục |
 | 11 | Contract upload, chưa code MinIO | K8 | Mobile/web có đầu vào chuẩn bị M3 | Chưa bắt đầu / — |
 
@@ -174,8 +174,9 @@ CI dùng chung để reviewer xem độc lập; quan hệ base/merge xem kế ho
 
 ## 5. Checklist K1–K8
 
-K1–K3 đã merge; K4 và các tiêu chí K5 đã tick phản ánh code/test local tuần 2,
-chưa thay thế review/merge hoặc nghiệm thu mọi thứ tự event xuyên service.
+K1–K5 phía WO đã merge develop qua #25; checkbox K6 tạo lần đầu phản ánh
+code/test local `d658a56`, chưa thay review/merge K6 hoặc nghiệm thu mọi thứ
+tự event xuyên service. H4 và replacement còn theo các tiêu chí chưa tick.
 
 ### M2-K1 — Contract và nền tảng
 
@@ -245,13 +246,18 @@ chưa nghiệm thu. Chi tiết trong [bàn giao H4](../testing/h4-stale-work-ord
 ### M2-K6 — WO từ Maintenance Task
 
 - [ ] Chốt M2-D04 và ví dụ thứ tự sự kiện với Minh trước code nhánh thay thế.
-- [ ] Consume MaintenanceTaskDue v1, tenant từ envelope và customer/site từ
+- [x] Consume MaintenanceTaskDue v1, tenant từ envelope và customer/site từ
   snapshot; không gọi upstream bằng token giả; `created_by = NULL`.
-- [ ] Inbox + WO + history + outbox Created v1 cùng transaction.
-- [ ] Constraint chặn nhiều WO chưa hủy cho một Task; WO COMPLETED vẫn chặn
-  WO mới; thay thế giữ cùng task ID/ngày lịch.
+- [x] Inbox + WO + history + outbox Created v1 cùng transaction.
+- [x] Constraint chặn nhiều WO chưa hủy cho một Task; WO COMPLETED vẫn chặn
+  WO mới; Due replay sau hủy không tự tạo replacement. Nhánh thay thế giữ
+  task ID/ngày lịch còn cần contract được review.
 - [ ] Test concurrent delivery, replay, rollback, hủy/thay thế và event cũ
   không ghi đè WO mới/Task đã hoàn tất; tích hợp producer thật với Minh.
+
+K6 tạo lần đầu đã có 21 DB tests và smoke fixture qua RabbitMQ/Gateway thật.
+Chưa hoàn tất toàn K6: replacement, Task state và producer thật còn chờ tích hợp.
+Chi tiết: [tuần 3](m2-khuong-week-3.md), [bằng chứng](../testing/m2-maintenance-test-cases.md).
 
 ### M2-K7 — Kiểm thử, seed và bàn giao
 
@@ -381,3 +387,5 @@ chạy E2E có ghi/xóa dữ liệu trên business DB.
 | 2026-10-26 | Codex, Khương chốt D01/D04 | Triển khai/test tuần 1 tại `2aecbe7`, dependency `cf54470`; cập nhật trạng thái K1–K3 và bằng chứng; K4/K5/K6 chưa triển khai. Chờ review/merge. |
 
 | 2026-10-26 | Codex; Khương giao H4 cho Huy | Audit develop sau merge #20/#21; fix UUID; triển khai/test K4/K5 `687d911`; cập nhật kế hoạch tuần 2 và giới hạn nghiệm thu replacement. |
+
+| 2026-10-27 | Codex, Khương xác nhận #25 đã merge | Đối chiếu develop `988dbe0`/CI SUCCESS; triển khai K6 tạo lần đầu `d658a56`; 79 DB, 183 unit/transport, 2 bootstrap và smoke thật đạt. Replacement chưa có contract được review; không nghiệm thu thay Minh/Huy. |
