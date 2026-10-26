@@ -4,11 +4,11 @@
 | --- | --- |
 | Người phụ trách | Khương — Member A theo bản phân công M2 người dùng cung cấp |
 | Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-26 |
-| Mốc code đã đối chiếu | `2aecbe7` — triển khai tuần 1, trên nhánh `feature/khuong-workorder-week1`; baseline `develop` là `e3acf49` |
-| Trạng thái tài liệu | Tuần 1 đã triển khai và kiểm tra local; chờ review/merge; chưa nghiệm thu M2 toàn nhóm |
-| PR dependency | [#20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20) — draft, base `develop` |
-| PR implementation | [#21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21) — draft, base nhánh dependency; merge #20 rồi đổi base #21 về `develop` |
-| Việc tiếp theo | Review dependency/implementation tuần 1; sau merge bắt đầu K4 assignment và triển khai K5 theo thiết kế khóa đã có |
+| Mốc code đã đối chiếu | `develop b8935d1` sau merge tuần 1; fix UUID `0b9405f`; K4/K5 `687d911` |
+| Trạng thái tài liệu | Tuần 1 đã merge/audit; K4/K5 tuần 2 đã code/test local, chờ review/merge |
+| PR dependency | [#20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20) — đã merge `fbbc97d` |
+| PR implementation | [#21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21) — đã merge `b8935d1` |
+| Việc tiếp theo | Review/merge K4/K5 tuần 2; Huy sửa H4 trước nghiệm thu nhánh thay thế; chuẩn bị K6 với Minh |
 
 Tài liệu lưu kế hoạch, phụ thuộc, tiêu chí hoàn thành và bằng chứng để Khương,
 thành viên nhóm hoặc AI tiếp tục cập nhật. Đây không phải biên bản nghiệm thu
@@ -76,7 +76,13 @@ Technician/Skill và phần K3 create/list/detail/patch/history/internal referen
 lint/typecheck/build toàn repo, 183 test (có RabbitMQ thật), 2 bootstrap test,
 16 DB test, drift WO, smoke M1 và M2 tuần 1 đạt. CI dependency `cf54470` và
 implementation `7e4aa75` đều xanh cả hai job. Bằng chứng/run cụ thể:
-[M2 tuần 1](../testing/m2-week1-test-cases.md). Review/merge vẫn còn chờ.
+[M2 tuần 1](../testing/m2-week1-test-cases.md).
+
+**Sau merge:** #20/#21 đã lên develop `b8935d1`, CI SUCCESS.
+[Audit tuần 1](../testing/m2-week1-review.md) đủ phạm vi K1–K3; có fix UUID riêng.
+[Kế hoạch tuần 2](m2-khuong-week-2.md): K4/K5 đã triển khai/test local;
+[bằng chứng](../testing/m2-week2-test-cases.md). H4 giao Huy theo quyết định Khương,
+chặn nghiệm thu event WO cũ/WO thay thế; không sửa SR thay owner.
 
 Nghiệm thu M1 toàn nhóm vẫn cần bảng kết quả và quyết định release. CODEOWNERS
 hiện còn comment; trạng thái branch protection/CI trên GitHub chưa được xác
@@ -108,7 +114,7 @@ minh trong lượt lập kế hoạch này. Những việc đó không tự đ�
 | Mã / nội dung | Người phối hợp | Chặn phần nào | Đầu ra cần có | Trạng thái |
 | --- | --- | --- | --- | --- |
 | M2-D01: đối chiếu permission M2 với bằng chứng duyệt, catalog và seed | Khương + Nguyên, consumer API | Giữ quyền hiện có cho tuần 1 | Khương đã chốt giữ nguyên catalog; không có role/quyền hoặc migration Identity mới | Khương chốt 2026-10-26; catalog trong code vẫn PROVISIONAL, cần review chung trước version hóa sau này |
-| M2-N2: test DB, env, bootstrap và CI cho WO | Khương chuẩn bị, Nguyên review | Review thay đổi dùng chung | Đã thêm `workorder_test_db`, test URL, script an toàn và CI DB/smoke | Local/CI đã đạt; chờ owner review/merge |
+| M2-N2: test DB, env, bootstrap và CI cho WO | Khương chuẩn bị, Nguyên review | Review thay đổi dùng chung | Đã thêm `workorder_test_db`, test URL, script an toàn và CI DB/smoke | Đã merge #21; develop CI đạt; không suy diễn người duyệt cụ thể |
 | M2-D04: ai yêu cầu WO bảo trì thay thế, operation/event, retry/backoff/giới hạn | Khương + Minh; Huy/Nguyên review | Contract kỹ thuật cho nhánh thay thế K6 | Khương chốt Service Manager chủ động yêu cầu, mỗi yêu cầu có định danh chống trùng; không tự động tạo lại | Khương chốt 2026-10-26; endpoint/event và quy tắc thứ tự còn cần review với các owner trước K6 |
 | M2-D06: làm rõ từ “reports” ngoài M2 trong mô tả contract | Khương + Nguyên/Hatsady và consumer liên quan | Review contract | Đã phân biệt Service Report M2 với thống kê/upload M3 | Đã sửa câu chữ tại `2aecbe7`; chờ consumer review |
 | H4: sự kiện của WO cũ đến muộn sau WO thay thế | Khương + Huy; Minh cho trường hợp Task | Nghiệm thu nhánh thay thế và consumer an toàn | Cách nhận diện WO hiện hành, xử lý event cũ và test sai thứ tự | Rủi ro từ đọc code; chưa chạy tái hiện |
@@ -135,14 +141,14 @@ phải yêu cầu gom toàn bộ một task lớn vào một PR.
 
 | Thứ tự | Phạm vi PR | Task | Đầu ra để người khác dùng | Trạng thái / PR |
 | --- | --- | --- | --- | --- |
-| 1 | Dependency riêng: package của WO + lockfile | K1 | Có thư viện dùng chung và validation cần thiết; Nguyên review | Draft PR #20, commit `cf54470`, chờ review |
-| 2 | Bootstrap: Prisma, auth, validation, health, env, nền tảng event/test | K1 | Service khởi động và kiểm tra được; có test DB/CI | Đã code/test local tại `2aecbe7`, chờ review |
-| 3 | Technician/Skill, `/technicians/me` | K2 | Mobile nhận diện technician; web có dữ liệu phân công | Đã code/test local tại `2aecbe7`, chờ review |
-| 4 | Tạo/đọc/sửa/history/internal WO; thiết kế khóa tạo/hủy cùng K5 | K3 | Tạo WO từ SR ACCEPTED, phát Created v1 | Đã code/test local tại `2aecbe7`; K5 chưa triển khai |
-| 5 | Assign/reassign/accept/reject và cập nhật trạng thái technician | K4 | Web phân công, Android nhận việc | Chưa bắt đầu / — |
-| 6 | Start-travel/start/hold/resume và work log | K4 | Android thực hiện công việc | Chưa bắt đầu / — |
-| 7 | Complete, Service Report và Completed v2 | K4 | Huy/Minh nối consumer kết quả thật | Chưa bắt đầu / — |
-| 8 | Consumer hủy SR, cancel WO và Cancelled v2 | K5 | An toàn khi create/cancel chạy đồng thời; hoàn thiện trước nghiệm thu nhánh SR | Chưa bắt đầu / — |
+| 1 | Dependency riêng: package của WO + lockfile | K1 | Có thư viện dùng chung và validation cần thiết; Nguyên review | Merged #20, commit `cf54470` |
+| 2 | Bootstrap: Prisma, auth, validation, health, env, nền tảng event/test | K1 | Service khởi động và kiểm tra được; có test DB/CI | Đã merge #21 tại `b8935d1` |
+| 3 | Technician/Skill, `/technicians/me` | K2 | Mobile nhận diện technician; web có dữ liệu phân công | Đã merge #21 tại `b8935d1` |
+| 4 | Tạo/đọc/sửa/history/internal WO; thiết kế khóa tạo/hủy cùng K5 | K3 | Tạo WO từ SR ACCEPTED, phát Created v1 | Đã merge #21; K5 đã code/test local tuần 2 |
+| 5 | Assign/reassign/accept/reject và cập nhật trạng thái technician | K4 | Web phân công, Android nhận việc | Đã code/test local `687d911`; chờ review/merge tuần 2 |
+| 6 | Start-travel/start/hold/resume và work log | K4 | Android thực hiện công việc | Đã code/test local `687d911`; chờ review/merge tuần 2 |
+| 7 | Complete, Service Report và Completed v2 | K4 | Huy/Minh nối consumer kết quả thật | Đã code/test local `687d911`; chờ review/merge tuần 2 |
+| 8 | Consumer hủy SR, cancel WO và Cancelled v2 | K5 | An toàn khi create/cancel chạy đồng thời; hoàn thiện trước nghiệm thu nhánh SR | Đã code/test local `687d911`; chờ review/merge tuần 2 |
 | 9 | MaintenanceTaskDue và WO thay thế sau khi D04 được chốt | K6 | Luồng bảo trì với Minh | Chưa bắt đầu / — |
 | 10 | Seed, hướng dẫn demo, tích hợp và bằng chứng cuối giai đoạn | K7 | Web/Android dùng Gateway và event thật | Đang làm: DB test/smoke và hướng dẫn tuần 1 đã đạt; nghiệm thu K4–K6 còn tiếp tục |
 | 11 | Contract upload, chưa code MinIO | K8 | Mobile/web có đầu vào chuẩn bị M3 | Chưa bắt đầu / — |
@@ -163,14 +169,13 @@ implementation, thay vì các PR dự kiến 2–4. Thay đổi test DB/CI/contr
 liệt kê trong PR để Nguyên/consumer review. K4–K8 còn theo phạm vi tương ứng,
 chưa được coi hoàn thành vì có smoke tuần 1.
 
-Đã push hai nhánh và mở draft PR #20/#21; chưa merge, chưa có owner approval.
-Các phần implementation 2–4 nằm trong #21. Sau khi merge dependency #20, đổi
-base #21 về `develop` để review/merge implementation theo quy trình.
+PR #20/#21 đã merge. Tuần 2 tách fix UUID, implementation K4/K5 và cấu hình
+CI dùng chung để reviewer xem độc lập; quan hệ base/merge xem kế hoạch tuần 2.
 
 ## 5. Checklist K1–K8
 
-Các checkbox K1–K3 đã tick ghi nhận tiêu chí triển khai/test local tại `2aecbe7`;
-task vẫn chờ review/merge và K5 còn thiếu, không phải nghiệm thu M2 toàn nhóm.
+K1–K3 đã merge; K4 và các tiêu chí K5 đã tick phản ánh code/test local tuần 2,
+chưa thay thế review/merge hoặc nghiệm thu mọi thứ tự event xuyên service.
 
 ### M2-K1 — Contract và nền tảng
 
@@ -181,7 +186,7 @@ task vẫn chờ review/merge và K5 còn thiếu, không phải nghiệm thu M2
 - [x] Nối Prisma, JWT/permission guard toàn cục, validation, lỗi chuẩn, logger
   và correlation ID; health kiểm tra DB.
 - [x] Validate DB URL, JWT, service URL và broker theo nhu cầu thực tế; env mới
-  có tài liệu; PR cấu hình dùng chung đang chờ Nguyên review.
+  có tài liệu; cấu hình tuần 1 đã merge #21.
 - [x] Chuẩn bị test DB/CI để Nguyên review; bootstrap test và negative test auth đạt.
 - [x] Lint/typecheck/test/build liên quan đạt; không tạo lại migration D5.
 
@@ -209,30 +214,33 @@ task vẫn chờ review/merge và K5 còn thiếu, không phải nghiệm thu M2
 
 ### M2-K4 — Assignment, thực thi và Service Report
 
-- [ ] Assign/reassign/accept/reject; chỉ một assignment ASSIGNED/ACCEPTED trên
+- [x] Assign/reassign/accept/reject; chỉ một assignment ASSIGNED/ACCEPTED trên
   WO; reassign cập nhật assignment cũ/mới và technician trong cùng transaction.
-- [ ] Start-travel/start/hold/resume; work log và lịch sử assignment; đúng
+- [x] Start-travel/start/hold/resume; work log và lịch sử assignment; đúng
   actor, trạng thái và lý do bắt buộc theo contract.
-- [ ] Quyền dạng “hoặc” ở hold/resume/thêm log được kiểm tra theo từng nhánh;
+- [x] Quyền dạng “hoặc” ở hold/resume/thêm log được kiểm tra theo từng nhánh;
   không biến thành yêu cầu đồng thời mọi permission của các nhánh.
-- [ ] Khóa WO/technician nhất quán khi thay đổi; BUSY/AVAILABLE tính theo các
+- [x] Khóa WO/technician nhất quán khi thay đổi; BUSY/AVAILABLE tính theo các
   assignment ACCEPTED còn lại; giữ OFF_DUTY/INACTIVE.
-- [ ] Complete chỉ do technician hiện được giao: report, WO, assignment,
+- [x] Complete chỉ do technician hiện được giao: report, WO, assignment,
   technician, history/work log và Completed v2 cùng transaction.
-- [ ] `customerSummary` bắt buộc, tách nội dung nội bộ; chỉ lưu một report/WO.
-- [ ] Test mọi transition, submit lặp, complete/cancel/reassign đồng thời và
+- [x] `customerSummary` bắt buộc, tách nội dung nội bộ; chỉ lưu một report/WO.
+- [x] Test mọi transition, submit lặp, complete/cancel/reassign đồng thời và
   rollback; `allowedActions` khớp quyền/trạng thái nhưng backend vẫn kiểm tra.
 
 ### M2-K5 — Hủy SR và WO
 
-- [ ] Consume ServiceRequestStatusChanged v1 → CANCELLED qua inbox; kiểm tra
+- [x] Consume ServiceRequestStatusChanged v1 → CANCELLED qua inbox; kiểm tra
   tenant/reference, dùng advisory lock cùng create.
-- [ ] Tự hủy WO chỉ ở CREATED/ASSIGNED/ACCEPTED, phát Cancelled v2 với
+- [x] Tự hủy WO chỉ ở CREATED/ASSIGNED/ACCEPTED, phát Cancelled v2 với
   `cancelServiceRequest: true`; WO đang thực hiện giữ nguyên và ghi cảnh báo.
-- [ ] API cancel xử lý assignment/technician/history/outbox nguyên tử;
+- [x] API cancel xử lý assignment/technician/history/outbox nguyên tử;
   `cancelServiceRequest` theo D4a và chỉ hợp lệ với nguồn SR.
 - [ ] Test cancel trước/sau create, start/accept chạy đồng thời với cancel,
   event trùng/sai thứ tự; SR không gọi WO đồng bộ để kiểm tra/hủy.
+
+H4 trên SR do Huy sửa theo quyết định Khương; ca event cũ/WO thay thế vẫn
+chưa nghiệm thu. Chi tiết trong [bàn giao H4](../testing/h4-stale-work-order-events.md).
 
 ### M2-K6 — WO từ Maintenance Task
 
@@ -371,3 +379,5 @@ chạy E2E có ghi/xóa dữ liệu trên business DB.
 | 2026-10-26 | Codex, theo yêu cầu Khương | Tạo kế hoạch từ bản phân công 25/10 và phân tích repository `e3acf49`; bổ sung thứ tự PR, checklist, phụ thuộc, rủi ro event và cách ghi bằng chứng. Chưa triển khai task M2; chưa ghi nhận nhóm duyệt. |
 | 2026-10-26 | Codex, theo yêu cầu Khương | Bổ sung kế hoạch tuần 1 theo từng ngày tại `m2-khuong-week-1.md`; làm rõ mục tiêu ưu tiên của K2/K3, giả định thời gian và tiêu chí bàn giao. Các task triển khai vẫn chưa bắt đầu. |
 | 2026-10-26 | Codex, Khương chốt D01/D04 | Triển khai/test tuần 1 tại `2aecbe7`, dependency `cf54470`; cập nhật trạng thái K1–K3 và bằng chứng; K4/K5/K6 chưa triển khai. Chờ review/merge. |
+
+| 2026-10-26 | Codex; Khương giao H4 cho Huy | Audit develop sau merge #20/#21; fix UUID; triển khai/test K4/K5 `687d911`; cập nhật kế hoạch tuần 2 và giới hạn nghiệm thu replacement. |
