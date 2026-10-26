@@ -143,7 +143,7 @@ phải yêu cầu gom toàn bộ một task lớn vào một PR.
 | 7 | Complete, Service Report và Completed v2 | K4 | Huy/Minh nối consumer kết quả thật | Chưa bắt đầu / — |
 | 8 | Consumer hủy SR, cancel WO và Cancelled v2 | K5 | An toàn khi create/cancel chạy đồng thời; hoàn thiện trước nghiệm thu nhánh SR | Chưa bắt đầu / — |
 | 9 | MaintenanceTaskDue và WO thay thế sau khi D04 được chốt | K6 | Luồng bảo trì với Minh | Chưa bắt đầu / — |
-| 10 | Seed, hướng dẫn demo, tích hợp và bằng chứng cuối giai đoạn | K7 | Web/Android dùng Gateway và event thật | Chưa bắt đầu / — |
+| 10 | Seed, hướng dẫn demo, tích hợp và bằng chứng cuối giai đoạn | K7 | Web/Android dùng Gateway và event thật | Đang làm: DB test/smoke và hướng dẫn tuần 1 đã đạt; nghiệm thu K4–K6 còn tiếp tục |
 | 11 | Contract upload, chưa code MinIO | K8 | Mobile/web có đầu vào chuẩn bị M3 | Chưa bắt đầu / — |
 
 Thiết kế advisory lock của K5 ngay khi làm PR 4: create lấy khóa theo SR ID rồi
@@ -314,7 +314,8 @@ Mỗi lần tiếp tục công việc:
 
 | Ngày | Commit / PR | Phạm vi hoặc lệnh kiểm tra | Môi trường | Kết quả / bằng chứng |
 | --- | --- | --- | --- | --- |
-| 2026-10-26 | `e3acf49` — mốc code | Đọc code/contract/schema/ADR phục vụ lập kế hoạch | Repository local | Đã đối chiếu tài liệu; chưa chạy lint/test/build/DB suite M2, chưa nghiệm thu tính năng |
+| 2026-10-26 | `e3acf49` — mốc code | Đọc code/contract/schema/ADR phục vụ lập kế hoạch | Repository local | Baseline trước triển khai; lúc lập kế hoạch chưa chạy kiểm tra M2 |
+| 2026-10-26 | `2aecbe7` / PR #21 | Lint/typecheck/build toàn repo; 183 test; 2 bootstrap + 16 DB test WO; drift; smoke M1 và M2 tuần 1 | PostgreSQL 17, RabbitMQ 4, sáu service thật | Pass local; [bằng chứng](../testing/m2-week1-test-cases.md); xem Checks của PR #21 cho trạng thái CI remote mới nhất |
 
 Những lệnh sẵn có để dùng khi triển khai (không phải bằng chứng đã chạy):
 
