@@ -5,6 +5,7 @@ import {
   type ReferencesClient,
 } from '../references/references.client';
 import { invalid } from '../common/errors';
+import { sameUuid } from '../common/uuid';
 import { TechniciansRepository } from './technicians.repository';
 import {
   CreateSkillDto,
@@ -34,7 +35,11 @@ export class TechniciansService {
     const tenantId = requireTenantId(p);
     this.manualStatus(input.status);
     const user = await this.refs.user(input.userId, p.accessToken);
-    if (!user || user.id !== input.userId || user.tenantId !== tenantId)
+    if (
+      !user ||
+      !sameUuid(user.id, input.userId) ||
+      !sameUuid(user.tenantId, tenantId)
+    )
       throw invalid('USER_NOT_FOUND', 'User was not found');
     if (user.userType !== 'TENANT_STAFF' || !user.roles.includes('TECHNICIAN'))
       throw invalid(
@@ -72,7 +77,7 @@ export class TechniciansService {
   }
   private async branch(id: string, p: Principal) {
     const branch = await this.refs.branch(id, p.accessToken);
-    if (!branch || branch.id !== id || branch.status !== 'ACTIVE')
+    if (!branch || !sameUuid(branch.id, id) || branch.status !== 'ACTIVE')
       throw invalid('BRANCH_NOT_FOUND', 'Active branch was not found');
   }
 }
