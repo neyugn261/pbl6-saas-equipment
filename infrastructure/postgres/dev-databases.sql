@@ -25,3 +25,4 @@ SELECT 'CREATE DATABASE identity_test_db' WHERE NOT EXISTS (SELECT FROM pg_datab
 SELECT 'CREATE DATABASE organization_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'organization_test_db')\gexec
 SELECT 'CREATE DATABASE asset_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'asset_test_db')\gexec
 SELECT 'CREATE DATABASE service_request_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'service_request_test_db')\gexec
+SELECT 'CREATE DATABASE maintenance_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'maintenance_test_db')\gexec

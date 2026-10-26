@@ -962,6 +962,9 @@ CREATE TABLE maintenance_plans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     equipment_id UUID NOT NULL, -- Logical reference to asset_db.equipments.id
+    -- ADR 0007 D12a; added to deployed databases by the second Maintenance migration.
+    customer_id UUID NOT NULL, -- Asset customer snapshot, logical reference
+    customer_site_id UUID NULL, -- Asset site snapshot, logical reference
     name VARCHAR(200) NOT NULL,
     description TEXT,
     frequency_unit VARCHAR(20) NOT NULL CHECK (frequency_unit IN ('DAY', 'WEEK', 'MONTH', 'YEAR')),
@@ -975,6 +978,7 @@ CREATE TABLE maintenance_plans (
 );
 CREATE INDEX idx_maintenance_plans_due ON maintenance_plans (tenant_id, next_due_date, status);
 CREATE INDEX idx_maintenance_plans_equipment ON maintenance_plans (tenant_id, equipment_id);
+CREATE INDEX idx_maintenance_plans_customer ON maintenance_plans (tenant_id, customer_id);
 
 CREATE TABLE maintenance_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
