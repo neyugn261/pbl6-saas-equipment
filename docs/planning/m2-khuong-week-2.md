@@ -33,6 +33,15 @@ CI của PR mới và merge. Chưa nghiệm thu M2 toàn nhóm hoặc app web/An
 Merge theo thứ tự fix → K4/K5 → CI; sau mỗi merge đổi base PR kế tiếp về develop.
 Mỗi PR vẫn cần reviewer ngoài tác giả; không tự merge vì CI xanh.
 
+| PR | Base hiện tại | Review / thứ tự merge |
+| --- | --- | --- |
+| [#22 — UUID fix](https://github.com/neyugn261/pbl6-saas-equipment/pull/22) | develop | Merge đầu tiên |
+| [#23 — K4/K5](https://github.com/neyugn261/pbl6-saas-equipment/pull/23) | fix/khuong-workorder-uuid | Đổi base về develop sau #22 |
+| [#24 — CI/smoke](https://github.com/neyugn261/pbl6-saas-equipment/pull/24) | feature/khuong-workorder-week2 | Nguyên review; đổi base sau #23 |
+
+Đã push và mở cả ba draft PR; chưa merge. Trạng thái CI mới nhất xem tab Checks
+của từng PR; kết quả local không tự chứng minh CI đã xanh.
+
 ## Việc Khương cần làm tiếp
 
 - Review/merge các PR tuần 2 cùng reviewer; Nguyên/Hatsady dùng API trong

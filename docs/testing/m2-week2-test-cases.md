@@ -2,7 +2,10 @@
 
 Ngày chạy: 2026-10-26, local Linux/Node 24/pnpm 11, PostgreSQL và RabbitMQ
 Docker. Code `687d911`, fix UUID `0b9405f`, baseline develop `b8935d1`.
-PR/CI mới theo dõi tại [kế hoạch tuần 2](../planning/m2-khuong-week-2.md).
+PR: [#22](https://github.com/neyugn261/pbl6-saas-equipment/pull/22) UUID fix,
+[#23](https://github.com/neyugn261/pbl6-saas-equipment/pull/23) K4/K5,
+[#24](https://github.com/neyugn261/pbl6-saas-equipment/pull/24) CI/smoke.
+CI mới nhất xem Checks của từng PR; chưa ghi PASS thay kết quả chưa xác minh.
 
 ## Kiểm tra đã chạy
 
