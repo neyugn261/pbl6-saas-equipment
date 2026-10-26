@@ -5,6 +5,7 @@ import {
   type ReferencesClient,
 } from '../references/references.client';
 import { invalid, missing } from '../common/errors';
+import { sameUuid } from '../common/uuid';
 import {
   CreateWorkOrderDto,
   ListWorkOrdersDto,
@@ -38,7 +39,7 @@ export class WorkOrdersService {
         input.serviceRequestId,
         p.accessToken,
       );
-      if (!source || source.id !== input.serviceRequestId)
+      if (!source || !sameUuid(source.id, input.serviceRequestId))
         throw missing('SERVICE_REQUEST_NOT_FOUND');
       if (source.status !== 'ACCEPTED')
         throw invalid(
@@ -51,8 +52,8 @@ export class WorkOrdersService {
       );
       if (
         !equipment ||
-        equipment.id !== source.equipmentId ||
-        equipment.customerId !== source.customerId
+        !sameUuid(equipment.id, source.equipmentId) ||
+        !sameUuid(equipment.customerId, source.customerId)
       )
         throw invalid(
           'EQUIPMENT_REFERENCE_INVALID',

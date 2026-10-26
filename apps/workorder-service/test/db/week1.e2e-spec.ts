@@ -74,7 +74,7 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
     }));
     refs.branch.mockResolvedValue({ id: branchId, status: 'ACTIVE' });
     refs.request.mockImplementation(
-      async (id: string) => sources.get(id) ?? null,
+      async (id: string) => sources.get(id.toLowerCase()) ?? null,
     );
     refs.equipment.mockResolvedValue({
       id: equipmentId,
@@ -113,6 +113,23 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
         ...extra,
       });
 
+  it('accepts mixed-case UUID references consistently with PostgreSQL', async () => {
+    refs.user.mockResolvedValueOnce({
+      id: technicianUser,
+      tenantId,
+      userType: 'TENANT_STAFF',
+      roles: ['TECHNICIAN'],
+      status: 'ACTIVE',
+    });
+    const tech = await postTechnician({
+      userId: technicianUser.toUpperCase(),
+      branchId: branchId.toUpperCase(),
+    }).expect(201);
+    expect(tech.body.userId).toBe(technicianUser);
+    const src = source();
+    await postWO(src.id.toUpperCase()).expect(201);
+    await postWO(src.id).expect(409);
+  });
   it('creates a technician, supports me, and never returns tenant metadata', async () => {
     const created = await postTechnician().expect(201);
     expect(created.body).toMatchObject({

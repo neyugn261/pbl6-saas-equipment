@@ -41,7 +41,7 @@ export async function lockServiceRequest(
   id: string,
 ) {
   // PostgreSQL returns void; cast it so Prisma can deserialize the lock result.
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${tenantId + ':' + id}, 0))::text`;
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${tenantId.toLowerCase() + ':' + id.toLowerCase()}, 0))::text`;
 }
 export function assertSchedule(start?: Date | null, end?: Date | null) {
   if (start && end && end <= start)
