@@ -32,7 +32,7 @@ apps/
   identity-service/         :3001  ✅ auth (login/refresh/logout/me), claim customer_id, consumer tenant/membership events
   asset-service/            :3002  ✅ Equipment Model, Equipment, Warranty, QR và lịch sử; tenant/customer scope
   maintenance-service/      :3003  scaffold + schema maintenance_db
-  workorder-service/        :3004  ✅ M2: Technician/Skill, WO, assignment, thực thi/report và cancel (tuần 2 chờ merge)
+  workorder-service/        :3004  ✅ M2: Technician/Skill, WO, assignment, thực thi/report và cancel; K6 tạo WO bảo trì lần đầu chờ review
   notification-service/     :3005  scaffold + schema notification_db
   organization-service/     :3006  ✅ Tenant, Branch, Customer, Site, Location và membership
   service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox
@@ -410,3 +410,5 @@ và RabbitMQ thật với cùng stack tuần 1. Khi chạy liên tiếp cả ba 
 Gateway cần `LOGIN_RATE_LIMIT=50` trong môi trường kiểm thử (CI đã cấu hình);
 giá trị mặc định ứng dụng giữ nguyên. Xem [kế hoạch tuần 2](docs/planning/m2-khuong-week-2.md),
 [bằng chứng](docs/testing/m2-week2-test-cases.md) và [H4 giao Huy](docs/testing/h4-stale-work-order-events.md).
+
+K6: [tuần 3 của Khương](docs/planning/m2-khuong-week-3.md) và [bằng chứng Maintenance](docs/testing/m2-maintenance-test-cases.md). Consumer tạo WO bảo trì lần đầu đã có DB tests và fixture smoke broker/Gateway; scheduler/Task state thật và contract thay thế vẫn cần Minh phối hợp.
