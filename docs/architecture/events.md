@@ -58,6 +58,7 @@ system-created order (ADR 0007 D12e and ADR 0008 D5).
 | `identity-service.directory` | identity-service | TenantCreated v1, TenantStatusChanged v1, CustomerMembershipChanged v1 |
 | `service-request-service.work-orders` | service-request-service | WorkOrderCreated v1, WorkOrderCompleted v1/v2, WorkOrderCancelled v1/v2 |
 | `workorder-service.service-requests` | workorder-service | ServiceRequestStatusChanged v1; chỉ xử lý toStatus CANCELLED, inbox handler `workorder-service.service-request-cancellations` |
+| `workorder-service.maintenance-tasks` | workorder-service | MaintenanceTaskDue v1; inbox handler `workorder-service.maintenance-task-due`, first WO only (implementation PR #26) |
 
 Each queue has `<queue>.retry` and `<queue>.dlq`.
 
@@ -71,3 +72,18 @@ Each queue has `<queue>.retry` and `<queue>.dlq`.
   fix, move it back with the console's *Move messages* (shovel plugin) or
   republish it to `pbl6.events` with its routing key. Handlers are idempotent,
   so a replay is safe.
+
+### Maintenance Task delivery
+
+Work Order's first-order consumer is tracked in [PR #26](https://github.com/neyugn261/pbl6-saas-equipment/pull/26).
+It consumes the existing v1 snapshot contract, writes inbox/WO/history/Created v1
+outbox atomically and retains the input correlation ID. `createdBy` and history
+actor are null; it makes no synchronous upstream call and invents no user.
+A normalized task UUID lock serializes distinct event IDs for the same task.
+
+A replay of MaintenanceTaskDue does not request a replacement: once any WO
+exists for that task, including CANCELLED or COMPLETED, this consumer creates
+no further WO. Khương confirmed manager-initiated replacements; that operation
+still needs a reviewed cross-owner contract with request identity and lifecycle
+ordering. Do not infer replacement intent from a new due-event ID or edit v1 to
+introduce it. No new event definition/version is introduced by this queue entry.
