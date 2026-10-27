@@ -155,6 +155,12 @@ jobs:
               echo "maintenance-service: $script not declared yet"
             fi
           done
+      - name: Minh M2 real Maintenance vertical slice (dedicated test databases)
+        env:
+          RABBITMQ_TEST_URL: amqp://pbl6:pbl6_dev_password@127.0.0.1:5672
+        run: |
+          pnpm --filter asset-service --filter maintenance-service --filter workorder-service --filter api-gateway build
+          pnpm --filter maintenance-service test:integration
       - name: M1 regression and M2 workflows through API Gateway
         env:
           NODE_ENV: development

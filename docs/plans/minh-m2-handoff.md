@@ -1,5 +1,10 @@
 # Minh M2 — bàn giao ngày 27/10/2026
 
+> **Trạng thái cuối ngày:** PR #29/#30 đã merge vào develop sau CI xanh.
+> Các issue bàn giao: Khương #31, Huy #32, Hatsady #33, Nguyên #34.
+> Xem [báo cáo tổng hợp](../reports/2026-10-27-minh-daily-handoff.md).
+> Những câu mô tả “code nhánh riêng/chưa merge” dưới đây ghi nhận thời điểm bàn giao ban đầu.
+
 Phạm vi theo M2-M1–M2-M8 trong [task list](m2-task-assignment.md).
 Code nằm trên nhánh riêng `codex/minh-maintenance-foundation`; không đồng nghĩa
 đã merge hoặc đã được các owner duyệt. Người dùng đã chọn chỉ sửa phần Minh,
