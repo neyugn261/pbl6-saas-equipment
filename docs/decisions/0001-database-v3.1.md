@@ -58,6 +58,9 @@ Status 2026-10-20: #2, #3, #4 and #5 decided in
 [ADR 0006](0006-m0-review-decisions.md); #4 is now Accepted. #1 stays
 provisional (`branch:read` added).
 
+Status 2026-10-26: #1 is resolved for M2 by ADR 0008 D9 and Identity migration
+`0003_permission_catalog`; the existing role and permission grants are kept.
+
 1. Permission catalog and `role_permissions` seed: to be agreed before the Identity Service migration.
 2. Which roles each role may assign (for example, may a Tenant Admin assign Tenant Admin?). This lives in code, not in the database.
 3. Returning unused parts: a `RETURN` transaction referencing the Work Order is supported, but `work_order_parts` does not store a returned quantity. Confirm whether reports compute "used = issued − returned".

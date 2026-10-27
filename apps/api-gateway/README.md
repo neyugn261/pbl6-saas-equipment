@@ -16,6 +16,7 @@ starting the gateway.
 | `/api/organization/*` | `ORGANIZATION_SERVICE_URL` | `/*` |
 | `/api/assets/*` | `ASSET_SERVICE_URL` | `/*` |
 | `/api/service-requests/*` | `SERVICE_REQUEST_SERVICE_URL` | `/service-requests/*` |
+| `/api/service-requests/estimates/*` | `SERVICE_REQUEST_SERVICE_URL` | `/estimates/*` |
 | `/api/workorders/*` | `WORKORDER_SERVICE_URL` | `/*` |
 | `/api/maintenance/*` | `MAINTENANCE_SERVICE_URL` | `/*` |
 | `/api/inventory/*` | `INVENTORY_SERVICE_URL` | `/*` |

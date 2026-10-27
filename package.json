@@ -25,6 +25,8 @@
     "identity:seed": "pnpm build:packages && pnpm --filter identity-service db:seed",
     "identity:seed:dev": "pnpm build:packages && pnpm --filter identity-service db:seed:dev",
     "smoke:m1": "node scripts/smoke-test-m1.mjs",
+    "smoke:m2:week1": "node scripts/smoke-test-m2-week1.mjs",
+    "smoke:m2:week2": "node scripts/smoke-test-m2-week2.mjs",
     "db:migrate": "pnpm -r --if-present db:migrate",
     "db:check-drift": "pnpm -r --if-present db:check-drift",
     "build": "pnpm -r --if-present build",

@@ -12,7 +12,7 @@ run `pnpm build:packages` before running commands inside one service
 | [`@pbl6/service-kit`](service-kit) | `configureApp()` (validation, error format, correlation id, no `x-powered-by`), `EnvReader`, `JsonLogger`/`createLogger`, `HealthModule`, `PaginationQueryDto`/`toPage`, `ServiceHttpClient`; subpath `@pbl6/service-kit/prisma`: `createPrismaAdapter` (UTC), `prismaHealthCheck` | [conventions](../docs/api/conventions.md) |
 | [`@pbl6/auth`](auth) | `AuthModule` (global `JwtAuthGuard` + `PermissionsGuard`), `@Public`, `@RequirePermissions`, `@AllowUserTypes`, `@CurrentUser`, `Principal`, `dataScope`/`scopeWhere`/`assertInScope`, RBAC catalog, `readJwtEnv` | [ADR 0003](../docs/decisions/0003-customer-scope.md), [ADR 0004](../docs/decisions/0004-service-auth-and-authorization.md) |
 | [`@pbl6/event-contracts`](event-contracts) | Event catalog `Events` + envelope, `enqueueEvent` (outbox), `OutboxRelay`, `processOnce` (inbox), `RabbitMqEventBus` (retry queue + DLQ) | [ADR 0005](../docs/decisions/0005-event-transport.md), [events.md](../docs/architecture/events.md) |
-| [`@pbl6/testing`](testing) | `signTestAccessToken`, `testJwtEnv`, `requireTestDatabaseUrl` | |
+| [`@pbl6/testing`](testing) | `signTestAccessToken`, `testJwtEnv`, `requireTestDatabaseUrl` (chỉ nhận đúng `<service>_test_db`) | |
 
 ## Using them in a service
 
