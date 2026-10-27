@@ -2,6 +2,20 @@
 
 Web React + Vite gọi Identity, Organization, Asset và Service Request qua API Gateway theo mặc định. Menu lấy vai trò từ `/auth/me`; backend quyết định quyền và phạm vi tenant/customer. Các trang M1 gồm khách hàng, thiết bị, yêu cầu dịch vụ, mời người dùng và đường dẫn QR `/portal/qr/{token}`.
 
+Giao diện dùng lại ngôn ngữ thiết kế Servio từ bản mẫu của Khương (sidebar, topbar, thẻ số liệu và trạng thái), nhưng dashboard lấy số liệu thật từ API trong phạm vi quyền của tài khoản. Các màn hình và dữ liệu giả của bản mẫu không được dùng để thay thế luồng M1.
+
+## Luồng demo trên web
+
+Sau khi seed dữ liệu DEMO, mở `/demo` từ menu **Luồng demo**. Dùng mật khẩu `SEED_DEMO_PASSWORD` của môi trường local và đổi tài khoản bằng nút Đăng xuất:
+
+1. `customer.user@demo.local` xem thiết bị rồi tạo yêu cầu sửa chữa. Web lưu ID yêu cầu vừa tạo trong `sessionStorage` của tab, theo tenant, để các vai trò tiếp tục cùng yêu cầu.
+2. `service.manager@demo.local` mở yêu cầu, chọn **Xem xét và kiểm tra bảo hành**, sau đó **Tiếp nhận**.
+3. `customer.user@demo.local` đăng nhập lại, mở yêu cầu từ trang demo và xem trạng thái `ACCEPTED`, lịch sử và bình luận.
+
+Trang demo chỉ dẫn tới các API M1 hiện có. ID lưu ở trình duyệt chỉ giúp điều hướng; backend vẫn kiểm tra tenant và quyền mỗi lần đọc hoặc cập nhật. Work Order và Service Report chưa có trong luồng web này.
+
+Kịch bản thuyết trình, tài khoản theo vai trò và các bước kiểm tra trước giờ demo: [docs/demo/web-m1.md](../../docs/demo/web-m1.md).
+
 ## Chạy local
 
 1. Chạy hạ tầng và các service M1 theo README ở root, migrate và seed DEMO.

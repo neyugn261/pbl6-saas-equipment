@@ -3,6 +3,9 @@ import {
   Events,
   enqueueEvent,
   isEvent,
+  parseEnvelope,
+  InvalidEventError,
+  findEventDefinition,
   processOnce,
   type EventEnvelope,
   type WorkOrderCompletedV1,
@@ -23,8 +26,36 @@ export class WorkOrderEventsConsumer {
   constructor(private readonly prisma: PrismaService) {}
 
   async handle(envelope: EventEnvelope): Promise<void> {
+    // Keep direct deliveries subject to the same contract as broker deliveries.
+    envelope = parseEnvelope(JSON.stringify(envelope));
+    const definition = findEventDefinition(
+      envelope.eventType,
+      envelope.eventVersion,
+    )!;
+    if (
+      envelope.producer !== definition.producer ||
+      envelope.aggregateType !== definition.aggregateType ||
+      definition.aggregateType !== 'WorkOrder'
+    ) {
+      throw new InvalidEventError([
+        'unexpected event producer or aggregate type',
+      ]);
+    }
     if (!envelope.tenantId) {
-      throw new Error(`${envelope.eventType} must include a tenant id`);
+      throw new InvalidEventError([
+        `${envelope.eventType} must include a tenant id`,
+      ]);
+    }
+    const payload = envelope.payload as
+      WorkOrderCreatedV1 | WorkOrderCompletedV1 | WorkOrderCancelledV1;
+    this.assertWorkOrderAggregate(envelope, payload.workOrderId);
+    if (
+      (payload.serviceRequestId === null) ===
+      (payload.maintenanceTaskId === null)
+    ) {
+      throw new InvalidEventError([
+        'exactly one Work Order origin must be set',
+      ]);
     }
 
     if (isEvent(envelope, Events.WorkOrderCreated)) {
@@ -69,7 +100,9 @@ export class WorkOrderEventsConsumer {
         },
         (tx) => this.handleWorkOrderCancelled(tx, envelope, envelope.payload),
       );
+      return;
     }
+    throw new InvalidEventError(['unsupported Work Order event']);
   }
 
   private async handleWorkOrderCreated(
@@ -77,6 +110,7 @@ export class WorkOrderEventsConsumer {
     envelope: EventEnvelope,
     payload: WorkOrderCreatedV1,
   ): Promise<void> {
+    this.assertWorkOrderAggregate(envelope, payload.workOrderId);
     const request = await this.findRequest(
       tx,
       envelope,
@@ -84,7 +118,16 @@ export class WorkOrderEventsConsumer {
       payload.equipmentId,
       payload.customerId,
     );
-    if (!request || request.status === 'CANCELLED') return;
+    if (!request || this.isTerminal(request)) return;
+    if (request.status === 'PROCESSING') {
+      if (!request.activeWorkOrderId) {
+        throw new Error(
+          `Cannot verify Work Order for legacy Service Request ${request.id}`,
+        );
+      }
+      // The same active order is a business duplicate; another order is stale.
+      return;
+    }
     if (request.status !== 'ACCEPTED') {
       throw new Error(
         `Cannot apply WorkOrderCreated to Service Request ${request.id} in ${request.status}`,
@@ -95,6 +138,7 @@ export class WorkOrderEventsConsumer {
       where: { id: request.id },
       data: {
         status: 'PROCESSING',
+        activeWorkOrderId: payload.workOrderId,
         resolutionResult: null,
         resolutionSummary: null,
         resolvedWorkOrderNo: null,
@@ -118,6 +162,7 @@ export class WorkOrderEventsConsumer {
     envelope: EventEnvelope,
     payload: WorkOrderCompletedV1,
   ): Promise<void> {
+    this.assertWorkOrderAggregate(envelope, payload.workOrderId);
     const request = await this.findRequest(
       tx,
       envelope,
@@ -125,11 +170,20 @@ export class WorkOrderEventsConsumer {
       payload.equipmentId,
       payload.customerId,
     );
-    if (!request || request.status === 'CANCELLED') return;
+    if (!request || this.isTerminal(request)) return;
+    if (request.status === 'PROCESSING' && !request.activeWorkOrderId) {
+      throw new Error(
+        `Cannot verify Work Order for Service Request ${request.id} before its Created event is applied`,
+      );
+    }
     if (
-      (request.status === 'RESOLVED' || request.status === 'CLOSED') &&
-      request.resolvedWorkOrderNo === payload.workOrderNo
+      request.activeWorkOrderId &&
+      request.activeWorkOrderId.toLowerCase() !==
+        payload.workOrderId.toLowerCase()
     ) {
+      return;
+    }
+    if (request.status === 'RESOLVED') {
       return;
     }
     if (request.status !== 'PROCESSING') {
@@ -144,6 +198,7 @@ export class WorkOrderEventsConsumer {
       where: { id: request.id },
       data: {
         status: resolved ? 'RESOLVED' : 'ACCEPTED',
+        activeWorkOrderId: null,
         resolutionResult: payload.result,
         resolutionSummary:
           'customerSummary' in payload &&
@@ -171,23 +226,32 @@ export class WorkOrderEventsConsumer {
     envelope: EventEnvelope,
     payload: WorkOrderCancelledV1,
   ): Promise<void> {
+    this.assertWorkOrderAggregate(envelope, payload.workOrderId);
     const request = await this.findRequest(
       tx,
       envelope,
       payload.serviceRequestId,
       payload.equipmentId,
     );
-    if (!request || request.status === 'CANCELLED') return;
+    if (!request || this.isTerminal(request)) return;
+    if (request.status === 'PROCESSING' && !request.activeWorkOrderId) {
+      throw new Error(
+        `Cannot verify Work Order for Service Request ${request.id} before its Created event is applied`,
+      );
+    }
+    if (
+      request.activeWorkOrderId &&
+      request.activeWorkOrderId.toLowerCase() !==
+        payload.workOrderId.toLowerCase()
+    ) {
+      return;
+    }
 
     const cancelServiceRequest =
       'cancelServiceRequest' in payload && payload.cancelServiceRequest;
     const nextStatus = cancelServiceRequest ? 'CANCELLED' : 'ACCEPTED';
-    if (request.status === nextStatus) return;
-    if (['CLOSED', 'REJECTED', 'RESOLVED'].includes(request.status)) return;
-    if (
-      request.status !== 'PROCESSING' &&
-      !(cancelServiceRequest && request.status === 'ACCEPTED')
-    ) {
+    if (request.status === 'RESOLVED') return;
+    if (request.status !== 'PROCESSING') {
       throw new Error(
         `Cannot apply WorkOrderCancelled to Service Request ${request.id} in ${request.status}`,
       );
@@ -195,7 +259,7 @@ export class WorkOrderEventsConsumer {
 
     const updated = await tx.serviceRequest.update({
       where: { id: request.id },
-      data: { status: nextStatus },
+      data: { status: nextStatus, activeWorkOrderId: null },
     });
     await this.recordStatusChange(
       tx,
@@ -206,6 +270,21 @@ export class WorkOrderEventsConsumer {
       payload.reason,
       envelope.correlationId,
     );
+  }
+
+  private assertWorkOrderAggregate(
+    envelope: EventEnvelope,
+    workOrderId: string,
+  ): void {
+    if (envelope.aggregateId.toLowerCase() !== workOrderId.toLowerCase()) {
+      throw new InvalidEventError([
+        `${envelope.eventType} aggregate id does not match its Work Order id`,
+      ]);
+    }
+  }
+
+  private isTerminal(request: ServiceRequest): boolean {
+    return ['CLOSED', 'REJECTED', 'CANCELLED'].includes(request.status);
   }
 
   private async findRequest(
@@ -236,8 +315,9 @@ export class WorkOrderEventsConsumer {
       );
     }
     if (
-      request.equipmentId !== equipmentId ||
-      (customerId !== undefined && request.customerId !== customerId)
+      request.equipmentId.toLowerCase() !== equipmentId.toLowerCase() ||
+      (customerId !== undefined &&
+        request.customerId.toLowerCase() !== customerId.toLowerCase())
     ) {
       throw new Error(
         `Work Order event ${envelope.eventId} references a different Service Request`,

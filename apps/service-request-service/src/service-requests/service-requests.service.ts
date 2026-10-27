@@ -29,7 +29,9 @@ import {
   type AddCommentDto,
   type CommentVisibility,
   type CreateServiceRequestDto,
+  type CostEstimateInputDto,
   type ListServiceRequestsDto,
+  type OptionalReasonDto,
   type RequestPriority,
   type RequestStatus,
   type RequestType,
@@ -52,6 +54,11 @@ const STAFF_CANCEL_STATUSES: RequestStatus[] = [
 ];
 const REJECT_STATUSES: RequestStatus[] = ['NEW', 'REVIEWING', 'AWAITING_INFO'];
 const PRIORITY_ORDER: RequestPriority[] = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
+const MONEY_LIMIT = new Prisma.Decimal('999999999999.99');
+
+type EstimateWithItems = Prisma.CostEstimateGetPayload<{
+  include: { items: true };
+}>;
 
 function hasPermission(
   principal: Principal,
@@ -87,6 +94,30 @@ function publicRequest(request: ServiceRequest) {
   };
 }
 
+function publicEstimate(estimate: EstimateWithItems) {
+  return {
+    id: estimate.id,
+    requestId: estimate.requestId,
+    revisionNo: estimate.revisionNo,
+    currency: estimate.currency.trim(),
+    totalAmount: estimate.totalAmount.toFixed(2),
+    status: estimate.status,
+    validUntil: estimate.validUntil?.toISOString().slice(0, 10) ?? null,
+    notes: estimate.notes,
+    createdBy: estimate.createdBy,
+    respondedBy: estimate.respondedBy,
+    respondedAt: estimate.respondedAt,
+    items: estimate.items.map((item) => ({
+      id: item.id,
+      itemType: item.itemType,
+      description: item.description,
+      quantity: item.quantity.toFixed(2),
+      unitPrice: item.unitPrice.toFixed(2),
+      amount: item.amount?.toFixed(2) ?? '0.00',
+    })),
+  };
+}
+
 function invalidTransition(from: string, action: string): ConflictException {
   return new ConflictException({
     code: 'INVALID_STATE_TRANSITION',
@@ -98,12 +129,18 @@ function invalidTransition(from: string, action: string): ConflictException {
 function allowedActions(
   request: ServiceRequest,
   principal: Principal,
+  estimateStatus: string | null = null,
 ): string[] {
   const status = request.status as RequestStatus;
   const actions: string[] = [];
   const isCustomer = principal.userType === 'CUSTOMER';
   const canReview = hasPermission(principal, 'service_request:review');
   const canCreate = hasPermission(principal, 'service_request:create');
+  const canManageEstimate = hasPermission(principal, 'cost_estimate:manage');
+  const canRespondToEstimate = hasPermission(
+    principal,
+    'cost_estimate:respond',
+  );
   const canComment =
     hasPermission(principal, 'service_request:read') &&
     (isCustomer ||
@@ -118,6 +155,37 @@ function allowedActions(
     if (request.warrantyCheckResult === 'IN_WARRANTY') actions.push('accept');
   }
   if (canReview && REJECT_STATUSES.includes(status)) actions.push('reject');
+  if (
+    canManageEstimate &&
+    ['REVIEWING', 'COST_REJECTED'].includes(status) &&
+    estimateStatus === null &&
+    request.warrantyCheckResult !== null &&
+    request.warrantyCheckResult !== 'IN_WARRANTY'
+  ) {
+    actions.push('create-estimate');
+  }
+  if (
+    canManageEstimate &&
+    estimateStatus === 'DRAFT' &&
+    ['REVIEWING', 'COST_REJECTED'].includes(status)
+  ) {
+    actions.push('edit-estimate', 'delete-estimate', 'send-estimate');
+  }
+  if (
+    canManageEstimate &&
+    status === 'AWAITING_CUSTOMER_APPROVAL' &&
+    estimateStatus === 'SENT'
+  ) {
+    actions.push('revise-estimate');
+  }
+  if (
+    isCustomer &&
+    canRespondToEstimate &&
+    status === 'AWAITING_CUSTOMER_APPROVAL' &&
+    estimateStatus === 'SENT'
+  ) {
+    actions.push('approve-estimate', 'reject-estimate');
+  }
 
   if (
     (isCustomer && CUSTOMER_CANCEL_STATUSES.includes(status)) ||
@@ -355,6 +423,7 @@ export class ServiceRequestsService {
 
   async detail(principal: Principal, requestId: string) {
     const request = await this.findRequest(principal, requestId);
+    await this.expireEstimateIfDue(principal, request.id);
     const liveEstimate = await this.prisma.costEstimate.findFirst({
       where: {
         tenantId: request.tenantId,
@@ -374,36 +443,626 @@ export class ServiceRequestsService {
         ? {
             result: request.warrantyCheckResult,
             warrantyId: request.warrantyId,
-            warrantyEndDate: request.warrantyEndDate,
+            warrantyEndDate:
+              request.warrantyEndDate?.toISOString().slice(0, 10) ?? null,
             checkedBy: request.warrantyCheckedBy,
             checkedAt: request.warrantyCheckedAt,
           }
         : null,
-      liveEstimate: liveEstimate
-        ? {
-            id: liveEstimate.id,
-            requestId: liveEstimate.requestId,
-            revisionNo: liveEstimate.revisionNo,
-            currency: liveEstimate.currency,
-            totalAmount: liveEstimate.totalAmount,
-            status: liveEstimate.status,
-            validUntil: liveEstimate.validUntil,
-            notes: liveEstimate.notes,
-            createdBy: liveEstimate.createdBy,
-            respondedBy: liveEstimate.respondedBy,
-            respondedAt: liveEstimate.respondedAt,
-            items: liveEstimate.items.map((item) => ({
-              id: item.id,
+      liveEstimate: liveEstimate ? publicEstimate(liveEstimate) : null,
+      allowedActions: allowedActions(
+        request,
+        principal,
+        liveEstimate?.status ?? null,
+      ),
+    };
+  }
+
+  async listEstimates(principal: Principal, requestId: string) {
+    const request = await this.findRequest(principal, requestId);
+    await this.expireEstimateIfDue(principal, request.id);
+    const estimates = await this.prisma.costEstimate.findMany({
+      where: {
+        tenantId: request.tenantId,
+        requestId: request.id,
+        ...(principal.userType === 'CUSTOMER'
+          ? { status: { not: 'DRAFT' } }
+          : {}),
+      },
+      include: { items: true },
+      orderBy: [{ revisionNo: 'desc' }, { id: 'desc' }],
+    });
+    return estimates.map(publicEstimate);
+  }
+
+  async createEstimate(
+    principal: Principal,
+    requestId: string,
+    input: CostEstimateInputDto,
+  ) {
+    const scope = dataScope(principal);
+    const values = this.validateEstimateInput(input);
+    const estimate = await this.prisma.$transaction(async (tx) => {
+      const request = await this.lockRequest(tx, scope, requestId);
+      if (!['REVIEWING', 'COST_REJECTED'].includes(request.status)) {
+        throw invalidTransition(request.status, 'create-estimate');
+      }
+      if (!request.warrantyCheckResult) {
+        throw new UnprocessableEntityException({
+          code: 'WARRANTY_CHECK_REQUIRED',
+          message: 'Record a warranty decision before creating an estimate',
+        });
+      }
+      if (request.warrantyCheckResult === 'IN_WARRANTY') {
+        throw new UnprocessableEntityException({
+          code: 'ESTIMATE_NOT_REQUIRED',
+          message: 'An estimate is not required for in-warranty requests',
+        });
+      }
+      const liveEstimate = await tx.costEstimate.findFirst({
+        where: {
+          tenantId: scope.tenantId,
+          requestId: request.id,
+          status: { in: ['DRAFT', 'SENT', 'APPROVED'] },
+        },
+        select: { id: true },
+      });
+      if (liveEstimate) {
+        throw new ConflictException({
+          code: 'LIVE_ESTIMATE_EXISTS',
+          message: 'A live estimate already exists for this service request',
+        });
+      }
+      const latest = await tx.costEstimate.findFirst({
+        where: { tenantId: scope.tenantId, requestId: request.id },
+        orderBy: { revisionNo: 'desc' },
+        select: { revisionNo: true },
+      });
+      return tx.costEstimate.create({
+        data: {
+          tenantId: scope.tenantId,
+          requestId: request.id,
+          revisionNo: (latest?.revisionNo ?? 0) + 1,
+          currency: input.currency ?? 'VND',
+          totalAmount: values.total,
+          validUntil: this.dateOnly(input.validUntil),
+          notes: input.notes ?? null,
+          createdBy: principal.userId,
+          items: {
+            create: values.items,
+          },
+        },
+        include: { items: true },
+      });
+    });
+    return publicEstimate(estimate);
+  }
+
+  async updateEstimate(
+    principal: Principal,
+    estimateId: string,
+    input: CostEstimateInputDto,
+  ) {
+    const scope = dataScope(principal);
+    const values = this.validateEstimateInput(input);
+    const estimate = await this.prisma.$transaction(async (tx) => {
+      const current = await this.lockEstimate(tx, scope, estimateId);
+      if (current.status !== 'DRAFT') {
+        throw invalidTransition(current.status, 'edit-estimate');
+      }
+      await tx.costEstimateItem.deleteMany({
+        where: { tenantId: scope.tenantId, estimateId: current.id },
+      });
+      return tx.costEstimate.update({
+        where: { id: current.id },
+        data: {
+          currency: input.currency ?? 'VND',
+          validUntil: this.dateOnly(input.validUntil),
+          notes: input.notes ?? null,
+          totalAmount: values.total,
+          items: { create: values.items },
+        },
+        include: { items: true },
+      });
+    });
+    return publicEstimate(estimate);
+  }
+
+  async deleteEstimate(
+    principal: Principal,
+    estimateId: string,
+  ): Promise<void> {
+    const scope = dataScope(principal);
+    await this.prisma.$transaction(async (tx) => {
+      const current = await this.lockEstimate(tx, scope, estimateId);
+      if (current.status !== 'DRAFT') {
+        throw invalidTransition(current.status, 'delete-estimate');
+      }
+      await tx.costEstimate.delete({ where: { id: current.id } });
+    });
+  }
+
+  async sendEstimate(principal: Principal, estimateId: string) {
+    const scope = dataScope(principal);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const current = await this.lockEstimate(tx, scope, estimateId);
+      if (current.status !== 'DRAFT') {
+        throw invalidTransition(current.status, 'send-estimate');
+      }
+      const request = await tx.serviceRequest.findFirstOrThrow({
+        where: { id: current.requestId, tenantId: scope.tenantId },
+      });
+      if (!['REVIEWING', 'COST_REJECTED'].includes(request.status)) {
+        throw invalidTransition(request.status, 'send-estimate');
+      }
+      if (!request.warrantyCheckResult) {
+        throw new UnprocessableEntityException({
+          code: 'WARRANTY_CHECK_REQUIRED',
+          message: 'Record a warranty decision before sending an estimate',
+        });
+      }
+      if (request.warrantyCheckResult === 'IN_WARRANTY') {
+        throw new UnprocessableEntityException({
+          code: 'ESTIMATE_NOT_REQUIRED',
+          message: 'An estimate is not required for in-warranty requests',
+        });
+      }
+      if (current.items.length === 0) {
+        throw new UnprocessableEntityException({
+          code: 'ESTIMATE_ITEMS_REQUIRED',
+          message: 'An estimate must contain at least one item',
+        });
+      }
+      if (
+        current.validUntil &&
+        current.validUntil.toISOString().slice(0, 10) < this.todayInVietnam()
+      ) {
+        throw new UnprocessableEntityException({
+          code: 'ESTIMATE_VALID_UNTIL_PAST',
+          message: 'An estimate cannot be sent after its validity date',
+        });
+      }
+
+      await tx.costEstimate.update({
+        where: { id: current.id },
+        data: { status: 'SENT' },
+      });
+      const requestAfterSend = await tx.serviceRequest.update({
+        where: { id: request.id },
+        data: { status: 'AWAITING_CUSTOMER_APPROVAL' },
+      });
+      await this.recordEstimateRequestTransition(
+        tx,
+        requestAfterSend,
+        request.status as RequestStatus,
+        'AWAITING_CUSTOMER_APPROVAL',
+        principal.userId,
+      );
+      return tx.costEstimate.findUniqueOrThrow({
+        where: { id: current.id },
+        include: { items: true },
+      });
+    });
+    return publicEstimate(updated);
+  }
+
+  async reviseEstimate(principal: Principal, estimateId: string) {
+    const scope = dataScope(principal);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const current = await this.lockEstimate(tx, scope, estimateId);
+      if (current.status !== 'SENT') {
+        throw invalidTransition(current.status, 'revise-estimate');
+      }
+      if (await this.expireLockedEstimate(tx, current)) {
+        return { expired: true as const };
+      }
+      const request = await tx.serviceRequest.findFirstOrThrow({
+        where: { id: current.requestId, tenantId: scope.tenantId },
+      });
+      if (request.status !== 'AWAITING_CUSTOMER_APPROVAL') {
+        throw invalidTransition(request.status, 'revise-estimate');
+      }
+      await tx.costEstimate.update({
+        where: { id: current.id },
+        data: { status: 'SUPERSEDED' },
+      });
+      const draft = await tx.costEstimate.create({
+        data: {
+          tenantId: current.tenantId,
+          requestId: current.requestId,
+          revisionNo: current.revisionNo + 1,
+          currency: current.currency,
+          totalAmount: current.totalAmount,
+          validUntil: current.validUntil,
+          notes: current.notes,
+          createdBy: principal.userId,
+          items: {
+            create: current.items.map((item) => ({
               itemType: item.itemType,
               description: item.description,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
-              amount: item.amount,
             })),
-          }
-        : null,
-      allowedActions: allowedActions(request, principal),
+          },
+        },
+        include: { items: true },
+      });
+      const requestAfterRevise = await tx.serviceRequest.update({
+        where: { id: request.id },
+        data: { status: 'REVIEWING' },
+      });
+      await this.recordEstimateRequestTransition(
+        tx,
+        requestAfterRevise,
+        'AWAITING_CUSTOMER_APPROVAL',
+        'REVIEWING',
+        principal.userId,
+      );
+      return { expired: false as const, estimate: draft };
+    });
+    return this.estimateAfterExpirationCheck(result);
+  }
+
+  async approveEstimate(principal: Principal, estimateId: string) {
+    const scope = dataScope(principal);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const current = await this.lockEstimate(tx, scope, estimateId);
+      if (current.status !== 'SENT') {
+        throw invalidTransition(current.status, 'approve-estimate');
+      }
+      if (await this.expireLockedEstimate(tx, current)) {
+        return { expired: true as const };
+      }
+      const request = await tx.serviceRequest.findFirstOrThrow({
+        where: { id: current.requestId, tenantId: scope.tenantId },
+      });
+      if (
+        request.status !== 'AWAITING_CUSTOMER_APPROVAL' ||
+        request.warrantyCheckResult === 'IN_WARRANTY'
+      ) {
+        throw invalidTransition(request.status, 'approve-estimate');
+      }
+      await tx.costEstimate.update({
+        where: { id: current.id },
+        data: {
+          status: 'APPROVED',
+          respondedBy: principal.userId,
+          respondedAt: new Date(),
+        },
+      });
+      const requestAfterApprove = await tx.serviceRequest.update({
+        where: { id: request.id },
+        data: { status: 'ACCEPTED' },
+      });
+      await this.recordEstimateRequestTransition(
+        tx,
+        requestAfterApprove,
+        'AWAITING_CUSTOMER_APPROVAL',
+        'ACCEPTED',
+        principal.userId,
+      );
+      return {
+        expired: false as const,
+        estimate: await tx.costEstimate.findUniqueOrThrow({
+          where: { id: current.id },
+          include: { items: true },
+        }),
+      };
+    });
+    return this.estimateAfterExpirationCheck(result);
+  }
+
+  async rejectEstimate(
+    principal: Principal,
+    estimateId: string,
+    input: OptionalReasonDto,
+  ) {
+    const scope = dataScope(principal);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const current = await this.lockEstimate(tx, scope, estimateId);
+      if (current.status !== 'SENT') {
+        throw invalidTransition(current.status, 'reject-estimate');
+      }
+      if (await this.expireLockedEstimate(tx, current)) {
+        return { expired: true as const };
+      }
+      const request = await tx.serviceRequest.findFirstOrThrow({
+        where: { id: current.requestId, tenantId: scope.tenantId },
+      });
+      if (request.status !== 'AWAITING_CUSTOMER_APPROVAL') {
+        throw invalidTransition(request.status, 'reject-estimate');
+      }
+      await tx.costEstimate.update({
+        where: { id: current.id },
+        data: {
+          status: 'REJECTED',
+          respondedBy: principal.userId,
+          respondedAt: new Date(),
+        },
+      });
+      const requestAfterReject = await tx.serviceRequest.update({
+        where: { id: request.id },
+        data: { status: 'COST_REJECTED' },
+      });
+      if (input.reason) {
+        await tx.requestComment.create({
+          data: {
+            tenantId: scope.tenantId,
+            requestId: request.id,
+            authorUserId: principal.userId,
+            visibility: 'CUSTOMER',
+            content: input.reason,
+          },
+        });
+      }
+      await this.recordEstimateRequestTransition(
+        tx,
+        requestAfterReject,
+        'AWAITING_CUSTOMER_APPROVAL',
+        'COST_REJECTED',
+        principal.userId,
+        input.reason ?? null,
+      );
+      return {
+        expired: false as const,
+        estimate: await tx.costEstimate.findUniqueOrThrow({
+          where: { id: current.id },
+          include: { items: true },
+        }),
+      };
+    });
+    return this.estimateAfterExpirationCheck(result);
+  }
+
+  private estimateAfterExpirationCheck(
+    result: { expired: true } | { expired: false; estimate: EstimateWithItems },
+  ) {
+    // Throw only after the transaction committed the EXPIRED status.
+    if (result.expired) {
+      throw new ConflictException({
+        code: 'ESTIMATE_EXPIRED',
+        message: 'This estimate has expired',
+      });
+    }
+    return publicEstimate(result.estimate);
+  }
+
+  private async expireLockedEstimate(
+    tx: Tx,
+    estimate: EstimateWithItems,
+  ): Promise<boolean> {
+    if (
+      !estimate.validUntil ||
+      estimate.validUntil.toISOString().slice(0, 10) >= this.todayInVietnam()
+    ) {
+      return false;
+    }
+    await tx.costEstimate.update({
+      where: { id: estimate.id },
+      data: { status: 'EXPIRED' },
+    });
+    return true;
+  }
+
+  private async lockEstimate(
+    tx: Tx,
+    scope: ReturnType<typeof dataScope>,
+    estimateId: string,
+  ): Promise<EstimateWithItems> {
+    const reference = await tx.costEstimate.findFirst({
+      where: {
+        id: estimateId,
+        tenantId: scope.tenantId,
+        ...(scope.customerId ? { status: { not: 'DRAFT' } } : {}),
+      },
+      select: { requestId: true },
+    });
+    if (!reference) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'Resource not found',
+      });
+    }
+    await this.lockRequest(tx, scope, reference.requestId);
+    await tx.$queryRawUnsafe(
+      `SELECT id FROM cost_estimates
+       WHERE id = $1::uuid AND tenant_id = $2::uuid
+       FOR UPDATE`,
+      estimateId,
+      scope.tenantId,
+    );
+    const estimate = await tx.costEstimate.findFirst({
+      where: {
+        id: estimateId,
+        tenantId: scope.tenantId,
+        requestId: reference.requestId,
+        ...(scope.customerId ? { status: { not: 'DRAFT' } } : {}),
+      },
+      include: { items: true },
+    });
+    if (!estimate) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'Resource not found',
+      });
+    }
+    return estimate;
+  }
+
+  private validateEstimateInput(input: CostEstimateInputDto): {
+    total: Prisma.Decimal;
+    items: {
+      itemType: string;
+      description: string;
+      quantity: Prisma.Decimal;
+      unitPrice: Prisma.Decimal;
+    }[];
+  } {
+    const items = input.items.map((item) => {
+      if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(item.quantity)) {
+        throw new BadRequestException({
+          code: 'INVALID_ESTIMATE_QUANTITY',
+          message: 'Quantity must fit NUMERIC(12,2)',
+        });
+      }
+      if (!/^\d{1,12}(?:\.\d{1,2})?$/.test(item.unitPrice)) {
+        throw new BadRequestException({
+          code: 'INVALID_ESTIMATE_UNIT_PRICE',
+          message: 'Unit price must fit NUMERIC(14,2)',
+        });
+      }
+      const quantity = new Prisma.Decimal(item.quantity);
+      const unitPrice = new Prisma.Decimal(item.unitPrice);
+      if (!quantity.greaterThan(0)) {
+        throw new BadRequestException({
+          code: 'INVALID_ESTIMATE_QUANTITY',
+          message: 'Quantity must be greater than zero',
+        });
+      }
+      const amount = quantity
+        .mul(unitPrice)
+        .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+      if (amount.greaterThan(MONEY_LIMIT)) {
+        throw new BadRequestException({
+          code: 'ESTIMATE_AMOUNT_OVERFLOW',
+          message: 'Estimate item amount exceeds the supported range',
+        });
+      }
+      return {
+        itemType: item.itemType,
+        description: item.description,
+        quantity,
+        unitPrice,
+        amount,
+      };
+    });
+    const total = items.reduce(
+      (sum, item) => sum.plus(item.amount),
+      new Prisma.Decimal(0),
+    );
+    if (total.greaterThan(MONEY_LIMIT)) {
+      throw new BadRequestException({
+        code: 'ESTIMATE_TOTAL_OVERFLOW',
+        message: 'Estimate total exceeds the supported range',
+      });
+    }
+    if (input.validUntil !== undefined && !this.isDateOnly(input.validUntil)) {
+      throw new BadRequestException({
+        code: 'INVALID_VALID_UNTIL',
+        message: 'validUntil must be a valid YYYY-MM-DD date',
+      });
+    }
+    if (input.currency !== undefined && !/^[A-Za-z]{3}$/.test(input.currency)) {
+      throw new BadRequestException({
+        code: 'INVALID_ESTIMATE_CURRENCY',
+        message: 'Currency must be a three-letter code',
+      });
+    }
+    return {
+      total,
+      items: items.map(({ itemType, description, quantity, unitPrice }) => ({
+        itemType,
+        description,
+        quantity,
+        unitPrice,
+      })),
     };
+  }
+
+  private dateOnly(value: string | undefined): Date | null {
+    if (value === undefined) return null;
+    if (!this.isDateOnly(value)) {
+      throw new BadRequestException({
+        code: 'INVALID_VALID_UNTIL',
+        message: 'validUntil must be a valid YYYY-MM-DD date',
+      });
+    }
+    return new Date(`${value}T00:00:00.000Z`);
+  }
+
+  private todayInVietnam(): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(
+      parts.map(({ type, value }) => [type, value]),
+    );
+    return `${values.year}-${values.month}-${values.day}`;
+  }
+
+  private async expireEstimateIfDue(
+    principal: Principal,
+    requestId: string,
+  ): Promise<boolean> {
+    const scope = dataScope(principal);
+    const candidate = await this.prisma.costEstimate.findFirst({
+      where: {
+        tenantId: scope.tenantId,
+        requestId,
+        status: 'SENT',
+      },
+      select: { id: true, validUntil: true },
+    });
+    if (
+      !candidate?.validUntil ||
+      candidate.validUntil.toISOString().slice(0, 10) >= this.todayInVietnam()
+    ) {
+      return false;
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const request = await this.lockRequest(tx, scope, requestId);
+      const sentEstimate = await tx.costEstimate.findFirst({
+        where: {
+          tenantId: scope.tenantId,
+          requestId: request.id,
+          id: candidate.id,
+          status: 'SENT',
+        },
+      });
+      if (
+        sentEstimate?.validUntil &&
+        sentEstimate.validUntil.toISOString().slice(0, 10) <
+          this.todayInVietnam()
+      ) {
+        await tx.costEstimate.update({
+          where: { id: sentEstimate.id },
+          data: { status: 'EXPIRED' },
+        });
+        return true;
+      }
+      return false;
+    });
+  }
+
+  private async recordEstimateRequestTransition(
+    tx: Tx,
+    request: ServiceRequest,
+    fromStatus: RequestStatus,
+    toStatus: RequestStatus,
+    changedBy: string,
+    reason: string | null = null,
+  ): Promise<void> {
+    await tx.requestStatusHistory.create({
+      data: {
+        tenantId: request.tenantId,
+        requestId: request.id,
+        oldStatus: fromStatus,
+        newStatus: toStatus,
+        changedBy,
+        reason,
+      },
+    });
+    await this.enqueueStatusChanged(
+      tx,
+      request,
+      fromStatus,
+      toStatus,
+      changedBy,
+      reason,
+    );
   }
 
   async update(
@@ -553,7 +1212,8 @@ export class ServiceRequestsService {
       warrantyCheck: {
         result: updated.warrantyCheckResult,
         warrantyId: updated.warrantyId,
-        warrantyEndDate: updated.warrantyEndDate,
+        warrantyEndDate:
+          updated.warrantyEndDate?.toISOString().slice(0, 10) ?? null,
         checkedBy: updated.warrantyCheckedBy,
         checkedAt: updated.warrantyCheckedAt,
       },
@@ -627,7 +1287,8 @@ export class ServiceRequestsService {
       warrantyCheck: {
         result: updated.warrantyCheckResult,
         warrantyId: updated.warrantyId,
-        warrantyEndDate: updated.warrantyEndDate,
+        warrantyEndDate:
+          updated.warrantyEndDate?.toISOString().slice(0, 10) ?? null,
         checkedBy: updated.warrantyCheckedBy,
         checkedAt: updated.warrantyCheckedAt,
       },

@@ -1,12 +1,18 @@
 import { PaginationQueryDto } from '@pbl6/service-kit';
 import {
+  ArrayMinSize,
+  IsArray,
+  IsDateString,
   IsIn,
+  IsNumberString,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export const REQUEST_STATUSES = [
   'NEW',
@@ -130,4 +136,44 @@ export class AddCommentDto {
   @IsOptional()
   @IsIn(COMMENT_VISIBILITIES)
   visibility?: CommentVisibility;
+}
+
+export class CostEstimateItemDto {
+  @IsIn(['LABOR', 'PART', 'TRAVEL', 'OTHER'])
+  itemType!: 'LABOR' | 'PART' | 'TRAVEL' | 'OTHER';
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  description!: string;
+
+  @IsNumberString({ no_symbols: false })
+  @MinLength(1)
+  quantity!: string;
+
+  @IsNumberString({ no_symbols: false })
+  @MinLength(1)
+  unitPrice!: string;
+}
+
+export class CostEstimateInputDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(3)
+  currency?: string;
+
+  @IsOptional()
+  @IsDateString({ strict: true })
+  validUntil?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CostEstimateItemDto)
+  items!: CostEstimateItemDto[];
 }

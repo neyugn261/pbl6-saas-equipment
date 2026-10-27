@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -8,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import {
@@ -19,6 +21,7 @@ import {
 import { ServiceRequestsService } from './service-requests.service';
 import {
   AddCommentDto,
+  CostEstimateInputDto,
   CreateServiceRequestDto,
   ListServiceRequestsDto,
   OptionalReasonDto,
@@ -179,6 +182,25 @@ export class ServiceRequestsController {
   ) {
     return this.requests.addComment(principal, requestId, body);
   }
+
+  @Get(':requestId/estimates')
+  @RequirePermissions('service_request:read')
+  listEstimates(
+    @CurrentUser() principal: Principal,
+    @Param('requestId', new ParseUUIDPipe()) requestId: string,
+  ) {
+    return this.requests.listEstimates(principal, requestId);
+  }
+
+  @Post(':requestId/estimates')
+  @RequirePermissions('cost_estimate:manage')
+  createEstimate(
+    @CurrentUser() principal: Principal,
+    @Param('requestId', new ParseUUIDPipe()) requestId: string,
+    @Body() body: CostEstimateInputDto,
+  ) {
+    return this.requests.createEstimate(principal, requestId, body);
+  }
 }
 
 @Controller('internal/service-requests')
@@ -193,5 +215,73 @@ export class InternalServiceRequestsController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.requests.internalReference(principal, id);
+  }
+}
+
+@Controller('estimates')
+@AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
+export class CostEstimatesController {
+  constructor(private readonly requests: ServiceRequestsService) {}
+
+  @Put(':estimateId')
+  @RequirePermissions('cost_estimate:manage')
+  update(
+    @CurrentUser() principal: Principal,
+    @Param('estimateId', new ParseUUIDPipe()) estimateId: string,
+    @Body() body: CostEstimateInputDto,
+  ) {
+    return this.requests.updateEstimate(principal, estimateId, body);
+  }
+
+  @Delete(':estimateId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions('cost_estimate:manage')
+  async remove(
+    @CurrentUser() principal: Principal,
+    @Param('estimateId', new ParseUUIDPipe()) estimateId: string,
+  ): Promise<void> {
+    await this.requests.deleteEstimate(principal, estimateId);
+  }
+
+  @Post(':estimateId/send')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('cost_estimate:manage')
+  send(
+    @CurrentUser() principal: Principal,
+    @Param('estimateId', new ParseUUIDPipe()) estimateId: string,
+  ) {
+    return this.requests.sendEstimate(principal, estimateId);
+  }
+
+  @Post(':estimateId/revise')
+  @RequirePermissions('cost_estimate:manage')
+  revise(
+    @CurrentUser() principal: Principal,
+    @Param('estimateId', new ParseUUIDPipe()) estimateId: string,
+  ) {
+    return this.requests.reviseEstimate(principal, estimateId);
+  }
+
+  @Post(':estimateId/approve')
+  @HttpCode(HttpStatus.OK)
+  @AllowUserTypes('CUSTOMER')
+  @RequirePermissions('cost_estimate:respond')
+  approve(
+    @CurrentUser() principal: Principal,
+    @Param('estimateId', new ParseUUIDPipe()) estimateId: string,
+  ) {
+    return this.requests.approveEstimate(principal, estimateId);
+  }
+
+  @Post(':estimateId/reject')
+  @HttpCode(HttpStatus.OK)
+  @AllowUserTypes('CUSTOMER')
+  @RequirePermissions('cost_estimate:respond')
+  reject(
+    @CurrentUser() principal: Principal,
+    @Param('estimateId', new ParseUUIDPipe()) estimateId: string,
+    @Body() body: OptionalReasonDto = new OptionalReasonDto(),
+  ) {
+    return this.requests.rejectEstimate(principal, estimateId, body);
   }
 }

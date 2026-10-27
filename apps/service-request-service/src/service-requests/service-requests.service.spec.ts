@@ -46,6 +46,7 @@ function serviceRequest(
     resolutionSummary: null,
     resolvedWorkOrderNo: null,
     resolutionCompletedAt: null,
+    activeWorkOrderId: null,
     warrantyCheckResult: null,
     warrantyId: null,
     warrantyEndDate: null,
