@@ -29,6 +29,11 @@ function buildProxy(target: string, pathPrefix: string, upstreamPrefix = '') {
         );
       }
       // Nest's JSON parser has already consumed POST/PATCH bodies by this point.
+      // fixRequestBody adds Content-Length, so a chunked client request must
+      // not retain Transfer-Encoding when forwarded to the upstream service.
+      if (expressReq.body != null && req.readableLength === 0) {
+        proxyReq.removeHeader('transfer-encoding');
+      }
       fixRequestBody(proxyReq, req);
     },
     onError: (
@@ -128,6 +133,21 @@ export class ServiceRequestProxyMiddleware implements NestMiddleware {
       config.get('SERVICE_REQUEST_SERVICE_URL', { infer: true }),
       '/api/service-requests',
       '/service-requests',
+    );
+  }
+  use(req: Request, res: Response, next: NextFunction): void {
+    this.proxy(req, res, next);
+  }
+}
+
+@Injectable()
+export class EstimateProxyMiddleware implements NestMiddleware {
+  private readonly proxy: ReturnType<typeof createProxyMiddleware>;
+  constructor(config: ConfigService<AppEnv, true>) {
+    this.proxy = buildProxy(
+      config.get('SERVICE_REQUEST_SERVICE_URL', { infer: true }),
+      '/api/service-requests/estimates',
+      '/estimates',
     );
   }
   use(req: Request, res: Response, next: NextFunction): void {

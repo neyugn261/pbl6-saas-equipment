@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, request as httpRequest, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -64,7 +64,7 @@ describe('API Gateway (e2e)', () => {
       .compile();
     app = moduleRef.createNestApplication();
     configureGateway(app, config);
-    await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {
@@ -109,6 +109,8 @@ describe('API Gateway (e2e)', () => {
       '/api/identity/internal/users',
       '/api/identity/%69nternal/users',
       '/api/assets/internal/equipment/123',
+      '/api/workorders/internal/work-orders/123',
+      '/api/maintenance/%69nternal/maintenance-plans/123',
     ]) {
       await request(app.getHttpServer()).get(path).expect(404);
     }
@@ -151,6 +153,47 @@ describe('API Gateway (e2e)', () => {
     });
   });
 
+  it('proxies chunked JSON login bodies sent by the Android client', async () => {
+    const port = ((app.getHttpServer() as Server).address() as AddressInfo).port;
+    const payload = JSON.stringify({
+      tenantCode: 'DEMO',
+      email: 'technician@demo.local',
+      password: 'test-password',
+    });
+    const response = await new Promise<{ status: number; body: string }>(
+      (resolve, reject) => {
+        const outgoing = httpRequest(
+          `http://127.0.0.1:${port}/api/auth/login`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Transfer-Encoding': 'chunked',
+            },
+          },
+          (incoming) => {
+            const chunks: Buffer[] = [];
+            incoming.on('data', (chunk: Buffer) => chunks.push(chunk));
+            incoming.on('end', () =>
+              resolve({
+                status: incoming.statusCode ?? 0,
+                body: Buffer.concat(chunks).toString(),
+              }),
+            );
+            incoming.on('error', reject);
+          },
+        );
+        outgoing.on('error', reject);
+        outgoing.write(payload);
+        outgoing.end();
+      },
+    );
+    expect(response.status).toBe(200);
+    const echoed = JSON.parse(response.body) as { url: string; body: string };
+    expect(echoed.url).toBe('/auth/login');
+    expect(JSON.parse(echoed.body)).toEqual(JSON.parse(payload));
+  });
+
   it('routes M1 contract paths to their owning services', async () => {
     const routes = [
       ['/api/identity/users?page=2', '/users?page=2'],
@@ -169,6 +212,32 @@ describe('API Gateway (e2e)', () => {
       expect([gatewayPath, res.status]).toEqual([gatewayPath, 200]);
       expect(res.body.url).toBe(upstreamPath);
       expect(res.body.correlationId).toBeTruthy();
+    }
+  });
+
+  it('routes M2 Work Order, Maintenance and Estimate paths without losing headers or body', async () => {
+    const routes = [
+      ['/api/workorders/work-orders?mine=true', '/work-orders?mine=true'],
+      ['/api/workorders/technicians/me', '/technicians/me'],
+      ['/api/maintenance/maintenance-plans', '/maintenance-plans'],
+      ['/api/maintenance/maintenance-tasks/123', '/maintenance-tasks/123'],
+      ['/api/service-requests/123/estimates', '/service-requests/123/estimates'],
+      ['/api/service-requests/estimates/123/approve', '/estimates/123/approve'],
+    ];
+    for (const [gatewayPath, upstreamPath] of routes) {
+      const res = await request(app.getHttpServer())
+        .post(gatewayPath)
+        .set('Authorization', 'Bearer m2-token')
+        .set('x-correlation-id', 'm2-correlation')
+        .send({ note: 'test' })
+        .expect(200);
+      expect(res.body).toMatchObject({
+        method: 'POST',
+        url: upstreamPath,
+        authorization: 'Bearer m2-token',
+        correlationId: 'm2-correlation',
+      });
+      expect(JSON.parse(res.body.body)).toEqual({ note: 'test' });
     }
   });
 

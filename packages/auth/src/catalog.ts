@@ -3,16 +3,15 @@
  *
  * - Roles are created by identity_db migration 0001_init; tenants cannot add,
  *   rename or delete them.
- * - Permissions and role_permissions are written to identity_db by
- *   `pnpm --filter identity-service db:seed` from THIS file, and every service
- *   authorizes with the same map through `@RequirePermissions()`. A change is
- *   one PR to this file: seed and enforcement can never disagree.
- * - The permission list is still PROVISIONAL (ADR 0001 open point #1): the
- *   team reviews it before it is moved into an identity_db migration.
+ * - The approved M2 permissions and role_permissions are installed by
+ *   identity_db migration 0003_permission_catalog. The idempotent Identity
+ *   seed reconciles them from THIS file, and every service authorizes with
+ *   the same map through `@RequirePermissions()`.
+ * - Future catalog changes need review and a new Identity data migration.
  *
  * Code format: <resource>:<action>.
  */
-export const CATALOG_STATUS = 'PROVISIONAL' as const;
+export const CATALOG_STATUS = 'APPROVED' as const;
 
 export const USER_TYPES = ['PLATFORM_STAFF', 'TENANT_STAFF', 'CUSTOMER'] as const;
 export type UserType = (typeof USER_TYPES)[number];

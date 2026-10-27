@@ -41,8 +41,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Bootstrap e2e (no database) of the services wired to packages/*
-        run: pnpm --filter organization-service --filter asset-service --filter service-request-service --filter workorder-service test:e2e
+      - name: Bootstrap e2e (no database)
+        run: pnpm --filter organization-service --filter asset-service --filter service-request-service --filter maintenance-service --filter workorder-service test:e2e
       - name: API Gateway e2e tests
         working-directory: apps/api-gateway
         run: pnpm test:e2e
@@ -75,6 +75,7 @@ jobs:
       ORGANIZATION_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_test_db
       ASSET_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_test_db
       SERVICE_REQUEST_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/service_request_test_db
+      MAINTENANCE_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_test_db
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -137,6 +138,23 @@ jobs:
       - name: Work Order database e2e tests
         working-directory: apps/workorder-service
         run: pnpm test:e2e:db
+      - name: Maintenance test DB migration and owner-provided suite
+        run: |
+          set -euo pipefail
+          actual="$(node -e 'process.stdout.write(new URL(process.argv[1]).pathname.slice(1))' "$MAINTENANCE_TEST_DATABASE_URL")"
+          if [ "$actual" != maintenance_test_db ]; then
+            echo "Refusing Maintenance test DB setup: got $actual" >&2
+            exit 1
+          fi
+          export MAINTENANCE_DATABASE_URL="$MAINTENANCE_TEST_DATABASE_URL"
+          pnpm --filter maintenance-service db:migrate
+          for script in test:e2e:db test:db; do
+            if node -e 'process.exit(require(process.argv[1]).scripts[process.argv[2]] ? 0 : 1)' ./apps/maintenance-service/package.json "$script"; then
+              pnpm --filter maintenance-service "$script"
+            else
+              echo "maintenance-service: $script not declared yet"
+            fi
+          done
       - name: M1 regression and M2 workflows through API Gateway
         env:
           NODE_ENV: development

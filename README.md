@@ -56,7 +56,7 @@ Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác th�
 | Node.js | **24.9 trở lên** (khuyên dùng 24 LTS) | Jest cần tính năng `require(esm)` của Node 24 |
 | pnpm | **11.26.0** | Đã khai báo trong `packageManager` của `package.json` |
 | Docker | Docker Engine + Compose plugin (Ubuntu) / Docker Desktop (Windows) | Chạy PostgreSQL, RabbitMQ, Redis, MinIO |
-| Flutter | 3.x | Chỉ cần nếu làm mobile |
+| Flutter | Bản đi kèm Dart ≥3.13.3 | Chỉ cần nếu làm mobile; xem `apps/mobile/pubspec.yaml` |
 
 Các cổng sẽ dùng: `5432` (PostgreSQL), `5672`/`15672` (RabbitMQ), `6379` (Redis), `9000`/`9001` (MinIO), `3000`–`3008` (services), `5173` (web). Nếu máy đã có PostgreSQL cài sẵn đang chiếm `5432`, xem [mục 8](#cổng-5432-đã-bị-chiếm).
 
@@ -173,7 +173,7 @@ Nếu cột PORTS trống, xem [mục 8](#cổng-5432-đã-bị-chiếm).
 Lần đầu khởi động (volume còn trống), PostgreSQL tự chạy hai script:
 
 - `init.sql` — 8 database của các service (`identity_db`, `organization_db`, …)
-- `dev-databases.sql` — shadow database `<service>_shadow_db` (cho `migrate dev` / drift check) và `<service>_test_db` của Identity, Organization, Asset, Service Request (cho e2e test)
+- `dev-databases.sql` — shadow database `<service>_shadow_db` (cho `migrate dev` / drift check) và `<service>_test_db` của Identity, Organization, Asset, Service Request, Maintenance, Work Order (cho e2e test)
 
 Nếu bạn đã chạy `infra:up` **trước** khi có `dev-databases.sql` (volume cũ), tạo bổ sung bằng hai lệnh sau (chạy được trên cả bash và PowerShell, chạy lại nhiều lần không sao):
 
@@ -257,8 +257,10 @@ Mobile (cần Flutter SDK):
 ```bash
 cd apps/mobile
 flutter pub get
-flutter run
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000  # Android emulator
 ```
+
+Xem [hướng dẫn mobile](apps/mobile/README.md) nếu dùng điện thoại thật hoặc build APK debug.
 
 Dừng hạ tầng: `pnpm infra:down` (dữ liệu vẫn giữ trong Docker volume). Xem log: `pnpm infra:logs`.
 
@@ -294,9 +296,9 @@ Test truyền tải sự kiện với RabbitMQ thật (cần `pnpm infra:up`):
 RABBITMQ_TEST_URL=amqp://pbl6:pbl6_dev_password@localhost:5672 pnpm --filter @pbl6/event-contracts test
 ```
 
-- E2E của Identity **xoá dữ liệu** trong database test, nên chỉ chạy khi tên database có chữ `test` (mặc định `identity_test_db`).
+- Các DB suite có thể **xoá dữ liệu**. `requireTestDatabaseUrl` chỉ chấp nhận đúng tên `<service>_test_db` của service gọi test (ví dụ `IDENTITY_TEST_DATABASE_URL` → `identity_test_db`); không dùng DB nghiệp vụ hay DB test của service khác.
 - Jest chạy với `--experimental-vm-modules` vì NestJS 12 chỉ phát hành dạng ESM; các script `test` đã có sẵn cờ này.
-- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR (kèm RabbitMQ cho test truyền tải, e2e khởi động và database-backed e2e của Service Request), cộng migration + drift check của cả 8 database và seed + e2e của Identity, Organization trên PostgreSQL 17.
+- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy các bước trên cho mọi push/PR (kèm RabbitMQ cho test truyền tải và bootstrap e2e của Maintenance/Work Order), cộng migration + drift check của cả 8 database và seed + DB suites M1 trên PostgreSQL 17. CI tạo riêng `maintenance_test_db` và `workorder_test_db`, áp migration lên hai DB này; khi owner thêm script `test:e2e:db` hoặc `test:db`, CI tự chạy suite đó và hiện thông báo rõ khi script chưa có.
 
 Lệnh database ở root: `pnpm db:migrate` (mọi service), `pnpm db:check-drift` (mọi service). Mỗi service có cùng bộ lệnh `db:migrate`, `db:check-drift`, `db:migrate:dev`, `prisma:generate` (chạy trong `apps/<service>`); quy tắc migration: [apps/identity-service/prisma/README.md](apps/identity-service/prisma/README.md).
 
