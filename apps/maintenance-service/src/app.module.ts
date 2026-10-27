@@ -6,6 +6,11 @@ import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
+import { PlansModule } from './plans/plans.module';
+import { SchedulerService } from './scheduler/scheduler.service';
+import { EquipmentEventsConsumer } from './events/equipment-events.consumer';
+import { WorkOrderEventsConsumer } from './events/work-order-events.consumer';
+import { EventsService } from './events/events.service';
 
 @Module({
   imports: [
@@ -16,6 +21,7 @@ import { PrismaService } from './prisma/prisma.service';
       validate: validateEnv,
     }),
     PrismaModule,
+    PlansModule,
     AuthModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => jwtOptionsFromConfig(config),
@@ -25,5 +31,6 @@ import { PrismaService } from './prisma/prisma.service';
       useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
   ],
+  providers: [SchedulerService, EquipmentEventsConsumer, WorkOrderEventsConsumer, EventsService],
 })
 export class AppModule {}

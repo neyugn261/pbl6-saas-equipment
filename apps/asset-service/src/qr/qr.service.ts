@@ -7,24 +7,53 @@ import { QrRepository } from './qr.repository';
 
 @Injectable()
 export class QrService {
-  constructor(private readonly repository: QrRepository, private readonly config: ConfigService) {}
+  constructor(
+    private readonly repository: QrRepository,
+    private readonly config: ConfigService,
+  ) {}
 
   async issue(principal: Principal, equipmentId: string) {
     const token = randomBytes(32).toString('base64url');
-    const qr = await this.repository.issue(dataScope(principal), equipmentId, principal.userId, token);
+    const qr = await this.repository.issue(
+      dataScope(principal),
+      equipmentId,
+      principal.userId,
+      token,
+      principal.roles,
+    );
     const base = this.config.getOrThrow<string>('ASSET_QR_PORTAL_BASE_URL');
-    const url = new URL(`portal/qr/${token}`, base.endsWith('/') ? base : `${base}/`).toString();
-    return { id: qr.id, equipmentId: qr.equipmentId, token, url, createdAt: qr.createdAt.toISOString() };
+    const url = new URL(
+      `portal/qr/${token}`,
+      base.endsWith('/') ? base : `${base}/`,
+    ).toString();
+    return {
+      id: qr.id,
+      equipmentId: qr.equipmentId,
+      token,
+      url,
+      createdAt: qr.createdAt.toISOString(),
+    };
   }
 
   async revoke(principal: Principal, equipmentId: string): Promise<void> {
-    await this.repository.revoke(dataScope(principal), equipmentId, principal.userId);
+    await this.repository.revoke(
+      dataScope(principal),
+      equipmentId,
+      principal.userId,
+      principal.roles,
+    );
   }
 
   async resolve(principal: Principal, token: string) {
     if (!/^[A-Za-z0-9_-]{22,255}$/.test(token)) {
-      throw new BadRequestException({ code: 'VALIDATION_FAILED', message: 'Invalid QR token' });
+      throw new BadRequestException({
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid QR token',
+      });
     }
-    return equipmentResponse(await this.repository.resolve(dataScope(principal), token));
+    return equipmentResponse(
+      await this.repository.resolve(dataScope(principal), token),
+      principal.userType === 'CUSTOMER',
+    );
   }
 }

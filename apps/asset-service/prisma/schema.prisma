@@ -32,6 +32,7 @@ model EquipmentModel {
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   equipments   Equipment[]
+  auditHistory EquipmentModelHistory[]
 
   @@unique([tenantId, manufacturer, modelCode])
   @@unique([tenantId, id])
@@ -55,6 +56,14 @@ model Equipment {
   installationDate DateTime?          @map("installation_date") @db.Date
   handoverDate     DateTime?          @map("handover_date") @db.Date
   status           String             @default("ACTIVE") @db.VarChar(30)
+  snapshotVersion  Int                @default(0) @map("snapshot_version")
+  displayName String? @map("display_name") @db.VarChar(200)
+  description String?
+  commissionedDate DateTime? @map("commissioned_date") @db.Date
+  technicalSpecifications Json? @map("technical_specifications")
+  operationalStatus String @default("UNKNOWN") @map("operational_status") @db.VarChar(30)
+  operationalStatusUpdatedAt DateTime? @map("operational_status_updated_at") @db.Timestamptz(6)
+  operationalStatusUpdatedBy String? @map("operational_status_updated_by") @db.Uuid
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   model            EquipmentModel     @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
@@ -121,9 +130,16 @@ model EquipmentHistory {
   createdBy     String?   @map("created_by") @db.Uuid
   occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  actorType String @default("UNKNOWN") @map("actor_type") @db.VarChar(20)
+  actorRoles String[] @default([]) @map("actor_roles")
+  changes Json?
+  context Json?
+  reasonInternal String? @map("reason_internal")
+  customerNote String? @map("customer_note")
   equipment     Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([tenantId, equipmentId, occurredAt(sort: Desc)], map: "idx_equipment_history_equipment_time")
+  @@index([tenantId, occurredAt(sort: Desc), id], map: "idx_equipment_history_tenant_time")
   @@map("equipment_history")
 }
 
@@ -136,4 +152,37 @@ model ProcessedEvent {
 
   @@id([eventId, consumer])
   @@map("processed_events")
+}
+
+model EquipmentModelHistory {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  modelId String @map("model_id") @db.Uuid
+  eventType String @map("event_type") @db.VarChar(50)
+  actorId String? @map("actor_id") @db.Uuid
+  actorRoles String[] @default([]) @map("actor_roles")
+  changes Json
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  model EquipmentModel @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, modelId, occurredAt])
+  @@map("equipment_model_history")
+}
+
+model OutboxEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(100)
+  eventVersion  Int       @default(1) @map("event_version") @db.SmallInt
+  payload       Json
+  status        String    @default("PENDING") @db.VarChar(20)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastError     String?   @map("last_error")
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
 }

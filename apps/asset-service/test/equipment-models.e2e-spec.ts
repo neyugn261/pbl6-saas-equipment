@@ -109,7 +109,7 @@ describe('equipment models HTTP contract (e2e)', () => {
     const created = await request(app.getHttpServer()).post('/equipment-models')
       .set('authorization', `Bearer ${staff}`).send(payload).expect(201);
     expect(created.body).toMatchObject({ ...payload, category: null, description: null });
-    expect(repo.create).toHaveBeenCalledWith(tenantA, expect.objectContaining(payload));
+    expect(repo.create).toHaveBeenCalledWith(tenantA, expect.objectContaining(payload), expect.any(String), ['SERVICE_MANAGER']);
     const duplicate = await request(app.getHttpServer()).post('/equipment-models')
       .set('authorization', `Bearer ${staff}`)
       .send({ ...payload, modelCode: 'DUP' }).expect(409);
@@ -141,7 +141,7 @@ describe('equipment models HTTP contract (e2e)', () => {
     expect(updated.body).toMatchObject({ status: 'INACTIVE', category: null });
     expect(repo.update).toHaveBeenCalledWith(tenantA, modelId, expect.objectContaining({
       status: 'INACTIVE', category: null,
-    }));
+    }), expect.any(String), ['SERVICE_MANAGER']);
     const outOfScope = await request(app.getHttpServer())
       .patch(`/equipment-models/${modelId}`)
       .set('authorization', `Bearer ${otherStaff}`)

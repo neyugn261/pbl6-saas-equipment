@@ -7,6 +7,10 @@ export interface AppEnv extends JwtEnv {
   ASSET_DATABASE_URL: string;
   ORGANIZATION_SERVICE_URL: string;
   ASSET_QR_PORTAL_BASE_URL: string;
+  RABBITMQ_URL?: string;
+  SERVICE_REQUEST_SERVICE_URL?: string;
+  WORKORDER_SERVICE_URL?: string;
+  MAINTENANCE_SERVICE_URL?: string;
 }
 
 export const PORT_VARIABLE = 'ASSET_SERVICE_PORT';
@@ -24,6 +28,10 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
     ASSET_DATABASE_URL: env.postgresUrl('ASSET_DATABASE_URL'),
     ORGANIZATION_SERVICE_URL: env.url('ORGANIZATION_SERVICE_URL', ['http:', 'https:']),
     ASSET_QR_PORTAL_BASE_URL: env.url('ASSET_QR_PORTAL_BASE_URL', ['http:', 'https:']),
+    RABBITMQ_URL: env.optionalUrl('RABBITMQ_URL', ['amqp:', 'amqps:']),
+    SERVICE_REQUEST_SERVICE_URL: env.optionalUrl('SERVICE_REQUEST_SERVICE_URL', ['http:', 'https:']),
+    WORKORDER_SERVICE_URL: env.optionalUrl('WORKORDER_SERVICE_URL', ['http:', 'https:']),
+    MAINTENANCE_SERVICE_URL: env.optionalUrl('MAINTENANCE_SERVICE_URL', ['http:', 'https:']),
     ...readJwtEnv(env),
   });
 }

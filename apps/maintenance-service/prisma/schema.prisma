@@ -25,6 +25,8 @@ model MaintenancePlan {
   /// Asset-owned customer snapshot; updated after EquipmentMoved is consumed.
   customerId      String            @map("customer_id") @db.Uuid
   customerSiteId  String?           @map("customer_site_id") @db.Uuid
+  snapshotVersion Int              @default(0) @map("snapshot_version")
+  anchorDate      DateTime         @map("anchor_date") @db.Date
   name            String            @db.VarChar(200)
   description     String?
   frequencyUnit   String            @map("frequency_unit") @db.VarChar(20)
@@ -35,6 +37,7 @@ model MaintenancePlan {
   createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   tasks           MaintenanceTask[]
+  history         MaintenanceHistory[]
 
   @@unique([tenantId, id])
   @@index([tenantId, nextDueDate, status], map: "idx_maintenance_plans_due")
@@ -51,6 +54,8 @@ model MaintenanceTask {
   tenantId          String          @map("tenant_id") @db.Uuid
   maintenancePlanId String          @map("maintenance_plan_id") @db.Uuid
   scheduledDate     DateTime        @map("scheduled_date") @db.Date
+  customerId        String          @map("customer_id") @db.Uuid
+  customerSiteId    String?         @map("customer_site_id") @db.Uuid
   /// Logical reference to workorder_db.work_orders.id
   workOrderId       String?         @map("work_order_id") @db.Uuid
   status            String          @default("PENDING") @db.VarChar(30)
@@ -60,10 +65,72 @@ model MaintenanceTask {
   updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   completedAt       DateTime?       @map("completed_at") @db.Timestamptz(6)
   maintenancePlan   MaintenancePlan @relation(fields: [tenantId, maintenancePlanId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  workOrderLinks MaintenanceWorkOrderLink[]
+  replacementRequests MaintenanceReplacementRequest[]
 
   @@unique([maintenancePlanId, scheduledDate])
+  @@unique([tenantId, id])
   @@index([tenantId, status, scheduledDate], map: "idx_maintenance_tasks_status_date")
   @@map("maintenance_tasks")
+}
+
+model EquipmentSnapshot {
+  tenantId       String   @map("tenant_id") @db.Uuid
+  equipmentId    String   @map("equipment_id") @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  customerSiteId String?  @map("customer_site_id") @db.Uuid
+  snapshotVersion Int    @map("snapshot_version")
+  changedAt      DateTime @map("changed_at") @db.Timestamptz(6)
+
+  @@id([tenantId, equipmentId])
+  @@map("equipment_snapshots")
+}
+
+model MaintenanceHistory {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+  taskId String? @map("task_id") @db.Uuid
+  eventType String @map("event_type") @db.VarChar(60)
+  actorId String? @map("actor_id") @db.Uuid
+  actorRoles String[] @default([]) @map("actor_roles")
+  sourceEventId String? @map("source_event_id") @db.Uuid
+  changes Json
+  context Json
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  plan MaintenancePlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "maintenance_history_plan_fkey")
+
+  @@index([tenantId, planId, occurredAt(sort: Desc)])
+  @@index([tenantId, taskId, occurredAt(sort: Desc)])
+  @@map("maintenance_history")
+}
+
+model MaintenanceWorkOrderLink {
+  workOrderId String @id @map("work_order_id") @db.Uuid
+  tenantId    String @map("tenant_id") @db.Uuid
+  taskId      String @map("task_id") @db.Uuid
+  state       String @db.VarChar(20)
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+  task MaintenanceTask @relation(fields: [tenantId, taskId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, taskId])
+  @@map("maintenance_work_order_links")
+}
+
+model MaintenanceReplacementRequest {
+  requestId              String @id @map("request_id") @db.Uuid
+  tenantId               String @map("tenant_id") @db.Uuid
+  taskId                 String @map("task_id") @db.Uuid
+  previousWorkOrderId    String @map("previous_work_order_id") @db.Uuid
+  replacementWorkOrderId String @unique @map("replacement_work_order_id") @db.Uuid
+  requestedBy            String @map("requested_by") @db.Uuid
+  status                 String @default("PENDING") @db.VarChar(20)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  task MaintenanceTask @relation(fields: [tenantId, taskId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, taskId])
+  @@map("maintenance_replacement_requests")
 }
 
 /// Transactional outbox; id is the event id sent to consumers.

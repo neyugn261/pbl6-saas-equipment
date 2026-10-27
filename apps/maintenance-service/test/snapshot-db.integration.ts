@@ -24,6 +24,7 @@ it('stores the Asset customer snapshot and permits an absent site', async () => 
       frequencyUnit: 'MONTH',
       frequencyValue: 1,
       nextDueDate: new Date('2026-11-01T00:00:00.000Z'),
+      anchorDate: new Date('2026-11-01T00:00:00.000Z'),
     },
   });
   try {

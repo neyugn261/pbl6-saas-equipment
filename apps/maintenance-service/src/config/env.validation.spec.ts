@@ -1,6 +1,7 @@
 import { PORT_VARIABLE, validateEnv } from './env.validation';
 
 const valid = {
+  ASSET_SERVICE_URL: 'http://asset.test',
   MAINTENANCE_DATABASE_URL:
     'postgresql://user:pass@localhost:5432/maintenance_db',
   JWT_ACCESS_SECRET: 'x'.repeat(32),
@@ -12,6 +13,9 @@ describe('validateEnv', () => {
       ...valid,
       NODE_ENV: 'development',
       PORT: 3003,
+      RABBITMQ_URL: undefined,
+      MAINTENANCE_SCHEDULER_ENABLED: 'true',
+      MAINTENANCE_SCHEDULER_INTERVAL_MS: 60000,
       JWT_ISSUER: 'pbl6-identity',
       JWT_AUDIENCE: 'pbl6',
     });

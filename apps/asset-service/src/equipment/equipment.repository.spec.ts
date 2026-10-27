@@ -12,7 +12,7 @@ const actorId = '00000000-0000-4000-8000-000000000007';
 const now = new Date('2026-10-21T00:00:00Z');
 const base = () => ({ id: equipmentId, tenantId, modelId, customerId, customerSiteId: siteId,
   locationId: '00000000-0000-4000-8000-000000000008', assetCode: 'A', serialNumber: 'S',
-  installationDate: null, handoverDate: null, status: 'ACTIVE', createdAt: now, updatedAt: now });
+  installationDate: null, handoverDate: null, status: 'ACTIVE', snapshotVersion: 0, createdAt: now, updatedAt: now });
 
 describe('EquipmentRepository', () => {
   it('scopes list and translates all three real warranty states into database predicates', async () => {
@@ -60,9 +60,9 @@ describe('EquipmentRepository', () => {
     })).rejects.toThrow('history failure');
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(lockModel).toHaveBeenCalledTimes(1);
-    expect(historyCreate).toHaveBeenCalledWith({ data: {
+    expect(historyCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
       tenantId, equipmentId, eventType: 'REGISTERED', createdBy: actorId,
-    } });
+    }) });
   });
 
   it('rechecks model status under lock so a deactivated model cannot be registered', async () => {
@@ -81,7 +81,7 @@ describe('EquipmentRepository', () => {
   it('clears the old location when moving site and records every changed category after row lock', async () => {
     const events = jest.fn();
     const update = jest.fn().mockImplementation(async ({ data }) => ({ ...base(), ...data }));
-    const tx = { $queryRaw: jest.fn().mockResolvedValue([{ id: equipmentId }]),
+    const tx = { $executeRawUnsafe: jest.fn().mockResolvedValue(1), $queryRaw: jest.fn().mockResolvedValue([{ id: equipmentId }]),
       equipment: { findFirst: jest.fn().mockResolvedValue(base()), update },
       equipmentHistory: { createMany: events } };
     const repo = new EquipmentRepository({ $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(tx) } as unknown as PrismaService);

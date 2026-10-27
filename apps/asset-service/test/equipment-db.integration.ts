@@ -38,10 +38,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await prisma.outboxEvent.deleteMany({ where: { tenantId } });
   await prisma.equipmentHistory.deleteMany({ where: { tenantId } });
   await prisma.warranty.deleteMany({ where: { tenantId } });
   await prisma.equipmentQrCode.deleteMany({ where: { tenantId } });
   await prisma.equipment.deleteMany({ where: { tenantId } });
+  await prisma.equipmentModelHistory.deleteMany({ where: { tenantId } });
   await prisma.equipmentModel.deleteMany({ where: { tenantId } });
   await prisma.$disconnect();
 });

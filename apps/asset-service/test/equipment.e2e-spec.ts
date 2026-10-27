@@ -122,7 +122,7 @@ describe('equipment HTTP contract (e2e)', () => {
     const created = await request(app.getHttpServer()).post('/equipment')
       .set('authorization', `Bearer ${staff}`).send(input).expect(201);
     expect(created.body).toMatchObject({ ...input, status: 'ACTIVE', installationDate: null });
-    expect(repository.createWithHistory).toHaveBeenCalledWith(tenantA, expect.any(String), expect.objectContaining(input));
+    expect(repository.createWithHistory).toHaveBeenCalledWith(tenantA, expect.any(String), expect.objectContaining(input), ['SERVICE_MANAGER']);
     for (const [payload, code] of [
       [{ ...input, modelId: randomUUID() }, 'MODEL_NOT_FOUND'],
       [{ ...input, customerId: randomUUID() }, 'CUSTOMER_NOT_FOUND'],
@@ -206,11 +206,11 @@ describe('equipment HTTP contract (e2e)', () => {
     await request(app.getHttpServer()).patch(`/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${staff}`).send({ customerSiteId: siteB }).expect(200);
     expect(repository.patchWithHistory).toHaveBeenCalledWith(
-      { tenantId: tenantA, customerId: null }, equipmentId, expect.any(String), { customerSiteId: siteB }, undefined);
+      { tenantId: tenantA, customerId: null }, equipmentId, expect.any(String), { customerSiteId: siteB }, undefined, ['SERVICE_MANAGER']);
     await request(app.getHttpServer()).patch(`/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${staff}`).send({ locationId: locationA }).expect(200);
     expect(repository.patchWithHistory).toHaveBeenCalledWith(
-      { tenantId: tenantA, customerId: null }, equipmentId, expect.any(String), { locationId: locationA }, siteA);
+      { tenantId: tenantA, customerId: null }, equipmentId, expect.any(String), { locationId: locationA }, siteA, ['SERVICE_MANAGER']);
     const badLocation = await request(app.getHttpServer()).patch(`/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${staff}`).send({ customerSiteId: siteB, locationId: locationA }).expect(422);
     expect(badLocation.body.code).toBe('LOCATION_NOT_IN_SITE');
@@ -277,7 +277,7 @@ describe('equipment HTTP contract (e2e)', () => {
     await request(app.getHttpServer()).post(`/warranties/${created.body.id}/void`)
       .set('authorization', `Bearer ${staff}`).send({ reason: 'test' }).expect(200);
     expect(warranties.void).toHaveBeenCalledWith({ tenantId: tenantA, customerId: null }, created.body.id,
-      expect.any(String), 'test');
+      expect.any(String), 'test', undefined, ['SERVICE_MANAGER']);
   });
 
   it('requires QR permissions and scope, and returns an opaque portal URL', async () => {
@@ -290,7 +290,7 @@ describe('equipment HTTP contract (e2e)', () => {
     expect(issued.body.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(issued.body.url).toBe(`http://portal.test/portal/qr/${issued.body.token}`);
     expect(qrCodes.issue).toHaveBeenCalledWith({ tenantId: tenantA, customerId: null }, equipmentId,
-      expect.any(String), issued.body.token);
+      expect.any(String), issued.body.token, ['SERVICE_MANAGER']);
     await request(app.getHttpServer()).get(`/qr/${issued.body.token}`).expect(401);
     await request(app.getHttpServer()).get('/qr/short')
       .set('authorization', `Bearer ${staff}`).expect(400);

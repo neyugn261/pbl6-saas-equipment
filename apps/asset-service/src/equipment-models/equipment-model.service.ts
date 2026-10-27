@@ -51,7 +51,7 @@ export class EquipmentModelService {
     input: CreateEquipmentModelDto,
   ): Promise<EquipmentModelResponse> {
     const { tenantId } = dataScope(principal);
-    return toResponse(await this.repository.create(tenantId, input));
+    return toResponse(await this.repository.create(tenantId, input, principal.userId, principal.roles));
   }
 
   async update(
@@ -69,6 +69,6 @@ export class EquipmentModelService {
     if (!(await this.repository.findScoped(tenantId, id))) {
       throw new NotFoundException({ code: 'MODEL_NOT_FOUND', message: 'Model not found' });
     }
-    return toResponse(await this.repository.update(tenantId, id, input));
+    return toResponse(await this.repository.update(tenantId, id, input, principal.userId, principal.roles));
   }
 }

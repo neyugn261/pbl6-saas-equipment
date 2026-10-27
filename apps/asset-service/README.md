@@ -6,13 +6,36 @@ Equipment models, equipment, warranties and warranty check, QR codes, equipment 
 - Port: `ASSET_SERVICE_PORT` (default 3002)
 - Database: `asset_db` via `ASSET_DATABASE_URL` — see [prisma/README.md](prisma/README.md)
 - API contract: [asset.yaml](../../docs/api/asset.yaml); conventions: [docs/api/conventions.md](../../docs/api/conventions.md)
+- Detailed dossier/history supplement: [equipment-dossier.yaml](../../docs/api/equipment-dossier.yaml), [frontend/owner handoff](../../docs/plans/equipment-dossier-handoff.md), ADR 0010.
 - Organization HTTP client: `ORGANIZATION_SERVICE_URL` (required, already in root `.env.example`). It forwards the caller's token and correlation id; production has no fake fallback.
 - QR portal base URL: `ASSET_QR_PORTAL_BASE_URL` (required, HTTP(S)); generated QR links use `<base>/portal/qr/<token>`.
 
 ## Status
 
-M0 bootstrap and A2–A5 Asset endpoints are implemented. Service-event history
-consumers are M2 work. Equipment detail and list warranty filtering read
+The approved dossier extension adds per-unit display name/specifications/commission
+date, an explicit operational confirmation with a required internal reason, and
+detailed Asset/Model/Warranty/QR audit. `GET /equipment/:id/dossier` composes
+caller-scoped Organization, Request, WO and Maintenance reads. Optional
+`SERVICE_REQUEST_SERVICE_URL`, `WORKORDER_SERVICE_URL`, `MAINTENANCE_SERVICE_URL`
+are already listed in root `.env.example`; absent URLs yield NOT_CONFIGURED.
+Source outages and permission restrictions are separate section statuses.
+CUSTOMER cannot read WO through this composition. No source write operation is
+proxied or authorized by an Asset response.
+
+`GET /equipment-history`, `/equipment/:id/timeline`, `/equipment-history/:id`,
+`/warranties/:id/history`, `/equipment-models/:id/history` provide filtered feeds
+and resource audit. Internal reasons and arbitrary legacy metadata are removed
+from customer views. Histories before audit deployment may be incomplete.
+Source events lacking original equipment context explicitly use
+`AT_EVENT_PROCESSING`; this is not proof of the historical job site.
+
+Local migration `20261027140000_equipment_dossier_history` is additive. Apply with
+`pnpm --filter asset-service db:migrate`. DB suites now include real HTTP/RBAC,
+PostgreSQL audit checks, explicit source fakes and a separate real-service
+Gateway/RabbitMQ test under Maintenance.
+
+M0 bootstrap and A2–A5 Asset endpoints are implemented. M2 adds transactional
+EquipmentMoved outbox and idempotent service-event history consumers. Equipment detail and list warranty filtering read
 real ACTIVE warranty rows from `asset_db` and use today's date in
 `Asia/Ho_Chi_Minh`. VOID periods are ignored. No warranty value is fabricated.
 
@@ -42,9 +65,11 @@ real ACTIVE warranty rows from `asset_db` and use today's date in
   if the site changes after Organization validates the location; retry against
   the current site.
 - `GET /equipment/:equipmentId/history` — scoped, stable newest-first history
-  with pagination. A3–A5 write local Asset events; M2 adds events from other services.
+  with pagination. M2 records ServiceRequestStatusChanged v1 and WorkOrderCompleted
+  v2 using an explicit safe-field allowlist. SR reason/internal data is not copied.
 - `GET /internal/equipment/:equipmentId` — scoped EquipmentRef for service
   callers forwarding the user's token. RETIRED stays readable as a status.
+  snapshotVersion is a monotonic site/location version for Maintenance snapshots.
 - `GET /equipment/:equipmentId/warranties` — scoped ACTIVE and VOID periods,
   newest start date first; `expired` is derived for today in Vietnam.
 - `POST /equipment/:equipmentId/warranties` — staff with `warranty:manage`;
@@ -70,6 +95,15 @@ real ACTIVE warranty rows from `asset_db` and use today's date in
   correlation id.
 
 ## Commands
+
+M2 event runtime uses optional `RABBITMQ_URL`. Queue `asset-service.history`
+has bounded retry and DLQ; each history write and inbox row commit together.
+Equipment patches increment snapshotVersion, add MOVED history and enqueue the
+complete EquipmentMoved v1 snapshot under the same row lock/transaction.
+When the broker is unavailable, events stay in the Asset outbox. See
+[ADR 0009](../../docs/decisions/0009-maintenance-m2-runtime.md) and
+[event operations](../../docs/architecture/events.md). The new additive migration
+`20261027090000_equipment_move_outbox` preserves the original constraints.
 
 ```bash
 pnpm start:dev        # watch mode (generates the Prisma client first)
