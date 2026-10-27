@@ -454,8 +454,19 @@ CREATE TABLE equipments (
     location_id UUID NULL, -- Logical reference to organization_db.locations.id
     asset_code VARCHAR(100) NOT NULL,
     serial_number VARCHAR(150) NOT NULL,
+    -- ADR 0009; additive EquipmentMoved/outbox migration (20261027090000).
+    snapshot_version INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_version >= 0),
     installation_date DATE,
     handover_date DATE,
+    -- ADR 0010, migration 20261027140000_equipment_dossier_history.
+    display_name VARCHAR(200),
+    description TEXT,
+    commissioned_date DATE,
+    technical_specifications JSONB,
+    operational_status VARCHAR(30) NOT NULL DEFAULT 'UNKNOWN'
+        CHECK (operational_status IN ('UNKNOWN', 'OPERATIONAL', 'DEGRADED', 'NOT_OPERATIONAL')),
+    operational_status_updated_at TIMESTAMPTZ,
+    operational_status_updated_by UUID, -- Logical Identity reference
     status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE'
         CHECK (status IN ('ACTIVE', 'IN_SERVICE', 'OUT_OF_SERVICE', 'RETIRED')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -470,6 +481,20 @@ CREATE TABLE equipments (
 CREATE INDEX idx_equipments_tenant_customer ON equipments (tenant_id, customer_id);
 CREATE INDEX idx_equipments_tenant_site ON equipments (tenant_id, customer_site_id);
 CREATE INDEX idx_equipments_tenant_status ON equipments (tenant_id, status);
+
+CREATE TABLE equipment_model_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    model_id UUID NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    actor_id UUID,
+    actor_roles TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    changes JSONB NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id, model_id) REFERENCES equipment_models(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX equipment_model_history_tenant_id_model_id_occurred_at_idx
+    ON equipment_model_history(tenant_id, model_id, occurred_at);
 
 CREATE TABLE warranties (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -517,11 +542,18 @@ CREATE TABLE equipment_history (
     created_by UUID, -- Logical reference to identity_db.users.id
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    actor_type VARCHAR(20) NOT NULL DEFAULT 'UNKNOWN' CHECK (actor_type IN ('UNKNOWN', 'USER', 'SYSTEM')),
+    actor_roles TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    changes JSONB,
+    context JSONB,
+    reason_internal TEXT,
+    customer_note TEXT,
     FOREIGN KEY (tenant_id, equipment_id)
         REFERENCES equipments (tenant_id, id) ON DELETE RESTRICT
 );
 CREATE INDEX idx_equipment_history_equipment_time
     ON equipment_history (tenant_id, equipment_id, occurred_at DESC);
+CREATE INDEX idx_equipment_history_tenant_time ON equipment_history(tenant_id, occurred_at DESC, id);
 CREATE UNIQUE INDEX uq_equipment_history_source_event
     ON equipment_history (source_event_id) WHERE source_event_id IS NOT NULL;
 
@@ -532,6 +564,20 @@ CREATE TABLE processed_events (
     processed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (event_id, consumer)
 );
+
+-- ADR 0009: Asset owns its move outbox in addition to its event inbox.
+CREATE TABLE outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID NULL,
+    aggregate_type VARCHAR(50) NOT NULL, aggregate_id UUID NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    event_version SMALLINT NOT NULL DEFAULT 1 CHECK (event_version > 0),
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PUBLISHED', 'FAILED')),
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0), last_error TEXT,
+    available_at TIMESTAMPTZ NOT NULL DEFAULT now(), occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(), published_at TIMESTAMPTZ,
+    CHECK ((status = 'PUBLISHED') = (published_at IS NOT NULL))
+);
+CREATE INDEX idx_outbox_events_pending ON outbox_events (available_at) WHERE status = 'PENDING';
 
 -- ============================================================================
 -- 4. service_request_db  (Service Request Service)
@@ -965,6 +1011,8 @@ CREATE TABLE maintenance_plans (
     -- ADR 0007 D12a; added to deployed databases by the second Maintenance migration.
     customer_id UUID NOT NULL, -- Asset customer snapshot, logical reference
     customer_site_id UUID NULL, -- Asset site snapshot, logical reference
+    snapshot_version INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_version >= 0),
+    anchor_date DATE NOT NULL, -- ADR 0009: fixed calendar anchor, not completion time
     name VARCHAR(200) NOT NULL,
     description TEXT,
     frequency_unit VARCHAR(20) NOT NULL CHECK (frequency_unit IN ('DAY', 'WEEK', 'MONTH', 'YEAR')),
@@ -980,11 +1028,33 @@ CREATE INDEX idx_maintenance_plans_due ON maintenance_plans (tenant_id, next_due
 CREATE INDEX idx_maintenance_plans_equipment ON maintenance_plans (tenant_id, equipment_id);
 CREATE INDEX idx_maintenance_plans_customer ON maintenance_plans (tenant_id, customer_id);
 
+-- ADR 0010: append-only Plan/Task ledger; scope is checked against its local Plan.
+CREATE TABLE maintenance_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    plan_id UUID NOT NULL,
+    task_id UUID, -- Logical local Task reference; no cross-service FK
+    event_type VARCHAR(60) NOT NULL,
+    actor_id UUID,
+    actor_roles TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    source_event_id UUID,
+    changes JSONB NOT NULL,
+    context JSONB NOT NULL,
+    occurred_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    recorded_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT maintenance_history_plan_fkey FOREIGN KEY (tenant_id, plan_id)
+        REFERENCES maintenance_plans(tenant_id, id) ON DELETE RESTRICT ON UPDATE NO ACTION
+);
+CREATE INDEX maintenance_history_tenant_id_plan_id_occurred_at_idx ON maintenance_history(tenant_id, plan_id, occurred_at DESC);
+CREATE INDEX maintenance_history_tenant_id_task_id_occurred_at_idx ON maintenance_history(tenant_id, task_id, occurred_at DESC);
+
 CREATE TABLE maintenance_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     maintenance_plan_id UUID NOT NULL,
     scheduled_date DATE NOT NULL,
+    customer_id UUID NOT NULL, -- creation-time snapshot from the local Plan
+    customer_site_id UUID,
     work_order_id UUID NULL, -- Logical reference to workorder_db.work_orders.id (set from WorkOrder event)
     status VARCHAR(30) NOT NULL DEFAULT 'PENDING'
         CHECK (status IN ('PENDING', 'WORK_ORDER_CREATED', 'COMPLETED', 'FAILED', 'CANCELLED')),
@@ -994,6 +1064,7 @@ CREATE TABLE maintenance_tasks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at TIMESTAMPTZ,
     UNIQUE (maintenance_plan_id, scheduled_date),
+    UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, maintenance_plan_id)
         REFERENCES maintenance_plans (tenant_id, id) ON DELETE RESTRICT
 );
@@ -1001,6 +1072,29 @@ CREATE UNIQUE INDEX uq_maintenance_task_work_order
     ON maintenance_tasks (work_order_id) WHERE work_order_id IS NOT NULL;
 CREATE INDEX idx_maintenance_tasks_status_date
     ON maintenance_tasks (tenant_id, status, scheduled_date);
+
+-- ADR 0009; created by Maintenance runtime migration (20261027091000).
+CREATE TABLE equipment_snapshots (
+    tenant_id UUID NOT NULL, equipment_id UUID NOT NULL, customer_id UUID NOT NULL,
+    customer_site_id UUID, snapshot_version INTEGER NOT NULL CHECK (snapshot_version >= 0),
+    changed_at TIMESTAMPTZ NOT NULL, PRIMARY KEY (tenant_id, equipment_id)
+);
+CREATE TABLE maintenance_work_order_links (
+    work_order_id UUID PRIMARY KEY, tenant_id UUID NOT NULL, task_id UUID NOT NULL,
+    state VARCHAR(20) NOT NULL CHECK (state IN ('CREATED', 'COMPLETED', 'CANCELLED')),
+    occurred_at TIMESTAMPTZ NOT NULL,
+    FOREIGN KEY (tenant_id, task_id) REFERENCES maintenance_tasks (tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX maintenance_work_order_links_tenant_id_task_id_idx ON maintenance_work_order_links (tenant_id, task_id);
+CREATE TABLE maintenance_replacement_requests (
+    request_id UUID PRIMARY KEY, tenant_id UUID NOT NULL, task_id UUID NOT NULL,
+    previous_work_order_id UUID NOT NULL, replacement_work_order_id UUID NOT NULL UNIQUE,
+    requested_by UUID NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'LINKED')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id, task_id) REFERENCES maintenance_tasks (tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX maintenance_replacement_requests_tenant_id_task_id_idx ON maintenance_replacement_requests (tenant_id, task_id);
+CREATE UNIQUE INDEX uq_maintenance_pending_replacement ON maintenance_replacement_requests (task_id) WHERE status = 'PENDING';
 
 CREATE TABLE outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

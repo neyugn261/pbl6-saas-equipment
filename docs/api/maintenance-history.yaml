@@ -1,0 +1,134 @@
+openapi: 3.1.0
+info:
+  title: Maintenance history, summary and Task journey
+  version: 0.4.0-local
+  description: |
+    ADR 0010 supplement to maintenance.yaml, owned by Minh. All endpoints require
+    maintenance:read; CUSTOMER is limited to CUSTOMER_ADMIN by current RBAC.
+    Scope follows the current local Plan customer snapshot. Snapshots are eventually
+    consistent with Asset moves. Entry context preserves the Plan/site/schedule at
+    recording; task customer/site remains its creation-time snapshot.
+    No history edit/delete API. New writes are atomic with audit/inbox/outbox.
+    Records predating this deployment may have no detailed history.
+servers: [{ url: /api/maintenance }]
+security: [{ bearer: [] }]
+paths:
+  /maintenance-summary:
+    get:
+      summary: Exact counts, earliest active due date, overdue work and bounded attention preview
+      x-permissions: [maintenance:read]
+      parameters: [{ name: equipmentId, in: query, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: Scoped aggregate computed over all matching rows, independent of preview truncation
+          content: { application/json: { schema: { $ref: '#/components/schemas/Summary' } } }
+        '400': { description: Invalid query }
+        '401': { description: Authentication required }
+        '403': { description: Maintenance read permission required }
+  /maintenance-history:
+    get:
+      summary: Global scoped Plan/Task audit feed
+      x-permissions: [maintenance:read]
+      parameters: &HistoryParameters
+        - { $ref: './maintenance.yaml#/components/parameters/Page' }
+        - { $ref: './maintenance.yaml#/components/parameters/PageSize' }
+        - { name: equipmentId, in: query, schema: { type: string, format: uuid } }
+        - { name: planId, in: query, schema: { type: string, format: uuid } }
+        - { name: taskId, in: query, schema: { type: string, format: uuid } }
+        - { name: eventType, in: query, schema: { type: string, maxLength: 60 } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time }, description: Inclusive; must not precede from }
+      responses: &HistoryResponses
+        '200':
+          description: Newest occurredAt then stable id; pageSize 1..100
+          content: { application/json: { schema: { $ref: '#/components/schemas/HistoryPage' } } }
+        '400': { description: Invalid filters/date range }
+        '401': { description: Authentication required }
+        '403': { description: Maintenance read permission required }
+        '404': { description: Scoped resource not found }
+  /maintenance-plans/{id}/history:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      summary: Paginated Plan history including its Task events
+      x-permissions: [maintenance:read]
+      parameters: *HistoryParameters
+      responses: *HistoryResponses
+  /maintenance-tasks/{id}/journey:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      summary: Current Task/Plan, every linked WO/replacement, responsibility hint and paginated history
+      description: |
+        Cancelled WO remains in workOrders; replacement request is a distinct record
+        with its own stable new WO id. A request PENDING means awaiting WO service
+        processing, not that a replacement WO exists. allowedActions contains
+        request-replacement only for permitted staff after a cancellation and no
+        pending request. CUSTOMER actions are empty. Internal cancellation reasons
+        and transport diagnostics are not included. This does not expose WO notes.
+      x-permissions: [maintenance:read]
+      parameters: *HistoryParameters
+      responses:
+        '200':
+          description: Detailed task journey
+          content: { application/json: { schema: { $ref: '#/components/schemas/Journey' } } }
+        '404': { description: Task outside caller scope or not found }
+        '403': { description: Maintenance read permission required }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    Entry:
+      type: object
+      required: [id, planId, taskId, eventType, actorType, actorId, actorRoles, sourceEventId, changes, context, occurredAt, recordedAt]
+      properties:
+        id: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        taskId: { type: [string, 'null'], format: uuid }
+        eventType: { type: string, examples: [PLAN_CREATED, PLAN_UPDATED, TASK_GENERATED, SCHEDULE_ADVANCED, EQUIPMENT_SNAPSHOT_UPDATED, EQUIPMENT_SNAPSHOT_REFRESHED, WORK_ORDER_CREATED, WORK_ORDER_CANCELLED, WORK_ORDER_COMPLETED, REPLACEMENT_REQUESTED, PLAN_COMPLETION_RECORDED] }
+        actorType: { type: string, enum: [USER, SYSTEM] }
+        actorId: { type: [string, 'null'], format: uuid, description: Always null for CUSTOMER }
+        actorRoles: { type: array, items: { type: string }, description: Empty for CUSTOMER }
+        sourceEventId: { type: [string, 'null'], format: uuid, description: Null for CUSTOMER }
+        changes: { type: object, additionalProperties: { type: object, required: [before, after], properties: { before: {}, after: {} } } }
+        context: { type: object, description: Captured equipment/customer/site/planName/frequency/anchorDate }
+        occurredAt: { type: string, format: date-time }
+        recordedAt: { type: string, format: date-time }
+    HistoryPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+    Summary:
+      type: object
+      required: [asOf, equipmentId, planCounts, taskCounts, nextDue, duePlansAwaitingScheduler, overdueOpenTaskCount, attentionPreview, attentionPreviewLimit, attentionTotal, scheduleMeaning]
+      properties:
+        asOf: { type: string, format: date-time }
+        equipmentId: { type: [string, 'null'], format: uuid }
+        planCounts: { type: object, additionalProperties: { type: integer, minimum: 0 }, description: Missing status keys mean zero within an AVAILABLE response }
+        taskCounts: { type: object, additionalProperties: { type: integer, minimum: 0 } }
+        nextDue:
+          type: [object, 'null']
+          properties:
+            planId: { type: string, format: uuid }
+            date: { type: string, format: date }
+            name: { type: string }
+        duePlansAwaitingScheduler: { type: integer, minimum: 0, description: ACTIVE plans due on or before today in Vietnam }
+        overdueOpenTaskCount: { type: integer, minimum: 0, description: PENDING or WORK_ORDER_CREATED tasks strictly before today in Vietnam }
+        attentionPreview: { type: array, maxItems: 5, items: { $ref: './maintenance.yaml#/components/schemas/Task' } }
+        attentionPreviewLimit: { const: 5 }
+        attentionTotal: { type: integer, minimum: 0, description: All PENDING/FAILED tasks; not a deduplicated equipment count }
+        scheduleMeaning: { const: PLAN_DUE_DATE_NOT_CONFIRMED_APPOINTMENT }
+    Journey:
+      type: object
+      required: [task, plan, workOrders, replacements, waitingFor, allowedActions, history, legacyHistoryMayBeIncomplete]
+      properties:
+        task: { $ref: './maintenance.yaml#/components/schemas/Task' }
+        plan: { $ref: './maintenance.yaml#/components/schemas/Plan' }
+        workOrders: { type: array, items: { type: object, properties: { workOrderId: { type: string, format: uuid }, state: { type: string, enum: [CREATED, COMPLETED, CANCELLED] }, occurredAt: { type: string, format: date-time } } } }
+        replacements: { type: array, items: { type: object, description: requestId/previousWorkOrderId/replacementWorkOrderId/status/createdAt } }
+        waitingFor: { type: [string, 'null'], enum: [WORK_ORDER_SERVICE, SERVICE_MANAGER, WORK_ORDER_TEAM, null] }
+        allowedActions: { type: array, items: { type: string, enum: [request-replacement] } }
+        history: { $ref: '#/components/schemas/HistoryPage' }
+        legacyHistoryMayBeIncomplete: { const: true }

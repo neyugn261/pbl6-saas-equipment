@@ -183,6 +183,22 @@ export interface MaintenanceTaskDueV1 {
   title: string;
 }
 
+export interface EquipmentMovedV1 {
+  equipmentId: string;
+  customerId: string;
+  customerSiteId: string | null;
+  locationId: string | null;
+  snapshotVersion: number;
+  changedAt: string;
+}
+
+export interface MaintenanceWorkOrderReplacementRequestedV1 extends MaintenanceTaskDueV1 {
+  requestId: string;
+  previousWorkOrderId: string;
+  replacementWorkOrderId: string;
+  requestedBy: string;
+}
+
 export interface LowStockDetectedV1 {
   stockId: string;
   partId: string;
@@ -194,6 +210,25 @@ export interface LowStockDetectedV1 {
 }
 
 export const Events = {
+  EquipmentMoved: define<EquipmentMovedV1>({
+    type: 'EquipmentMoved', version: 1, aggregateType: 'Equipment', producer: 'asset-service',
+    fields: {
+      equipmentId: is.uuid, customerId: is.uuid,
+      customerSiteId: is.nullable(is.uuid), locationId: is.nullable(is.uuid),
+      snapshotVersion: (value) => Number.isSafeInteger(value) && (value as number) > 0,
+      changedAt: is.isoDateTime,
+    },
+  }),
+  MaintenanceWorkOrderReplacementRequested: define<MaintenanceWorkOrderReplacementRequestedV1>({
+    type: 'MaintenanceWorkOrderReplacementRequested', version: 1,
+    aggregateType: 'MaintenanceTask', producer: 'maintenance-service',
+    fields: {
+      requestId: is.uuid, previousWorkOrderId: is.uuid, replacementWorkOrderId: is.uuid,
+      requestedBy: is.uuid, maintenanceTaskId: is.uuid, maintenancePlanId: is.uuid,
+      equipmentId: is.uuid, customerId: is.uuid, customerSiteId: is.nullable(is.uuid),
+      scheduledDate: is.isoDate, title: is.string(200),
+    },
+  }),
   TenantCreated: define<TenantCreatedV1>({
     type: 'TenantCreated',
     version: 1,
