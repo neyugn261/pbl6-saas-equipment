@@ -141,6 +141,11 @@ publishes `cancelServiceRequest: true`; the request is already CANCELLED
   not renamed or removed without checking every use.
 - The catalog stays PROVISIONAL until then (ADR 0001 open point #1).
 
+M2 resolution (2026-10-26): retain all existing role codes, permission codes,
+and role → permission grants in `packages/auth/src/catalog.ts`. No D2 or D6
+permission is added. `identity_db` migration `0003_permission_catalog` installs
+this unchanged catalog; the Identity seed remains its idempotent reconciler.
+
 ### D10 — Codes of soft-deleted records
 
 The code of a soft-deleted Branch or Customer stays reserved in the MVP:

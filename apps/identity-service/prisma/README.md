@@ -22,9 +22,9 @@
    - CHECK on `user_customer_links.status` (0002)
 4. **The role catalog is seeded by `0001_init`**; tenants cannot change it.
    The permission catalog lives in `packages/auth/src/catalog.ts` (shared with
-   every service's `PermissionsGuard`, ADR 0004) and is **PROVISIONAL** until
-   ADR 0001 open point #1 is approved. It is applied by `pnpm db:seed`
-   (idempotent). Move it into a migration once approved.
+   every service's `PermissionsGuard`, ADR 0004). The unchanged M2 catalog is
+   installed by `0003_permission_catalog`; `pnpm db:seed` reconciles it
+   idempotently. Future changes need a new data migration.
 
 ## Changing the schema
 
@@ -51,7 +51,7 @@ raw-SQL objects above exist after `migrate deploy`, and
 
 | Command | What it does | Environments |
 |---|---|---|
-| `pnpm db:seed` | Permission catalog + role_permissions (provisional) | all |
+| `pnpm db:seed` | Reconcile approved permission catalog + role_permissions | all |
 | `pnpm db:seed:dev` | + demo tenant `DEMO` in `tenant_directory`, demo accounts (password from `SEED_DEMO_PASSWORD`) and the customer links of the two customer accounts | refuses when `NODE_ENV=production` |
 
 The demo tenant and the customer links are written directly into the read

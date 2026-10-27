@@ -34,15 +34,21 @@ describe('signTestAccessToken', () => {
 
 describe('requireTestDatabaseUrl', () => {
   afterEach(() => {
-    delete process.env.X_TEST_URL;
+    delete process.env.ASSET_TEST_DATABASE_URL;
   });
 
-  it('accepts only databases whose name contains "test"', () => {
-    process.env.X_TEST_URL = 'postgresql://u:p@localhost:5432/asset_test_db';
-    expect(requireTestDatabaseUrl('X_TEST_URL')).toContain('asset_test_db');
-    process.env.X_TEST_URL = 'postgresql://u:p@localhost:5432/asset_db';
-    expect(() => requireTestDatabaseUrl('X_TEST_URL')).toThrow('must contain "test"');
-    delete process.env.X_TEST_URL;
-    expect(() => requireTestDatabaseUrl('X_TEST_URL')).toThrow('is not set');
+  it('accepts only the owning service test database', () => {
+    process.env.ASSET_TEST_DATABASE_URL = 'postgresql://u:p@localhost:5432/asset_test_db';
+    expect(requireTestDatabaseUrl('ASSET_TEST_DATABASE_URL')).toContain('asset_test_db');
+    process.env.ASSET_TEST_DATABASE_URL = 'postgresql://u:p@localhost:5432/asset_db';
+    expect(() => requireTestDatabaseUrl('ASSET_TEST_DATABASE_URL')).toThrow('expected "asset_test_db"');
+    process.env.ASSET_TEST_DATABASE_URL = 'postgresql://u:p@localhost:5432/other_test_db';
+    expect(() => requireTestDatabaseUrl('ASSET_TEST_DATABASE_URL')).toThrow('expected "asset_test_db"');
+    process.env.ASSET_TEST_DATABASE_URL = 'postgresql://u:p@localhost:5432/asset_test_db_backup';
+    expect(() => requireTestDatabaseUrl('ASSET_TEST_DATABASE_URL')).toThrow('expected "asset_test_db"');
+    process.env.ASSET_TEST_DATABASE_URL = 'https://localhost/asset_test_db';
+    expect(() => requireTestDatabaseUrl('ASSET_TEST_DATABASE_URL')).toThrow('not a valid URL');
+    delete process.env.ASSET_TEST_DATABASE_URL;
+    expect(() => requireTestDatabaseUrl('ASSET_TEST_DATABASE_URL')).toThrow('is not set');
   });
 });

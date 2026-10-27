@@ -17,6 +17,7 @@ import {
   OrganizationProxyMiddleware,
   AssetProxyMiddleware,
   ServiceRequestProxyMiddleware,
+  EstimateProxyMiddleware,
   WorkorderProxyMiddleware,
   MaintenanceProxyMiddleware,
   InventoryProxyMiddleware,
@@ -64,6 +65,11 @@ export class AppModule implements NestModule {
     consumer
       .apply(AssetProxyMiddleware)
       .forRoutes({ path: 'api/assets/*path', method: RequestMethod.ALL });
+
+    // M2 estimate-by-id routes are rooted at /estimates in the owning service.
+    consumer
+      .apply(EstimateProxyMiddleware)
+      .forRoutes({ path: 'api/service-requests/estimates/*path', method: RequestMethod.ALL });
 
     consumer.apply(ServiceRequestProxyMiddleware).forRoutes(
       {

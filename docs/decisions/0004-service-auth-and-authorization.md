@@ -41,6 +41,8 @@ agreed authentication.
 - The permission list itself is still PROVISIONAL (ADR 0001 open point #1):
   the team reviews it in a PR to `catalog.ts`. A change is one file, reviewed
   once, and takes effect in seed and enforcement together.
+  ADR 0008 D9 resolved this for M2 with the unchanged catalog and Identity
+  migration `0003_permission_catalog`; future changes require a new migration.
 
 ### 3. Service-to-service calls forward the caller's token
 

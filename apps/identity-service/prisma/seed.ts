@@ -1,7 +1,7 @@
 /**
  * Seed entry point, run by `prisma db seed` (see prisma.config.ts).
  *
- *   pnpm db:seed       permission catalog (provisional, idempotent)
+ *   pnpm db:seed       permission catalog (approved, idempotent)
  *   pnpm db:seed:dev   + demo tenant and demo accounts (refuses in production)
  */
 import { config as loadEnv } from 'dotenv';
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   try {
     await seedPermissions(prisma);
     console.log(
-      `Seeded permission catalog (${CATALOG_STATUS}, not approved yet).`,
+      `Seeded permission catalog (${CATALOG_STATUS}).`,
     );
     if (withDevData) {
       await seedDevData(prisma, demoPassword!);
