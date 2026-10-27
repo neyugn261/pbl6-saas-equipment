@@ -414,3 +414,9 @@ giá trị mặc định ứng dụng giữ nguyên. Xem [kế hoạch tuần 2]
 [bằng chứng](docs/testing/m2-week2-test-cases.md) và [H4 giao Huy](docs/testing/h4-stale-work-order-events.md).
 
 K6: [tuần 3 của Khương](docs/planning/m2-khuong-week-3.md) và [bằng chứng Maintenance](docs/testing/m2-maintenance-test-cases.md). Consumer tạo WO bảo trì lần đầu đã có DB tests và fixture smoke broker/Gateway; scheduler/Task state thật và contract thay thế vẫn cần Minh phối hợp.
+
+Gateway có developer portal local: [Services](http://localhost:3000/dev) và
+[Swagger API Explorer](http://localhost:3000/docs), chỉ bật development/test.
+Xem [hướng dẫn Gateway](apps/api-gateway/README.md#local-api-explorer-and-service-dashboard)
+và [kiểm chứng portal](docs/testing/gateway-developer-portal.md). Nhãn scaffold
+và health chưa có được hiển thị riêng; JWT cho API nghiệp vụ vẫn do backend kiểm tra.
