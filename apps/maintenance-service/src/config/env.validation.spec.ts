@@ -1,21 +1,48 @@
 import { PORT_VARIABLE, validateEnv } from './env.validation';
 
+const valid = {
+  ASSET_SERVICE_URL: 'http://asset.test',
+  MAINTENANCE_DATABASE_URL:
+    'postgresql://user:pass@localhost:5432/maintenance_db',
+  JWT_ACCESS_SECRET: 'x'.repeat(32),
+};
+
 describe('validateEnv', () => {
-  it('uses the default port when none is configured', () => {
-    expect(validateEnv({})).toEqual({ NODE_ENV: 'development', PORT: 3003 });
+  it('uses defaults for optional settings', () => {
+    expect(validateEnv(valid)).toEqual({
+      ...valid,
+      NODE_ENV: 'development',
+      PORT: 3003,
+      RABBITMQ_URL: undefined,
+      MAINTENANCE_SCHEDULER_ENABLED: 'true',
+      MAINTENANCE_SCHEDULER_INTERVAL_MS: 60000,
+      JWT_ISSUER: 'pbl6-identity',
+      JWT_AUDIENCE: 'pbl6',
+    });
   });
 
   it('reads the service-specific port variable', () => {
-    expect(validateEnv({ [PORT_VARIABLE]: '4100' }).PORT).toBe(4100);
+    expect(validateEnv({ ...valid, [PORT_VARIABLE]: '4100' }).PORT).toBe(4100);
   });
 
   it('rejects an invalid port', () => {
-    expect(() => validateEnv({ [PORT_VARIABLE]: 'abc' })).toThrow(
+    expect(() => validateEnv({ ...valid, [PORT_VARIABLE]: 'abc' })).toThrow(
       PORT_VARIABLE,
     );
   });
 
   it('rejects an unknown NODE_ENV', () => {
-    expect(() => validateEnv({ NODE_ENV: 'staging' })).toThrow('NODE_ENV');
+    expect(() => validateEnv({ ...valid, NODE_ENV: 'staging' })).toThrow(
+      'NODE_ENV',
+    );
+  });
+
+  it('requires a database URL and a non-placeholder JWT secret', () => {
+    expect(() => validateEnv({})).toThrow(
+      /MAINTENANCE_DATABASE_URL is required[\s\S]*JWT_ACCESS_SECRET is required/,
+    );
+    expect(() =>
+      validateEnv({ ...valid, JWT_ACCESS_SECRET: 'CHANGE_ME' }),
+    ).toThrow('JWT_ACCESS_SECRET');
   });
 });

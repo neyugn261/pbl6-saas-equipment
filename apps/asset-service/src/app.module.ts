@@ -9,6 +9,8 @@ import { EquipmentModule } from './equipment/equipment.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
+import { EventsService } from './events/events.service';
+import { HistoryConsumer } from './events/history.consumer';
 
 @Module({
   imports: [
@@ -32,5 +34,6 @@ import { PrismaService } from './prisma/prisma.service';
       useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
   ],
+  providers: [EventsService, HistoryConsumer],
 })
 export class AppModule {}

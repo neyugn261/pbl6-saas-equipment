@@ -8,7 +8,9 @@ describe('EquipmentModelRepository tenant queries', () => {
   const create = jest.fn(async () => ({}));
   const update = jest.fn(async () => ({}));
   const findFirst = jest.fn(async () => null);
-  const prisma = { equipmentModel: { findMany, count, create, update, findFirst } };
+  const history = jest.fn();
+  const tx = { $queryRaw: jest.fn(), equipmentModelHistory: { create: history }, equipmentModel: { findMany, count, create, update, findFirst, findUniqueOrThrow: jest.fn(async () => ({})) } };
+  const prisma = { ...tx, $transaction: async (fn: (value: unknown) => Promise<unknown>) => fn(tx) };
   const repository = new EquipmentModelRepository(prisma as unknown as PrismaService);
 
   beforeEach(() => jest.clearAllMocks());

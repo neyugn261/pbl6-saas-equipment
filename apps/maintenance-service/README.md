@@ -1,114 +1,143 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Maintenance Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## Detailed history and equipment dossier integration (ADR 0010)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Additive migration `20261027141000_maintenance_history` records Plan/Task changes
+atomically with local writes/inbox/outbox. No public edit/delete audit endpoint.
+`GET /maintenance-history` filters by equipment/plan/task/event/time;
+`GET /maintenance-plans/:id/history` scopes one Plan;
+`GET /maintenance-tasks/:id/journey` returns current Task/Plan, all linked WO and
+replacement requests, responsibility, allowedActions and a paginated history.
+`GET /maintenance-summary?equipmentId=...` computes counts/earliest due over all
+matching rows and limits only the attention preview to five. Task list accepts
+`equipmentId`. Dates are planned due dates, not confirmed appointments.
 
-## Description
+Read APIs require `maintenance:read` and current tenant/customer scope. CUSTOMER
+receives no internal diagnostics, actor IDs/roles or cancellation reasons.
+Existing CUSTOMER_ADMIN access and CUSTOMER_USER restrictions remain. Historical
+Plan/schedule/site snapshots are never rewritten by later Plan edits or moves.
+Rows predating the migration may have no detailed audit.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Contract: [maintenance-history.yaml](../../docs/api/maintenance-history.yaml).
+UI/service-owner handoff: [equipment-dossier-handoff.md](../../docs/plans/equipment-dossier-handoff.md).
 
-## Project setup
+Owner Minh / Member B. Port 3003 (`MAINTENANCE_SERVICE_PORT`), database
+`maintenance_db` only. [OpenAPI](../../docs/api/maintenance.yaml),
+[ADR 0007](../../docs/decisions/0007-maintenance-snapshot.md),
+[runtime proposal ADR 0009](../../docs/decisions/0009-maintenance-m2-runtime.md),
+[owner handoff](../../docs/plans/minh-m2-handoff.md).
 
-```bash
-$ pnpm install
+M2 now implements Plan CRUD/status, scoped Task reads, fixed-anchor scheduler,
+EquipmentMoved snapshots, WO lifecycle inbox and explicit replacement requests.
+Work Order's **replacement producer** remains Khương's handoff; the first-WO
+producer is integrated without changing his service. This local implementation
+and shared schema/events still need the normal owner reviews before merge.
+
+## API and security
+
+| Method/path | Permission and caller |
+| --- | --- |
+| GET /maintenance-plans, /maintenance-plans/:id | maintenance:read; tenant staff or scoped CUSTOMER_ADMIN |
+| POST /maintenance-plans | maintenance:manage; tenant staff (current catalog: SERVICE_MANAGER) |
+| PATCH /maintenance-plans/:id | maintenance:manage; tenant staff |
+| GET /maintenance-tasks, /maintenance-tasks/:id | maintenance:read; same scope as Plan |
+| POST /maintenance-tasks/:id/replacement | maintenance:manage; tenant staff |
+| GET /health | public; database up/down |
+
+Gateway prefix is `/api/maintenance`. CUSTOMER_USER has no maintenance:read;
+customer/site/tenant input is rejected. Create calls Asset's scoped internal
+reference with the original access token/correlation ID. RETIRED is rejected.
+No fake fallback, cross-service SQL, fake scheduler user or public scheduler API.
+
+## Scheduling
+
+The initial nextDueDate is a fixed anchor. MONTH Jan 31 → Feb 28/29 → Mar 31;
+YEAR Feb 29 restores Feb 29 in leap years. Completion does not shift the anchor.
+One tick catches up only the latest due occurrence per active Plan and advances
+to the first future date. Row locks + `(plan_id, scheduled_date)` uniqueness
+keep concurrent/repeated ticks safe. Task, Due outbox and advancement commit
+together. Ticks process at most 100 due Plans; remaining Plans run next tick.
+
+PAUSED/INACTIVE generate nothing. Resume restarts from today's Vietnam date.
+INACTIVE cannot resume. Schedule edits preserve existing Tasks. Existing Task
+snapshots remain their creation-time data; Plan snapshots follow Equipment moves.
+
+Scheduler defaults: enabled, every 60000 ms; set
+`MAINTENANCE_SCHEDULER_ENABLED=false` for controlled tests/manual runs, or adjust
+`MAINTENANCE_SCHEDULER_INTERVAL_MS` (1000–3600000). It starts one background tick
+at boot, prevents overlapping ticks per process, and awaits completion on shutdown.
+
+## Events and operations
+
+- Outbox producer: `maintenance-service`; Due v1 and replacement request v1.
+- Queue `maintenance-service.equipment`: EquipmentMoved v1, complete snapshots
+  ordered by integer version. The cursor also survives periods with no Plans.
+  Scheduler skips a Plan behind a known local snapshot; unknown broker-delayed
+  moves remain subject to eventual consistency.
+- Queue `maintenance-service.workorder`: Created v1, Completed/Cancelled v2.
+  Completion may precede Created; durable per-WO tombstones prevent regressions.
+  Successful/partial completion → COMPLETED and max(lastCompletedAt); unresolved
+  → FAILED without advancing lastCompletedAt; cancellation → PENDING.
+- A manager POSTs a UUID requestId for replacement. Retries return the same
+  allocated replacementWorkOrderId; another request while pending returns 409.
+  Replaying Due does not create a replacement. No automatic replacement loop.
+- With RabbitMQ down, rows remain durable in outbox; reconnect resumes delivery.
+  Consumer retries use 5 attempts with 2/4/8/16 second delays, then `<queue>.dlq`.
+  Missing references roll back inbox and retry; malformed/mismatched events go
+  to DLQ. Fix causes before replaying the **same** event ID.
+- Inspect FAILED outbox rows and DLQ using [event operations](../../docs/architecture/events.md).
+  Never delete inbox rows to retry a business operation. A manual transport
+  replay uses the same event; a new replacement uses a new manager requestId.
+
+## Commands and demo seed
+
+Run from repository root unless stated otherwise:
+
+```powershell
+pnpm build:packages
+pnpm --filter maintenance-service db:migrate
+pnpm --filter maintenance-service build
+pnpm --filter maintenance-service start:dev
 ```
 
-## Compile and run the project
+After the M1 Identity/Organization/Asset seeds and services are available:
 
-```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+```powershell
+pnpm --filter maintenance-service db:seed:dev
+pnpm --filter maintenance-service db:seed:dev
+pnpm --filter maintenance-service scheduler:tick
 ```
 
-## Run tests
+Seed validates Equipment through Asset and the manager's verified token, writes
+only Maintenance, and creates fixed Plan `…003001` due today. Reruns preserve the
+schedule/Tasks. It refuses production. A locally supplied
+`MAINTENANCE_SEED_ACCESS_TOKEN` may replace demo login; it is still verified and
+must have maintenance:manage. Never commit tokens. `scheduler:tick` defaults to
+today; an optional YYYY-MM-DD override is allowed only in dev/test.
 
-```bash
-# unit tests
-$ pnpm run test
+## Validation
 
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+```powershell
+pnpm --filter maintenance-service lint
+pnpm --filter maintenance-service typecheck
+pnpm --filter maintenance-service test --runInBand
+pnpm --filter maintenance-service test:e2e
+pnpm --filter maintenance-service test:db
+pnpm --filter maintenance-service db:check-drift
+pnpm --filter asset-service --filter maintenance-service --filter workorder-service --filter api-gateway build
+pnpm --filter maintenance-service test:integration
 ```
 
-## Deployment
+`test:db` refuses any target except `maintenance_test_db`. The vertical slice
+also requires exactly `asset_test_db` and `workorder_test_db`, plus RabbitMQ
+(`RABBITMQ_TEST_URL` or local `RABBITMQ_URL`). It creates isolated service
+instances, Gateway, exchange/queues and tenant fixtures, then cleans only its
+fixtures. It uses real Asset/WO APIs and producers; Identity tokens and
+Organization references are explicit test fixtures. It proves initial WO
+completion, real cancellation, and a durable replacement request. DB event tests
+cover replacement Created/Completed fixtures; actual replacement production is
+not claimed until Khương implements the handoff.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Migrations remain additive. The earlier snapshot migration refuses nonempty
+legacy Plans; follow ADR 0007 backfill review rather than inventing IDs. Runtime
+migration backfills anchors and Task snapshots using local Plan rows only.

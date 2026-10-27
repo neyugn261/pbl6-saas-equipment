@@ -7,9 +7,14 @@ import { WarrantyRepository } from './warranty.repository';
 
 export function warrantyResponse(row: Warranty, today = todayInVietnam()) {
   return {
-    id: row.id, equipmentId: row.equipmentId, startDate: dateString(row.startDate),
-    endDate: dateString(row.endDate), warrantyType: row.warrantyType, terms: row.terms,
-    status: row.status, expired: dateString(row.endDate)! < today,
+    id: row.id,
+    equipmentId: row.equipmentId,
+    startDate: dateString(row.startDate),
+    endDate: dateString(row.endDate),
+    warrantyType: row.warrantyType,
+    terms: row.terms,
+    status: row.status,
+    expired: dateString(row.endDate)! < today,
   };
 }
 
@@ -23,14 +28,43 @@ export class WarrantyService {
     return rows.map((row) => warrantyResponse(row, today));
   }
 
-  async add(principal: Principal, equipmentId: string, input: CreateWarrantyDto) {
+  async add(
+    principal: Principal,
+    equipmentId: string,
+    input: CreateWarrantyDto,
+  ) {
     if (input.endDate < input.startDate) {
-      throw new BadRequestException({ code: 'VALIDATION_FAILED', message: 'endDate must be on or after startDate' });
+      throw new BadRequestException({
+        code: 'VALIDATION_FAILED',
+        message: 'endDate must be on or after startDate',
+      });
     }
-    return warrantyResponse(await this.repository.add(dataScope(principal), equipmentId, principal.userId, input));
+    return warrantyResponse(
+      await this.repository.add(
+        dataScope(principal),
+        equipmentId,
+        principal.userId,
+        input,
+        principal.roles,
+      ),
+    );
   }
 
-  async void(principal: Principal, warrantyId: string, reason?: string) {
-    return warrantyResponse(await this.repository.void(dataScope(principal), warrantyId, principal.userId, reason));
+  async void(
+    principal: Principal,
+    warrantyId: string,
+    reason?: string,
+    customerNote?: string,
+  ) {
+    return warrantyResponse(
+      await this.repository.void(
+        dataScope(principal),
+        warrantyId,
+        principal.userId,
+        reason,
+        customerNote,
+        principal.roles,
+      ),
+    );
   }
 }

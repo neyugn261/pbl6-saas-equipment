@@ -1,9 +1,20 @@
-import { IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import {
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 
 const calendarDate = /^\d{4}-\d{2}-\d{2}$/;
 
 export class WarrantyDateQueryDto {
-  @IsOptional() @Matches(calendarDate) @IsISO8601({ strict: true }) date?: string;
+  @IsOptional()
+  @Matches(calendarDate)
+  @IsISO8601({ strict: true })
+  date?: string;
 }
 
 export class CreateWarrantyDto {
@@ -14,5 +25,9 @@ export class CreateWarrantyDto {
 }
 
 export class VoidWarrantyDto {
-  @ValidateIf((_, value) => value !== undefined) @IsString() @MaxLength(1000) reason?: string;
+  @ValidateIf((_, value) => value !== undefined)
+  @IsString()
+  @MaxLength(1000)
+  reason?: string;
+  @IsOptional() @IsString() @MaxLength(2000) customerNote?: string;
 }

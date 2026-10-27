@@ -5,6 +5,7 @@ import { testJwtEnv } from '@pbl6/testing';
 // has no .env file.
 Object.assign(process.env, testJwtEnv(), {
   NODE_ENV: 'test',
+  RABBITMQ_URL: '',
   ASSET_DATABASE_URL: 'postgresql://unused:unused@localhost:5432/unused_test_db',
   ORGANIZATION_SERVICE_URL: 'http://organization.test',
   ASSET_QR_PORTAL_BASE_URL: 'http://portal.test/',
