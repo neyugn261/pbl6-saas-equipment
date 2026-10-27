@@ -30,7 +30,9 @@
     "express-rate-limit": "^7.5.0",
     "http-proxy-middleware": "^2.0.7",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "swagger-ui-dist": "5.34.0",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
