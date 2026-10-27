@@ -1,0 +1,787 @@
+openapi: 3.1.0
+info:
+  title: Inventory Service API — M3 draft prepared in M2
+  version: 0.1.0
+  description: |
+    REVIEW DRAFT, not an implemented API. Owner Minh; review with Khương
+    (Work Order), Huy (LowStockDetected) and Nguyên (permissions/test DB).
+    Tenant comes exclusively from the verified token. TENANT_STAFF only;
+    CUSTOMER cannot access stock or part usage. No procurement or invoicing.
+    Quantities use decimal strings NUMERIC(12,2), costs NUMERIC(14,2);
+    never compute using binary floating point. Mutations are local DB transactions.
+    Inventory validates Branch via Organization and Work Order via the scoped
+    /internal/work-orders/{id}, forwarding the caller token/correlation ID.
+    Source availability is checked before a write; no cross-service transaction
+    is claimed. Race with WO completion is an open review item in the handoff.
+servers: [{ url: / }]
+security: [{ bearer: [] }]
+x-review-notes: ../plans/minh-m2-handoff.md
+paths:
+  /parts:
+    get:
+      summary: List parts in tenant, with optional q and status filters
+      x-permissions: [inventory:read]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - {
+            name: status,
+            in: query,
+            schema: { $ref: "#/components/schemas/Status" },
+          }
+      responses:
+        "200":
+          {
+            description: Parts,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/PartPage" } },
+              },
+          }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      summary: Create Part (unique tenant SKU)
+      x-permissions: [inventory:manage]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/PartInput" } },
+          }
+      responses:
+        "201":
+          {
+            description: Part,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Part" } },
+              },
+          }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /parts/{partId}:
+    parameters:
+      [
+        {
+          name: partId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    get:
+      summary: Part detail (another tenant returns 404)
+      x-permissions: [inventory:read]
+      responses:
+        "200":
+          {
+            description: Part,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Part" } },
+              },
+          }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update Part metadata/status; never delete transactions
+      x-permissions: [inventory:manage]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/PartPatch" } },
+          }
+      responses:
+        "200":
+          {
+            description: Part,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Part" } },
+              },
+          }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /warehouses:
+    get:
+      summary: List warehouses in tenant
+      x-permissions: [inventory:read]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { name: branchId, in: query, schema: { type: string, format: uuid } }
+        - {
+            name: status,
+            in: query,
+            schema: { $ref: "#/components/schemas/Status" },
+          }
+      responses:
+        "200":
+          {
+            description: Warehouses,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/WarehousePage" } },
+              },
+          }
+    post:
+      summary: Create warehouse after validating an active Branch via Organization
+      x-permissions: [inventory:manage]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/WarehouseInput" } },
+          }
+      responses:
+        "201":
+          {
+            description: Warehouse,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Warehouse" } },
+              },
+          }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/InvalidReference" }
+        "502": { $ref: "#/components/responses/Upstream" }
+        "503": { $ref: "#/components/responses/Upstream" }
+  /warehouses/{warehouseId}:
+    parameters:
+      [
+        {
+          name: warehouseId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    get:
+      summary: Warehouse detail
+      x-permissions: [inventory:read]
+      responses:
+        "200":
+          {
+            description: Warehouse,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Warehouse" } },
+              },
+          }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update warehouse metadata/status; branch is immutable after creation
+      x-permissions: [inventory:manage]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/WarehousePatch" } },
+          }
+      responses:
+        "200":
+          {
+            description: Warehouse,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Warehouse" } },
+              },
+          }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /stocks:
+    get:
+      summary: Stock list; quantity is changed only through transactions
+      x-permissions: [inventory:read]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - {
+            name: warehouseId,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+        - { name: partId, in: query, schema: { type: string, format: uuid } }
+        - { name: lowStock, in: query, schema: { type: boolean } }
+      responses:
+        "200":
+          {
+            description: Stocks,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/StockPage" } },
+              },
+          }
+  /warehouses/{warehouseId}/stocks/{partId}:
+    parameters:
+      - {
+          name: warehouseId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        }
+      - {
+          name: partId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        }
+    put:
+      summary: Configure minimum quantity (new Stock starts at 0); cannot set quantity
+      description: |
+        REVIEW proposal: crossing below the configured minimum also emits an
+        alert if no alert is latched. Stock and LowStockDetected outbox update
+        atomically. Replenishing to quantity >= minQuantity clears the latch.
+      x-permissions: [inventory:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [minQuantity]
+              properties:
+                { minQuantity: { $ref: "#/components/schemas/Quantity" } }
+      responses:
+        "200":
+          {
+            description: Stock,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Stock" } },
+              },
+          }
+        "422": { $ref: "#/components/responses/InvalidReference" }
+  /stock-transactions:
+    get:
+      summary: Immutable stock ledger, stable createdAt/id descending order
+      x-permissions: [inventory:read]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - {
+            name: warehouseId,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+        - { name: partId, in: query, schema: { type: string, format: uuid } }
+        - {
+            name: type,
+            in: query,
+            schema: { $ref: "#/components/schemas/TransactionType" },
+          }
+      responses:
+        "200":
+          {
+            description: Ledger,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/TransactionPage" } },
+              },
+          }
+  /stock-transactions/receive:
+    post:
+      summary: Receive positive quantity into an active part/warehouse
+      x-permissions: [inventory:manage]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/StockMutation" } },
+          }
+      responses:
+        "201":
+          {
+            description: Ledger entry,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Transaction" } },
+              },
+          }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/InvalidReference" }
+  /stock-transactions/adjust:
+    post:
+      summary: Adjust with positive quantity and explicit IN/OUT direction and reason
+      description: Stock row is locked; ADJUST_OUT cannot leave quantity negative.
+      x-permissions: [inventory:manage]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/StockMutationFields" }
+                - type: object
+                  required: [direction, note]
+                  properties:
+                    {
+                      direction:
+                        { type: string, enum: [ADJUST_IN, ADJUST_OUT] },
+                    }
+              unevaluatedProperties: false
+      responses:
+        "201":
+          {
+            description: Ledger entry,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/Transaction" } },
+              },
+          }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /work-orders/{workOrderId}/parts:
+    parameters:
+      [
+        {
+          name: workOrderId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    get:
+      summary: Parts issued for scoped Work Order, including returns
+      x-permissions: [inventory:read]
+      responses:
+        "200":
+          {
+            description: Part usages,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: array,
+                        items: { $ref: "#/components/schemas/WorkOrderPart" },
+                      },
+                  },
+              },
+          }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Issue stock to a nonterminal Work Order (F09)
+      description: |
+        Validate scoped WO by forwarded token. COMPLETED/CANCELLED are rejected.
+        Lock Stock; decrement quantity, create exactly one ISSUE ledger entry,
+        create one WorkOrderPart pointing at that entry, and write any low-stock
+        event in one transaction. quantityUsed means issued, not net consumed.
+      x-permissions: [inventory:issue]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/StockMutationFields" }
+                - type: object
+                  properties:
+                    { unitCost: { $ref: "#/components/schemas/Money" } }
+              unevaluatedProperties: false
+      responses:
+        "201":
+          {
+            description: Issued Part,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/WorkOrderPart" } },
+              },
+          }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/InvalidReference" }
+        "502": { $ref: "#/components/responses/Upstream" }
+        "503": { $ref: "#/components/responses/Upstream" }
+  /work-order-parts/{workOrderPartId}/return:
+    parameters:
+      [
+        {
+          name: workOrderPartId,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        },
+      ]
+    post:
+      summary: Return unused issued parts to their original warehouse (ADR 0006)
+      description: |
+        Lock usage and stock; RETURN ledger referenceType=WORK_ORDER and
+        referenceId=workOrderId. Increase Stock and quantityReturned atomically;
+        never change original quantityUsed or its ISSUE transaction. Return total
+        cannot exceed issued quantity. Proposal allows returns after WO terminal
+        state to reconcile unused parts; owner review is required before M3 code.
+      x-permissions: [inventory:issue]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [quantity, note]
+              properties:
+                quantity: { $ref: "#/components/schemas/PositiveQuantity" }
+                note: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        "200":
+          {
+            description: Updated usage,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/WorkOrderPart" } },
+              },
+          }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Page:
+      {
+        name: page,
+        in: query,
+        schema: { type: integer, minimum: 1, default: 1 },
+      }
+    PageSize:
+      {
+        name: pageSize,
+        in: query,
+        schema: { type: integer, minimum: 1, maximum: 100, default: 20 },
+      }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Client UUID retained durably with tenant, endpoint, canonical payload hash
+        and response. Same key/body returns the original result; another body or
+        endpoint with the same tenant/key returns 409. Proposed M3 migration;
+        not yet stored in the current schema. No automatic expiry during MVP.
+      schema: { type: string, format: uuid }
+  schemas:
+    Status: { type: string, enum: [ACTIVE, INACTIVE] }
+    Quantity:
+      {
+        type: string,
+        pattern: '^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$',
+        examples: ["0.00", "12.50"],
+      }
+    PositiveQuantity:
+      allOf: [{ $ref: "#/components/schemas/Quantity" }]
+      not: { enum: ["0", "0.0", "0.00"] }
+    Money:
+      {
+        type: string,
+        pattern: '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$',
+        examples: ["125000.00"],
+      }
+    TransactionType:
+      { type: string, enum: [RECEIVE, ISSUE, RETURN, ADJUST_IN, ADJUST_OUT] }
+    PartInput:
+      allOf: [{ $ref: "#/components/schemas/PartFields" }]
+      unevaluatedProperties: false
+    PartFields:
+      type: object
+      required: [sku, name, unit]
+      properties:
+        sku: { type: string, minLength: 1, maxLength: 100 }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        unit: { type: string, minLength: 1, maxLength: 30 }
+        description: { type: [string, "null"] }
+    PartPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/Status" }
+    Part:
+      allOf:
+        - { $ref: "#/components/schemas/PartFields" }
+        - type: object
+          required: [id, status, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/Status" }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    WarehouseInput:
+      allOf: [{ $ref: "#/components/schemas/WarehouseFields" }]
+      unevaluatedProperties: false
+    WarehouseFields:
+      type: object
+      required: [branchId, code, name]
+      properties:
+        branchId: { type: string, format: uuid }
+        code: { type: string, minLength: 1, maxLength: 50 }
+        name: { type: string, minLength: 1, maxLength: 150 }
+        address: { type: [string, "null"] }
+    WarehousePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        address: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/Status" }
+    Warehouse:
+      allOf:
+        - { $ref: "#/components/schemas/WarehouseFields" }
+        - type: object
+          required: [id, status, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/Status" }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    Stock:
+      type: object
+      required:
+        [
+          id,
+          warehouseId,
+          partId,
+          quantity,
+          minQuantity,
+          lowStockAlertedAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        partId: { type: string, format: uuid }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        minQuantity: { $ref: "#/components/schemas/Quantity" }
+        lowStockAlertedAt: { type: [string, "null"], format: date-time }
+        updatedAt: { type: string, format: date-time }
+    StockMutationFields:
+      type: object
+      required: [warehouseId, partId, quantity]
+      properties:
+        warehouseId: { type: string, format: uuid }
+        partId: { type: string, format: uuid }
+        quantity: { $ref: "#/components/schemas/PositiveQuantity" }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    StockMutation:
+      allOf: [{ $ref: "#/components/schemas/StockMutationFields" }]
+      unevaluatedProperties: false
+    Transaction:
+      type: object
+      required:
+        [
+          id,
+          warehouseId,
+          partId,
+          type,
+          quantity,
+          referenceType,
+          referenceId,
+          note,
+          createdBy,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        partId: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/TransactionType" }
+        quantity: { $ref: "#/components/schemas/PositiveQuantity" }
+        referenceType: { type: [string, "null"], enum: [WORK_ORDER, null] }
+        referenceId: { type: [string, "null"], format: uuid }
+        note: { type: [string, "null"] }
+        createdBy: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+    WorkOrderPart:
+      type: object
+      required:
+        [
+          id,
+          workOrderId,
+          partId,
+          warehouseId,
+          stockTransactionId,
+          quantityUsed,
+          quantityReturned,
+          unitCost,
+          recordedBy,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        workOrderId: { type: string, format: uuid }
+        partId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        stockTransactionId: { type: string, format: uuid }
+        quantityUsed: { $ref: "#/components/schemas/PositiveQuantity" }
+        quantityReturned: { $ref: "#/components/schemas/Quantity" }
+        unitCost:
+          { anyOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        recordedBy: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+    PageFields:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+    PartPage:
+      allOf:
+        [
+          { $ref: "#/components/schemas/PageFields" },
+          {
+            type: object,
+            properties:
+              {
+                items:
+                  { type: array, items: { $ref: "#/components/schemas/Part" } },
+              },
+          },
+        ]
+    WarehousePage:
+      allOf:
+        [
+          { $ref: "#/components/schemas/PageFields" },
+          {
+            type: object,
+            properties:
+              {
+                items:
+                  {
+                    type: array,
+                    items: { $ref: "#/components/schemas/Warehouse" },
+                  },
+              },
+          },
+        ]
+    StockPage:
+      allOf:
+        [
+          { $ref: "#/components/schemas/PageFields" },
+          {
+            type: object,
+            properties:
+              {
+                items:
+                  {
+                    type: array,
+                    items: { $ref: "#/components/schemas/Stock" },
+                  },
+              },
+          },
+        ]
+    TransactionPage:
+      allOf:
+        [
+          { $ref: "#/components/schemas/PageFields" },
+          {
+            type: object,
+            properties:
+              {
+                items:
+                  {
+                    type: array,
+                    items: { $ref: "#/components/schemas/Transaction" },
+                  },
+              },
+          },
+        ]
+    Error:
+      type: object
+      required: [code, message]
+      properties: { code: { type: string }, message: { type: string } }
+  responses:
+    BadRequest:
+      {
+        description: Invalid body/decimal/key,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    Unauthorized:
+      {
+        description: Authentication required,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    Forbidden:
+      {
+        description: Permission or user type denied,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    NotFound:
+      {
+        description: Missing or outside token tenant,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    Conflict:
+      {
+        description: Duplicate code/key or insufficient stock/terminal WO/excess return,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    InvalidReference:
+      {
+        description: Invalid or inactive Part/Warehouse/Branch/WO reference,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    Upstream:
+      {
+        description: Organization or Work Order unavailable/failed; no local stock write,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }

@@ -14,6 +14,7 @@ this page and that file must change in the same PR.
 | `CustomerMembershipChanged.v1` | organization-service | CustomerUserMembership | `membershipId, userId, customerId, status (ACTIVE\|INACTIVE), changedAt` | identity-service.directory → `user_customer_links` (ADR 0003) |
 | `ServiceRequestCreated.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, requesterId, type, priority` | notification (M3) |
 | `ServiceRequestStatusChanged.v1` | service-request-service | ServiceRequest | `serviceRequestId, requestNo, customerId, equipmentId, fromStatus, toStatus, changedBy, reason` | notification (M3), asset history (M2), workorder (toStatus CANCELLED → cancels the live Work Order, ADR 0008 D4) |
+| `EquipmentMoved.v1` | asset-service | Equipment | `equipmentId, customerId, customerSiteId\|null, locationId\|null, snapshotVersion, changedAt` | maintenance-service.equipment; complete snapshots ordered by version (ADR 0009 proposal) |
 
 `tenantId` is in the envelope, not repeated in payloads (except tenant events,
 where it is the aggregate).
@@ -33,6 +34,7 @@ with pre-release or already queued messages; producers publish v2:
 | `WorkOrderCancelled.v1` | — (compatibility only) | legacy compatibility | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelledAt` | service-request (→ ACCEPTED), maintenance (release task, ADR 0002) |
 | `WorkOrderCancelled.v2` | workorder-service | M2 | `WorkOrderCancelled.v1` fields + `cancelServiceRequest` | service-request (→ CANCELLED when `cancelServiceRequest`, else → ACCEPTED; ADR 0008 D4a), maintenance |
 | `MaintenanceTaskDue.v1` | maintenance-service | M2 | `maintenanceTaskId, maintenancePlanId, equipmentId, customerId, customerSiteId\|null, scheduledDate (YYYY-MM-DD), title` | workorder (create WO) |
+| `MaintenanceWorkOrderReplacementRequested.v1` | maintenance-service | M2 proposal | Due snapshot fields + `requestId, previousWorkOrderId, replacementWorkOrderId, requestedBy` | Work Order owner handoff; explicit manager request, fixed allocated WO ID, never a Due replay |
 | `LowStockDetected.v1` | inventory-service | M3 | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
 
 `MaintenanceTaskDue` carries a customer snapshot because event consumers do
@@ -59,6 +61,9 @@ system-created order (ADR 0007 D12e and ADR 0008 D5).
 | `service-request-service.work-orders` | service-request-service | WorkOrderCreated v1, WorkOrderCompleted v1/v2, WorkOrderCancelled v1/v2 |
 | `workorder-service.service-requests` | workorder-service | ServiceRequestStatusChanged v1; chỉ xử lý toStatus CANCELLED, inbox handler `workorder-service.service-request-cancellations` |
 | `workorder-service.maintenance-tasks` | workorder-service | MaintenanceTaskDue v1; inbox handler `workorder-service.maintenance-task-due`, first WO only (implementation PR #26) |
+| `maintenance-service.equipment` | maintenance-service | EquipmentMoved v1; inbox handler `maintenance-service.equipment-snapshots` |
+| `maintenance-service.workorder` | maintenance-service | WorkOrderCreated v1, WorkOrderCompleted v2, WorkOrderCancelled v2; inbox handler `maintenance-service.workorder` |
+| `asset-service.history` | asset-service | ServiceRequestStatusChanged v1, WorkOrderCompleted v2; safe allowlisted history fields |
 
 Each queue has `<queue>.retry` and `<queue>.dlq`.
 
@@ -86,4 +91,6 @@ exists for that task, including CANCELLED or COMPLETED, this consumer creates
 no further WO. Khương confirmed manager-initiated replacements; that operation
 still needs a reviewed cross-owner contract with request identity and lifecycle
 ordering. Do not infer replacement intent from a new due-event ID or edit v1 to
-introduce it. No new event definition/version is introduced by this queue entry.
+introduce it. ADR 0009 now contains a separate replacement proposal and the
+Maintenance-side implementation. Work Order's replacement consumer remains a
+separate handoff; no replacement is implied by the initial Due queue entry.

@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Maintenance Service API
-  version: 0.2.0
+  version: 0.4.0-local
   description: |
-    M2 contract following accepted ADR 0007. No Maintenance business endpoint
-    is implemented in M1. The snapshot migration, EquipmentMoved event,
-    scheduler and Work Order consumer belong to M2 implementation.
+    M2 implementation contract following ADR 0007 and the local runtime proposal
+    ADR 0009. Calendar/lifecycle rules were confirmed by the owner on 2026-10-27.
+    Shared contract changes still require cross-owner review before merge.
+    Detailed history, summary and Task journey additions: maintenance-history.yaml.
 servers:
   - url: /
 security:
@@ -22,23 +23,23 @@ paths:
       x-user-types: [TENANT_STAFF, CUSTOMER]
       description: CUSTOMER access is limited to CUSTOMER_ADMIN by the current RBAC catalog; rows of another customer are never returned.
       parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PageSize'
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
         - name: equipmentId
           in: query
           schema: { type: string, format: uuid }
         - name: status
           in: query
-          schema: { $ref: '#/components/schemas/PlanStatus' }
+          schema: { $ref: "#/components/schemas/PlanStatus" }
       responses:
-        '200':
+        "200":
           description: Page of plans
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PlanPage' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/PlanPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [Plans]
       summary: Create a plan for an Equipment reference
@@ -53,63 +54,66 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PlanInput' }
+            schema: { $ref: "#/components/schemas/PlanInput" }
       responses:
-        '201':
+        "201":
           description: Created plan
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Plan' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '422': { $ref: '#/components/responses/InvalidReference' }
-        '502': { $ref: '#/components/responses/UpstreamError' }
-        '503': { $ref: '#/components/responses/UpstreamError' }
+              schema: { $ref: "#/components/schemas/Plan" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/InvalidReference" }
+        "502": { $ref: "#/components/responses/UpstreamError" }
+        "503": { $ref: "#/components/responses/UpstreamError" }
   /maintenance-plans/{planId}:
     parameters:
-      - $ref: '#/components/parameters/PlanId'
+      - $ref: "#/components/parameters/PlanId"
     get:
       tags: [Plans]
       summary: Read one scoped plan
       x-permissions: [maintenance:read]
       x-user-types: [TENANT_STAFF, CUSTOMER]
       responses:
-        '200':
+        "200":
           description: Plan
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Plan' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema: { $ref: "#/components/schemas/Plan" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [Plans]
       summary: Update plan details, schedule or status
       description: |
         A PAUSED plan generates no tasks; on resumption its schedule restarts
         from the resume day without backfilling paused periods (ADR 0007).
-        INACTIVE transitions and edits after tasks exist require a separate
-        decision before implementation. No arbitrary customer/site input.
+        INACTIVE is terminal. Schedule edits only affect future generation;
+        existing Tasks remain unchanged. Schedules use a fixed anchor, with
+        month-end clamping and leap-day restoration, independent of completion.
+        Resume sets the anchor and first due date to the resume day. Combining
+        resume with a schedule edit is rejected with 409. No arbitrary snapshot input.
       x-permissions: [maintenance:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PlanPatch' }
+            schema: { $ref: "#/components/schemas/PlanPatch" }
       responses:
-        '200':
+        "200":
           description: Updated plan
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Plan' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
+              schema: { $ref: "#/components/schemas/Plan" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /maintenance-tasks:
     get:
       tags: [Tasks]
@@ -118,23 +122,26 @@ paths:
       x-permissions: [maintenance:read]
       x-user-types: [TENANT_STAFF, CUSTOMER]
       parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PageSize'
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: equipmentId
+          in: query
+          schema: { type: string, format: uuid }
         - name: planId
           in: query
           schema: { type: string, format: uuid }
         - name: status
           in: query
-          schema: { $ref: '#/components/schemas/TaskStatus' }
+          schema: { $ref: "#/components/schemas/TaskStatus" }
       responses:
-        '200':
+        "200":
           description: Page of tasks
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TaskPage' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+              schema: { $ref: "#/components/schemas/TaskPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /maintenance-tasks/{taskId}:
     get:
       tags: [Tasks]
@@ -147,15 +154,55 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200':
+        "200":
           description: Task
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Task' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema: { $ref: "#/components/schemas/Task" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /maintenance-tasks/{taskId}/replacement:
+    post:
+      tags: [Tasks]
+      summary: Request a replacement for a cancelled Work Order
+      description: |
+        Service Manager explicitly requests a replacement for a PENDING Task
+        whose current workOrderId has a durable cancellation record. requestId
+        is a client-generated UUID; retrying it returns the same allocated WO ID.
+        Only one pending replacement per Task is allowed. The request and
+        MaintenanceWorkOrderReplacementRequested.v1 outbox entry commit together.
+        The Work Order consumer is a separate owner handoff; replaying Due v1
+        never requests a replacement. No automatic business retry loop.
+      x-permissions: [maintenance:manage]
+      x-user-types: [TENANT_STAFF]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [requestId]
+              properties:
+                requestId: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Durable request (same result for an idempotent retry)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReplacementRequest" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -175,7 +222,11 @@ components:
       schema: { type: string, format: uuid }
   schemas:
     PlanStatus: { type: string, enum: [ACTIVE, PAUSED, INACTIVE] }
-    TaskStatus: { type: string, enum: [PENDING, WORK_ORDER_CREATED, COMPLETED, FAILED, CANCELLED] }
+    TaskStatus:
+      {
+        type: string,
+        enum: [PENDING, WORK_ORDER_CREATED, COMPLETED, FAILED, CANCELLED],
+      }
     FrequencyUnit: { type: string, enum: [DAY, WEEK, MONTH, YEAR] }
     PlanInput:
       type: object
@@ -184,9 +235,9 @@ components:
       properties:
         equipmentId: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 200 }
-        description: { type: [string, 'null'] }
-        frequencyUnit: { $ref: '#/components/schemas/FrequencyUnit' }
-        frequencyValue: { type: integer, minimum: 1 }
+        description: { type: [string, "null"] }
+        frequencyUnit: { $ref: "#/components/schemas/FrequencyUnit" }
+        frequencyValue: { type: integer, minimum: 1, maximum: 10000 }
         nextDueDate: { type: string, format: date }
     PlanPatch:
       type: object
@@ -194,48 +245,106 @@ components:
       minProperties: 1
       properties:
         name: { type: string, minLength: 1, maxLength: 200 }
-        description: { type: [string, 'null'] }
-        frequencyUnit: { $ref: '#/components/schemas/FrequencyUnit' }
-        frequencyValue: { type: integer, minimum: 1 }
+        description: { type: [string, "null"] }
+        frequencyUnit: { $ref: "#/components/schemas/FrequencyUnit" }
+        frequencyValue: { type: integer, minimum: 1, maximum: 10000 }
         nextDueDate: { type: string, format: date }
-        status: { $ref: '#/components/schemas/PlanStatus' }
+        status: { $ref: "#/components/schemas/PlanStatus" }
     Plan:
       type: object
       additionalProperties: false
-      required: [id, equipmentId, name, description, frequencyUnit, frequencyValue, nextDueDate, customerId, customerSiteId, status, lastCompletedAt, createdAt, updatedAt]
+      required:
+        [
+          id,
+          equipmentId,
+          name,
+          description,
+          frequencyUnit,
+          frequencyValue,
+          nextDueDate,
+          customerId,
+          customerSiteId,
+          status,
+          lastCompletedAt,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id: { type: string, format: uuid }
         equipmentId: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 200 }
-        description: { type: [string, 'null'] }
-        frequencyUnit: { $ref: '#/components/schemas/FrequencyUnit' }
+        description: { type: [string, "null"] }
+        frequencyUnit: { $ref: "#/components/schemas/FrequencyUnit" }
         frequencyValue: { type: integer, minimum: 1 }
         nextDueDate: { type: string, format: date }
-        customerId: { type: string, format: uuid, description: Asset snapshot stored on the plan by an M2 migration }
-        customerSiteId: { type: [string, 'null'], format: uuid, description: Asset snapshot stored on the plan by an M2 migration }
-        status: { $ref: '#/components/schemas/PlanStatus' }
-        lastCompletedAt: { type: [string, 'null'], format: date-time }
+        customerId:
+          {
+            type: string,
+            format: uuid,
+            description: Asset snapshot stored on the plan by an M2 migration,
+          }
+        customerSiteId:
+          {
+            type: [string, "null"],
+            format: uuid,
+            description: Asset snapshot stored on the plan by an M2 migration,
+          }
+        status: { $ref: "#/components/schemas/PlanStatus" }
+        lastCompletedAt: { type: [string, "null"], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     Task:
       type: object
-      required: [id, maintenancePlanId, scheduledDate, workOrderId, status, attemptCount, lastError, completedAt, createdAt, updatedAt]
+      required:
+        [
+          id,
+          maintenancePlanId,
+          scheduledDate,
+          workOrderId,
+          status,
+          attemptCount,
+          lastError,
+          completedAt,
+          createdAt,
+          updatedAt,
+        ]
       properties:
+        equipmentId: { type: [string, 'null'], format: uuid }
+        customerId: { type: string, format: uuid }
         id: { type: string, format: uuid }
         maintenancePlanId: { type: string, format: uuid }
         scheduledDate: { type: string, format: date }
-        workOrderId: { type: [string, 'null'], format: uuid }
-        status: { $ref: '#/components/schemas/TaskStatus' }
+        workOrderId: { type: [string, "null"], format: uuid }
+        status: { $ref: "#/components/schemas/TaskStatus" }
         attemptCount: { type: integer, minimum: 0 }
-        lastError: { type: [string, 'null'] }
-        completedAt: { type: [string, 'null'], format: date-time }
+        lastError: { type: [string, "null"] }
+        completedAt: { type: [string, "null"], format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    ReplacementRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          requestId,
+          taskId,
+          previousWorkOrderId,
+          replacementWorkOrderId,
+          status,
+          createdAt,
+        ]
+      properties:
+        requestId: { type: string, format: uuid }
+        taskId: { type: string, format: uuid }
+        previousWorkOrderId: { type: string, format: uuid }
+        replacementWorkOrderId: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, LINKED] }
+        createdAt: { type: string, format: date-time }
     PlanPage:
       type: object
       required: [items, page, pageSize, total]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/Plan' } }
+        items: { type: array, items: { $ref: "#/components/schemas/Plan" } }
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
@@ -243,7 +352,7 @@ components:
       type: object
       required: [items, page, pageSize, total]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/Task' } }
+        items: { type: array, items: { $ref: "#/components/schemas/Task" } }
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
@@ -255,10 +364,66 @@ components:
         message: { type: string }
         details: { type: object }
   responses:
-    BadRequest: { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    Unauthorized: { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    Forbidden: { description: Permission or scope missing, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    NotFound: { description: Missing or outside caller scope, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    Conflict: { description: State or schedule conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    InvalidReference: { description: Equipment reference cannot be validated, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    UpstreamError: { description: Asset request failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    BadRequest:
+      {
+        description: Invalid input,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    Unauthorized:
+      {
+        description: Authentication required,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    Forbidden:
+      {
+        description: Permission or scope missing,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    NotFound:
+      {
+        description: Missing or outside caller scope,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    Conflict:
+      {
+        description: State or schedule conflict,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    InvalidReference:
+      {
+        description: Equipment reference cannot be validated,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }
+    UpstreamError:
+      {
+        description: Asset request failed,
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/Error" } },
+          },
+      }

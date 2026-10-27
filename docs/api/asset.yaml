@@ -1,9 +1,10 @@
 openapi: 3.1.0
 info:
   title: PBL6 Asset Service
-  version: 0.1.0-draft
+  version: 0.4.0-local
   description: |
-    DRAFT M1 contract for review — owner: Asset Service owner (Member B).
+    M1/M2 local contract for review — owner: Minh. ADR 0010 dossier and filtered
+    history endpoints are specified in equipment-dossier.yaml (same service).
     Conventions: docs/api/conventions.md. Every operation below requires a
     bearer access token. The tenant and, for CUSTOMER accounts, customer scope
     come only from the token (ADR 0003). PLATFORM_STAFF has no tenant scope.
@@ -18,7 +19,7 @@ info:
     - ACTIVE warranties of one equipment never overlap; `startDate` and
       `endDate` are both covered days (DEC-07). So at most one ACTIVE warranty
       covers a given day.
-    Model changes do not create equipment history. Equipment, warranty and QR
+    Model changes create a separate model audit ledger. Equipment, warranty and QR
     writes create the history entries described on their operations. Reads
     never create history.
 servers:
@@ -331,6 +332,7 @@ paths:
               additionalProperties: false
               properties:
                 reason: { type: string, maxLength: 1000 }
+                customerNote: { type: string, maxLength: 2000, description: Customer-visible explanation; reason remains internal }
       responses:
         '200':
           description: Voided
@@ -651,8 +653,15 @@ components:
         status: { $ref: '#/components/schemas/EquipmentModelStatus' }
     Equipment:
       type: object
-      required: [id, modelId, customerId, customerSiteId, locationId, assetCode, serialNumber, installationDate, handoverDate, status, createdAt, updatedAt]
+      required: [id, modelId, customerId, customerSiteId, locationId, assetCode, serialNumber, installationDate, handoverDate, status, createdAt, updatedAt, displayName, description, commissionedDate, technicalSpecifications, operationalStatus, operationalStatusUpdatedAt, operationalStatusUpdatedBy]
       properties:
+        displayName: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        commissionedDate: { type: [string, 'null'], format: date }
+        technicalSpecifications: { type: [object, 'null'], additionalProperties: { type: [string, number, boolean] } }
+        operationalStatus: { type: string, enum: [UNKNOWN, OPERATIONAL, DEGRADED, NOT_OPERATIONAL] }
+        operationalStatusUpdatedAt: { type: [string, 'null'], format: date-time }
+        operationalStatusUpdatedBy: { type: [string, 'null'], format: uuid }
         id: { type: string, format: uuid }
         modelId: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
@@ -679,6 +688,10 @@ components:
       additionalProperties: false
       required: [modelId, customerId, customerSiteId, assetCode, serialNumber]
       properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: [string, 'null'], maxLength: 10000 }
+        commissionedDate: { type: [string, 'null'], format: date }
+        technicalSpecifications: { $ref: '#/components/schemas/Specifications' }
         modelId: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
         customerSiteId: { type: string, format: uuid }
@@ -691,12 +704,44 @@ components:
       type: object
       additionalProperties: false
       minProperties: 1
+      anyOf:
+        - { required: [displayName] }
+        - { required: [description] }
+        - { required: [commissionedDate] }
+        - { required: [technicalSpecifications] }
+        - { required: [operationalStatus] }
+        - { required: [customerSiteId] }
+        - { required: [locationId] }
+        - { required: [installationDate] }
+        - { required: [handoverDate] }
+        - { required: [status] }
+      if: { required: [operationalStatus] }
+      then:
+        required: [reason]
+        properties:
+          reason: { type: string, pattern: '\S' }
       properties:
+        displayName: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        description: { type: [string, 'null'], maxLength: 10000 }
+        commissionedDate: { type: [string, 'null'], format: date }
+        technicalSpecifications: { $ref: '#/components/schemas/Specifications' }
+        operationalStatus: { type: string, enum: [UNKNOWN, OPERATIONAL, DEGRADED, NOT_OPERATIONAL], description: Explicit confirmation requires a nonblank reason. WO completion never sets this field. }
+        reason: { type: string, minLength: 1, maxLength: 2000, description: Internal audit reason; reason/customerNote alone is not a valid patch }
+        customerNote: { type: [string, 'null'], maxLength: 2000 }
         customerSiteId: { type: string, format: uuid, description: Must belong to the existing customer; changing it without locationId clears the old location }
         locationId: { type: [string, 'null'], format: uuid, description: A non-null location must belong to the effective site }
         installationDate: { type: [string, 'null'], format: date }
         handoverDate: { type: [string, 'null'], format: date }
         status: { $ref: '#/components/schemas/EquipmentStatus' }
+    Specifications:
+      type: [object, 'null']
+      maxProperties: 50
+      propertyNames: { minLength: 1, maxLength: 80, pattern: '\S', not: { enum: [__proto__, constructor, prototype] } }
+      additionalProperties:
+        oneOf:
+          - { type: string, maxLength: 500 }
+          - { type: number }
+          - { type: boolean }
     Warranty:
       type: object
       required: [id, equipmentId, startDate, endDate, warrantyType, terms, status, expired]
@@ -738,11 +783,20 @@ components:
         createdAt: { type: string, format: date-time }
     HistoryEntry:
       type: object
-      required: [id, equipmentId, eventType, referenceType, referenceId, description, metadata, createdBy, occurredAt]
+      required: [id, equipmentId, eventType, referenceType, referenceId, description, metadata, createdBy, occurredAt, actorType, actorRoles, changes, context, reasonInternal, customerNote, sourceEventId, recordedAt, completeness]
       properties:
+        actorType: { type: string, enum: [UNKNOWN, USER, SYSTEM] }
+        actorRoles: { type: array, items: { type: string } }
+        changes: { type: [object, 'null'] }
+        context: { type: [object, 'null'], description: LOCAL_WRITE or AT_EVENT_PROCESSING snapshot; a source event without equipment context cannot prove the original site }
+        reasonInternal: { type: [string, 'null'], description: Always null for CUSTOMER }
+        customerNote: { type: [string, 'null'] }
+        sourceEventId: { type: [string, 'null'], format: uuid }
+        recordedAt: { type: string, format: date-time }
+        completeness: { type: string, enum: [CAPTURED, LEGACY_SUMMARY] }
         id: { type: string, format: uuid }
         equipmentId: { type: string, format: uuid }
-        eventType: { type: string, examples: [REGISTERED, MOVED, STATUS_CHANGED, DETAILS_UPDATED, WARRANTY_ADDED, WARRANTY_VOIDED, QR_CREATED, QR_REPRINTED, QR_REVOKED, SERVICE_REQUEST, WORK_ORDER_COMPLETED] }
+        eventType: { type: string, examples: [REGISTERED, MOVED, STATUS_CHANGED, DETAILS_UPDATED, WARRANTY_ADDED, WARRANTY_VOIDED, QR_CREATED, QR_REPRINTED, QR_REVOKED, SERVICE_REQUEST_STATUS_CHANGED, WORK_ORDER_COMPLETED] }
         referenceType: { type: [string, 'null'] }
         referenceId: { type: [string, 'null'], format: uuid }
         description: { type: [string, 'null'] }
@@ -751,7 +805,7 @@ components:
         occurredAt: { type: string, format: date-time }
     EquipmentRef:
       type: object
-      required: [id, customerId, customerSiteId, locationId, status, assetCode]
+      required: [id, customerId, customerSiteId, locationId, status, assetCode, snapshotVersion]
       properties:
         id: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
@@ -759,3 +813,4 @@ components:
         locationId: { type: [string, 'null'], format: uuid }
         assetCode: { type: string }
         status: { $ref: '#/components/schemas/EquipmentStatus' }
+        snapshotVersion: { type: integer, minimum: 0, description: Monotonic site/location snapshot version; incremented with EquipmentMoved outbox in the same transaction. }

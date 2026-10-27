@@ -1,0 +1,217 @@
+openapi: 3.1.0
+info:
+  title: Asset equipment dossier and detailed histories
+  version: 0.4.0-local
+  description: |
+    ADR 0010 supplement to asset.yaml, owned by Minh. Gateway prefix /api/assets.
+    Equipment is authorized before any upstream call. Every source receives the
+    original bearer token/correlation id. A source failure produces a section
+    status with data null, never a fabricated empty list or zero.
+    CUSTOMER WO reads remain RESTRICTED. Maintenance requires maintenance:read
+    (currently CUSTOMER_ADMIN only among customer roles). Models are staff only.
+    Pagination page >= 1, pageSize 1..100, default 20. Dossier previews use 5.
+    Global histories are service-owned feeds; they do not claim a complete merged
+    audit across every service. Full Request/WO details stay authoritative at source.
+servers: [{ url: /api/assets }]
+security: [{ bearer: [] }]
+paths:
+  /equipment/{equipmentId}/dossier:
+    parameters: [{ $ref: '#/components/parameters/EquipmentId' }]
+    get:
+      summary: Profile, calendar warranty, condition, linked work and history previews
+      x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      responses:
+        '200':
+          description: Independently read source sections and local profile; partial availability is explicit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dossier' }
+        '404': { description: Equipment outside token scope or not found; no remote calls }
+        '401': { description: Authentication required }
+        '403': { description: Equipment read permission required }
+  /equipment/{equipmentId}/service-requests:
+    parameters: [{ $ref: '#/components/parameters/EquipmentId' }]
+    get:
+      summary: Paginated equipment Requests, filtered at source
+      x-permissions: [equipment:read]
+      parameters: &LinkedParameters
+        - { $ref: './asset.yaml#/components/parameters/Page' }
+        - { $ref: './asset.yaml#/components/parameters/PageSize' }
+        - { name: status, in: query, schema: { type: string, maxLength: 150 }, description: Source status filter; Request/WO supports comma-separated statuses }
+      responses: &LinkedResponses
+        '200':
+          description: Section containing source page with items/total/page/pageSize; only this equipment/customer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Section' }
+        '400': { description: Invalid UUID/pagination/query }
+        '404': { description: Equipment not found in caller scope }
+  /equipment/{equipmentId}/work-orders:
+    parameters: [{ $ref: '#/components/parameters/EquipmentId' }]
+    get:
+      summary: Paginated staff WO view, preserving source assignment scope
+      x-permissions: [equipment:read]
+      parameters: *LinkedParameters
+      responses: *LinkedResponses
+  /equipment/{equipmentId}/service-requests/{requestId}:
+    parameters:
+      - { $ref: '#/components/parameters/EquipmentId' }
+      - { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Request with frozen warranty check, current calendar coverage, visible estimate revisions, source actions, history and comments
+      description: |
+        Request equipment/customer/id must match before subordinate reads. Source
+        authorizes history/comment visibility and estimate state. Existing MVP
+        estimate fields are exposed; this does not implement a new billing flow.
+        estimates is an independent section using the source list/revision API;
+        CUSTOMER visibility (including hidden DRAFT) remains source-authorized.
+        PROCESSING maps to WORK_ORDER_TEAM responsibility, matching SR status.
+        waitingFor is a display hint; allowedActions from source governs buttons.
+      x-permissions: [equipment:read]
+      responses: *LinkedResponses
+  /equipment/{equipmentId}/work-orders/{workOrderId}:
+    parameters:
+      - { $ref: '#/components/parameters/EquipmentId' }
+      - { name: workOrderId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Scoped WO, assignments, logs, history and service report for staff
+      description: |
+        CUSTOMER receives RESTRICTED without a WO HTTP call. After membership
+        check, each child is a separate availability section (e.g. no report yet
+        is NOT_FOUND). scheduledStart/end is not a confirmed appointment.
+      x-permissions: [equipment:read]
+      responses: *LinkedResponses
+  /equipment/{equipmentId}/maintenance-plans:
+    parameters: [{ $ref: '#/components/parameters/EquipmentId' }]
+    get:
+      summary: Paginated equipment plans from Maintenance
+      x-permissions: [equipment:read]
+      parameters: *LinkedParameters
+      responses: *LinkedResponses
+  /equipment/{equipmentId}/maintenance-tasks:
+    parameters: [{ $ref: '#/components/parameters/EquipmentId' }]
+    get:
+      summary: Paginated equipment tasks from Maintenance
+      x-permissions: [equipment:read]
+      parameters: *LinkedParameters
+      responses: *LinkedResponses
+  /equipment-history:
+    get:
+      summary: Global Asset history within caller tenant/customer scope
+      x-permissions: [equipment:read]
+      parameters: &HistoryParameters
+        - { $ref: './asset.yaml#/components/parameters/Page' }
+        - { $ref: './asset.yaml#/components/parameters/PageSize' }
+        - { name: equipmentId, in: query, schema: { type: string, format: uuid } }
+        - { name: customerId, in: query, schema: { type: string, format: uuid }, description: Cannot widen CUSTOMER scope }
+        - { name: siteId, in: query, schema: { type: string, format: uuid }, description: Current site; original site remains in entry context }
+        - { name: actorId, in: query, schema: { type: string, format: uuid } }
+        - { name: eventType, in: query, schema: { type: string, maxLength: 50 } }
+        - { name: referenceType, in: query, schema: { type: string, maxLength: 50 } }
+        - { name: referenceId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time }, description: Inclusive; must not precede from }
+        - { name: sort, in: query, schema: { type: string, enum: [occurredAt, '-occurredAt'], default: '-occurredAt' } }
+      responses: &HistoryResponses
+        '200':
+          description: Stable paginated history; CUSTOMER private fields are null and legacy metadata is allowlisted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: './asset.yaml#/components/schemas/PageMeta' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: './asset.yaml#/components/schemas/HistoryEntry' } }
+        '400': { description: Invalid filters/date range }
+        '401': { description: Authentication required }
+        '403': { description: Equipment read permission required }
+        '404': { description: Scoped resource not found }
+  /equipment/{equipmentId}/timeline:
+    parameters: [{ $ref: '#/components/parameters/EquipmentId' }]
+    get:
+      summary: Equipment history with the same filters as the global Asset feed
+      description: The path equipmentId takes precedence over a query equipmentId.
+      x-permissions: [equipment:read]
+      parameters: *HistoryParameters
+      responses: *HistoryResponses
+  /equipment-history/{historyId}:
+    parameters: [{ name: historyId, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      summary: One immutable Asset history entry
+      x-permissions: [equipment:read]
+      responses:
+        '200':
+          description: Scope-checked history detail
+          content: { application/json: { schema: { $ref: './asset.yaml#/components/schemas/HistoryEntry' } } }
+        '404': { description: History outside caller scope or not found }
+  /warranties/{warrantyId}/history:
+    parameters: [{ name: warrantyId, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      summary: Current warranty plus paginated creation/void history
+      x-permissions: [equipment:read]
+      parameters: *HistoryParameters
+      responses:
+        '200': { description: Object with warranty (id/equipmentId/startDate/endDate/type/terms/status) and history page }
+        '404': { description: Warranty outside caller scope or not found }
+  /equipment-models/{modelId}/history:
+    parameters: [{ name: modelId, in: path, required: true, schema: { type: string, format: uuid } }]
+    get:
+      summary: Staff-only current model and paginated model audit
+      x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF]
+      parameters:
+        - { $ref: './asset.yaml#/components/parameters/Page' }
+        - { $ref: './asset.yaml#/components/parameters/PageSize' }
+      responses:
+        '200': { description: model, history page (id/modelId/eventType/actorId/actorRoles/changes/occurredAt), legacyHistoryMayBeIncomplete }
+        '403': { description: Model catalog is staff only }
+        '404': { description: Model outside caller tenant or not found }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    EquipmentId: { name: equipmentId, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    Section:
+      type: object
+      required: [status, data]
+      properties:
+        status: { type: string, enum: [AVAILABLE, RESTRICTED, UNAVAILABLE, NOT_CONFIGURED, NOT_FOUND] }
+        data: { description: Source-specific payload when AVAILABLE; otherwise null }
+        fetchedAt: { type: string, format: date-time }
+    Dossier:
+      type: object
+      required: [equipment, warranties, calendarCoverage, operationalCondition, profileCompleteness, customer, site, contacts, location, requests, workOrders, maintenance, maintenanceHistory, timelinePreview, latestRecordedService, historyCoverage, asOf, links]
+      properties:
+        equipment: { $ref: './asset.yaml#/components/schemas/EquipmentDetail' }
+        warranties: { type: array, items: { $ref: './asset.yaml#/components/schemas/Warranty' } }
+        calendarCoverage: { $ref: './asset.yaml#/components/schemas/WarrantyStatus' }
+        coverageMeaning: { const: CALENDAR_ONLY_CLAIM_DECISION_BELONGS_TO_SERVICE_REQUEST }
+        operationalCondition:
+          type: object
+          properties:
+            status: { type: string, enum: [UNKNOWN, OPERATIONAL, DEGRADED, NOT_OPERATIONAL] }
+            confirmedAt: { type: [string, 'null'], format: date-time }
+            confirmedBy: { type: [string, 'null'], format: uuid }
+            confirmationIsCurrentHealthGuarantee: { const: false }
+        profileCompleteness:
+          type: object
+          properties:
+            missingFields: { type: array, items: { type: string } }
+            legacyHistoryMayBeIncomplete: { const: true }
+        customer: { $ref: '#/components/schemas/Section' }
+        site: { $ref: '#/components/schemas/Section' }
+        contacts: { $ref: '#/components/schemas/Section' }
+        location: { $ref: '#/components/schemas/Section' }
+        requests: { $ref: '#/components/schemas/Section' }
+        workOrders: { $ref: '#/components/schemas/Section' }
+        maintenance: { $ref: '#/components/schemas/Section' }
+        maintenanceHistory: { $ref: '#/components/schemas/Section' }
+        latestRecordedService: { type: object, description: Latest consumed completion by occurredAt; may lag source, never a health confirmation }
+        timelinePreview: { type: object, description: History page with total and at most five entries }
+        historyCoverage: { type: object, description: Declared coverage and legacy gaps for each source }
+        asOf: { type: string, format: date-time }
+        consistency: { const: INDEPENDENT_SERVICE_READS }
+        links: { type: object, description: Paths relative to the owning service; Maintenance history uses /api/maintenance prefix }
