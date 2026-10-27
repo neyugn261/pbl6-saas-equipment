@@ -11,6 +11,15 @@ never be dropped by a later migration.
 
 Notes for this database:
 
+- **Deployment gate:** `0004_active_work_order_tracking` is an existing local
+  M2 change requiring an approved ADR/ERD update. Do not run `db:migrate` on
+  development/production until that review is recorded. Read-only inspection
+  during the 2026-10-26 audit found it already applied in both the configured
+  development database and the validated test database before this work. This
+  is not proof of approval; do not edit the applied migration or roll it back.
+  See [M2 audit](../../../docs/testing/m2-service-request-audit.md) for the
+  reconciliation and deployment proposal.
+
 - `cost_estimate_items.amount` is a `GENERATED ALWAYS ... STORED` column. `schema.prisma` declares it with `@default(dbgenerated("round((quantity * unit_price), 2)"))` so the drift check matches; it is read-only — never set it in `create`/`update`.
 - Migration `0003_work_order_resolution` adds the customer-safe resolution
   snapshot populated from `WorkOrderCompleted.v2`. The original v3.1 ERD and

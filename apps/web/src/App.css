@@ -205,6 +205,93 @@
 .m1-login .m1-card {
   width: min(100%, 420px);
 }
+.demo-page {
+  display: grid;
+  gap: 28px;
+}
+.demo-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 32px;
+  padding: 32px;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(125deg, #152b49, #235e78);
+}
+.demo-eyebrow {
+  color: #9be9db;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .12em;
+}
+.demo-hero h1 {
+  max-width: 650px;
+  margin: 12px 0;
+  font-size: clamp(27px, 3vw, 40px);
+  line-height: 1.15;
+}
+.demo-hero p {
+  max-width: 650px;
+  margin: 0;
+  color: #d8e9f1;
+}
+.demo-current-user {
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+  padding: 16px;
+  border: 1px solid #ffffff3b;
+  border-radius: 12px;
+  background: #ffffff16;
+}
+.demo-current-user small,
+.demo-current-user span { color: #d8e9f1; }
+.demo-summary {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+}
+.demo-summary > div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #dfe8ed;
+  border-radius: 12px;
+  background: #fff;
+}
+.demo-summary small,
+.demo-step small { color: #64748b; font-weight: 600; }
+.demo-summary strong,
+.demo-summary a { font-size: 16px; overflow-wrap: anywhere; }
+.demo-summary a,
+.demo-step a { color: #0b6b72; font-weight: 700; }
+.demo-summary p { margin: 0; color: #a51e1e; }
+.demo-heading h2 { margin: 0 0 4px; }
+.demo-heading p { margin: 0; color: #5c687a; }
+.demo-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.demo-step {
+  display: flex;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid #dfe8ed;
+  border-radius: 14px;
+  background: #fff;
+}
+.demo-step-number { color: #0b6b72; font-size: 26px; font-weight: 800; line-height: 1; }
+.demo-step h3 { margin: 7px 0; font-size: 18px; }
+.demo-step p { min-height: 66px; margin: 0 0 14px; color: #526074; }
+.demo-switch { color: #64748b; }
+.demo-scope {
+  margin: 0;
+  padding: 16px 20px;
+  border-left: 4px solid #0b6b72;
+  border-radius: 6px;
+  background: #e9f4f4;
+  color: #204b52;
+}
 @media (max-width: 700px) {
   .m1-layout {
     display: block;
@@ -231,4 +318,8 @@
   .m1-activity {
     grid-template-columns: 1fr;
   }
+  .demo-hero { display: grid; padding: 24px; }
+  .demo-summary,
+  .demo-steps { grid-template-columns: 1fr; }
+  .demo-step p { min-height: 0; }
 }

@@ -29,7 +29,7 @@ for (const role of ROLE_CODES) {
     .map((item) => item.path)
 
   assert.deepEqual(visible, expected, `${role}: menu differs from RBAC catalog`)
-  assert.equal(home([role]), expected[0] ?? '/403', `${role}: home route`)
+  assert.equal(home([role]), expected.length ? '/dashboard' : '/403', `${role}: home route`)
   assert.equal(
     has([role], creators),
     permissions.has('service_request:create'),

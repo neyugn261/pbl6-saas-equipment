@@ -21,8 +21,8 @@ export const bases = isMockMode
     }
   : {
       identity: identityBase,
-      organization: `${gateway}/api/organization`,
-      asset: `${gateway}/api/assets`,
-      // Request paths already include /service-requests (also used by the mock API).
-      requests: `${gateway}/api`,
+organization: `${gateway}/api/organization`,
+asset: `${gateway}/api/assets`,
+// Request paths already include /service-requests (also used by the mock API).
+requests: `${gateway}/api`,
     }

@@ -63,6 +63,8 @@ model ServiceRequest {
   resolutionSummary     String?                @map("resolution_summary")
   resolvedWorkOrderNo   String?                @map("resolved_work_order_no") @db.VarChar(50)
   resolutionCompletedAt DateTime?              @map("resolution_completed_at") @db.Timestamptz(6)
+  /// Logical reference to workorder_db.work_orders.id for stale-event protection.
+  activeWorkOrderId     String?                @map("active_work_order_id") @db.Uuid
   confirmedBy           String?                @map("confirmed_by") @db.Uuid
   confirmedAt           DateTime?              @map("confirmed_at") @db.Timestamptz(6)
   closedAt              DateTime?              @map("closed_at") @db.Timestamptz(6)

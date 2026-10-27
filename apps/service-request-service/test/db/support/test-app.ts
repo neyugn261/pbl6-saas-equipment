@@ -6,6 +6,7 @@ import { FakeAssetClient } from '../../../src/asset/fake-asset.client';
 import { ASSET_CLIENT } from '../../../src/asset/asset-client';
 import { AppModule } from '../../../src/app.module';
 import { PrismaService } from '../../../src/prisma/prisma.service';
+import { testDatabaseUrl } from './test-env';
 
 export async function createTestApp(): Promise<{
   app: INestApplication<App>;
@@ -26,6 +27,17 @@ export async function createTestApp(): Promise<{
 }
 
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
+  const expected = decodeURIComponent(
+    new URL(testDatabaseUrl()).pathname.slice(1),
+  );
+  const [actual] = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    'SELECT current_database() AS name',
+  );
+  if (actual?.name !== expected) {
+    throw new Error(
+      'Refusing to truncate a database other than the validated test database',
+    );
+  }
   await prisma.$executeRawUnsafe(
     'TRUNCATE outbox_events, processed_events, request_comments, request_status_history, request_attachments, cost_estimate_items, cost_estimates, service_requests, document_sequences',
   );
