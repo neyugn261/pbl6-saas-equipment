@@ -1,5 +1,10 @@
 # M2 — Phân công công việc cho 5 thành viên
 
+> **Cập nhật phần Minh cuối 27/10/2026:** contract/backend đã merge PR #29/#30,
+> có CI và các issue #31–#34 cho phần liên thành viên. Kết quả và phần còn thiếu:
+> [báo cáo bàn giao Minh](../reports/2026-10-27-minh-daily-handoff.md).
+> Checkbox nghiệm thu toàn nhóm vẫn cần bằng chứng của đúng owner; không tự tick thay web/Android/replacement.
+
 Ngày lập: **25/10/2026**. Mốc đối chiếu: `develop` tại commit `7cc48ba`.
 
 Bản hiệu chỉnh sau khi đối chiếu **“Kế hoạch giai đoạn & phân công 5 người” ngày 17/10/2026** do người dùng cung cấp. Phân công và ranh giới M2/M3 theo kế hoạch 5 người; chi tiết nghiệp vụ theo ADR/contract Accepted mới hơn. Mã task cũ được giữ để tiện theo dõi; bổ sung K8 và H7 cho phần chuẩn bị M3 bị thiếu trong bản đầu.
