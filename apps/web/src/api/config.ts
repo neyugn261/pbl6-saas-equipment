@@ -23,5 +23,5 @@ export const bases = isMockMode
       identity: identityBase,
       organization: `${gateway}/api/organization`,
       asset: `${gateway}/api/assets`,
-      requests: `${gateway}/api/service-requests`,
+      requests: `${gateway}/api`,
     }

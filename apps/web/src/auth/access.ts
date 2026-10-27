@@ -54,4 +54,4 @@ export const creators: Role[] = [
 export const has = (roles: readonly string[], allowed: readonly string[]) =>
   roles.some((role) => allowed.includes(role))
 export const home = (roles: string[]) =>
-  menu.find((item) => has(roles, item.roles))?.path || '/403'
+  menu.some((item) => has(roles, item.roles)) ? '/dashboard' : '/403'

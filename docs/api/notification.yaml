@@ -1,0 +1,189 @@
+openapi: 3.1.0
+info:
+  title: PBL6 Notification Service
+  version: 0.1.0-draft
+  description: |
+    M3-preparation draft only. This contract does not mean Notification Service,
+    email delivery, event consumers or a recipient directory are implemented.
+    Conventions: docs/api/conventions.md; event versions and payloads:
+    docs/architecture/events.md; authorization: ADR 0003, ADR 0004 and the
+    shared permission catalog.
+
+    Every operation requires an access token and `notification:read`.
+    Tenant, user and customer scope come only from the verified token. A user
+    can list, count and mark read only their own notification rows. IDs outside
+    that scope return 404. Customer-facing title/body content must be rendered
+    from allowlisted fields or templates, never copied from internal comments,
+    technician notes or unrestricted event text.
+
+    Recipient resolution remains an open dependency: Identity has an internal
+    tenant user listing filtered by role/userType/status, but notification
+    consumers have no agreed machine identity for calling it, and that API
+    cannot list CUSTOMER users for a customer by customerId. See
+    notification-recipient-matrix.md.
+servers:
+  - url: http://localhost:3005
+    description: Local service; Gateway already strips /api/notifications (M3 API path mapping needs owner review)
+security:
+  - bearer: []
+tags:
+  - name: Notifications
+paths:
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications for the authenticated user
+      description: The server derives tenantId and recipientUserId from the access token; caller-supplied ownership filters are not accepted.
+      x-permissions: [notification:read]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: readStatus
+          in: query
+          description: Filter by read state; omitted means all.
+          schema:
+            type: string
+            enum: [ALL, READ, UNREAD]
+            default: ALL
+        - name: createdFrom
+          in: query
+          schema: { type: string, format: date-time }
+        - name: createdTo
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Page of the authenticated user's notifications
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageMeta"
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Notification" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Count unread notifications for the authenticated user
+      x-permissions: [notification:read]
+      responses:
+        "200":
+          description: Unread count in the caller's own scope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unreadCount]
+                properties:
+                  unreadCount: { type: integer, minimum: 0 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /notifications/{notificationId}/read:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Notifications]
+      summary: Mark one of the authenticated user's notifications as read
+      description: Idempotent for an in-scope notification. Does not accept a recipient or tenant ID in the request.
+      x-permissions: [notification:read]
+      responses:
+        "200":
+          description: Notification after marking it read
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Notification" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    BadRequest:
+      description: VALIDATION_FAILED
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: INVALID_ACCESS_TOKEN
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: FORBIDDEN or CUSTOMER_SCOPE_MISSING
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Not found or outside the authenticated user's scope
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: {}
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    Notification:
+      type: object
+      required:
+        [
+          id,
+          eventType,
+          title,
+          body,
+          resourceType,
+          resourceId,
+          createdAt,
+          readAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        eventType:
+          type: string
+          description: Event type and version used to produce this notification.
+          examples: [ServiceRequestStatusChanged.v1]
+        title: { type: string, maxLength: 200 }
+        body:
+          type: string
+          maxLength: 1000
+          description: Rendered, allowlisted content appropriate to this recipient.
+        resourceType:
+          type: [string, "null"]
+          enum: [SERVICE_REQUEST, WORK_ORDER, EQUIPMENT, STOCK, null]
+        resourceId: { type: [string, "null"], format: uuid }
+        createdAt: { type: string, format: date-time }
+        readAt: { type: [string, "null"], format: date-time }
