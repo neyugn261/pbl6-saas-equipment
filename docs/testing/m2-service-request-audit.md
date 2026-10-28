@@ -1,5 +1,10 @@
 # M2 Service Request — audit, hardening và bàn giao
 
+> **Cập nhật 2026-10-28:** Các mục 1–7 là snapshot audit ngày 26/10, giữ lại
+> để truy vết và không đại diện cho checkout hiện tại. Xem [mục 8](#8-follow-up-2026-10-28)
+> và [tài liệu quyết định lifecycle](m2-work-order-lifecycle-decision.md) cho
+> trạng thái review mới nhất. F09 vẫn FAIL; chưa nghiệm thu P0.
+
 Ngày: 2026-10-26, Asia/Saigon. Phạm vi: Member C / Huy, M2-H1–H7 theo
 file yêu cầu `writing-block.md`. Đây là báo cáo kết quả thực tế, không phải
 phê duyệt ADR/ERD hoặc xác nhận toàn bộ M2 đã nghiệm thu.
@@ -228,3 +233,48 @@ Code hardening thuộc ownership đã được thực hiện và kiểm thử. *
 thu toàn bộ M2**: F09 còn tái hiện FAIL; F10–F14 cần quyết định/dependency.
 H3 và H7 chỉ DONE theo phạm vi backend/tài liệu ghi rõ trong bảng, không thay
 cho approval thiết kế hoặc kiểm thử tích hợp thật. Không commit/push/PR/merge.
+
+## 8. Follow-up 2026-10-28
+
+`feature/huyM2` đã fast-forward tới `origin/develop` tại HEAD `76c179b`.
+Thay đổi P0 trước đó được khôi phục bằng `git stash apply` và vẫn là thay đổi
+chưa commit: Service Request consumer, unit test và README. Tài liệu quyết
+định lifecycle là file mới; audit này cũng đang sửa. Không sửa code hoặc
+diagnostic trong lượt cập nhật tài liệu.
+
+| Kiểm tra | Bằng chứng sau fast-forward | Diễn giải |
+| --- | --- | --- |
+| Service Request unit | 31/31 PASS | Gồm test retry Created(B) khi A còn active. |
+| Application E2E | 5/5 PASS | Không chứng minh producer/broker thật. |
+| DB E2E | 42/42 PASS trên `service_request_test_db` | PostgreSQL hoạt động, migration 0001–0004 đã áp dụng trên test DB. Không gồm diagnostic riêng. |
+| `work-order-ordering.repro.ts` | **1/1 FAIL** | Expected `ACCEPTED/null`, actual `PROCESSING/A` sau Created(A,e1) → Cancelled(A,false,e2) → Created(A,e3). F09 còn tái hiện. |
+| Work Order/Gateway source | Có trên checkout hiện tại | Producer phát Created.v1/Completed.v2/Cancelled.v2; Gateway có `EstimateProxyMiddleware`. Chưa xác minh full-stack real broker trong follow-up này. |
+
+Các kết quả trên là bằng chứng người thực hiện cung cấp sau fast-forward;
+follow-up chỉ đối chiếu code/tài liệu, không chạy lại suite hay truy vấn DB.
+Lần thử `docker compose ps` trong phiên tài liệu này bị từ chối quyền Docker
+API, nên không coi đó là bằng chứng PostgreSQL ngừng chạy. Bảng kiểm thử ở
+mục 5 là kết quả lịch sử ngày 26/10, không ghi đè kết quả mới.
+
+F13 (Gateway thiếu mapping) và F14 (Work Order scaffold) trong bảng mục 2 là
+phát hiện **lịch sử của checkout cũ**, đã hết đúng sau fast-forward. Không còn
+coi chúng là dependency implementation chưa tồn tại; luồng CUSTOMER → Gateway
+→ WO producer → RabbitMQ → SR vẫn **NOT VERIFIED** bằng integration run thật.
+F09/F10 vẫn **BLOCKED** chờ quyết định ledger, reordering và retention;
+F11 chờ xác nhận approval 0004/ERD và reconciliation dữ liệu cũ; F12 chờ
+Accepted state-machine/OpenAPI decision cho EXPIRED recovery. Chi tiết lựa
+chọn, owner và cổng nghiệm thu ở
+[tài liệu quyết định](m2-work-order-lifecycle-decision.md).
+
+# M2-H4 implementation update (2026-10-28)
+
+Service Request now has a proposed migration `0005_work_order_lifecycle` and
+durable Created/terminal receipts, pending reconciliation, semantic duplicate
+checks and private conflict evidence. Migration review by the ADR/ERD owner is
+still required before development or production deployment. The diagnostic
+assertion in `work-order-ordering.repro.ts` remains unchanged. The former
+"P0 BLOCKED" statements above describe the pre-implementation baseline.
+At this checkout, the local Docker daemon is unavailable, so P0 and DB E2E
+remain **NOT VERIFIED after implementation**. Unit 31/31, application E2E
+5/5, lint, typecheck and build passed. Legacy `PROCESSING` rows lacking an
+active Work Order ID still require verified owner-led reconciliation.

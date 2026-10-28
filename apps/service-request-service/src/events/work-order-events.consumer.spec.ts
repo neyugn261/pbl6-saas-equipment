@@ -50,6 +50,21 @@ describe('WorkOrderEventsConsumer contract and state protection', () => {
         update: jest.fn(),
       },
       requestStatusHistory: { create: jest.fn() },
+      workOrderLifecycle: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ ...data, appliedPhase: null }),
+          ),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ ...data, terminalPhase: null }),
+          ),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      workOrderLifecycleConflict: { upsert: jest.fn() },
     };
     const db = {
       $transaction: jest.fn((work: (value: typeof tx) => Promise<void>) =>
@@ -67,6 +82,20 @@ describe('WorkOrderEventsConsumer contract and state protection', () => {
   it('consumes a business duplicate Created without writing another transition', async () => {
     const { consumer, event, tx } = setup();
     await consumer.handle(event);
+    expect(tx.serviceRequest.update).not.toHaveBeenCalled();
+    expect(tx.requestStatusHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('persists a different Created while another Work Order is active', async () => {
+    const { consumer, event, tx } = setup();
+    const workOrderId = randomUUID();
+    await consumer.handle({
+      ...event,
+      eventId: randomUUID(),
+      aggregateId: workOrderId,
+      payload: { ...event.payload, workOrderId },
+    });
+    expect(tx.workOrderLifecycle.create).toHaveBeenCalledTimes(1);
     expect(tx.serviceRequest.update).not.toHaveBeenCalled();
     expect(tx.requestStatusHistory.create).not.toHaveBeenCalled();
   });
@@ -94,26 +123,25 @@ describe('WorkOrderEventsConsumer contract and state protection', () => {
   );
 
   it.each([false, true])(
-    'retries cancellation before Created (cancelServiceRequest=%s)',
+    'persists cancellation before Created (cancelServiceRequest=%s)',
     async (cancelServiceRequest) => {
       const { consumer, event, tx } = setup('ACCEPTED');
-      await expect(
-        consumer.handle({
-          ...event,
-          eventType: 'WorkOrderCancelled',
-          eventVersion: 2,
-          payload: {
-            workOrderId: event.payload.workOrderId,
-            workOrderNo: 'WO-TEST',
-            serviceRequestId: event.payload.serviceRequestId,
-            maintenanceTaskId: null,
-            equipmentId: event.payload.equipmentId,
-            reason: null,
-            cancelledAt: new Date().toISOString(),
-            cancelServiceRequest,
-          },
-        }),
-      ).rejects.toThrow(/Cannot apply WorkOrderCancelled/);
+      await consumer.handle({
+        ...event,
+        eventType: 'WorkOrderCancelled',
+        eventVersion: 2,
+        payload: {
+          workOrderId: event.payload.workOrderId,
+          workOrderNo: 'WO-TEST',
+          serviceRequestId: event.payload.serviceRequestId,
+          maintenanceTaskId: null,
+          equipmentId: event.payload.equipmentId,
+          reason: null,
+          cancelledAt: new Date().toISOString(),
+          cancelServiceRequest,
+        },
+      });
+      expect(tx.workOrderLifecycle.create).toHaveBeenCalledTimes(1);
       expect(tx.serviceRequest.update).not.toHaveBeenCalled();
     },
   );
