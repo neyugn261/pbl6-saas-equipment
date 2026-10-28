@@ -48,6 +48,9 @@ Cả 8 service backend đều có Prisma migration cho database riêng (`0001_in
 
 Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác thực token và phân quyền theo catalog RBAC, phạm vi tenant/customer, định dạng lỗi `{code, message}`, log JSON có correlation id, `/health`, outbox/inbox và RabbitMQ. Quy trình làm việc nhóm: [CONTRIBUTING.md](CONTRIBUTING.md).
 
+Seed/demo WO M2: [K7 — chuẩn bị dữ liệu và kịch bản](docs/demo/workorder-m2.md).
+Contract attachment M3: [K8 — OpenAPI và bàn giao](docs/api/workorder-attachments.md).
+
 ## 2. Yêu cầu hệ thống
 
 | Công cụ | Phiên bản | Ghi chú |
