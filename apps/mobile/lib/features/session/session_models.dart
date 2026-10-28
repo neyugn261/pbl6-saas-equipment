@@ -69,8 +69,10 @@ class SessionUser {
     required this.tenantId,
     required this.email,
     required this.fullName,
+    this.roles = const ['TECHNICIAN'],
   });
   final String id, tenantId, email, fullName;
+  final List<String> roles;
 
   factory SessionUser.fromResponse(Object? response) {
     final data = jsonObject(response);
@@ -78,6 +80,7 @@ class SessionUser {
     if (data['userType'] != 'TENANT_STAFF' ||
         data['status'] != 'ACTIVE' ||
         roles is! List ||
+        roles.any((r) => r is! String) ||
         !roles.contains('TECHNICIAN')) {
       throw const ApiException('TECHNICIAN_REQUIRED');
     }
@@ -86,6 +89,7 @@ class SessionUser {
       tenantId: jsonString(data, 'tenantId'),
       email: jsonString(data, 'email'),
       fullName: jsonString(data, 'fullName'),
+      roles: List<String>.unmodifiable(roles.whereType<String>()),
     );
   }
 }

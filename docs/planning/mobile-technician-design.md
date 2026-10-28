@@ -335,3 +335,16 @@ Nguồn: [phân công M2](../plans/m2-task-assignment.md),
 [equipment handoff](../plans/equipment-dossier-handoff.md),
 [attachment K8](../api/workorder-attachments.md),
 [Inventory](../api/inventory.yaml), [Notification](../api/notification.yaml).
+
+## 14. Tiến độ sau khi chốt UI
+
+UI theme được chốt/push ở `05a9909`, có entry point preview riêng. Đợt tiếp
+người dùng yêu cầu nối **toàn bộ phần đọc backend** trước: app đăng nhập dùng
+workspace thật, 5 tab, WO/history/report/logs, lịch, dossier/warranty/timeline,
+liên hệ/profile và QR nhập tay. Chi tiết API, scope cá nhân đa role, tradeoff
+phân trang/assignment lookup và bằng chứng ở
+[mobile-backend-reads](../testing/mobile-backend-reads.md).
+
+Bước tiếp theo vẫn là command workflow/report thật và xử lý 409/timeout/race
+như mục 5–6; file/notification/parts/camera thuộc giai đoạn sau. Hoàn thành
+phần đọc không thay cho nghiệm thu workflow M2 đầy đủ ở mục 13.

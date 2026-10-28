@@ -2,9 +2,12 @@
 
 Mobile dành cho Technician. Đã có nền tảng/session P0: đăng nhập Identity thật,
 lưu token mã hóa, khôi phục phiên, refresh tuần tự, kiểm tra profile và đăng
-xuất. Giao diện 5 tab và các màn hình nghiệp vụ đã được dựng bằng dữ liệu minh
-họa theo [thiết kế mobile](../../docs/planning/mobile-technician-design.md).
-API/command của các màn hình mới còn TODO; chưa nghiệm thu N4–N6/M2 nghiệp vụ.
+xuất. Giao diện 5 tab và các màn hình nghiệp vụ theo
+[thiết kế mobile](../../docs/planning/mobile-technician-design.md).
+App đăng nhập đã nối các API đọc thật qua Gateway: công việc cá nhân/lịch sử,
+WO/report/logs, lịch, thiết bị/dossier/bảo hành/timeline, liên hệ và hồ sơ
+Technician. Các command nghiệp vụ và M3 còn TODO; chưa nghiệm thu toàn bộ
+workflow N4–N6/M2. Xem [đọc backend và cách demo](../../docs/testing/mobile-backend-reads.md).
 
 ## Xem giao diện không cần backend
 
@@ -23,10 +26,11 @@ ngày lịch, stepper và xem trước form chỉ hoạt động trong giao di�
 nghiệp vụ thông báo rõ chưa gửi/thay đổi dữ liệu. Camera, file upload, thông
 báo và phụ tùng M3 có giao diện minh họa, chưa nối plugin/API.
 
-`lib/main.dart` vẫn dùng session P0 thật. Sau khi xác thực, nó mở cùng workspace
-giao diện; các màn hình nghiệp vụ vẫn dùng fixtures và có nhãn Dữ liệu minh họa.
-Kiểm tra phiên/đăng xuất trong entry point này tiếp tục dùng P0; khi phiên đổi,
-navigation stack riêng được hủy để không giữ màn hình chi tiết của phiên cũ.
+`lib/main.dart` dùng session P0 và workspace đọc backend thật, không dùng
+fixtures của preview. Có loading/empty/error/retry, phân trang, kéo tải lại
+và đọc lại khi trở về foreground. Thiếu profile/quyền, lỗi API hoặc dịch vụ
+chưa cấu hình được thể hiện rõ. Khi phiên đổi, navigation stack riêng được
+hủy để không giữ màn hình chi tiết và dữ liệu của phiên cũ.
 
 Theme, danh mục màn hình và TODO bàn giao:
 [mobile UI preview](../../docs/demo/mobile-ui-preview.md).

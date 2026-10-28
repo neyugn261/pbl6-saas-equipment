@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:pbl6_technician/features/session/session_app.dart';
 
 import 'support/session_fixture.dart';
+import 'support/workspace_fixture.dart';
 
 void main() {
   late SessionFixture f;
@@ -104,11 +105,12 @@ void main() {
   });
 
   testWidgets('session logout removes private detail routes', (tester) async {
+    f.handler = (r) async => workspaceResponse(r, f);
     await f.login();
     await open(tester);
     await tester.tap(find.byKey(const Key('nav-jobs')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Kiểm tra lỗi hiển thị E12'));
+    await tester.tap(find.text('Công việc từ API'));
     await tester.pumpAndSettle();
     expect(find.text('Chi tiết công việc'), findsOneWidget);
     await f.controller.logout();

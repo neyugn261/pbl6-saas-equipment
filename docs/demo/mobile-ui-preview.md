@@ -2,7 +2,9 @@
 
 Nhánh: `feature/khuong-mobile-session`. Ngày: 28/10/2026.
 Thiết kế chức năng: [mobile-technician-design](../planning/mobile-technician-design.md).
-Mục tiêu đợt này chỉ là giao diện Flutter theo ảnh tham chiếu của người dùng.
+Bản UI được chốt và push ở commit `05a9909`. Tài liệu này mô tả entry point
+preview; app đăng nhập hiện dùng [backend reads](../testing/mobile-backend-reads.md).
+Mục tiêu đợt UI chỉ là giao diện Flutter theo ảnh tham chiếu của người dùng.
 Không có API/backend/migration/permission mới. Chưa coi UI là nghiệm thu M2/M3.
 
 ## Theme và bố cục
@@ -62,9 +64,10 @@ work order được chuyển trạng thái, report gửi, file lưu/upload hoặ
 ## Ranh giới thực thi
 
 - `main_preview.dart` chỉ dựng MaterialApp/workspace; không import auth/network.
-- `main.dart` giữ login/restore/refresh/logout P0. Shell sau login vẫn có dữ
-  liệu minh họa. Session workspace dùng Navigator riêng; logout/xác thực lại
-  loại bỏ các route detail cũ.
+- `main.dart` dùng login/restore/refresh/logout P0 và workspace đọc backend
+  thật trong `lib/features/workspace/`. Session workspace dùng Navigator riêng;
+  logout/xác thực lại loại bỏ các route detail cũ. Các bảng fixtures/TODO dưới
+  đây chỉ áp dụng entry point preview.
 - Search/filter/calendar/stepper là UI state local để đánh giá layout. Date
   range picker, preference persistence và phục hồi nháp có stub/TODO.
 - Mutation CTA mở notice Bản xem trước; không giả thông báo server thành công,
@@ -107,4 +110,6 @@ TypeScript vào Flutter hoặc đọc DB từ điện thoại để hoàn thiệ
   Smoke: `/tmp/pbl6-mobile-ui-smoke.log`; screenshot
   `/tmp/pbl6-mobile-ui-{home,jobs,schedule,job-detail,report-form,report-read,equipment,dossier,profile,notifications}.png`.
 
-Chưa thêm CI Flutter, chưa tích hợp backend mới, chưa commit/push đợt UI này.
+Bằng chứng trên thuộc đợt UI `05a9909` đã push; chưa thêm CI Flutter.
+Kết quả tích hợp backend tiếp theo được ghi riêng trong
+[mobile-backend-reads](../testing/mobile-backend-reads.md).

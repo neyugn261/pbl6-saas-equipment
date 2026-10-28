@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../ui/technician_workspace.dart';
 import '../../ui/theme.dart';
+import '../workspace/live_workspace.dart';
 import 'session_controller.dart';
 
 class TechnicianApp extends StatefulWidget {
@@ -80,13 +80,11 @@ class _TechnicianAppState extends State<TechnicianApp>
           builder: (context, _) {
             final user = widget.session.user;
             if (user == null) return const SizedBox.shrink();
-            return TechnicianWorkspace(
-              name: user.fullName,
-              email: user.email,
-              onLogout: widget.session.logout,
-              onCheckSession: widget.session.revalidate,
-              sessionBusy: widget.session.busy,
-              sessionMessage: widget.session.message,
+            return LiveWorkspace(
+              key: ValueKey(
+                '${user.tenantId}/${user.id}/${user.roles.join(',')}',
+              ),
+              session: widget.session,
             );
           },
         ),
