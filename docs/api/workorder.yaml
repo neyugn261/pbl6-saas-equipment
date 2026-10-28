@@ -73,6 +73,8 @@ info:
     Out of M2: attachments (M3, MinIO, `visibility` per ADR 0006), parts used
     (Inventory, M3), operational/statistical reports. Service Report submission
     through `/complete` and reading `/service-report` belong to M2.
+    M3 attachment contract (K8, not implemented by M2 routes):
+    docs/api/workorder-attachments.yaml and workorder-attachments.md.
 servers:
   - url: http://localhost:3004
     description: Local service (through the gateway at /api/workorders, prefix stripped)

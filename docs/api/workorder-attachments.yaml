@@ -1,0 +1,520 @@
+openapi: 3.1.0
+info:
+  title: PBL6 Work Order and Service Report attachments — M3 contract
+  version: 0.1.0
+  description: |
+    K8 owner contract for consumer review. CONTRACT ONLY: these paths are not
+    implemented in M2. Supplements workorder.yaml; see workorder-attachments.md.
+    Uses existing catalog permissions, ADR 0003/0004/0006 and WO assignment scope.
+    No new roles, invoice/payment flow, multipart upload or public bucket.
+    Gateway strips /api/workorders; /internal paths remain blocked by Gateway.
+    Upload bytes go directly to the short-lived signed PUT URL. The application
+    reauthorizes and verifies the stored object before attaching it. A successful
+    PUT alone does not create a visible attachment. Storage keys never come from
+    the client and never appear in metadata responses.
+    Limits: JPEG, PNG or PDF; 1..10485760 bytes; at most 10 attached/pending slots
+    per parent (WO and report counted separately). Upload URL valid 300 seconds;
+    download URL valid 60 seconds. Requested checksum is lowercase hex SHA-256.
+    The signed PUT does not by itself prove byte size, actual MIME or checksum.
+    PUT grants access to a staging key only. Finalize must store verified bytes
+    under a separate immutable final key (or copy the exact verified version).
+    Reusing a still-valid staging PUT URL can never overwrite an attached file.
+    Complete verifies actual bytes/type/hash at the server, parent scope/state,
+    ownership and quota before DB attachment + upload state commit together.
+    Report uploads require an existing submitted report and COMPLETED WO; mobile
+    completes the report first, then uploads/retries attachments independently.
+    CUSTOMER has no access to staff WO/report paths, even for CUSTOMER visibility.
+    SR exposes published files using the narrowly scoped internal projection;
+    see the SR-owner handoff in the companion document, not raw WO/report access.
+x-implementation-status: CONTRACT_ONLY_M3
+servers:
+  - url: http://localhost:3004
+security:
+  - bearer: []
+tags:
+  - name: Upload intents
+  - name: Attachments
+  - name: Customer-safe internal projection
+paths:
+  /work-orders/{workOrderId}/attachment-uploads:
+    post:
+      tags: [Upload intents]
+      operationId: prepareWorkOrderAttachment
+      summary: Prepare an INTERNAL attachment upload for a non-terminal WO
+      description: |
+        TENANT_STAFF only. work_order:manage, or work_order:execute for the
+        current ACCEPTED assignment in ACCEPTED/TRAVELLING/IN_PROGRESS/ON_HOLD.
+        Other-tenant/unassigned WO is 404 after account-type/permission checks.
+        COMPLETED/CANCELLED is 409. Only work_order:manage may request CUSTOMER
+        visibility; technician uploads remain INTERNAL until a manager publishes.
+      parameters:
+        - $ref: "#/components/parameters/WorkOrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/PrepareUpload"
+      responses:
+        "201":
+          $ref: "#/components/responses/UploadTicket"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "413":
+          $ref: "#/components/responses/Error"
+        "415":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /work-orders/{workOrderId}/service-report/attachment-uploads:
+    post:
+      tags: [Upload intents]
+      operationId: prepareReportAttachment
+      summary: Prepare an attachment upload for an existing submitted report
+      description: |
+        TENANT_STAFF with work_order:manage, or the report's author Technician
+        with service_report:submit and work_order:execute. WO must be COMPLETED;
+        report must exist. Past assignees who did not submit this report cannot
+        mutate it. This adds a file, never changes the report/result or emits a
+        second WorkOrderCompleted event. Technician visibility is INTERNAL only.
+      parameters:
+        - $ref: "#/components/parameters/WorkOrderId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        $ref: "#/components/requestBodies/PrepareUpload"
+      responses:
+        "201":
+          $ref: "#/components/responses/UploadTicket"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "413":
+          $ref: "#/components/responses/Error"
+        "415":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /attachment-uploads/{uploadId}/complete:
+    post:
+      tags: [Upload intents]
+      operationId: completeAttachmentUpload
+      summary: Verify the uploaded object and atomically register its attachment
+      description: |
+        Same uploader userId, tenant and parent mutation scope as prepare,
+        checked again under lock. Body must be empty JSON. StorageKey, parentId,
+        tenantId, uploadedBy and verification results cannot be supplied.
+        Original intent + actual stored object determine metadata. No object is
+        409 UPLOAD_NOT_READY; expired intent is 409 UPLOAD_EXPIRED; mismatched
+        bytes/type/hash is 422 UPLOAD_VERIFICATION_FAILED. No attachment is
+        registered on failure. Replay returns the same attachment without a
+        second row, including after a lost HTTP response. Parent/account access
+        is always rechecked; replay never restores a deleted attachment.
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Attachment"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /attachment-uploads/{uploadId}:
+    delete:
+      tags: [Upload intents]
+      operationId: abortAttachmentUpload
+      summary: Abort the caller's unfinished intent and release its quota slot
+      description: |
+        Same uploader/tenant and authorized parent; manager may abort within
+        its parent scope. Repeated abort is 204. ATTACHED is 409: delete the
+        attachment instead. Expired/aborted intents never attach on late PUT.
+        Orphan removal is durable/retryable cleanup, not a cross-storage transaction.
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+      responses:
+        "204":
+          description: Aborted or already aborted
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /work-orders/{workOrderId}/attachments:
+    get:
+      tags: [Attachments]
+      operationId: listWorkOrderAttachments
+      summary: List registered WO attachments in normal staff/assignment scope
+      description: TENANT_STAFF with work_order:read; includes terminal WO reads and historical Technician assignment scope. Excludes pending/failed/deleted objects.
+      parameters:
+        - $ref: "#/components/parameters/WorkOrderId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          $ref: "#/components/responses/AttachmentPage"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /work-orders/{workOrderId}/service-report/attachments:
+    get:
+      tags: [Attachments]
+      operationId: listReportAttachments
+      summary: List files of the submitted report in normal staff/assignment scope
+      parameters:
+        - $ref: "#/components/parameters/WorkOrderId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          $ref: "#/components/responses/AttachmentPage"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /attachments/{attachmentId}/download:
+    get:
+      tags: [Attachments]
+      operationId: downloadStaffAttachment
+      summary: Reauthorize a registered attachment and issue a signed GET URL
+      description: |
+        TENANT_STAFF with work_order:read and parent scope, including historical
+        Technician read scope. No redirect: returns JSON. Signed URL is a bearer
+        capability, valid at most 60 seconds; never include Authorization in the
+        storage request or log/store the URL. Response has Cache-Control:no-store.
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Download"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /attachments/{attachmentId}:
+    patch:
+      tags: [Attachments]
+      operationId: setAttachmentVisibility
+      summary: Manager publishes or hides an attachment, with an audit record
+      description: |
+        TENANT_STAFF with work_order:manage and tenant scope; no Technician or
+        CUSTOMER publication. Visibility changes are separate from upload and
+        never disclose a raw WO/report to CUSTOMER. Source may be terminal;
+        publication always requires the same manager authorization.
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [visibility]
+              properties:
+                visibility:
+                  $ref: "#/components/schemas/Visibility"
+      responses:
+        "200":
+          $ref: "#/components/responses/Attachment"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Attachments]
+      operationId: deleteAttachment
+      summary: Remove an attachment from application reads and queue blob cleanup
+      description: |
+        work_order:manage or original uploader still in the target's mutation
+        scope. WO target must be non-terminal; report target must have an existing
+        COMPLETED report. Deletion is replay-safe (204 while a deletion tombstone
+        remains) and audited; metadata/tombstone + cleanup claim commit together.
+        An already issued signed URL may remain usable until its short expiry.
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "204":
+          description: Deleted or already deleted
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /internal/service-request-attachments/{serviceRequestId}:
+    get:
+      tags: [Customer-safe internal projection]
+      operationId: listPublishedRequestAttachments
+      summary: SR read-composition endpoint returning CUSTOMER files only
+      description: |
+        service_request:read and original caller token required (ADR 0004).
+        CUSTOMER is limited by tenant/customer claims to WO linked to this SR;
+        staff also retain normal WO/assignment scope. No Maintenance-origin
+        attachments, INTERNAL files, pending/deleted files or internal parent IDs.
+        Counts apply the same visibility/scope filter. SR must independently
+        authorize the request before composing this result. Gateway blocks this
+        internal route. This is not raw WO/report access for CUSTOMER.
+        Without a matching in-scope WO this source returns 404; SR may map it
+        to an empty attachment page only after authorizing its own SR first.
+      parameters:
+        - $ref: "#/components/parameters/ServiceRequestId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Published files only; no storage keys, uploader or raw parent IDs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishedPage"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /internal/service-request-attachments/{serviceRequestId}/{attachmentId}/download:
+    get:
+      tags: [Customer-safe internal projection]
+      operationId: downloadPublishedRequestAttachment
+      summary: Recheck SR relation, scope and CUSTOMER visibility before signing
+      description: Same auth/filter as the internal list, additionally verifies attachment belongs to this SR. Hidden/deleted/wrong-parent files return 404. Never trusts caller-supplied WO/customer IDs.
+      parameters:
+        - $ref: "#/components/parameters/ServiceRequestId"
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Download"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    WorkOrderId:
+      in: path
+      name: workOrderId
+      required: true
+      schema: { type: string, format: uuid }
+    ServiceRequestId:
+      in: path
+      name: serviceRequestId
+      required: true
+      schema: { type: string, format: uuid }
+    UploadId:
+      in: path
+      name: uploadId
+      required: true
+      schema: { type: string, format: uuid }
+    AttachmentId:
+      in: path
+      name: attachmentId
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      description: UUID scoped by tenant, uploader and logical operation. Identical target/body replays the original result; reuse for another target/body is 409 IDEMPOTENCY_KEY_REUSED. Never extends the intent expiry.
+      schema: { type: string, format: uuid }
+    Page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      in: query
+      name: pageSize
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  requestBodies:
+    PrepareUpload:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [fileName, mimeType, sizeBytes, checksumSha256]
+            properties:
+              fileName:
+                type: string
+                minLength: 1
+                maxLength: 255
+                description: Basename only; reject path separators, dot paths, control characters and header injection. Never used as storage key.
+              mimeType:
+                type: string
+                enum: [image/jpeg, image/png, application/pdf]
+              sizeBytes:
+                type: integer
+                minimum: 1
+                maximum: 10485760
+              checksumSha256:
+                type: string
+                pattern: "^[a-f0-9]{64}$"
+              visibility:
+                allOf:
+                  - $ref: "#/components/schemas/Visibility"
+                default: INTERNAL
+  responses:
+    Error:
+      description: Scoped error; no SQL, storage credentials or object keys
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, message]
+            properties:
+              code: { type: string }
+              message: { type: string }
+              details: { type: object }
+    UploadTicket:
+      description: Signed PUT ticket; Cache-Control:no-store; never contains a bucket credential
+      headers:
+        Cache-Control:
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [uploadId, method, uploadUrl, headers, expiresAt]
+            properties:
+              uploadId: { type: string, format: uuid }
+              method: { type: string, const: PUT }
+              uploadUrl: { type: string, format: uri }
+              headers:
+                type: object
+                required: [Content-Type]
+                additionalProperties: { type: string }
+                properties:
+                  Content-Type: { type: string }
+              expiresAt: { type: string, format: date-time }
+    Attachment:
+      description: Verified registered file, without storage key or a persistent download URL
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Attachment"
+    AttachmentPage:
+      description: Deterministic createdAt/id ascending order, scoped before pagination/count
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [items, page, pageSize, total]
+            properties:
+              items:
+                type: array
+                items: { $ref: "#/components/schemas/Attachment" }
+              page: { type: integer }
+              pageSize: { type: integer }
+              total: { type: integer, minimum: 0 }
+    Download:
+      description: Short-lived signed GET capability; never forward the API bearer token to storage
+      headers:
+        Cache-Control:
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [downloadUrl, expiresAt]
+            properties:
+              downloadUrl: { type: string, format: uri }
+              expiresAt: { type: string, format: date-time }
+  schemas:
+    Visibility:
+      type: string
+      enum: [INTERNAL, CUSTOMER]
+    PublishedAttachment:
+      type: object
+      additionalProperties: false
+      required: [id, fileName, mimeType, sizeBytes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string }
+        mimeType:
+          { type: string, enum: [image/jpeg, image/png, application/pdf] }
+        sizeBytes: { type: integer, minimum: 1, maximum: 10485760 }
+        createdAt: { type: string, format: date-time }
+    Attachment:
+      type: object
+      additionalProperties: false
+      required:
+        [id, fileName, mimeType, sizeBytes, visibility, uploadedBy, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string }
+        mimeType:
+          { type: string, enum: [image/jpeg, image/png, application/pdf] }
+        sizeBytes: { type: integer, minimum: 1, maximum: 10485760 }
+        visibility: { $ref: "#/components/schemas/Visibility" }
+        uploadedBy: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+    PublishedPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PublishedAttachment" }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer, minimum: 0 }
