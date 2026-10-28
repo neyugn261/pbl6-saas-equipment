@@ -2,8 +2,34 @@
 
 Mobile dành cho Technician. Đã có nền tảng/session P0: đăng nhập Identity thật,
 lưu token mã hóa, khôi phục phiên, refresh tuần tự, kiểm tra profile và đăng
-xuất. My Jobs/thực hiện WO/Service Report là các bước tiếp theo của N4–N6 trong
-[phân công M2](../../docs/plans/m2-task-assignment.md).
+xuất. Giao diện 5 tab và các màn hình nghiệp vụ đã được dựng bằng dữ liệu minh
+họa theo [thiết kế mobile](../../docs/planning/mobile-technician-design.md).
+API/command của các màn hình mới còn TODO; chưa nghiệm thu N4–N6/M2 nghiệp vụ.
+
+## Xem giao diện không cần backend
+
+Từ `apps/mobile`, khi emulator đã chạy:
+
+```bash
+flutter pub get
+flutter run -d emulator-5554 -t lib/main_preview.dart
+# Hoặc build để cài:
+flutter build apk --debug -t lib/main_preview.dart
+```
+
+Entry point preview không tạo SessionController, HTTP client hoặc đọc secure
+storage. Dữ liệu và trạng thái WO là fixtures bất biến. Tìm kiếm/lọc, đổi tab,
+ngày lịch, stepper và xem trước form chỉ hoạt động trong giao diện; các nút
+nghiệp vụ thông báo rõ chưa gửi/thay đổi dữ liệu. Camera, file upload, thông
+báo và phụ tùng M3 có giao diện minh họa, chưa nối plugin/API.
+
+`lib/main.dart` vẫn dùng session P0 thật. Sau khi xác thực, nó mở cùng workspace
+giao diện; các màn hình nghiệp vụ vẫn dùng fixtures và có nhãn Dữ liệu minh họa.
+Kiểm tra phiên/đăng xuất trong entry point này tiếp tục dùng P0; khi phiên đổi,
+navigation stack riêng được hủy để không giữ màn hình chi tiết của phiên cũ.
+
+Theme, danh mục màn hình và TODO bàn giao:
+[mobile UI preview](../../docs/demo/mobile-ui-preview.md).
 
 ## Toolchain của dự án
 
@@ -88,7 +114,7 @@ trường backend. Nhập trên form; app không chứa sẵn mật khẩu. Dùn
 TENANT_STAFF ACTIVE có role TECHNICIAN. Tài khoản khác bị từ chối trên app và
 session vừa cấp được yêu cầu revoke; backend vẫn thực thi RBAC/tenant scope.
 
-App hiện có màn hình đăng nhập, tài khoản và khôi phục khi lỗi. Các route auth
+App có màn hình đăng nhập, workspace/tài khoản và khôi phục khi lỗi. Các route auth
 qua `/api/identity/auth/*`. Khi mở lại/đưa app về foreground, kiểm tra profile
 qua `/auth/me`; mất mạng khi đọc profile giữ phiên đã biết và hiển thị Thử lại.
 Refresh xoay token nên các request đồng thời dùng chung một lần refresh; chỉ

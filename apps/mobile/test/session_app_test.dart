@@ -74,6 +74,13 @@ void main() {
     gate.complete(jsonResponse({...f.pair(), 'user': f.profile}));
     await tester.pumpAndSettle();
     expect(find.text('Xin chào, Demo Technician'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('nav-profile')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('logout')),
+      250,
+      scrollable: find.byType(Scrollable).hitTestable().first,
+    );
     await tester.tap(find.byKey(const Key('logout')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('login')), findsOneWidget);
@@ -94,6 +101,20 @@ void main() {
     expect(find.textContaining('chưa đúng'), findsOneWidget);
     expect(find.textContaining('sensitive'), findsNothing);
     expect(find.byKey(const Key('login')), findsOneWidget);
+  });
+
+  testWidgets('session logout removes private detail routes', (tester) async {
+    await f.login();
+    await open(tester);
+    await tester.tap(find.byKey(const Key('nav-jobs')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kiểm tra lỗi hiển thị E12'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chi tiết công việc'), findsOneWidget);
+    await f.controller.logout();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('login')), findsOneWidget);
+    expect(find.text('Chi tiết công việc'), findsNothing);
   });
 
   testWidgets('session restore outage offers retry, does not claim logout', (

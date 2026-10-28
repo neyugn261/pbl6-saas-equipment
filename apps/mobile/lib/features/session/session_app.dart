@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../ui/technician_workspace.dart';
+import '../../ui/theme.dart';
 import 'session_controller.dart';
 
 class TechnicianApp extends StatefulWidget {
@@ -19,6 +21,7 @@ class TechnicianApp extends StatefulWidget {
 
 class _TechnicianAppState extends State<TechnicianApp>
     with WidgetsBindingObserver {
+  final _workspaceNavigator = GlobalKey<NavigatorState>();
   @override
   void initState() {
     super.initState();
@@ -44,13 +47,7 @@ class _TechnicianAppState extends State<TechnicianApp>
   Widget build(BuildContext context) => MaterialApp(
     title: 'PBL6 Technician',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff126a70)),
-      useMaterial3: true,
-      inputDecorationTheme: const InputDecorationTheme(
-        border: OutlineInputBorder(),
-      ),
-    ),
+    theme: technicianTheme(),
     home: AnimatedBuilder(
       animation: widget.session,
       builder: (context, _) => switch (widget.session.phase) {
@@ -67,9 +64,33 @@ class _TechnicianAppState extends State<TechnicianApp>
           ),
         ),
         SessionPhase.signedOut => _LoginPage(session: widget.session),
-        SessionPhase.authenticated => _AccountPage(session: widget.session),
+        SessionPhase.authenticated => _workspace(),
         SessionPhase.unavailable => _RecoveryPage(session: widget.session),
       },
+    ),
+  );
+
+  Widget _workspace() => NavigatorPopHandler<Object?>(
+    onPopWithResult: (_) => _workspaceNavigator.currentState?.pop(),
+    child: Navigator(
+      key: _workspaceNavigator,
+      onGenerateRoute: (_) => MaterialPageRoute<void>(
+        builder: (_) => AnimatedBuilder(
+          animation: widget.session,
+          builder: (context, _) {
+            final user = widget.session.user;
+            if (user == null) return const SizedBox.shrink();
+            return TechnicianWorkspace(
+              name: user.fullName,
+              email: user.email,
+              onLogout: widget.session.logout,
+              onCheckSession: widget.session.revalidate,
+              sessionBusy: widget.session.busy,
+              sessionMessage: widget.session.message,
+            );
+          },
+        ),
+      ),
     ),
   );
 }
@@ -220,63 +241,6 @@ class _LoginPageState extends State<_LoginPage> {
                   ],
                 ),
               ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _AccountPage extends StatelessWidget {
-  const _AccountPage({required this.session});
-  final SessionController session;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Tài khoản kỹ thuật viên')),
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Icon(
-                  Icons.verified_user_outlined,
-                  size: 56,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Xin chào, ${session.user!.fullName}',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(session.user!.email, textAlign: TextAlign.center),
-                const SizedBox(height: 24),
-                const _Notice('Bạn đã đăng nhập bằng tài khoản kỹ thuật viên.'),
-                if (session.message != null) ...[
-                  const SizedBox(height: 16),
-                  _Notice(session.message!),
-                ],
-                const SizedBox(height: 24),
-                OutlinedButton(
-                  onPressed: session.busy ? null : session.revalidate,
-                  child: Text(
-                    session.busy ? 'Đang kiểm tra…' : 'Kiểm tra phiên',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FilledButton(
-                  key: const Key('logout'),
-                  onPressed: session.busy ? null : session.logout,
-                  child: const Text('Đăng xuất'),
-                ),
-              ],
             ),
           ),
         ),
