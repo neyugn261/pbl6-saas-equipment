@@ -48,7 +48,7 @@ With `NODE_ENV=development` (or `test`), the Gateway serves:
 
 - `http://localhost:3000/dev`: health of all eight upstream services, their
   configured addresses, implementation labels and links to API documentation.
-- `http://localhost:3000/docs`: Swagger UI with six service documents and
+- `http://localhost:3000/docs`: Swagger UI with eight service documents and
   same-origin requests through the existing Gateway routes.
 - `/dev/catalog`, `/dev/status`: developer-tool JSON, independent of the
   existing four-service `/health` readiness contract.
@@ -82,12 +82,13 @@ or another service and execute a request. Authorization is carried between
 service selections in page memory, and cleared on a full page reload. After
 logging in as another role, replace the authorized token explicitly.
 
-Maintenance currently shows its contract with Try-it-out disabled. Inventory
-and Notification have no OpenAPI document yet. Planned Cost Estimate operations
-are omitted from the public SR document because implementation/Gateway routes
-are not ready. Internal endpoints are removed from every public document and
-remain blocked by the Gateway middleware. Catalog implementation labels must
-be updated when a service ships its corresponding APIs.
+Maintenance and Cost Estimate operations can now be executed through existing
+Gateway routes. Standalone `/estimates/*` paths are displayed under
+`/api/service-requests/estimates/*`; nested SR Estimate paths keep their existing
+mapping. Inventory and Notification show contracts with Try-it-out disabled
+because their business APIs remain scaffolds. Internal endpoints are removed
+from every public document and remain blocked by Gateway middleware. Update
+catalog implementation labels when a service ships its corresponding APIs.
 
 Status `UP` means `/health` returned 2xx; `CHƯA CÓ HEALTH` means the upstream
 answered 404 at that path; `DOWN` means another failing response or an

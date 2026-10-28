@@ -2,7 +2,8 @@
 
 Ngày 2026-10-27. Baseline develop `99bc1c3` sau merge K6 #26/#27.
 Dependency `b07b987`; implementation `f8bab9e`.
-Khương yêu cầu chưa tạo PR; giữ các commit local, chưa push portal.
+Bằng chứng bên dưới ghi nhận phiên kiểm tra ngày 27/10; đợt cập nhật 28/10
+đã rebase lên develop `ccace00` và chuẩn bị PR dependency/implementation riêng.
 
 ## Đã kiểm tra
 
@@ -48,7 +49,17 @@ chạy ở development. Xem [README Gateway](../../apps/api-gateway/README.md)
 để khởi động và đăng nhập bằng Swagger. `/health` hiện hành vẫn chỉ tổng hợp
 4 service M1; `/dev/status` kiểm tra cả 8 và phân biệt endpoint health chưa có.
 
-Giới hạn: portal không chứng minh API scaffold đã có code hoặc mọi luồng M2
-đã được nghiệm thu. UI Web/Android, scheduler Maintenance thật, H4 và replacement
-vẫn theo các kế hoạch/owner hiện hành. Chưa có kết quả CI remote cho portal vì
-chưa mở PR theo yêu cầu Khương.
+## Cập nhật bàn giao 28/10/2026
+
+Catalog hiện có 8 tài liệu: Maintenance đã có API và bật Try-it-out;
+Inventory/Notification có contract nhưng vẫn tắt thực thi. Cost Estimate đã có
+API: public view giữ đường nested SR và đổi `/estimates/*` sang
+`/service-requests/estimates/*` dưới server `/api` cho đúng Gateway hiện tại.
+Không sửa YAML nguồn. E2E bổ sung mapping Estimate, Maintenance và kiểm tra hai
+contract scaffold; kết quả chạy lại sẽ được ghi trong PR.
+
+Giới hạn: portal không chứng minh mọi luồng M2 đã được nghiệm thu. Các bước
+browser ngày 27/10 là bằng chứng lịch sử, chưa xác nhận browser cho hai tài liệu
+mới. UI Web/Android và SR lifecycle ordering vẫn do kế hoạch/owner hiện hành
+quản lý. K8 attachment là contract M3 riêng, chưa có endpoint upload để thử.
+CI remote được theo dõi tại các PR sau khi push.

@@ -82,20 +82,28 @@ describe('Developer portal (no DB)', () => {
       .get('/dev/assets/package.json')
       .expect(404);
   });
-  it('lists all eight services and six documents, with scaffold execution disabled', async () => {
+  it('lists eight documents and disables execution only for scaffold services', async () => {
     const response = await request(app.getHttpServer())
       .get('/dev/catalog')
       .expect(200);
     expect(response.body).toHaveLength(8);
     expect(
       response.body.filter((item: { specUrl: string | null }) => item.specUrl),
-    ).toHaveLength(6);
+    ).toHaveLength(8);
     expect(
       response.body.find((item: { id: string }) => item.id === 'maintenance'),
     ).toMatchObject({
-      interactive: false,
+      interactive: true,
       specUrl: '/docs/openapi/maintenance.json',
     });
+    for (const id of ['inventory', 'notification']) {
+      expect(
+        response.body.find((item: { id: string }) => item.id === id),
+      ).toMatchObject({
+        interactive: false,
+        specUrl: `/docs/openapi/${id}.json`,
+      });
+    }
   });
   it.each([
     [
@@ -133,7 +141,15 @@ describe('Developer portal (no DB)', () => {
       '/api/workorders/work-orders',
       '/work-orders',
     ],
-    ['maintenance', '/api/maintenance', '/maintenance-plans', null, null],
+    [
+      'maintenance',
+      '/api/maintenance',
+      '/maintenance-plans',
+      '/api/maintenance/maintenance-plans',
+      '/maintenance-plans',
+    ],
+    ['inventory', '/api/inventory', '/parts', null, null],
+    ['notification', '/api/notifications', '/notifications', null, null],
   ])(
     'maps %s to the real same-origin Gateway route and hides internal paths',
     async (id, base, path, gatewayPath, upstreamPath) => {
@@ -160,7 +176,7 @@ describe('Developer portal (no DB)', () => {
       }
     },
   );
-  it('preserves login security, excludes unimplemented estimates, and rejects unknown spec filenames', async () => {
+  it('preserves login security, maps Estimate routes, and rejects unknown spec filenames', async () => {
     const identity = await request(app.getHttpServer())
       .get('/docs/openapi/identity.json')
       .expect(200);
@@ -170,10 +186,20 @@ describe('Developer portal (no DB)', () => {
       .get('/docs/openapi/service-request.json')
       .expect(200);
     expect(
-      Object.keys(requests.body.paths).some((path) =>
-        path.includes('/estimates'),
-      ),
-    ).toBe(false);
+      requests.body.paths['/service-requests/{requestId}/estimates'],
+    ).toBeDefined();
+    expect(
+      requests.body.paths['/service-requests/estimates/{estimateId}'],
+    ).toBeDefined();
+    expect(requests.body.paths['/estimates/{estimateId}']).toBeUndefined();
+    const estimate = await request(app.getHttpServer())
+      .get('/api/service-requests/estimates/portal-example')
+      .set('Authorization', 'Bearer portal-test')
+      .expect(200);
+    expect(estimate.body).toMatchObject({
+      path: '/estimates/portal-example',
+      authorization: 'Bearer portal-test',
+    });
     await request(app.getHttpServer())
       .get('/docs/openapi/package.json')
       .expect(404);

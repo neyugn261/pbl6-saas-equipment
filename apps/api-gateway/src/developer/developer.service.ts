@@ -57,14 +57,14 @@ export class DeveloperService {
         delete document.paths[path];
         continue;
       }
-      // Estimate endpoints are not implemented and /estimates has no Gateway route.
-      // Keep the original contract intact; omit these planned operations from this public view.
+      // Standalone Estimate operations use a dedicated Gateway prefix.
+      // Keep the source contract intact and map only this public view.
       if (
         service.id === 'service-request' &&
-        /\/estimates(?:\/|$)/.test(path)
+        /^\/estimates(?:\/|$)/.test(path)
       ) {
+        document.paths[`/service-requests${path}`] = item;
         delete document.paths[path];
-        continue;
       }
       delete item.servers;
       for (const method of [
