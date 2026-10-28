@@ -48,6 +48,8 @@ Nút yêu cầu Work Order thay thế của Maintenance Task mặc định bị 
 
 Kiểm tra API thật bằng `node --env-file=.env apps/web/scripts/verify-m2-issue33.mjs` từ root. Lệnh cần stack local và dữ liệu DEMO. Có thể thêm `--expect-maintenance-outage` khi chủ động tắt Maintenance Service để kiểm tra trạng thái `UNAVAILABLE`. Chế độ `--exercise-replacement` thay đổi dữ liệu demo và hiện dự kiến thất bại cho đến khi consumer nêu trên sẵn sàng. Kết quả kiểm tra chi tiết: [docs/testing/m2-web-issue33.md](../../docs/testing/m2-web-issue33.md).
 
+Thêm `--exercise-equipment-update` để kiểm tra PATCH hồ sơ, xác nhận tình trạng với lý do và quyền sửa. Chế độ này ghi lịch sử xác nhận trên thiết bị DEMO rồi phục hồi các trường hồ sơ ban đầu.
+
 ## Mock contract tùy chọn
 
 Chỉ dùng để kiểm tra giao diện khi service chưa chạy. Đặt `VITE_M1_API_MODE=mock` và `VITE_IDENTITY_API_URL=/identity` trong `.env.local`, rồi chạy ba Prism server trên cổng 4010–4012 theo `docs/api/{organization,asset,service-request}.yaml`. Sau đó có thể chạy `apps/web/scripts/smoke-mocks.ps1`. Prism không lưu thay đổi sau POST và không thay thế smoke test qua gateway.

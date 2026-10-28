@@ -168,24 +168,18 @@ function HistoryRows({ items }: { items: Row[] }) {
             {date(item.recordedAt ?? item.createdAt)}
           </span>
           <p>
-            Người thực hiện:{" "}
-            {asText(
-              item.actorId ??
-                item.createdBy ??
-                item.changedBy ??
-                item.actorType,
-            )}{" "}
+            ID người thực hiện: {asText(item.actorId ?? item.createdBy ?? item.changedBy)}{" "}
             · Vai trò:{" "}
             {Array.isArray(item.actorRoles) && item.actorRoles.length
               ? item.actorRoles.join(", ")
               : "—"}
           </p>
-          {item.reason || item.reasonInternal || item.customerNote ? (
-            <p>
-              Lý do:{" "}
-              {asText(item.reason ?? item.reasonInternal ?? item.customerNote)}
-            </p>
-          ) : null}
+          {Boolean(item.reason ?? item.reasonInternal) && (
+            <p>Lý do: {asText(item.reason ?? item.reasonInternal)}</p>
+          )}
+          {Boolean(item.customerNote) && (
+            <p>Ghi chú cho khách hàng: {asText(item.customerNote)}</p>
+          )}
           {item.referenceType ? (
             <p>
               {asText(item.referenceType)}: {asText(item.referenceId)}
@@ -263,14 +257,155 @@ function LinkedRows({
   );
 }
 
+function EquipmentEditor({
+  equipmentId,
+  equipment,
+  onSaved,
+}: {
+  equipmentId: string;
+  equipment: Row;
+  onSaved: (message: string) => void;
+}) {
+  const [displayName, setDisplayName] = useState(String(equipment.displayName ?? ""));
+  const [specs, setSpecs] = useState(
+    equipment.technicalSpecifications
+      ? JSON.stringify(equipment.technicalSpecifications, null, 2)
+      : "",
+  );
+  const [commissionedDate, setCommissionedDate] = useState(
+    String(equipment.commissionedDate ?? "").slice(0, 10),
+  );
+  const [operationalStatus, setOperationalStatus] = useState(
+    String(equipment.operationalStatus ?? "UNKNOWN"),
+  );
+  const [reason, setReason] = useState("");
+  const [customerNote, setCustomerNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submitProfile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    let technicalSpecifications: Record<string, string | number | boolean> | null = null;
+    if (specs.trim()) {
+      try {
+        const parsed: unknown = JSON.parse(specs);
+        if (
+          !parsed ||
+          typeof parsed !== "object" ||
+          Array.isArray(parsed) ||
+          Object.values(parsed).some(
+            (value) => !["string", "number", "boolean"].includes(typeof value),
+          )
+        ) {
+          throw new Error("Thông số phải là object JSON có giá trị chữ, số hoặc đúng/sai.");
+        }
+        technicalSpecifications = parsed as Record<string, string | number | boolean>;
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Thông số JSON không hợp lệ.");
+        return;
+      }
+    }
+    setBusy(true);
+    try {
+      await api.assetM2(`/equipment/${equipmentId}`, {
+        method: "PATCH",
+        body: {
+          displayName: displayName.trim() || null,
+          technicalSpecifications,
+          commissionedDate: commissionedDate || null,
+        },
+      });
+      onSaved("Đã lưu hồ sơ thiết bị.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmCondition(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    if (!reason.trim()) {
+      setError("Cần nhập lý do cho mỗi lần xác nhận tình trạng vận hành.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.assetM2(`/equipment/${equipmentId}`, {
+        method: "PATCH",
+        body: {
+          operationalStatus,
+          reason: reason.trim(),
+          customerNote: customerNote.trim() || null,
+        },
+      });
+      onSaved("Đã xác nhận tình trạng vận hành.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Cập nhật thiết bị">
+      <form className="m2-editor" onSubmit={submitProfile}>
+        <h3>Hồ sơ</h3>
+        <label>
+          Tên hiển thị
+          <input maxLength={200} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+        </label>
+        <label>
+          Thông số kỹ thuật (JSON)
+          <textarea value={specs} onChange={(e) => setSpecs(e.target.value)} />
+        </label>
+        <label>
+          Ngày đưa vào vận hành
+          <input type="date" value={commissionedDate} onChange={(e) => setCommissionedDate(e.target.value)} />
+        </label>
+        <button disabled={busy} type="submit">Lưu hồ sơ</button>
+      </form>
+      <form className="m2-editor" onSubmit={confirmCondition}>
+        <h3>Xác nhận tình trạng vận hành</h3>
+        <label>
+          Tình trạng
+          <select value={operationalStatus} onChange={(e) => setOperationalStatus(e.target.value)}>
+            <option value="UNKNOWN">Chưa rõ</option>
+            <option value="OPERATIONAL">Hoạt động</option>
+            <option value="DEGRADED">Suy giảm</option>
+            <option value="NOT_OPERATIONAL">Không hoạt động</option>
+          </select>
+        </label>
+        <label>
+          Lý do xác nhận
+          <textarea required maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </label>
+        <label>
+          Ghi chú cho khách hàng (nếu có)
+          <textarea maxLength={2000} value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} />
+        </label>
+        <button disabled={busy} type="submit">Xác nhận tình trạng</button>
+      </form>
+      {error && <p role="alert" className="m1-error">{error}</p>}
+    </Card>
+  );
+}
+
 export function DossierPage() {
   const { id } = useParams();
   const { profile } = useSession();
-  const state = useRemote<Dossier>(`dossier:${id}`, () =>
+  const [revision, setRevision] = useState(0);
+  const [notice, setNotice] = useState("");
+  const state = useRemote<Dossier>(`dossier:${id}:${revision}`, () =>
     api.assetM2(`/equipment/${id}/dossier`),
   );
   const dossier = state.value;
   const base = profile?.userType === "CUSTOMER" ? "/portal" : "/app";
+  const canManageEquipment =
+    profile?.userType === "TENANT_STAFF" &&
+    profile.roles.some((role) => ["TENANT_ADMIN", "SERVICE_MANAGER"].includes(role));
   return (
     <div className="m2-page">
       <header>
@@ -285,6 +420,7 @@ export function DossierPage() {
         <p>
           Hồ sơ thiết bị và dữ liệu liên kết · cập nhật {date(dossier?.asOf)}
         </p>
+        {notice && <p role="status">{notice}</p>}
       </header>
       <Result state={state}>
         {dossier && (
@@ -314,6 +450,17 @@ export function DossierPage() {
                   </p>
                 )}
               </Card>
+              {canManageEquipment && (
+                <EquipmentEditor
+                  key={`${id}:${revision}`}
+                  equipmentId={id!}
+                  equipment={dossier.equipment}
+                  onSaved={(message) => {
+                    setNotice(message);
+                    setRevision((value) => value + 1);
+                  }}
+                />
+              )}
               <Card title="Bảo hành và tình trạng">
                 <p>
                   Bảo hành theo lịch:{" "}

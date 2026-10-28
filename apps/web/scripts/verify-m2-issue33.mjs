@@ -133,6 +133,65 @@ console.log(
   "PASS dossier preview, independent source statuses and maintenance availability",
 );
 
+if (process.argv.includes("--exercise-equipment-update")) {
+  const original = dossier.equipment;
+  const originalProfile = {
+    displayName: original.displayName ?? null,
+    technicalSpecifications: original.technicalSpecifications ?? null,
+    commissionedDate: original.commissionedDate ?? null,
+  };
+  const patch = (token, body, expected = 200) =>
+    call(`/api/assets/equipment/${equipmentOne}`, token, expected, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const testDate =
+    originalProfile.commissionedDate === "2025-01-01"
+      ? "2025-01-02"
+      : "2025-01-01";
+  try {
+    await patch(manager, {
+      displayName: "Issue 33 equipment update check",
+      technicalSpecifications: { issue33Verified: true },
+      commissionedDate: testDate,
+    });
+    const updated = await call(
+      `/api/assets/equipment/${equipmentOne}/dossier`,
+      manager,
+    );
+    assert.equal(updated.equipment.displayName, "Issue 33 equipment update check");
+    assert.equal(updated.equipment.technicalSpecifications.issue33Verified, true);
+    assert.equal(updated.equipment.commissionedDate, testDate);
+    await patch(
+      manager,
+      { operationalStatus: original.operationalStatus },
+      400,
+    );
+    await patch(customerUser, { displayName: "Unauthorized change" }, 403);
+    await patch(manager, {
+      operationalStatus: original.operationalStatus,
+      reason: "Issue 33 confirmation check",
+      customerNote: "Confirmation test in local DEMO",
+    });
+    const confirmed = await call(
+      `/api/assets/equipment/${equipmentOne}/dossier`,
+      manager,
+    );
+    assert.ok(confirmed.operationalCondition.confirmedAt);
+    assert.ok(
+      confirmed.timelinePreview.items.some(
+        (item) => item.eventType === "OPERATIONAL_STATUS_CONFIRMED",
+      ),
+    );
+    console.log(
+      "PASS equipment profile update, separate operational confirmation, reason and permission",
+    );
+  } finally {
+    await patch(manager, originalProfile);
+  }
+}
+
 const customerDossier = await call(
   `/api/assets/equipment/${equipmentOne}/dossier`,
   customerUser,
