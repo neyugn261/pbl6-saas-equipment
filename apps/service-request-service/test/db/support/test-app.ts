@@ -39,6 +39,6 @@ export async function resetDatabase(prisma: PrismaService): Promise<void> {
     );
   }
   await prisma.$executeRawUnsafe(
-    'TRUNCATE outbox_events, processed_events, request_comments, request_status_history, request_attachments, cost_estimate_items, cost_estimates, service_requests, document_sequences',
+    'TRUNCATE outbox_events, processed_events, work_order_lifecycle_conflicts, work_order_lifecycles, request_comments, request_status_history, request_attachments, cost_estimate_items, cost_estimates, service_requests, document_sequences',
   );
 }

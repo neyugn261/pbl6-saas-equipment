@@ -38,11 +38,15 @@ isolated tests.
   customer-safe completion summary fields from v2 events. It stores the active
   Work Order logical ID so delayed completion/cancellation events from a
   replaced Work Order cannot overwrite the current result.
+  A Created event for a different Work Order while one is active now fails
+  delivery for retry/DLQ instead of being acknowledged and discarded.
   Terminal requests (CLOSED/REJECTED/CANCELLED) are recorded in the inbox
   without further transitions. Created for an already active Work Order is a
   no-op. Completion/cancellation before Created fail the inbox transaction and
   use the existing bounded retry/DLQ policy; durable reordering and lifecycle
   deduplication after the active ID is cleared are still review blockers.
+  The lifecycle ledger proposal and decision gates are recorded in
+  [the M2 lifecycle handoff](../../docs/testing/m2-work-order-lifecycle-decision.md).
 - Cost Estimate APIs support DRAFT revision create/list/update/delete, send,
   revise, customer approve/reject and lazy expiration. Totals use PostgreSQL
   decimal values and generated item amounts; the request row is locked while
@@ -98,3 +102,26 @@ and [manual guide](../../docs/testing/m2-service-request.md) before testing.
 use it directly, first change directory to `apps/service-request-service`.
 The database-backed E2E suite migrates and truncates `SERVICE_REQUEST_TEST_DATABASE_URL`;
 it refuses to run unless the database name contains `test`.
+
+# M2-H4 Work Order lifecycle (migration pending review)
+
+Migration `0005_work_order_lifecycle` adds a private, SR-owned ledger keyed by
+`(tenant_id, work_order_id)` and a conflict evidence table. The ledger retains
+Created and terminal receipts separately from the phase applied to the Service
+Request. A terminal receipt arriving first remains pending until Created is
+received. A second Created received while another Work Order is active remains
+pending and is reconciled in the same transaction that ends the active order.
+Semantic duplicates do not repeat history or outbox writes. Contradictory
+receipts are quarantined for Work Order owner review. No TTL or cleanup runs.
+
+The consumer locks the Service Request row before reading its ledger, then
+commits inbox, ledger, SR, history and outbox together. Existing
+`PROCESSING` rows with `active_work_order_id=NULL` require owner-led legacy
+reconciliation; this migration does not infer IDs or backfill them. Review the
+migration and shared ERD amendment before applying it outside the test DB.
+The customer API does not expose lifecycle or conflict records.
+
+Test DB verification: confirm `SERVICE_REQUEST_TEST_DATABASE_URL` names a
+database containing `test` before running `pnpm --filter service-request-service
+test:e2e:db`; its setup applies migrations only to that URL. The separate P0
+diagnostic uses `--testRegex=work-order-ordering.repro.ts`.
