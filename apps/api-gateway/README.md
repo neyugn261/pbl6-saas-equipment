@@ -41,3 +41,57 @@ From the repository root, run `pnpm dev:gateway`. In this directory, run
 The e2e suite uses local mock upstreams and needs no database. For the M1
 integration path after all four services and demo fixtures are ready, run
 `pnpm smoke:m1` from the root. The smoke test requires `SEED_DEMO_PASSWORD`.
+
+## Local API Explorer and service dashboard
+
+With `NODE_ENV=development` (or `test`), the Gateway serves:
+
+- `http://localhost:3000/dev`: health of all eight upstream services, their
+  configured addresses, implementation labels and links to API documentation.
+- `http://localhost:3000/docs`: Swagger UI with eight service documents and
+  same-origin requests through the existing Gateway routes.
+- `/dev/catalog`, `/dev/status`: developer-tool JSON, independent of the
+  existing four-service `/health` readiness contract.
+- `/docs/openapi/{service}.json`: a public Gateway view of `docs/api/*.yaml`.
+
+The HTML, JS, CSS and Swagger bundle are served locally; no CDN is needed.
+Nest copies `src/developer/public` when building. The Gateway reads contracts
+from the monorepo's `docs/api` directory; keep that directory when running the
+local developer portal. Changes do not modify the source YAML contracts.
+All developer pages, assets and JSON routes return 404 in production.
+These development-only routes intentionally have no business permission guard;
+Try-it-out requests still use normal service authentication and tenant scope.
+
+Start from the root:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dev:gateway
+```
+
+If a Gateway watcher was already running before the first install/config change,
+restart that Gateway process once so it loads the new dependency/asset settings.
+Use your configured Gateway port if it differs from 3000. Start business services
+and seed demo data as described in the root README to execute requests; the
+portal itself can render even when some upstreams are unavailable.
+
+To try an authenticated API: select Identity, expand `POST /auth/login`, click
+Try it out, enter DEMO credentials and Execute. Copy `accessToken`, click
+Authorize, and paste the token without a `Bearer ` prefix. Switch to Work Order
+or another service and execute a request. Authorization is carried between
+service selections in page memory, and cleared on a full page reload. After
+logging in as another role, replace the authorized token explicitly.
+
+Maintenance and Cost Estimate operations can now be executed through existing
+Gateway routes. Standalone `/estimates/*` paths are displayed under
+`/api/service-requests/estimates/*`; nested SR Estimate paths keep their existing
+mapping. Inventory and Notification show contracts with Try-it-out disabled
+because their business APIs remain scaffolds. Internal endpoints are removed
+from every public document and remain blocked by Gateway middleware. Update
+catalog implementation labels when a service ships its corresponding APIs.
+
+Status `UP` means `/health` returned 2xx; `CHƯA CÓ HEALTH` means the upstream
+answered 404 at that path; `DOWN` means another failing response or an
+unreachable/timeout target. These labels do not assert business-flow readiness.
+
+Validation: [developer portal checks](../../docs/testing/gateway-developer-portal.md).

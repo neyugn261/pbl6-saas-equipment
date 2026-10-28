@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PBL6 · Services</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/dev/assets/portal.css" />
+    <script src="/dev/assets/dashboard.js" defer></script>
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/dev">PBL6 <span>DEVELOPER</span></a>
+      <nav>
+        <a href="/dev" aria-current="page">Services</a
+        ><a href="/docs">API Explorer ↗</a>
+      </nav>
+    </header>
+    <main class="shell">
+      <div class="intro">
+        <div>
+          <p class="eyebrow">LOCAL WORKSPACE</p>
+          <h1>Services & APIs</h1>
+          <p>Xem trạng thái backend và mở tài liệu API từ một nơi.</p>
+        </div>
+        <a class="button primary" href="/docs">Mở API Explorer →</a>
+      </div>
+      <section class="toolbar">
+        <div>
+          <span class="dot neutral" id="overall-dot"></span
+          ><strong id="overall">Đang kiểm tra…</strong
+          ><span id="checked-at" class="muted"></span>
+        </div>
+        <div class="actions">
+          <label
+            ><input type="checkbox" id="auto" checked /> Tự cập nhật 10s</label
+          ><button id="refresh" type="button">Kiểm tra lại</button>
+        </div>
+      </section>
+      <p id="error" class="notice error" role="alert" hidden></p>
+      <section
+        id="services"
+        class="grid"
+        aria-label="Danh sách service"
+      ></section>
+      <p class="notice">
+        Health UP nghĩa là endpoint health trả thành công. Nhãn triển khai bên
+        dưới cho biết service đã có API nghiệp vụ hay mới là scaffold. Không cần
+        mở Web/Mobile để gọi API.
+      </p>
+      <footer>
+        Gateway developer tools · Chỉ phục vụ development/test ·
+        <a href="/health">Gateway health JSON</a>
+      </footer>
+    </main>
+  </body>
+</html>

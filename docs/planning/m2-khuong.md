@@ -3,16 +3,29 @@
 | Thuộc tính | Giá trị |
 | --- | --- |
 | Người phụ trách | Khương — Member A theo bản phân công M2 người dùng cung cấp |
-| Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-27 |
-| Mốc code đã đối chiếu | `develop 988dbe0` sau PR #25; K6 tạo lần đầu `d658a56` |
-| Trạng thái tài liệu | Tuần 2 đã merge develop qua #25; K6 tạo lần đầu đã code/test local, chờ review/merge |
+| Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-28 |
+| Mốc code đã đối chiếu | `develop ccace00` sau #36; K7 seed/demo và K8 trên nhánh `feature/khuong-m2-upload-contract-demo` |
+| Trạng thái tài liệu | K1–K6 đã triển khai/merge; K7 seed/demo đã có, K8 owner contract đã có để consumer review; nghiệm thu UI còn riêng |
 | PR dependency | [#20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20) — đã merge `fbbc97d` |
 | PR implementation | [#21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21) — đã merge `b8935d1` |
-| Việc tiếp theo | Review K6 tạo lần đầu; Minh tích hợp producer/Task state và review contract thay thế; Huy sửa H4; K7/K8 tiếp tục |
+| Việc tiếp theo | Consumer review K8 với Nguyên/Hatsady/Huy; Huy sửa H4; tích hợp Web/Android và nghiệm thu K7 |
 
 Tài liệu lưu kế hoạch, phụ thuộc, tiêu chí hoàn thành và bằng chứng để Khương,
 thành viên nhóm hoặc AI tiếp tục cập nhật. Đây không phải biên bản nghiệm thu
 hay ADR mới. Việc viết tài liệu không có nghĩa các task đã được triển khai.
+
+**Cập nhật 28/10:** issue #31 đã có implementation và bằng chứng
+[K6 replacement](../testing/m2-maintenance-replacement-test-cases.md), gồm
+producer Maintenance thật qua Gateway/PostgreSQL/RabbitMQ. Các ghi nhận ngày
+26–27/10 bên dưới là lịch sử, không dùng câu “chờ producer/contract” cũ để
+đánh giá trạng thái mới. M2 toàn nhóm vẫn cần nghiệm thu riêng.
+
+**Cập nhật sau PR #36:** K6 đã merge vào develop `ccace00`. K7 có seed
+Technician/Skill và demo SR/WO qua API thật, 130 WO DB tests (19 seed cases mới)
+và real demo smoke; [hướng dẫn](../demo/workorder-m2.md). K8 có
+[OpenAPI](../api/workorder-attachments.yaml) và [semantics/handoff](../api/workorder-attachments.md).
+Phần owner contract đã chuẩn bị; chưa ghi nhận consumer approval hoặc upload
+implementation. Các checkbox/baseline lịch sử bên dưới không thay trạng thái mới.
 
 Nguồn phân công là bản **“M2 — Phân công công việc cho 5 thành viên”**, ngày
 25/10/2026, đối chiếu `7cc48ba`, do người dùng cung cấp dưới tên
@@ -261,7 +274,7 @@ Chi tiết: [tuần 3](m2-khuong-week-3.md), [bằng chứng](../testing/m2-main
 
 ### M2-K7 — Kiểm thử, seed và bàn giao
 
-- [ ] DB suite chạy trên test DB riêng, có `requireTestDatabaseUrl`; migration
+- [x] DB suite chạy trên test DB riêng, có `requireTestDatabaseUrl`; migration
   và drift check; seed chỉ ghi DB WO, dùng fixtures đã thống nhất, idempotent.
 - [ ] Test constraint/transaction/concurrency chạy với PostgreSQL thật; test
   delivery/inbox/retry và luồng liên service qua RabbitMQ thật khi tích hợp.
@@ -274,7 +287,7 @@ Chi tiết: [tuần 3](m2-khuong-week-3.md), [bằng chứng](../testing/m2-main
 
 ### M2-K8 — Contract upload cho M3
 
-- [ ] Chuẩn bị contract attachment WO/report: presigned URL, MIME/size,
+- [x] Chuẩn bị contract attachment WO/report: presigned URL, MIME/size,
   quyền tenant/assignment, visibility INTERNAL/CUSTOMER và vòng đời file.
 - [ ] Review với Nguyên/Hatsady; phối hợp Huy nếu customer nhận attachment qua
   SR, không mở quyền đọc toàn bộ WO/report cho CUSTOMER.

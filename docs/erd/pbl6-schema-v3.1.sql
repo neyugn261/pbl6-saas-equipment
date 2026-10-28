@@ -820,6 +820,9 @@ CREATE TABLE work_orders (
     work_order_no VARCHAR(50) NOT NULL,
     service_request_id UUID NULL, -- Logical reference to service_request_db.service_requests.id
     maintenance_task_id UUID NULL, -- Logical reference to maintenance_db.maintenance_tasks.id
+    -- ADR 0011 / workorder_db 0004: durable replacement request and predecessor.
+    maintenance_replacement_request_id UUID NULL,
+    replaces_work_order_id UUID NULL, -- Local WO ID; tenant/source validated by Work Order Service.
     equipment_id UUID NOT NULL, -- Logical reference to asset_db.equipments.id
     customer_id UUID NOT NULL, -- Logical reference to organization_db.customers.id
     customer_site_id UUID NULL, -- Logical reference to organization_db.customer_sites.id
@@ -845,10 +848,25 @@ CREATE TABLE work_orders (
     UNIQUE (tenant_id, work_order_no),
     UNIQUE (tenant_id, id),
     CHECK ((service_request_id IS NOT NULL) <> (maintenance_task_id IS NOT NULL)),
+    CONSTRAINT chk_work_orders_maintenance_replacement CHECK (
+        (maintenance_replacement_request_id IS NULL AND replaces_work_order_id IS NULL)
+        OR (
+            maintenance_replacement_request_id IS NOT NULL
+            AND replaces_work_order_id IS NOT NULL
+            AND maintenance_task_id IS NOT NULL
+            AND service_request_id IS NULL
+            AND type = 'MAINTENANCE'
+            AND replaces_work_order_id <> id
+        )
+    ),
     CHECK (scheduled_end IS NULL OR scheduled_start IS NULL OR scheduled_end > scheduled_start)
 );
 CREATE INDEX idx_work_orders_service_request
     ON work_orders (service_request_id) WHERE service_request_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_work_orders_maintenance_replacement_request
+    ON work_orders (maintenance_replacement_request_id);
+CREATE UNIQUE INDEX uq_work_orders_replaces_work_order
+    ON work_orders (replaces_work_order_id);
 -- One live Work Order per Maintenance Task; a CANCELLED one releases the task
 -- so a replacement can be created (ADR 0002, fixes audit finding F07).
 CREATE UNIQUE INDEX uq_work_orders_maintenance_task

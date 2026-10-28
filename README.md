@@ -32,7 +32,7 @@ apps/
   identity-service/         :3001  ✅ auth (login/refresh/logout/me), claim customer_id, consumer tenant/membership events
   asset-service/            :3002  ✅ Equipment Model, Equipment, Warranty, QR và lịch sử; tenant/customer scope
   maintenance-service/      :3003  ✅ M2 Plan/Task API, scheduler, snapshot, WO inbox và lịch sử chi tiết
-  workorder-service/        :3004  ✅ M2: Technician/Skill, WO, assignment, thực thi/report và cancel; K6 tạo WO bảo trì lần đầu chờ review
+  workorder-service/        :3004  ✅ M2: Technician/Skill, WO, assignment/report/cancel; K6 Maintenance và consumer WO thay thế
   notification-service/     :3005  scaffold + schema notification_db
   organization-service/     :3006  ✅ Tenant, Branch, Customer, Site, Location và membership
   service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox
@@ -47,6 +47,9 @@ docs/                       SRS, ADR, ERD, API contract, kiến trúc (event, st
 Cả 8 service backend đều có Prisma migration cho database riêng (`0001_init` chép từ `docs/erd/pbl6-schema-v3.1.sql`; các migration tiếp theo thuộc từng service). Identity, Organization, Asset, Service Request và Work Order có API nghiệp vụ; các phần còn lại đang được triển khai theo ownership trong [CONTRIBUTING.md](CONTRIBUTING.md). Mỗi service đọc port riêng (`<SERVICE>_PORT` trong `.env`) và từ chối khởi động nếu biến môi trường sai.
 
 Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác thực token và phân quyền theo catalog RBAC, phạm vi tenant/customer, định dạng lỗi `{code, message}`, log JSON có correlation id, `/health`, outbox/inbox và RabbitMQ. Quy trình làm việc nhóm: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Seed/demo WO M2: [K7 — chuẩn bị dữ liệu và kịch bản](docs/demo/workorder-m2.md).
+Contract attachment M3: [K8 — OpenAPI và bàn giao](docs/api/workorder-attachments.md).
 
 ## 2. Yêu cầu hệ thống
 
@@ -414,3 +417,9 @@ giá trị mặc định ứng dụng giữ nguyên. Xem [kế hoạch tuần 2]
 [bằng chứng](docs/testing/m2-week2-test-cases.md) và [H4 giao Huy](docs/testing/h4-stale-work-order-events.md).
 
 K6: [tuần 3 của Khương](docs/planning/m2-khuong-week-3.md) và [bằng chứng Maintenance](docs/testing/m2-maintenance-test-cases.md). Consumer tạo WO bảo trì lần đầu đã có DB tests và fixture smoke broker/Gateway; scheduler/Task state thật và contract thay thế vẫn cần Minh phối hợp.
+
+Gateway có developer portal local: [Services](http://localhost:3000/dev) và
+[Swagger API Explorer](http://localhost:3000/docs), chỉ bật development/test.
+Xem [hướng dẫn Gateway](apps/api-gateway/README.md#local-api-explorer-and-service-dashboard)
+và [kiểm chứng portal](docs/testing/gateway-developer-portal.md). Nhãn scaffold
+và health chưa có được hiển thị riêng; JWT cho API nghiệp vụ vẫn do backend kiểm tra.

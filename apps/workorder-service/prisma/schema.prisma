@@ -95,6 +95,10 @@ model WorkOrder {
   serviceRequestId  String?                  @map("service_request_id") @db.Uuid
   /// Logical reference to maintenance_db.maintenance_tasks.id
   maintenanceTaskId String?                  @map("maintenance_task_id") @db.Uuid
+  /// Stable request from Maintenance; retained after cancellation for business deduplication.
+  maintenanceReplacementRequestId String? @unique(map: "uq_work_orders_maintenance_replacement_request") @map("maintenance_replacement_request_id") @db.Uuid
+  /// Previous WO in this database; source/tenant validated by the consumer. A WO has at most one successor.
+  replacesWorkOrderId String? @unique(map: "uq_work_orders_replaces_work_order") @map("replaces_work_order_id") @db.Uuid
   /// Logical reference to asset_db.equipments.id
   equipmentId       String                   @map("equipment_id") @db.Uuid
   /// Logical reference to organization_db.customers.id

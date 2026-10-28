@@ -8,6 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation.js';
 import { ProxyModule } from './proxy/proxy.module.js';
 import { HealthModule } from './health/health.module.js';
+import { DeveloperModule } from './developer/developer.module.js';
 import { InternalBlockMiddleware } from './proxy/internal-block.middleware.js';
 import { CorrelationIdMiddleware } from './proxy/correlation-id.middleware.js';
 import {
@@ -34,6 +35,7 @@ import {
     }),
     ProxyModule,
     HealthModule,
+    DeveloperModule,
   ],
 })
 export class AppModule implements NestModule {
