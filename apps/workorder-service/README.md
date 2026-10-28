@@ -1,4 +1,4 @@
-# Work Order Service — M2 (K6 tạo WO bảo trì lần đầu)
+# Work Order Service — M2 (K6 Maintenance và WO thay thế)
 
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
@@ -75,7 +75,7 @@ transaction: sequence, WO CREATED, status history, work log và
 `WorkOrderCreated.v1`. Transaction timeout 20 giây; mỗi HTTP call timeout 5 giây.
 Constraint SQL vẫn là lớp chặn tạo trùng cuối cùng. Không sửa migration cũ.
 
-Workflow khóa theo thứ tự SR → WO → technician (ID chuẩn hóa chữ thường,
+Workflow khóa theo thứ tự nguồn SR/Maintenance Task → WO → technician (ID chuẩn hóa chữ thường,
 sắp tăng dần). Tất cả thay đổi assignment/status/report/history/log/outbox
 nằm trong một transaction. BUSY tính từ các assignment ACCEPTED còn lại;
 OFF_DUTY/INACTIVE được giữ nguyên. `allowedActions` phản ánh các action đã
@@ -117,7 +117,8 @@ ASSIGNED/ACCEPTED tự hủy; history changedBy=NULL, không tạo log bằng us
 WO TRAVELLING/IN_PROGRESS/ON_HOLD giữ nguyên, ghi cảnh báo cho quản lý; Notification
 thuộc M3. Consumer không gọi SR đồng bộ hoặc đọc DB SR.
 
-Queue `workorder-service.maintenance-tasks` nhận MaintenanceTaskDue v1; inbox
+Queue `workorder-service.maintenance-tasks` nhận MaintenanceTaskDue v1 và
+MaintenanceWorkOrderReplacementRequested v1. Due dùng inbox
 handler `workorder-service.maintenance-task-due`. Consumer kiểm tra catalog,
 producer/aggregate/tenant/task và ngày lịch; tạo MAINTENANCE/NORMAL từ snapshot,
 createdBy/history actor null, không log hệ thống, không gọi HTTP upstream.
@@ -128,11 +129,36 @@ scheduledDate được biểu diễn tại scheduledStart bằng 00:00 ngày đ�
 scheduledEnd null; đây là ngày lịch, chưa phải giờ hẹn khách. Ngày không có thật
 bị từ chối. Replay Due (kể cả event ID mới) không tạo thêm WO nếu task đã có WO,
 bao gồm CANCELLED/COMPLETED; không tự thay WO khi thiếu ý định Service Manager.
-Không đổi schema, permission hoặc contract v1.
+Contract Due v1 và permission giữ nguyên.
 
-**Giới hạn:** yêu cầu WO thay thế chưa có contract kỹ thuật được review với Minh;
-Maintenance producer/Task-state consumer còn cần tích hợp thật. [H4 của SR](../../docs/testing/h4-stale-work-order-events.md)
-đã giao Huy sửa; chưa nghiệm thu event WO cũ tác động sau WO thay thế.
+Replacement dùng inbox handler `workorder-service.maintenance-work-order-replacement`.
+Maintenance sở hữu API `/maintenance-tasks/{id}/replacement`, xác thực ý định
+Service Manager và cấp requestId/replacementWorkOrderId. WO không gọi HTTP hoặc
+truy vấn Maintenance DB từ consumer. Predecessor phải CANCELLED, đúng
+tenant/task/equipment/customer/site, không phải nguồn SR. Một WO COMPLETED vẫn
+chặn replacement theo ADR 0002.
+
+Consumer tạo **đúng ID do Maintenance cấp**; migration
+`0004_maintenance_replacement_reference` lưu requestId và predecessor bền vững,
+unique riêng từng giá trị. Một predecessor chỉ có một successor, kể cả successor
+đã bị hủy: yêu cầu tiếp theo phải tham chiếu successor vừa hủy. Reuse request/WO
+ID cho nguồn khác bị từ chối. Replay cùng/khác event ID không tạo thêm WO hoặc
+đặt lại lịch đã được sửa. createdBy/changedBy NULL; requestedBy ghi trong reason
+history hệ thống, không tạo work log hoặc token người dùng giả.
+
+Initial Due, replacement và workflow Maintenance dùng chung advisory lock theo
+task UUID; inbox/sequence/WO/history/Created outbox cùng transaction. Không có
+retry tự tạo request mới. Lỗi handler dùng bounded retry rồi DLQ theo package
+chung. Sau sửa nguyên nhân, replay giữ event/request/WO IDs.
+
+**Triển khai:** áp migration WO 0004 trước khi chạy consumer; deploy binding trước
+khi bật thao tác replacement UI. Với request đã PENDING từ trước khi có binding,
+đối soát Maintenance outbox và replay event gốc sau deploy; không cấp requestId
+mới. Broker confirm/PUBLISHED không chứng minh WO đã được tạo.
+
+Thiết kế/schema cần shared review theo [ADR 0011](../../docs/decisions/0011-workorder-maintenance-replacement.md).
+[H4/F09/F10 của SR](../../docs/testing/m2-service-request-audit.md) vẫn thuộc Huy;
+kiểm thử Maintenance replacement không thay thế nghiệm thu SR ordering.
 
 ## Kiểm tra
 
@@ -194,3 +220,19 @@ cho dev/test, dọn queue observer riêng và giữ record demo làm bằng ch�
 Đây chưa phải scheduler Maintenance thật. CI hiện tự chạy DB cases mới;
 smoke K6 riêng chưa có trong job CI. Xem [tuần 3](../../docs/planning/m2-khuong-week-3.md)
 và [bằng chứng K6](../../docs/testing/m2-maintenance-test-cases.md).
+
+K6 replacement có DB tests riêng trong `test/db/maintenance-replacement.e2e-spec.ts`
+(được suite/CI hiện có tự tìm). Tích hợp producer Maintenance thật:
+
+```bash
+pnpm --filter asset-service --filter maintenance-service --filter workorder-service --filter api-gateway build
+pnpm --filter maintenance-service test:integration
+```
+
+Cần ASSET/MAINTENANCE/WORKORDER_TEST_DATABASE_URL và RABBITMQ_TEST_URL (hoặc
+RABBITMQ_URL); chỉ dùng DB test. Script dùng Gateway/PostgreSQL/RabbitMQ và
+producer/consumer thật; JWT và Organization reference là fixture. Nó kiểm tra
+cancel → request → WO thay thế → Task link → cancel/thay thế tiếp → report/Task/
+Asset history, duplicate/replay Due/event WO cũ. Fault injection cố ý giữ Created
+của replacement cuối đến sau Completed. Không phải kiểm thử web/Android.
+Kết quả và hướng dẫn: [K6 replacement](../../docs/testing/m2-maintenance-replacement-test-cases.md).

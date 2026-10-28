@@ -34,7 +34,7 @@ with pre-release or already queued messages; producers publish v2:
 | `WorkOrderCancelled.v1` | — (compatibility only) | legacy compatibility | `workOrderId, workOrderNo, serviceRequestId\|null, maintenanceTaskId\|null, equipmentId, reason\|null, cancelledAt` | service-request (→ ACCEPTED), maintenance (release task, ADR 0002) |
 | `WorkOrderCancelled.v2` | workorder-service | M2 | `WorkOrderCancelled.v1` fields + `cancelServiceRequest` | service-request (→ CANCELLED when `cancelServiceRequest`, else → ACCEPTED; ADR 0008 D4a), maintenance |
 | `MaintenanceTaskDue.v1` | maintenance-service | M2 | `maintenanceTaskId, maintenancePlanId, equipmentId, customerId, customerSiteId\|null, scheduledDate (YYYY-MM-DD), title` | workorder (create WO) |
-| `MaintenanceWorkOrderReplacementRequested.v1` | maintenance-service | M2 proposal | Due snapshot fields + `requestId, previousWorkOrderId, replacementWorkOrderId, requestedBy` | Work Order owner handoff; explicit manager request, fixed allocated WO ID, never a Due replay |
+| `MaintenanceWorkOrderReplacementRequested.v1` | maintenance-service | M2 | Due snapshot fields + `requestId, previousWorkOrderId, replacementWorkOrderId, requestedBy` | workorder (explicit manager request, fixed allocated replacement WO ID; ADR 0011) |
 | `LowStockDetected.v1` | inventory-service | M3 | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
 
 `MaintenanceTaskDue` carries a customer snapshot because event consumers do
@@ -60,7 +60,7 @@ system-created order (ADR 0007 D12e and ADR 0008 D5).
 | `identity-service.directory` | identity-service | TenantCreated v1, TenantStatusChanged v1, CustomerMembershipChanged v1 |
 | `service-request-service.work-orders` | service-request-service | WorkOrderCreated v1, WorkOrderCompleted v1/v2, WorkOrderCancelled v1/v2 |
 | `workorder-service.service-requests` | workorder-service | ServiceRequestStatusChanged v1; chỉ xử lý toStatus CANCELLED, inbox handler `workorder-service.service-request-cancellations` |
-| `workorder-service.maintenance-tasks` | workorder-service | MaintenanceTaskDue v1; inbox handler `workorder-service.maintenance-task-due`, first WO only (implementation PR #26) |
+| `workorder-service.maintenance-tasks` | workorder-service | MaintenanceTaskDue v1 + MaintenanceWorkOrderReplacementRequested v1; inbox handlers `workorder-service.maintenance-task-due` and `workorder-service.maintenance-work-order-replacement` (issue #31, ADR 0011) |
 | `maintenance-service.equipment` | maintenance-service | EquipmentMoved v1; inbox handler `maintenance-service.equipment-snapshots` |
 | `maintenance-service.workorder` | maintenance-service | WorkOrderCreated v1, WorkOrderCompleted v2, WorkOrderCancelled v2; inbox handler `maintenance-service.workorder` |
 | `asset-service.history` | asset-service | ServiceRequestStatusChanged v1, WorkOrderCompleted v2; safe allowlisted history fields |
@@ -88,9 +88,12 @@ A normalized task UUID lock serializes distinct event IDs for the same task.
 
 A replay of MaintenanceTaskDue does not request a replacement: once any WO
 exists for that task, including CANCELLED or COMPLETED, this consumer creates
-no further WO. Khương confirmed manager-initiated replacements; that operation
-still needs a reviewed cross-owner contract with request identity and lifecycle
-ordering. Do not infer replacement intent from a new due-event ID or edit v1 to
-introduce it. ADR 0009 now contains a separate replacement proposal and the
-Maintenance-side implementation. Work Order's replacement consumer remains a
-separate handoff; no replacement is implied by the initial Due queue entry.
+no further WO. Khương confirmed manager-initiated replacements; the operation
+uses the separate catalog contract with request identity and lifecycle ordering.
+Do not infer replacement intent from a new due-event ID or edit Due v1 to
+introduce it. ADR 0009 contains the separate replacement proposal and the
+Maintenance-side implementation. Work Order consumes the separate replacement
+event using the supplied WO ID; durable request/predecessor references and
+deployment ordering are recorded in [ADR 0011](../decisions/0011-workorder-maintenance-replacement.md).
+No replacement is implied by a Due replay. Deploy the replacement binding before
+enabling UI requests; replay previously unbound outbox deliveries with original IDs.

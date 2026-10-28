@@ -1,5 +1,13 @@
 # M2 — Tuần 3 của Khương
 
+**Cập nhật 28/10/2026:** baseline develop `76c179b` đã nhận #26/#27 và backend
+Maintenance của Minh. Issue #31 được triển khai trên
+`feature/khuong-maintenance-replacement`: consumer replacement, migration WO
+0004, khóa nguồn và integration producer thật. Kết quả/triển khai/replay:
+[K6 replacement](../testing/m2-maintenance-replacement-test-cases.md).
+Chờ review/merge; F09/F10/F11 của SR và K8 vẫn tách riêng. Phần ghi ngày 27/10
+bên dưới lưu lịch sử trước khi tích hợp, không phải trạng thái hiện tại.
+
 Cập nhật 2026-10-27. Baseline develop `988dbe0` đã nhận đầy đủ tuần 2 qua
 [PR #25](https://github.com/neyugn261/pbl6-saas-equipment/pull/25), sau #22–#24.
 [CI develop](https://github.com/neyugn261/pbl6-saas-equipment/actions/runs/40376976083)

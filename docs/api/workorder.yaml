@@ -51,7 +51,16 @@ info:
       and refuses (422), or the consumer runs after the create and finds the
       Work Order. This coordinates creation and cancellation in CREATED,
       ASSIGNED and ACCEPTED; the underway-work exception above still applies.
-    - Consumers are idempotent through the inbox (ADR 0005).
+    - Consumes `MaintenanceWorkOrderReplacementRequested.v1` for explicit
+      manager-requested replacements. The predecessor must be CANCELLED and
+      match tenant/task/equipment/customer/site; COMPLETED still blocks the
+      task. Uses the supplied replacementWorkOrderId and retains unique
+      request/predecessor references (ADR 0011). Due replay never requests
+      replacement. Initial creation, replacement and Maintenance workflows
+      share the task advisory lock before WO/technician locks. System actors
+      remain NULL; requestedBy is recorded in the internal history reason.
+    - Consumers are idempotent through the inbox (ADR 0005); replacement
+      request/WO identity also deduplicates deliveries with different event IDs.
 
     Changes made by the system from an event (create from a Maintenance Task,
     cancel after a cancelled request) write `work_order_status_history` with

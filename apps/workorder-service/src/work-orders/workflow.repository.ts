@@ -4,6 +4,7 @@ import { Events, enqueueEvent } from '@pbl6/event-contracts';
 import { getCorrelationId } from '@pbl6/service-kit';
 import { PrismaService } from '../prisma/prisma.service';
 import { missing } from '../common/errors';
+import { lockMaintenanceTask } from '../common/maintenance-source';
 import {
   lockServiceRequest,
   workOrderInclude,
@@ -35,6 +36,8 @@ export class WorkOrderWorkflowRepository {
         if (!source) throw missing('WORK_ORDER_NOT_FOUND');
         if (source.serviceRequestId)
           await lockServiceRequest(tx, tenantId, source.serviceRequestId);
+        if (source.maintenanceTaskId)
+          await lockMaintenanceTask(tx, source.maintenanceTaskId);
         await tx.$queryRaw`SELECT id FROM work_orders WHERE tenant_id = ${tenantId}::uuid AND id = ${id}::uuid FOR UPDATE`;
         const order = await tx.workOrder.findFirst({
           where: { ...workOrderScope(p), id },
