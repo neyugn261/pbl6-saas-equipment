@@ -6,7 +6,7 @@ chức năng đã triển khai. Nền tảng/session P0 đã có ở `e6e538a` v
 Backend được đối chiếu thêm tại `origin/develop cffbaa6`; không rebase, apply
 migration hoặc thay đổi backend trong lần thiết kế này.
 
-**Cập nhật giao diện:** đã dựng Flutter UI theo theme ảnh tham chiếu trên nhánh
+**Mốc UI trước tích hợp (05a9909):** đã dựng Flutter UI theo theme ảnh tham chiếu trên nhánh
 `feature/khuong-mobile-session`. Màn hình dùng fixtures; API/mutation/plugin mới
 còn TODO. [Cách mở và bàn giao UI](../demo/mobile-ui-preview.md). Kết quả này
 không đổi trạng thái nghiệm thu nghiệp vụ M2/M3 trong thiết kế bên dưới.
@@ -348,3 +348,13 @@ phân trang/assignment lookup và bằng chứng ở
 Bước tiếp theo vẫn là command workflow/report thật và xử lý 409/timeout/race
 như mục 5–6; file/notification/parts/camera thuộc giai đoạn sau. Hoàn thành
 phần đọc không thay cho nghiệm thu workflow M2 đầy đủ ở mục 13.
+
+## 15. N5 và kiểm tra N6 phía Android
+
+Đã nối thao tác WO/report/complete qua Gateway thật, xác nhận/lý do,
+chống gửi lặp, giữ form khi lỗi và đối soát kết quả chưa xác định. Native Back
+qua session navigator tôn trọng PopScope; không mất report chưa gửi.
+Xem [bằng chứng và cách chạy N5/N6](../testing/mobile-n5-n6.md).
+
+Theo lựa chọn của người dùng, giữ phạm vi mobile. N6 phía Android được kiểm
+thử riêng; bước web tạo/phân công WO còn chờ Hatsady, chưa chốt 9/9 toàn nhóm.

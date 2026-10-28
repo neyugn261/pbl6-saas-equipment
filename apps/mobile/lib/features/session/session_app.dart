@@ -71,7 +71,12 @@ class _TechnicianAppState extends State<TechnicianApp>
   );
 
   Widget _workspace() => NavigatorPopHandler<Object?>(
-    onPopWithResult: (_) => _workspaceNavigator.currentState?.pop(),
+    // Respect the child route's PopScope (dirty report / in-flight command).
+    // Calling pop() here forces a pop and bypasses that route's disposition.
+    onPopWithResult: (_) {
+      final navigator = _workspaceNavigator.currentState;
+      if (navigator != null) unawaited(navigator.maybePop());
+    },
     child: Navigator(
       key: _workspaceNavigator,
       onGenerateRoute: (_) => MaterialPageRoute<void>(

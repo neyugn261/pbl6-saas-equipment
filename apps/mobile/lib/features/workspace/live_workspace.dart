@@ -32,14 +32,21 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final user = widget.session.user!;
-    repo = WorkspaceRepository((path) async {
+    Future<Object?> request(String method, String path, {Json? body}) async {
       if (widget.session.user?.id != user.id ||
           widget.session.user?.tenantId != user.tenantId ||
           widget.session.user?.roles.join(',') != user.roles.join(',')) {
         throw const ApiException('SESSION_CHANGED');
       }
-      return widget.session.authorizedRequest('GET', path);
-    }, user);
+      return widget.session.authorizedRequest(method, path, body: body);
+    }
+
+    repo = WorkspaceRepository(
+      (path) => request('GET', path),
+      user,
+      write: (path, body) => request('POST', path, body: body),
+    );
+    repo.addListener(_businessChanged);
     _work = repo.personalWork();
     // ReadView attaches its listener during the first build. Attach an error
     // listener immediately too, for synchronous test transports / fast failures.
@@ -49,7 +56,13 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    repo.removeListener(_businessChanged);
+    repo.dispose();
     super.dispose();
+  }
+
+  void _businessChanged() {
+    if (mounted) unawaited(_refresh());
   }
 
   @override

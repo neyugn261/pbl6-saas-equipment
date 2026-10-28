@@ -4,6 +4,10 @@ Nhánh `feature/khuong-mobile-session`, 28/10/2026. UI được chốt và push 
 `05a9909`; nhánh đã nhận `develop` đến `e16a7b8` trước đợt tích hợp này.
 Thiết kế: [mobile-technician-design](../planning/mobile-technician-design.md).
 
+**Cập nhật 29/10:** phần ghi nghiệp vụ đã được nối ở đợt
+[N5/N6 Android](mobile-n5-n6.md). Tài liệu dưới giữ bằng chứng của mốc đọc
+`173786f`, không phải danh sách TODO hiện tại.
+
 ## Phạm vi đã nối
 
 `lib/main.dart` đăng nhập Identity thật và mở workspace trong
@@ -68,7 +72,7 @@ bị biến thành danh sách rỗng. UNKNOWN là Chưa xác nhận; hoàn thàn
 được suy ra equipment OPERATIONAL. Bảo hành theo ngày khác snapshot xét SR.
 Tên actor chưa resolve được hiển thị bằng ID, không gọi Identity internal.
 
-Các nút ghi nghiệp vụ vẫn ghi rõ **Chưa kết nối**: accept/reject, travel/start,
+Ở mốc đọc `173786f`, các nút ghi nghiệp vụ còn ghi rõ **Chưa kết nối**: accept/reject, travel/start,
 hold/resume, POST log, complete/report. Không có business POST/PATCH/DELETE từ
 workspace. Camera, file/upload, Notification, phụ tùng và nháp M3 chờ API/plugin;
 app đăng nhập hiện ghi chú chờ triển khai, không hiện inbox/file/stock mẫu như

@@ -110,14 +110,30 @@ class ReadPage extends StatelessWidget {
     required this.title,
     required this.child,
     this.actions,
+    this.bottom,
   });
   final String title;
   final Widget child;
   final List<Widget>? actions;
+  final Widget? bottom;
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(title), actions: actions),
     body: SafeArea(top: false, child: child),
+    bottomNavigationBar: bottom == null
+        ? null
+        : Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: bottom,
+              ),
+            ),
+          ),
   );
 }
 
@@ -289,32 +305,4 @@ class SectionView extends StatelessWidget {
       _ => 'Chưa nhận được phần dữ liệu này.',
     });
   }
-}
-
-void readOnlyNote(BuildContext context, String action) {
-  // TODO(mobile-commands/M3): implement commands with fresh allowedActions and
-  // conflict handling. This read milestone never writes business data.
-  showModalBottomSheet<void>(
-    context: context,
-    builder: (context) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(action, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            const Text(
-              'Chức năng này chưa được kết nối. Hiện ứng dụng chỉ đọc dữ liệu nghiệp vụ từ backend.',
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Đã hiểu'),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }

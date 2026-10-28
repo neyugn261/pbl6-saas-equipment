@@ -149,4 +149,41 @@ void main() {
     await fill(tester);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'system Back through session navigator honors unsent report PopScope',
+    (tester) async {
+      f.handler = (r) async => workspaceResponse(r, f);
+      await f.login();
+      await open(tester);
+      await tester.tap(find.byKey(const Key('nav-jobs')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Công việc từ API'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('wo-complete')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('report-problem')),
+        'Draft protected by nested navigator',
+      );
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Rời báo cáo đang nhập?'), findsOneWidget);
+      await tester.tap(find.text('Tiếp tục nhập'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('report-problem')))
+            .controller!
+            .text,
+        'Draft protected by nested navigator',
+      );
+      expect(
+        f.requests.any(
+          (r) => r.method == 'POST' && r.url.path.endsWith('/complete'),
+        ),
+        false,
+      );
+    },
+  );
 }

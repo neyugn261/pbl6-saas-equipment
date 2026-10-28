@@ -6,8 +6,10 @@ xuất. Giao diện 5 tab và các màn hình nghiệp vụ theo
 [thiết kế mobile](../../docs/planning/mobile-technician-design.md).
 App đăng nhập đã nối các API đọc thật qua Gateway: công việc cá nhân/lịch sử,
 WO/report/logs, lịch, thiết bị/dossier/bảo hành/timeline, liên hệ và hồ sơ
-Technician. Các command nghiệp vụ và M3 còn TODO; chưa nghiệm thu toàn bộ
-workflow N4–N6/M2. Xem [đọc backend và cách demo](../../docs/testing/mobile-backend-reads.md).
+Technician. Đã nối thao tác N5 thật: accept/reject/travel/start/hold/resume,
+ghi chú, Service Report và complete. Có bảo vệ form, chống gửi lặp và đối soát
+khi mất phản hồi. Xem [N5 và nghiệm thu Android N6](../../docs/testing/mobile-n5-n6.md).
+Luồng 9/9 toàn nhóm còn bước web tạo/phân công WO chờ Hatsady; M3 còn TODO.
 
 ## Xem giao diện không cần backend
 
@@ -26,7 +28,7 @@ ngày lịch, stepper và xem trước form chỉ hoạt động trong giao di�
 nghiệp vụ thông báo rõ chưa gửi/thay đổi dữ liệu. Camera, file upload, thông
 báo và phụ tùng M3 có giao diện minh họa, chưa nối plugin/API.
 
-`lib/main.dart` dùng session P0 và workspace đọc backend thật, không dùng
+`lib/main.dart` dùng session P0 và workspace đọc/ghi nghiệp vụ thật, không dùng
 fixtures của preview. Có loading/empty/error/retry, phân trang, kéo tải lại
 và đọc lại khi trở về foreground. Thiếu profile/quyền, lỗi API hoặc dịch vụ
 chưa cấu hình được thể hiện rõ. Khi phiên đổi, navigation stack riêng được
@@ -66,7 +68,8 @@ emulator -accel-check
 flutter emulators
 ```
 
-AVD cho dự án: `PBL6_API_36`, Pixel 6, API 36, x86_64, dùng KVM. Chỉ chạy một
+AVD cho dự án: `PBL6_API_36`, API 36, x86_64, KVM và GPU host. Máy local
+đã chỉnh 720×1600/density 280, 4 CPU/4 GB RAM để giảm tải, giữ kích thước dp. Chỉ chạy một
 instance của cùng AVD. Để mở cửa sổ emulator:
 
 ```bash

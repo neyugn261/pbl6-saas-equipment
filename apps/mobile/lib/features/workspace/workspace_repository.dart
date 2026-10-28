@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
+
 import '../../core/api/api_exception.dart';
 import '../session/session_models.dart';
 
 typedef Json = Map<String, dynamic>;
 typedef GatewayRead = Future<Object?> Function(String path);
+typedef GatewayWrite = Future<Object?> Function(String path, Json body);
 
 Json object(Object? value) => jsonObject(value);
 List<Json> rows(Object? value) {
@@ -167,6 +170,20 @@ class WorkOrder {
   bool get terminal => ['COMPLETED', 'CANCELLED'].contains(status);
   DateTime? get start => wallTime(data['scheduledStart']);
   DateTime? get end => wallTime(data['scheduledEnd']);
+  bool allows(String action, String userId) =>
+      currentFor(userId) &&
+      (data['allowedActions'] is List &&
+          (data['allowedActions'] as List).contains(action)) &&
+      (const {
+            'accept': ['ASSIGNED'],
+            'reject': ['ASSIGNED'],
+            'start-travel': ['ACCEPTED'],
+            'start': ['ACCEPTED', 'TRAVELLING'],
+            'hold': ['IN_PROGRESS'],
+            'resume': ['ON_HOLD'],
+            'complete': ['IN_PROGRESS'],
+          }[action]?.contains(status) ??
+          false);
   bool currentFor(String userId) {
     final a = nested(data, 'currentAssignment');
     return !terminal &&
@@ -185,6 +202,18 @@ class Equipment {
       text(data, 'displayName', text(nested(data, 'model'), 'name', code));
 }
 
+/// Session-local uncertainty marker. Never an offline queue and never replayed.
+class PendingWorkOrderCommand {
+  PendingWorkOrderCommand(this.action, this.body, this.before);
+  final String action;
+  final Json body;
+  final WorkOrder before;
+  final beforeLogIds = <String>{};
+  final beforeHistoryIds = <String>{};
+  bool attempted = false;
+  bool inFlight = true;
+}
+
 class PersonalWork {
   const PersonalWork(this.technician, this.orders, this.userId);
   final Json technician;
@@ -196,12 +225,43 @@ class PersonalWork {
       orders.where((w) => !w.currentFor(userId)).toList();
 }
 
-/// Public Gateway GETs only. No credentials or cross-service DB access here.
+/// Public Gateway reads and Technician commands. No credentials or DB access.
 /// No durable business cache: a workspace and its data die with the session.
-class WorkspaceRepository {
-  WorkspaceRepository(this.read, this.user);
+class WorkspaceRepository extends ChangeNotifier {
+  WorkspaceRepository(this.read, this.user, {this.write});
   final GatewayRead read;
+  final GatewayWrite? write;
   final SessionUser user;
+  final pendingCommands = <String, PendingWorkOrderCommand>{};
+  bool _closed = false;
+  void changed() {
+    if (!_closed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _closed = true;
+    super.dispose();
+  }
+
+  Future<Object?> post(String id, String action, Json body) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (![
+      'accept',
+      'reject',
+      'start-travel',
+      'start',
+      'hold',
+      'resume',
+      'complete',
+      'logs',
+    ].contains(action)) {
+      throw const ApiException('INVALID_COMMAND');
+    }
+    if (write == null) throw const ApiException('READ_ONLY');
+    return write!('$wo/work-orders/$id/$action', body);
+  }
+
   static const wo = '/api/workorders';
   static const asset = '/api/assets';
   String path(String base, [Map<String, String> query = const {}]) =>

@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-import '../../core/api/api_exception.dart';
 import '../../ui/components.dart';
 import '../../ui/theme.dart';
 import 'equipment_reads.dart';
+import 'job_actions.dart';
+import 'work_order_workflow.dart';
+import 'service_report_read.dart';
+export 'service_report_read.dart';
 import 'read_widgets.dart';
 import 'workspace_repository.dart';
 
@@ -17,110 +22,120 @@ class JobReadScreen extends StatefulWidget {
 
 class _JobReadScreenState extends State<JobReadScreen>
     with WidgetsBindingObserver {
-  int _tab = 0, _revision = 0;
+  int _tab = 0;
+  late final WorkOrderWorkflow workflow;
+  int get _revision => workflow.revision;
   WorkspaceRepository get repo => widget.repo;
   String get base => '${WorkspaceRepository.wo}/work-orders/${widget.id}';
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    workflow = WorkOrderWorkflow(repo, widget.id);
+    unawaited(workflow.load());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    workflow.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
-      setState(() => _revision++);
+      unawaited(workflow.load());
     }
   }
 
-  Future<void> _refresh() async => setState(() => _revision++);
+  Future<void> _refresh() => workflow.load();
   @override
-  Widget build(BuildContext context) => ReadPage(
-    title: 'Chi tiết công việc',
-    actions: [
-      IconButton(
-        tooltip: 'Tải lại',
-        onPressed: _refresh,
-        icon: const Icon(Icons.refresh),
-      ),
-    ],
-    child: ReadList(
-      refresh: _refresh,
-      children: [
-        ReadView<WorkOrder>(
-          requestKey: _revision,
-          load: () => repo.order(widget.id),
-          builder: (w) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              PageHeading(w.number, subtitle: w.title),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  statusPill(w.status),
-                  Pill(label(text(w.data, 'priority')), color: AppColors.muted),
-                ],
-              ),
-              const SizedBox(height: 20),
-              ChoicePills(
-                labels: const [
-                  'Tổng quan',
-                  'Hoạt động',
-                  'Báo cáo',
-                  'Tệp',
-                  'Phụ tùng',
-                ],
-                selected: _tab,
-                onSelected: (i) => setState(() => _tab = i),
-              ),
-              const SizedBox(height: 20),
-              if (_tab == 0) ..._overview(w),
-              if (_tab == 1) ...[
-                const SectionTitle('Lịch sử trạng thái'),
-                _feed('history', 'status'),
-                const SectionTitle('Lịch sử phân công'),
-                _feed('assignments', 'assignment'),
-                const SectionTitle('Nhật ký thực hiện'),
-                _feed('logs', 'log'),
-              ],
-              if (_tab == 2)
-                ServiceReportRead(
-                  repo: repo,
-                  workOrderId: w.id,
-                  revision: _revision,
-                ),
-              if (_tab == 3)
-                const Notice(
-                  'Tệp đính kèm chờ backend M3. Chưa có danh sách tệp thật.',
-                ),
-              if (_tab == 4)
-                const Notice(
-                  'Phụ tùng chờ Inventory M3. Chưa có dữ liệu xuất kho thật.',
-                ),
-              const SizedBox(height: 20),
-              if (w.terminal)
-                const Notice(
-                  'Công việc đã kết thúc. Chỉ xem dữ liệu và báo cáo.',
-                )
-              else if (w.currentFor(repo.user.id))
-                OutlinedButton.icon(
-                  onPressed: () => readOnlyNote(context, 'Cập nhật công việc'),
-                  icon: const Icon(Icons.edit_note),
-                  label: const Text('Cập nhật công việc · Chưa kết nối'),
-                ),
-            ],
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: workflow,
+    builder: (context, _) => PopScope(
+      canPop: !workflow.busy,
+      child: ReadPage(
+        title: 'Chi tiết công việc',
+        actions: [
+          IconButton(
+            tooltip: 'Tải lại',
+            onPressed: workflow.busy ? null : _refresh,
+            icon: const Icon(Icons.refresh),
           ),
+        ],
+        bottom: WorkOrderActionBar(
+          workflow: workflow,
+          onReportClosed: () => setState(() => _tab = 2),
         ),
-      ],
+        child: ReadList(
+          refresh: _refresh,
+          children: [
+            if (workflow.notice != null) Notice(workflow.notice!),
+            if (workflow.loading)
+              const Center(child: CircularProgressIndicator())
+            else if (workflow.order == null)
+              Notice(
+                workflow.loadError?.userMessage ?? 'Không đọc được công việc.',
+                action: TextButton(
+                  onPressed: _refresh,
+                  child: const Text('Thử lại'),
+                ),
+              )
+            else
+              _detail(workflow.order!),
+          ],
+        ),
+      ),
     ),
+  );
+  Widget _detail(WorkOrder w) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      PageHeading(w.number, subtitle: w.title),
+      const SizedBox(height: 16),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          statusPill(w.status),
+          Pill(label(text(w.data, 'priority')), color: AppColors.muted),
+        ],
+      ),
+      const SizedBox(height: 20),
+      ChoicePills(
+        labels: const ['Tổng quan', 'Hoạt động', 'Báo cáo', 'Tệp', 'Phụ tùng'],
+        selected: _tab,
+        onSelected: (i) => setState(() => _tab = i),
+      ),
+      const SizedBox(height: 20),
+      if (_tab == 0) ..._overview(w),
+      if (_tab == 1) ...[
+        const SectionTitle('Lịch sử trạng thái'),
+        _feed('history', 'status'),
+        const SectionTitle('Lịch sử phân công'),
+        _feed('assignments', 'assignment'),
+        const SectionTitle('Nhật ký thực hiện'),
+        _feed('logs', 'log'),
+      ],
+      if (_tab == 2)
+        ServiceReportRead(repo: repo, workOrderId: w.id, revision: _revision),
+      if (_tab == 3)
+        const Notice(
+          'Tệp đính kèm chờ backend M3. Chưa có danh sách tệp thật.',
+        ),
+      if (_tab == 4)
+        const Notice(
+          'Phụ tùng chờ Inventory M3. Chưa có dữ liệu xuất kho thật.',
+        ),
+      const SizedBox(height: 20),
+      if (w.terminal)
+        const Notice('Công việc đã kết thúc. Chỉ xem dữ liệu và báo cáo.')
+      else if (!w.currentFor(repo.user.id))
+        const Notice(
+          'Bạn không còn được phân công hiện tại. Chỉ xem lịch sử công việc.',
+        ),
+    ],
   );
   List<Widget> _overview(WorkOrder w) => [
     DataCard(
@@ -298,54 +313,6 @@ class EventRecords extends StatelessWidget {
               ),
           ],
         );
-}
-
-class ServiceReportRead extends StatelessWidget {
-  const ServiceReportRead({
-    super.key,
-    required this.repo,
-    required this.workOrderId,
-    this.revision = 0,
-  });
-  final WorkspaceRepository repo;
-  final String workOrderId;
-  final int revision;
-  Future<Json?> _load() async {
-    try {
-      return await repo.get(
-        '${WorkspaceRepository.wo}/work-orders/$workOrderId/service-report',
-      );
-    } on ApiException catch (e) {
-      if (e.status == 404 && e.code == 'SERVICE_REPORT_NOT_FOUND') return null;
-      rethrow;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => ReadView<Json?>(
-    requestKey: revision,
-    load: _load,
-    builder: (r) => r == null
-        ? const Notice('Công việc chưa có báo cáo dịch vụ.')
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              statusPill(text(r, 'result')),
-              const SizedBox(height: 16),
-              DataCard(
-                'Báo cáo dịch vụ',
-                fields: {
-                  'Vấn đề': r['problemDescription'],
-                  'Nguyên nhân': r['rootCause'],
-                  'Giải pháp': r['solution'],
-                  'Tóm tắt cho khách hàng': r['customerSummary'],
-                  'Nộp lúc': dateText(r['submittedAt'], time: true),
-                  'Mã báo cáo': r['id'],
-                },
-              ),
-            ],
-          ),
-  );
 }
 
 class RequestReadScreen extends StatefulWidget {
