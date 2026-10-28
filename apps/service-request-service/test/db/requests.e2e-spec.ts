@@ -908,7 +908,7 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
     expect(persisted.resolutionSummary).toBeNull();
   });
 
-  it('does not acknowledge a completion that arrives before WorkOrderCreated', async () => {
+  it('durably holds a completion that arrives before WorkOrderCreated', async () => {
     const created = await createRequest('Out-of-order event').expect(201);
     await reviewAndAccept(created.body.id);
     const workOrderEvent = workOrderCreated(created.body.id);
@@ -931,19 +931,37 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
       },
     };
 
-    await expect(
-      app.get(WorkOrderEventsConsumer).handle(completion),
-    ).rejects.toThrow(/Cannot apply WorkOrderCompleted/);
+    await app.get(WorkOrderEventsConsumer).handle(completion);
     expect(
       await prisma.processedEvent.count({
         where: { eventId: completion.eventId },
       }),
-    ).toBe(0);
+    ).toBe(1);
+    expect(
+      await prisma.workOrderLifecycle.findUniqueOrThrow({
+        where: {
+          tenantId_workOrderId: {
+            tenantId: tenantA,
+            workOrderId: workOrderEvent.payload.workOrderId,
+          },
+        },
+      }),
+    ).toMatchObject({ terminalPhase: 'COMPLETED', appliedPhase: null });
     expect(
       await prisma.serviceRequest.findUniqueOrThrow({
         where: { id: created.body.id },
       }),
     ).toMatchObject({ status: 'ACCEPTED', activeWorkOrderId: null });
+    await app.get(WorkOrderEventsConsumer).handle(workOrderEvent);
+    expect(
+      await prisma.serviceRequest.findUniqueOrThrow({
+        where: { id: created.body.id },
+      }),
+    ).toMatchObject({
+      status: 'RESOLVED',
+      activeWorkOrderId: null,
+      resolutionSummary: 'Completed before create delivery.',
+    });
   });
 
   it('rejects Work Order events with a mismatched tenant reference', async () => {
@@ -1327,7 +1345,7 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
   });
 
   it.each([false, true])(
-    'M2-WO-03 keeps early cancellation out of inbox until Created (%s)',
+    'M2-WO-03 keeps early cancellation pending until Created (%s)',
     async (intent) => {
       const created = await createRequest('Early cancellation').expect(201);
       await reviewAndAccept(created.body.id);
@@ -1338,14 +1356,22 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
         event.payload.workOrderId,
       );
       const consumer = app.get(WorkOrderEventsConsumer);
-      await expect(consumer.handle(cancel)).rejects.toThrow(
-        /Cannot apply WorkOrderCancelled/,
-      );
+      await consumer.handle(cancel);
       expect(
         await prisma.processedEvent.count({
           where: { eventId: cancel.eventId },
         }),
-      ).toBe(0);
+      ).toBe(1);
+      expect(
+        await prisma.workOrderLifecycle.findUniqueOrThrow({
+          where: {
+            tenantId_workOrderId: {
+              tenantId: tenantA,
+              workOrderId: event.payload.workOrderId,
+            },
+          },
+        }),
+      ).toMatchObject({ terminalPhase: 'CANCELLED', appliedPhase: null });
       await consumer.handle(event);
       await consumer.handle(cancel);
       await consumer.handle(cancel);
@@ -1393,20 +1419,29 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
     });
     const event = workOrderCreated(created.body.id);
     const consumer = app.get(WorkOrderEventsConsumer);
-    for (const pending of [
-      event,
-      completion(event),
-      workOrderCancelled(created.body.id, true, event.payload.workOrderId),
-    ]) {
-      await expect(consumer.handle(pending)).rejects.toThrow(
-        /Cannot verify Work Order/,
-      );
-      expect(
-        await prisma.processedEvent.count({
-          where: { eventId: pending.eventId },
-        }),
-      ).toBe(0);
-    }
+    await expect(consumer.handle(event)).rejects.toThrow(
+      /Cannot verify legacy Service Request/,
+    );
+    expect(
+      await prisma.processedEvent.count({ where: { eventId: event.eventId } }),
+    ).toBe(0);
+    expect(
+      await prisma.workOrderLifecycle.count({
+        where: { requestId: created.body.id },
+      }),
+    ).toBe(0);
+    const pending = completion(event);
+    await consumer.handle(pending);
+    expect(
+      await prisma.workOrderLifecycle.findUniqueOrThrow({
+        where: {
+          tenantId_workOrderId: {
+            tenantId: tenantA,
+            workOrderId: event.payload.workOrderId,
+          },
+        },
+      }),
+    ).toMatchObject({ terminalPhase: 'COMPLETED', appliedPhase: null });
   });
 
   it('M2-SEC-01 scopes every customer read and result action, including pagination and nested data', async () => {
@@ -1538,20 +1573,35 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
     ).toMatchObject({ status: 'RESOLVED' });
   });
 
-  it('M2-SEC-03 rejects foreign equipment, customer and aggregate references without committing inbox', async () => {
+  it('M2-SEC-03 rejects aggregate mismatch and quarantines foreign references without changing SR', async () => {
     const created = await createRequest('Event reference validation').expect(
       201,
     );
     await reviewAndAccept(created.body.id);
     const event = workOrderCreated(created.body.id);
     const consumer = app.get(WorkOrderEventsConsumer);
-    for (const invalid of [
-      { ...event, aggregateId: randomUUID() },
-      { ...event, payload: { ...event.payload, equipmentId: randomUUID() } },
-      { ...event, payload: { ...event.payload, customerId: customerB } },
-    ])
-      await expect(consumer.handle(invalid)).rejects.toThrow();
+    await expect(
+      consumer.handle({ ...event, aggregateId: randomUUID() }),
+    ).rejects.toThrow();
     expect(await prisma.processedEvent.count()).toBe(0);
+    for (const invalid of [
+      {
+        ...event,
+        eventId: randomUUID(),
+        payload: { ...event.payload, equipmentId: randomUUID() },
+      },
+      {
+        ...event,
+        eventId: randomUUID(),
+        payload: { ...event.payload, customerId: customerB },
+      },
+    ])
+      await consumer.handle(invalid);
+    expect(
+      await prisma.workOrderLifecycleConflict.count({
+        where: { requestId: created.body.id, reason: 'REFERENCE_MISMATCH' },
+      }),
+    ).toBe(2);
     expect(
       await prisma.serviceRequest.findUniqueOrThrow({
         where: { id: created.body.id },

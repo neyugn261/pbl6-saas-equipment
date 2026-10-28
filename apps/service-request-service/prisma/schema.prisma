@@ -74,6 +74,8 @@ model ServiceRequest {
   comments              RequestComment[]
   statusHistory         RequestStatusHistory[]
   costEstimates         CostEstimate[]
+  workOrderLifecycles   WorkOrderLifecycle[]
+  workOrderConflicts    WorkOrderLifecycleConflict[]
 
   @@unique([tenantId, requestNo])
   @@unique([tenantId, id])
@@ -211,4 +213,54 @@ model ProcessedEvent {
 
   @@id([eventId, consumer])
   @@map("processed_events")
+}
+
+/// Private durable Work Order receipt and application state. No cross-service FK.
+model WorkOrderLifecycle {
+  tenantId        String   @map("tenant_id") @db.Uuid
+  workOrderId     String   @map("work_order_id") @db.Uuid
+  requestId       String   @map("request_id") @db.Uuid
+  equipmentId     String   @map("equipment_id") @db.Uuid
+  customerId      String?  @map("customer_id") @db.Uuid
+  createdPayload  Json?    @map("created_payload")
+  terminalPayload Json?    @map("terminal_payload")
+  terminalPhase   String?  @map("terminal_phase") @db.VarChar(20)
+  appliedPhase    String?  @map("applied_phase") @db.VarChar(20)
+  createdEventId  String?  @map("created_event_id") @db.Uuid
+  terminalEventId String?  @map("terminal_event_id") @db.Uuid
+  createdVersion  Int?     @map("created_version") @db.SmallInt
+  terminalVersion Int?     @map("terminal_version") @db.SmallInt
+  createdOccurredAt DateTime? @map("created_occurred_at") @db.Timestamptz(6)
+  terminalOccurredAt DateTime? @map("terminal_occurred_at") @db.Timestamptz(6)
+  createdCorrelationId String? @map("created_correlation_id") @db.VarChar(100)
+  terminalCorrelationId String? @map("terminal_correlation_id") @db.VarChar(100)
+  receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  request         ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "work_order_lifecycles_request_fkey")
+
+  @@id([tenantId, workOrderId])
+  @@index([tenantId, requestId, appliedPhase])
+  @@index([createdEventId])
+  @@index([terminalEventId])
+  @@map("work_order_lifecycles")
+}
+
+/// Quarantined contradictory receipts; never exposed by the customer API.
+model WorkOrderLifecycleConflict {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  requestId   String   @map("request_id") @db.Uuid
+  workOrderId String   @map("work_order_id") @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  eventType   String   @map("event_type") @db.VarChar(100)
+  eventVersion Int     @map("event_version") @db.SmallInt
+  reason      String   @db.VarChar(100)
+  payload     Json
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  request     ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "work_order_lifecycle_conflicts_request_fkey")
+
+  @@index([tenantId, requestId, receivedAt], map: "work_order_lifecycle_conflicts_tenant_id_request_id_received_at")
+  @@unique([tenantId, eventId, reason])
+  @@map("work_order_lifecycle_conflicts")
 }
