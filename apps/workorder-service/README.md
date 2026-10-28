@@ -18,6 +18,24 @@ pnpm --filter workorder-service db:migrate
 pnpm dev:workorder
 ```
 
+Seed/demo chính thức (Identity/Organization đã có seed và API đang chạy):
+
+```bash
+pnpm --filter workorder-service db:seed:dev
+pnpm --filter workorder-service demo:prepare
+```
+
+Lệnh seed tự build WO, chỉ ghi Technician/Skill trong DB của mình, kiểm tra
+reference qua API và giữ nguyên profile/status/skill đã chỉnh. `demo:prepare`
+cần stack Gateway/Identity/Organization/Asset/SR/WO + broker; tạo hoặc tái sử dụng
+SR/WO thật với marker DEMO-M2-WORKORDER-01, không reset hay tự phân công.
+[Hướng dẫn K7](../../docs/demo/workorder-m2.md) có thứ tự seed, account, payload
+cho Web/Android và smoke `pnpm --filter workorder-service test:demo`.
+
+K8 có [OpenAPI attachment](../../docs/api/workorder-attachments.yaml) và
+[quy tắc upload/quyền/visibility](../../docs/api/workorder-attachments.md) cho M3.
+Đây là contract bàn giao, chưa triển khai route upload hoặc MinIO trong M2.
+
 Service đọc `.env` riêng rồi `.env` root; port `WORKORDER_SERVICE_PORT` mặc
 định 3004. Biến bắt buộc: `WORKORDER_DATABASE_URL`, JWT theo shared auth và
 `IDENTITY_SERVICE_URL`, `ORGANIZATION_SERVICE_URL`, `ASSET_SERVICE_URL`,

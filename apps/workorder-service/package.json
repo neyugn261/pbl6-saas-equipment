@@ -13,7 +13,7 @@
     "start:dev": "prisma generate --no-hints && nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "oxlint --deny-warnings src/ test/",
+    "lint": "oxlint --deny-warnings src/ test/ scripts/",
     "test": "prisma generate --no-hints && node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --watch",
     "test:cov": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --coverage",
@@ -22,6 +22,9 @@
     "test:e2e:db": "prisma generate --no-hints && node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --config ./test/db/jest-e2e.json --runInBand",
     "typecheck": "prisma generate --no-hints && tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate --no-hints",
+    "db:seed:dev": "pnpm build && node scripts/seed-dev.cjs",
+    "demo:prepare": "node scripts/demo-prepare.cjs",
+    "test:demo": "node test/demo-smoke.cjs",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:check-drift": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code"
