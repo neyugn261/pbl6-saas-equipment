@@ -16,13 +16,21 @@ export const bases = isMockMode
       organization:
         import.meta.env.VITE_ORGANIZATION_API_URL || '/mock/organization',
       asset: import.meta.env.VITE_ASSET_API_URL || '/mock/asset',
+      assetM2: `${gateway}/api/assets`,
       requests:
         import.meta.env.VITE_SERVICE_REQUEST_API_URL || '/mock/requests',
+      requestsLive: `${gateway}/api`,
+      workorders: `${gateway}/api/workorders`,
+      maintenance: `${gateway}/api/maintenance`,
     }
   : {
       identity: identityBase,
-organization: `${gateway}/api/organization`,
-asset: `${gateway}/api/assets`,
-// Request paths already include /service-requests (also used by the mock API).
-requests: `${gateway}/api`,
+      organization: `${gateway}/api/organization`,
+      asset: `${gateway}/api/assets`,
+      assetM2: `${gateway}/api/assets`,
+      // Request paths already include /service-requests (also used by the mock API).
+      requests: `${gateway}/api`,
+      requestsLive: `${gateway}/api`,
+      workorders: `${gateway}/api/workorders`,
+      maintenance: `${gateway}/api/maintenance`,
     }

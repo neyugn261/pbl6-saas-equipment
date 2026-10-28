@@ -40,6 +40,14 @@ pnpm smoke:m1
 
 `pnpm smoke:m1` cần stack thật. Các ca kiểm thử và kết quả ghi trong `docs/testing/m1-test-cases.md`.
 
+## M2: thiết bị, yêu cầu, Work Order và bảo trì
+
+Các trang `/app` và `/portal` của M2 gọi API thật qua Gateway, kể cả khi cấu hình M1 đang ở chế độ mock. Khởi động các service Identity, Organization, Asset, Service Request, Work Order và Maintenance, chạy migration và seed DEMO theo README ở root trước khi mở web. Customer User chỉ có thể xem Service Request và phần tóm tắt đã công bố; Customer Admin được xem Maintenance theo phạm vi khách hàng của mình.
+
+Nút yêu cầu Work Order thay thế của Maintenance Task mặc định bị khóa. Sau khi consumer của Work Order xử lý `MaintenanceWorkOrderReplacementRequested.v1` và đã kiểm thử luồng liên kết Task, đặt `VITE_M2_REPLACEMENT_ENABLED=true` trong `.env.local`, rồi khởi động lại Vite. Khi thử lại yêu cầu từ giao diện, cùng `requestId` được giữ trong phiên trang để tránh tạo yêu cầu trùng.
+
+Kiểm tra API thật bằng `node --env-file=.env apps/web/scripts/verify-m2-issue33.mjs` từ root. Lệnh cần stack local và dữ liệu DEMO. Có thể thêm `--expect-maintenance-outage` khi chủ động tắt Maintenance Service để kiểm tra trạng thái `UNAVAILABLE`. Chế độ `--exercise-replacement` thay đổi dữ liệu demo và hiện dự kiến thất bại cho đến khi consumer nêu trên sẵn sàng. Kết quả kiểm tra chi tiết: [docs/testing/m2-web-issue33.md](../../docs/testing/m2-web-issue33.md).
+
 ## Mock contract tùy chọn
 
 Chỉ dùng để kiểm tra giao diện khi service chưa chạy. Đặt `VITE_M1_API_MODE=mock` và `VITE_IDENTITY_API_URL=/identity` trong `.env.local`, rồi chạy ba Prism server trên cổng 4010–4012 theo `docs/api/{organization,asset,service-request}.yaml`. Sau đó có thể chạy `apps/web/scripts/smoke-mocks.ps1`. Prism không lưu thay đổi sau POST và không thay thế smoke test qua gateway.

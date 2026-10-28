@@ -1,0 +1,52 @@
+.m2-page {
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.m2-page > header {
+  display: grid;
+  gap: 6px;
+}
+.m2-page h1 {
+  margin: 0;
+  font-size: 28px;
+}
+.m2-page .m1-section-body {
+  overflow-wrap: anywhere;
+}
+.m2-page pre {
+  overflow: auto;
+  max-height: 340px;
+  white-space: pre-wrap;
+}
+.m2-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+.m2-linked-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.m2-linked-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+.m2-linked-list span {
+  color: #64748b;
+}
+.m2-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.m2-page button {
+  width: fit-content;
+  margin-right: 8px;
+}
