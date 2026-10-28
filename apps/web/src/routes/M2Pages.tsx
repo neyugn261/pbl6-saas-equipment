@@ -8,7 +8,8 @@ type Row = Record<string, unknown>;
 type Availability =
   "AVAILABLE" | "RESTRICTED" | "UNAVAILABLE" | "NOT_CONFIGURED" | "NOT_FOUND";
 type Section<T> = { status: Availability; data: T | null; fetchedAt?: string };
-const replacementConsumerReady = import.meta.env.VITE_M2_REPLACEMENT_ENABLED === "true";
+const replacementConsumerReady =
+  import.meta.env.VITE_M2_REPLACEMENT_ENABLED !== "false";
 type Dossier = {
   equipment: Row;
   warranties: Row[];
@@ -33,6 +34,12 @@ type Dossier = {
 
 const asText = (value: unknown) =>
   value == null || value === "" ? "—" : String(value);
+const operationalLabels: Record<string, string> = {
+  UNKNOWN: "Chưa xác nhận tình trạng vận hành",
+  OPERATIONAL: "Hoạt động",
+  DEGRADED: "Suy giảm",
+  NOT_OPERATIONAL: "Không hoạt động",
+};
 const date = (value: unknown) => {
   if (!value) return "—";
   const text = String(value);
@@ -168,8 +175,9 @@ function HistoryRows({ items }: { items: Row[] }) {
             {date(item.recordedAt ?? item.createdAt)}
           </span>
           <p>
-            ID người thực hiện: {asText(item.actorId ?? item.createdBy ?? item.changedBy)}{" "}
-            · Vai trò:{" "}
+            ID người thực hiện:{" "}
+            {asText(item.actorId ?? item.createdBy ?? item.changedBy)} · Vai
+            trò:{" "}
             {Array.isArray(item.actorRoles) && item.actorRoles.length
               ? item.actorRoles.join(", ")
               : "—"}
@@ -185,6 +193,8 @@ function HistoryRows({ items }: { items: Row[] }) {
               {asText(item.referenceType)}: {asText(item.referenceId)}
             </p>
           ) : null}
+          {Boolean(item.planId) && <p>ID kế hoạch: {asText(item.planId)}</p>}
+          {Boolean(item.taskId) && <p>ID công việc: {asText(item.taskId)}</p>}
           {item.completeness === "LEGACY_SUMMARY" && (
             <p>Chi tiết cũ có thể chưa đầy đủ.</p>
           )}
@@ -266,7 +276,9 @@ function EquipmentEditor({
   equipment: Row;
   onSaved: (message: string) => void;
 }) {
-  const [displayName, setDisplayName] = useState(String(equipment.displayName ?? ""));
+  const [displayName, setDisplayName] = useState(
+    String(equipment.displayName ?? ""),
+  );
   const [specs, setSpecs] = useState(
     equipment.technicalSpecifications
       ? JSON.stringify(equipment.technicalSpecifications, null, 2)
@@ -286,7 +298,10 @@ function EquipmentEditor({
   async function submitProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    let technicalSpecifications: Record<string, string | number | boolean> | null = null;
+    let technicalSpecifications: Record<
+      string,
+      string | number | boolean
+    > | null = null;
     if (specs.trim()) {
       try {
         const parsed: unknown = JSON.parse(specs);
@@ -298,11 +313,20 @@ function EquipmentEditor({
             (value) => !["string", "number", "boolean"].includes(typeof value),
           )
         ) {
-          throw new Error("Thông số phải là object JSON có giá trị chữ, số hoặc đúng/sai.");
+          throw new Error(
+            "Thông số phải là object JSON có giá trị chữ, số hoặc đúng/sai.",
+          );
         }
-        technicalSpecifications = parsed as Record<string, string | number | boolean>;
+        technicalSpecifications = parsed as Record<
+          string,
+          string | number | boolean
+        >;
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Thông số JSON không hợp lệ.");
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Thông số JSON không hợp lệ.",
+        );
         return;
       }
     }
@@ -355,7 +379,11 @@ function EquipmentEditor({
         <h3>Hồ sơ</h3>
         <label>
           Tên hiển thị
-          <input maxLength={200} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          <input
+            maxLength={200}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
         </label>
         <label>
           Thông số kỹ thuật (JSON)
@@ -363,15 +391,24 @@ function EquipmentEditor({
         </label>
         <label>
           Ngày đưa vào vận hành
-          <input type="date" value={commissionedDate} onChange={(e) => setCommissionedDate(e.target.value)} />
+          <input
+            type="date"
+            value={commissionedDate}
+            onChange={(e) => setCommissionedDate(e.target.value)}
+          />
         </label>
-        <button disabled={busy} type="submit">Lưu hồ sơ</button>
+        <button disabled={busy} type="submit">
+          Lưu hồ sơ
+        </button>
       </form>
       <form className="m2-editor" onSubmit={confirmCondition}>
         <h3>Xác nhận tình trạng vận hành</h3>
         <label>
           Tình trạng
-          <select value={operationalStatus} onChange={(e) => setOperationalStatus(e.target.value)}>
+          <select
+            value={operationalStatus}
+            onChange={(e) => setOperationalStatus(e.target.value)}
+          >
             <option value="UNKNOWN">Chưa rõ</option>
             <option value="OPERATIONAL">Hoạt động</option>
             <option value="DEGRADED">Suy giảm</option>
@@ -380,15 +417,30 @@ function EquipmentEditor({
         </label>
         <label>
           Lý do xác nhận
-          <textarea required maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <textarea
+            required
+            maxLength={2000}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
         </label>
         <label>
           Ghi chú cho khách hàng (nếu có)
-          <textarea maxLength={2000} value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} />
+          <textarea
+            maxLength={2000}
+            value={customerNote}
+            onChange={(e) => setCustomerNote(e.target.value)}
+          />
         </label>
-        <button disabled={busy} type="submit">Xác nhận tình trạng</button>
+        <button disabled={busy} type="submit">
+          Xác nhận tình trạng
+        </button>
       </form>
-      {error && <p role="alert" className="m1-error">{error}</p>}
+      {error && (
+        <p role="alert" className="m1-error">
+          {error}
+        </p>
+      )}
     </Card>
   );
 }
@@ -405,7 +457,9 @@ export function DossierPage() {
   const base = profile?.userType === "CUSTOMER" ? "/portal" : "/app";
   const canManageEquipment =
     profile?.userType === "TENANT_STAFF" &&
-    profile.roles.some((role) => ["TENANT_ADMIN", "SERVICE_MANAGER"].includes(role));
+    profile.roles.some((role) =>
+      ["TENANT_ADMIN", "SERVICE_MANAGER"].includes(role),
+    );
   return (
     <div className="m2-page">
       <header>
@@ -450,7 +504,7 @@ export function DossierPage() {
                   </p>
                 )}
               </Card>
-              {canManageEquipment && (
+              {canManageEquipment && dossier.equipment.status !== "RETIRED" && (
                 <EquipmentEditor
                   key={`${id}:${revision}`}
                   equipmentId={id!}
@@ -460,6 +514,12 @@ export function DossierPage() {
                     setRevision((value) => value + 1);
                   }}
                 />
+              )}
+              {canManageEquipment && dossier.equipment.status === "RETIRED" && (
+                <p>
+                  Thiết bị đã ngừng sử dụng; không thể chỉnh hồ sơ hoặc xác nhận
+                  tình trạng.
+                </p>
               )}
               <Card title="Bảo hành và tình trạng">
                 <p>
@@ -473,17 +533,25 @@ export function DossierPage() {
                   duyệt.
                 </p>
                 <p>
-                  Tình trạng vận hành đã xác nhận:{" "}
-                  {asText(dossier.operationalCondition.status)} ·{" "}
-                  {date(dossier.operationalCondition.confirmedAt)}
+                  Tình trạng vận hành:{" "}
+                  {operationalLabels[
+                    String(dossier.operationalCondition.status)
+                  ] ?? asText(dossier.operationalCondition.status)}
+                  {Boolean(dossier.operationalCondition.confirmedAt) && (
+                    <>
+                      {" "}
+                      · Xác nhận{" "}
+                      {date(dossier.operationalCondition.confirmedAt)}
+                    </>
+                  )}
                 </p>
                 <p>
                   Xác nhận này không bảo đảm tình trạng hiện tại của thiết bị.
                 </p>
                 {dossier.warranties.map((w) => (
                   <p key={String(w.id)}>
-                    {asText(w.warrantyType)} · {date(w.startDate)} – {date(w.endDate)} ·{" "}
-                    {asText(w.status)} ·{" "}
+                    {asText(w.warrantyType)} · {date(w.startDate)} –{" "}
+                    {date(w.endDate)} · {asText(w.status)} ·{" "}
                     <Link to={`${base}/warranties/${w.id}/history`}>
                       Lịch sử
                     </Link>
@@ -568,7 +636,14 @@ export function DossierPage() {
                   )}
                 </Source>
                 <Source section={dossier.maintenanceHistory}>
-                  {(page) => <HistoryRows items={page.items} />}
+                  {(page) => (
+                    <>
+                      <HistoryRows items={page.items} />
+                      <Link to={`${base}/equipment/${id}/maintenance-history`}>
+                        Xem toàn bộ lịch sử bảo trì ({page.total})
+                      </Link>
+                    </>
+                  )}
                 </Source>
                 {(profile?.userType !== "CUSTOMER" ||
                   profile.roles.includes("CUSTOMER_ADMIN")) && (
@@ -851,7 +926,10 @@ export function ResourceHistoryPage({ kind }: { kind: "model" | "warranty" }) {
             <input
               value={draft.eventType}
               onChange={(event) =>
-                setDraft((current) => ({ ...current, eventType: event.target.value }))
+                setDraft((current) => ({
+                  ...current,
+                  eventType: event.target.value,
+                }))
               }
             />
           </label>
@@ -861,7 +939,10 @@ export function ResourceHistoryPage({ kind }: { kind: "model" | "warranty" }) {
               type="datetime-local"
               value={draft.from}
               onChange={(event) =>
-                setDraft((current) => ({ ...current, from: event.target.value }))
+                setDraft((current) => ({
+                  ...current,
+                  from: event.target.value,
+                }))
               }
             />
           </label>
@@ -1184,6 +1265,130 @@ export function RequestDossierExtras({
   );
 }
 
+type MaintenanceFilter = {
+  equipmentId: string;
+  planId: string;
+  taskId: string;
+  eventType: string;
+  from: string;
+  to: string;
+};
+const emptyMaintenanceFilter: MaintenanceFilter = {
+  equipmentId: "",
+  planId: "",
+  taskId: "",
+  eventType: "",
+  from: "",
+  to: "",
+};
+
+export function MaintenanceHistoryPage({
+  equipmentId,
+}: {
+  equipmentId?: string;
+}) {
+  const { pathname } = useLocation();
+  const [draft, setDraft] = useState<MaintenanceFilter>(emptyMaintenanceFilter);
+  const [filter, setFilter] = useState<MaintenanceFilter>(
+    emptyMaintenanceFilter,
+  );
+  const [page, setPage] = useState(1);
+  const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+  if (equipmentId) params.set("equipmentId", equipmentId);
+  for (const [key, value] of Object.entries(filter)) {
+    if (value && !(equipmentId && key === "equipmentId")) {
+      params.set(
+        key,
+        key === "from" || key === "to" ? new Date(value).toISOString() : value,
+      );
+    }
+  }
+  const path = `/maintenance-history?${params}`;
+  const state = useRemote<Page<Row>>(path, () => api.maintenance(path));
+  const base = pathname.startsWith("/portal") ? "/portal" : "/app";
+  const fields: [keyof MaintenanceFilter, string][] = [
+    ["equipmentId", "ID thiết bị"],
+    ["planId", "ID kế hoạch"],
+    ["taskId", "ID công việc"],
+    ["eventType", "Loại sự kiện"],
+  ];
+  return (
+    <div className="m2-page">
+      <Link
+        to={
+          equipmentId
+            ? `${base}/equipment/${equipmentId}`
+            : `${base}/maintenance`
+        }
+      >
+        ← {equipmentId ? "Hồ sơ thiết bị" : "Bảo trì"}
+      </Link>
+      <h1>Lịch sử bảo trì{equipmentId ? " của thiết bị" : ""}</h1>
+      <form
+        className="m2-filters"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setFilter(draft);
+          setPage(1);
+        }}
+      >
+        {fields
+          .filter(([key]) => !(equipmentId && key === "equipmentId"))
+          .map(([key, label]) => (
+            <label key={key}>
+              {label}
+              <input
+                value={draft[key]}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    [key]: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          ))}
+        {(["from", "to"] as const).map((key) => (
+          <label key={key}>
+            {key === "from" ? "Từ" : "Đến"}
+            <input
+              type="datetime-local"
+              value={draft[key]}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  [key]: event.target.value,
+                }))
+              }
+            />
+          </label>
+        ))}
+        <button type="submit">Áp dụng bộ lọc</button>
+      </form>
+      <Result state={state}>
+        {state.value && (
+          <>
+            <HistoryRows items={state.value.items} />
+            <p>Lịch sử cũ có thể không đầy đủ.</p>
+            <p>
+              Trang {page} · Tổng {state.value.total}
+            </p>
+            <button disabled={page === 1} onClick={() => setPage(page - 1)}>
+              Trước
+            </button>
+            <button
+              disabled={page * 20 >= state.value.total}
+              onClick={() => setPage(page + 1)}
+            >
+              Sau
+            </button>
+          </>
+        )}
+      </Result>
+    </div>
+  );
+}
+
 export function MaintenancePage() {
   const { profile } = useSession();
   const [tab, setTab] = useState<"plans" | "tasks">("plans");
@@ -1206,6 +1411,11 @@ export function MaintenancePage() {
   return (
     <div className="m2-page">
       <h1>Bảo trì định kỳ</h1>
+      <Link
+        to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/maintenance-history`}
+      >
+        Xem lịch sử bảo trì
+      </Link>
       <Card title="Tổng quan">
         <Result state={summary}>
           {summary.value && (
@@ -1298,16 +1508,38 @@ export function MaintenancePage() {
 export function MaintenanceRecordPage() {
   const { id } = useParams();
   const { search, pathname } = useLocation();
+  const { profile } = useSession();
   const [revision, setRevision] = useState(0);
+  const [historyPageNo, setHistoryPageNo] = useState(1);
+  const [historyDraft, setHistoryDraft] = useState({
+    eventType: "",
+    from: "",
+    to: "",
+  });
+  const [historyFilter, setHistoryFilter] = useState(historyDraft);
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionResult, setActionResult] = useState("");
   const replacementRequestId = useRef<string | null>(null);
+  const replacementKey = `pbl6.m2.replacement.${profile?.tenantId ?? "none"}.${profile?.id ?? "none"}.${id ?? "none"}`;
+  useEffect(() => {
+    replacementRequestId.current = sessionStorage.getItem(replacementKey);
+  }, [replacementKey]);
   const kind =
     new URLSearchParams(search).get("kind") === "task" ? "task" : "plan";
   const path = `/${kind === "task" ? "maintenance-tasks" : "maintenance-plans"}/${id}`;
-  const state = useRemote<Row>(path, () => api.maintenance(path));
-  const historyPath = `${path}/${kind === "task" ? "journey" : "history"}?page=1&pageSize=20`;
+  const state = useRemote<Row>(`${path}:${revision}`, () => api.maintenance(path));
+  const historyParams = new URLSearchParams({
+    page: String(historyPageNo),
+    pageSize: "20",
+  });
+  if (historyFilter.eventType)
+    historyParams.set("eventType", historyFilter.eventType);
+  if (historyFilter.from)
+    historyParams.set("from", new Date(historyFilter.from).toISOString());
+  if (historyFilter.to)
+    historyParams.set("to", new Date(historyFilter.to).toISOString());
+  const historyPath = `${path}/${kind === "task" ? "journey" : "history"}?${historyParams}`;
   const history = useRemote<Row | Page<Row>>(`${historyPath}:${revision}`, () =>
     api.maintenance(historyPath),
   );
@@ -1317,6 +1549,28 @@ export function MaintenanceRecordPage() {
     kind === "task"
       ? (journey?.history as Page<Row> | undefined)
       : (history.value as Page<Row> | undefined);
+  const pendingReplacement =
+    Array.isArray(journey?.replacements) &&
+    journey.replacements.some((row: Row) => row.status === "PENDING");
+  useEffect(() => {
+    if (!pendingReplacement) return;
+    const timer = window.setInterval(() => setRevision((value) => value + 1), 3000);
+    return () => window.clearInterval(timer);
+  }, [pendingReplacement]);
+  useEffect(() => {
+    const requestId = replacementRequestId.current;
+    if (
+      requestId &&
+      Array.isArray(journey?.replacements) &&
+      journey.replacements.some(
+        (row: Row) => row.requestId === requestId && row.status === "LINKED",
+      )
+    ) {
+      sessionStorage.removeItem(replacementKey);
+      replacementRequestId.current = null;
+      setActionResult("Work Order thay thế đã được liên kết.");
+    }
+  }, [journey, replacementKey]);
   async function replace() {
     if (busy) return;
     setBusy(true);
@@ -1324,11 +1578,11 @@ export function MaintenanceRecordPage() {
     setActionResult("");
     try {
       replacementRequestId.current ??= crypto.randomUUID();
+      sessionStorage.setItem(replacementKey, replacementRequestId.current);
       await api.maintenance(`${path}/replacement`, {
         method: "POST",
         body: { requestId: replacementRequestId.current },
       });
-      replacementRequestId.current = null;
       setActionResult(
         "Đã ghi nhận yêu cầu thay thế; đang chờ Work Order Service xử lý.",
       );
@@ -1374,6 +1628,9 @@ export function MaintenanceRecordPage() {
       </Result>
       {journey && (
         <Card title="Hành trình công việc">
+          <button type="button" onClick={() => setRevision((value) => value + 1)}>
+            Làm mới
+          </button>
           <p>Đang chờ: {asText(journey.waitingFor)}</p>
           <p>
             Lệnh công việc:{" "}
@@ -1392,16 +1649,22 @@ export function MaintenanceRecordPage() {
           {Array.isArray(journey.replacements) &&
             journey.replacements.map((item: Row) => (
               <p key={String(item.requestId)}>
-                {asText(item.status)} · Work Order dự kiến {asText(item.replacementWorkOrderId)}
+                {asText(item.status)} · Work Order dự kiến{" "}
+                {asText(item.replacementWorkOrderId)}
               </p>
             ))}
           {Array.isArray(journey.allowedActions) &&
             journey.allowedActions.includes("request-replacement") && (
               <>
-                <button disabled={busy || !replacementConsumerReady} onClick={replace}>
+                <button
+                  disabled={busy || !replacementConsumerReady}
+                  onClick={replace}
+                >
                   Yêu cầu lệnh công việc thay thế
                 </button>
-                {!replacementConsumerReady && <p>Đang chờ Work Order Service hỗ trợ tạo lệnh thay thế.</p>}
+                {!replacementConsumerReady && (
+                  <p>Đang chờ Work Order Service hỗ trợ tạo lệnh thay thế.</p>
+                )}
               </>
             )}
           {actionError && (
@@ -1413,8 +1676,75 @@ export function MaintenanceRecordPage() {
         </Card>
       )}
       <Card title="Lịch sử">
+        <form
+          className="m2-filters"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setHistoryFilter(historyDraft);
+            setHistoryPageNo(1);
+          }}
+        >
+          <label>
+            Loại sự kiện
+            <input
+              value={historyDraft.eventType}
+              onChange={(event) =>
+                setHistoryDraft((current) => ({
+                  ...current,
+                  eventType: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            Từ
+            <input
+              type="datetime-local"
+              value={historyDraft.from}
+              onChange={(event) =>
+                setHistoryDraft((current) => ({
+                  ...current,
+                  from: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            Đến
+            <input
+              type="datetime-local"
+              value={historyDraft.to}
+              onChange={(event) =>
+                setHistoryDraft((current) => ({
+                  ...current,
+                  to: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <button type="submit">Áp dụng bộ lọc</button>
+        </form>
         <Result state={history}>
-          {historyPage && <HistoryRows items={historyPage.items} />}
+          {historyPage && (
+            <>
+              <HistoryRows items={historyPage.items} />
+              <p>
+                Trang {historyPageNo} · Tổng {historyPage.total}
+              </p>
+              <button
+                disabled={historyPageNo === 1}
+                onClick={() => setHistoryPageNo((value) => value - 1)}
+              >
+                Trước
+              </button>
+              <button
+                disabled={historyPageNo * 20 >= historyPage.total}
+                onClick={() => setHistoryPageNo((value) => value + 1)}
+              >
+                Sau
+              </button>
+            </>
+          )}
         </Result>
       </Card>
     </div>

@@ -42,7 +42,7 @@ import { PriorityBadge, StatusBadge } from './components/Badges'
 import ActivatePage from './routes/ActivatePage'
 import DashboardPage from './routes/DashboardPage'
 import DemoPage from './routes/DemoPage'
-import { DossierPage, EquipmentFeedPage, HistoryFeedPage, ResourceHistoryPage, WorkOrderListPage, WorkOrderPage, MaintenancePage as LiveMaintenancePage, MaintenanceRecordPage, RequestDossierExtras, TechniciansPage as LiveTechniciansPage, TechnicianPage } from './routes/M2Pages'
+import { DossierPage, EquipmentFeedPage, HistoryFeedPage, ResourceHistoryPage, WorkOrderListPage, WorkOrderPage, MaintenancePage as LiveMaintenancePage, MaintenanceHistoryPage, MaintenanceRecordPage, RequestDossierExtras, TechniciansPage as LiveTechniciansPage, TechnicianPage } from './routes/M2Pages'
 import { rememberDemoRequest } from './routes/demo-request'
 import InvitePage from './routes/InvitePage'
 import QrPage from './routes/QrPage'
@@ -234,8 +234,10 @@ function Layout({ children }: { children: ReactNode }) {
     { path: '/app/equipment-history', label: 'Lịch sử thiết bị', icon: History, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
     { path: '/portal/equipment-history', label: 'Lịch sử thiết bị', icon: History, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN', 'CUSTOMER_USER'] },
     { path: '/portal/maintenance', label: 'Bảo trì định kỳ', icon: History, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN'] },
+    { path: '/portal/maintenance-history', label: 'Lịch sử bảo trì', icon: History, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN'] },
     { path: '/app/technicians', label: 'Kỹ thuật viên', icon: UserCog, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
     { path: '/app/maintenance', label: 'Bảo trì định kỳ', icon: History, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/maintenance-history', label: 'Lịch sử bảo trì', icon: History, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/inventory/parts', label: 'Phụ tùng', icon: Package, group: 'Kho phụ tùng', roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
     { path: '/app/inventory/warehouses', label: 'Kho & tồn kho', icon: Factory, group: 'Kho phụ tùng', roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
     { path: '/app/inventory/transactions', label: 'Giao dịch kho', icon: SlidersHorizontal, group: 'Kho phụ tùng', roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
@@ -261,7 +263,7 @@ function Layout({ children }: { children: ReactNode }) {
   const section = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`))
   const initials = profile.fullName.split(' ').slice(-2).map((part) => part[0]).join('').toUpperCase()
   const scope = profile.userType === 'PLATFORM_STAFF' ? 'Phạm vi nền tảng' : profile.userType === 'CUSTOMER' ? 'Cổng khách hàng' : 'Doanh nghiệp hiện tại'
-  const liveM2Page = /^\/(app|portal)\/(equipment(?:\/|$)|equipment-history$|warranties\/|models\/|service-requests(?:\/|$)|requests(?:\/|$)|work-orders(?:\/|$)|technicians(?:\/|$)|maintenance(?:\/|$))/.test(location.pathname)
+  const liveM2Page = /^\/(app|portal)\/(equipment(?:\/|$)|equipment-history$|warranties\/|models\/|service-requests(?:\/|$)|requests(?:\/|$)|work-orders(?:\/|$)|technicians(?:\/|$)|maintenance(?:\/|$)|maintenance-history$)/.test(location.pathname)
   const samplePage = !liveM2Page && (location.pathname.startsWith('/app/') || location.pathname === '/admin' || location.pathname.startsWith('/admin/') || location.pathname === '/portal' || (location.pathname.startsWith('/portal/') && !location.pathname.startsWith('/portal/qr/')))
   return (
     <div className={`m1-layout ${collapsed ? 'm1-layout--collapsed' : ''}`}>
@@ -787,7 +789,6 @@ function NewRequestPage() {
   const [description, setDescription] = useState('')
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
-  const [mockSubmitted, setMockSubmitted] = useState(false)
   async function submit(event: FormEvent) {
     event.preventDefault()
     const selected = data.value?.items.find((item) => item.id === equipmentId)
@@ -797,7 +798,6 @@ function NewRequestPage() {
     }
     setBusy(true)
     setError(null)
-    setMockSubmitted(false)
     try {
       const created = await api.requestsLive<RequestRecord>('/service-requests', {
         method: 'POST',
@@ -812,11 +812,8 @@ function NewRequestPage() {
             : { customerId: selected.customerId }),
         },
       })
-      if (isMockMode) setMockSubmitted(true)
-      else {
-        rememberDemoRequest(profile?.tenantId ?? null, created.id)
-        navigate(`/requests/${created.id}`)
-      }
+      rememberDemoRequest(profile?.tenantId ?? null, created.id)
+      navigate(`/requests/${created.id}`)
     } catch (cause) {
       setError(cause)
     } finally {
@@ -833,12 +830,6 @@ function NewRequestPage() {
       ) : (
         <form className="m1-form m1-request-form" onSubmit={submit}>
           {error ? <Problem error={error} /> : null}
-          {mockSubmitted && (
-            <p role="status" className="m1-mock-notice">
-              Mock server đã nhận yêu cầu. Dữ liệu này không được lưu; kiểm tra
-              luồng thật khi API M1 được tích hợp.
-            </p>
-          )}
           <div className="m1-request-detail-grid"><div>
           <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>1. Chọn thiết bị</h2></div><div className="m1-section-body"><label>
             Thiết bị
@@ -920,6 +911,10 @@ function HistoryFeedPageRoute() {
   const { id } = useParams()
   return <HistoryFeedPage equipmentId={id} />
 }
+function EquipmentMaintenanceHistoryRoute() {
+  const { id } = useParams()
+  return <MaintenanceHistoryPage equipmentId={id} />
+}
 const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/dashboard', element: <SampleDashboardPage />, roles: sampleTenantRoles },
   { path: '/app/customers', element: <SampleCustomersPage />, roles: sampleTenantRoles },
@@ -932,6 +927,7 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: sampleTenantRoles },
   { path: '/app/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: sampleTenantRoles },
   { path: '/app/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: sampleTenantRoles },
+  { path: '/app/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
   { path: '/app/equipment-history', element: <HistoryFeedPage />, roles: sampleTenantRoles },
   { path: '/app/models/:id/history', element: <ResourceHistoryPage kind="model" />, roles: sampleTenantRoles },
   { path: '/app/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: sampleTenantRoles },
@@ -943,6 +939,7 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/technicians', element: <LiveTechniciansPage />, roles: sampleTenantRoles },
   { path: '/app/technicians/:id', element: <TechnicianPage />, roles: sampleTenantRoles },
   { path: '/app/maintenance', element: <LiveMaintenancePage />, roles: sampleTenantRoles },
+  { path: '/app/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
   { path: '/app/maintenance/:id', element: <MaintenanceRecordPage />, roles: sampleTenantRoles },
   { path: '/app/inventory/parts', element: <PartsPage />, roles: sampleTenantRoles },
   { path: '/app/inventory/parts/:id', element: <PartDetailPage />, roles: sampleTenantRoles },
@@ -967,12 +964,14 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/portal/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: sampleCustomerRoles },
   { path: '/portal/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: ['CUSTOMER_ADMIN'] },
+  { path: '/portal/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/equipment-history', element: <HistoryFeedPage />, roles: sampleCustomerRoles },
   { path: '/portal/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: sampleCustomerRoles },
   { path: '/portal/requests', element: <RequestsPage />, roles: sampleCustomerRoles },
   { path: '/portal/requests/new', element: <NewRequestPage />, roles: sampleCustomerRoles },
   { path: '/portal/requests/:id', element: <RequestDetailPage />, roles: sampleCustomerRoles },
   { path: '/portal/maintenance', element: <LiveMaintenancePage />, roles: ['CUSTOMER_ADMIN'] },
+  { path: '/portal/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/locations', element: <PortalSimplePage type="locations" />, roles: sampleCustomerRoles },
   { path: '/portal/notifications', element: <PortalSimplePage type="notifications" />, roles: sampleCustomerRoles },

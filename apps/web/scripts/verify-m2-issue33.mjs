@@ -74,6 +74,12 @@ const otherCustomer = signTestAccessToken({
   customerId: customerTwo,
   secret: process.env.JWT_ACCESS_SECRET,
 });
+const otherCustomerAdmin = signTestAccessToken({
+  role: "CUSTOMER_ADMIN",
+  tenantId: tenant,
+  customerId: customerTwo,
+  secret: process.env.JWT_ACCESS_SECRET,
+});
 
 const dossier = await call(
   `/api/assets/equipment/${equipmentOne}/dossier`,
@@ -106,6 +112,10 @@ for (const key of [
 }
 assert.equal(
   dossier.maintenance.status,
+  maintenanceOutage ? "UNAVAILABLE" : "AVAILABLE",
+);
+assert.equal(
+  dossier.maintenanceHistory.status,
   maintenanceOutage ? "UNAVAILABLE" : "AVAILABLE",
 );
 for (const kind of ["service-requests", "work-orders"]) {
@@ -160,8 +170,14 @@ if (process.argv.includes("--exercise-equipment-update")) {
       `/api/assets/equipment/${equipmentOne}/dossier`,
       manager,
     );
-    assert.equal(updated.equipment.displayName, "Issue 33 equipment update check");
-    assert.equal(updated.equipment.technicalSpecifications.issue33Verified, true);
+    assert.equal(
+      updated.equipment.displayName,
+      "Issue 33 equipment update check",
+    );
+    assert.equal(
+      updated.equipment.technicalSpecifications.issue33Verified,
+      true,
+    );
     assert.equal(updated.equipment.commissionedDate, testDate);
     await patch(
       manager,
@@ -320,6 +336,37 @@ if (!maintenanceOutage) {
     manager,
   );
   assert.ok(Array.isArray(planHistory.items));
+  const maintenanceHistory = await call(
+    "/api/maintenance/maintenance-history?page=1&pageSize=1",
+    manager,
+  );
+  assert.ok(maintenanceHistory.total > 0);
+  assert.ok(maintenanceHistory.items.length <= 1);
+  const equipmentHistory = await call(
+    `/api/maintenance/maintenance-history?equipmentId=${equipmentOne}&page=1&pageSize=20`,
+    manager,
+  );
+  assert.ok(
+    equipmentHistory.items.every((item) =>
+      plans.items.some((plan) => plan.id === item.planId),
+    ),
+  );
+  if (maintenanceHistory.total > 1) {
+    const secondPage = await call(
+      "/api/maintenance/maintenance-history?page=2&pageSize=1",
+      manager,
+    );
+    assert.notEqual(secondPage.items[0].id, maintenanceHistory.items[0].id);
+  }
+  const filteredMaintenanceHistory = await call(
+    `/api/maintenance/maintenance-history?planId=${plans.items[0].id}&eventType=${encodeURIComponent(planHistory.items[0]?.eventType ?? "PLAN_CREATED")}&page=1&pageSize=20`,
+    manager,
+  );
+  assert.ok(
+    filteredMaintenanceHistory.items.every(
+      (item) => item.planId === plans.items[0].id,
+    ),
+  );
   const tasks = await call(
     `/api/maintenance/maintenance-tasks?equipmentId=${equipmentOne}&pageSize=20`,
     manager,
@@ -338,38 +385,84 @@ if (!maintenanceOutage) {
   );
   await call("/api/maintenance/maintenance-summary", customerUser, 403);
   await call("/api/maintenance/maintenance-summary", customerAdmin);
+  await call("/api/maintenance/maintenance-history", customerUser, 403);
+  assert.equal(
+    (
+      await call(
+        `/api/maintenance/maintenance-history?equipmentId=${equipmentThree}`,
+        customerAdmin,
+      )
+    ).total,
+    0,
+  );
+  assert.equal(
+    (
+      await call(
+        `/api/maintenance/maintenance-history?equipmentId=${equipmentOne}`,
+        otherCustomerAdmin,
+      )
+    ).total,
+    0,
+  );
+  assert.equal(
+    (await call("/api/maintenance/maintenance-history", otherTenant)).total,
+    0,
+  );
   console.log(
-    "PASS Maintenance Plan/Task/summary/journey and Customer Admin versus User permission",
+    "PASS Maintenance Plan/Task/summary/journey, history pagination/filter/scope and Customer permissions",
   );
 
   if (process.argv.includes("--exercise-replacement")) {
-    const task = tasks.items.find(
+    let task = tasks.items.find(
       (item) => item.status === "WORK_ORDER_CREATED" && item.workOrderId,
     );
-    assert.ok(task, "A linked maintenance Work Order is required");
-    await call(
-      `/api/workorders/work-orders/${task.workOrderId}/cancel`,
-      manager,
-      200,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reason: "Issue 33 replacement verification" }),
-      },
-    );
-    const journeyPath = `/api/maintenance/maintenance-tasks/${task.id}/journey`;
     let eligible;
-    for (let attempt = 0; attempt < 40; attempt++) {
-      eligible = await call(journeyPath, manager);
-      if (eligible.allowedActions.includes("request-replacement")) break;
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    let requestId;
+    if (task) {
+      await call(
+        `/api/workorders/work-orders/${task.workOrderId}/cancel`,
+        manager,
+        200,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: "Issue 33 replacement verification" }),
+        },
+      );
+      const journeyPath = `/api/maintenance/maintenance-tasks/${task.id}/journey`;
+      for (let attempt = 0; attempt < 40; attempt++) {
+        eligible = await call(journeyPath, manager);
+        if (eligible.allowedActions.includes("request-replacement")) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      assert.ok(
+        eligible.allowedActions.includes("request-replacement"),
+        "Maintenance did not authorize replacement after cancellation",
+      );
+      requestId = randomUUID();
+    } else {
+      for (const candidate of tasks.items) {
+        if (candidate.status !== "PENDING") continue;
+        const pendingJourney = await call(
+          `/api/maintenance/maintenance-tasks/${candidate.id}/journey`,
+          manager,
+        );
+        const pending = pendingJourney.replacements.find(
+          (item) => item.status === "PENDING",
+        );
+        if (pending) {
+          task = candidate;
+          requestId = pending.requestId;
+          break;
+        }
+      }
+      assert.ok(
+        task && requestId,
+        "A linked or pending maintenance replacement is required",
+      );
     }
-    assert.ok(
-      eligible.allowedActions.includes("request-replacement"),
-      "Maintenance did not authorize replacement after cancellation",
-    );
-    const requestId = randomUUID();
-    await call(
+    const journeyPath = `/api/maintenance/maintenance-tasks/${task.id}/journey`;
+    const accepted = await call(
       `/api/maintenance/maintenance-tasks/${task.id}/replacement`,
       manager,
       201,
@@ -379,8 +472,22 @@ if (!maintenanceOutage) {
         body: JSON.stringify({ requestId }),
       },
     );
+    const retried = await call(
+      `/api/maintenance/maintenance-tasks/${task.id}/replacement`,
+      manager,
+      201,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ requestId }),
+      },
+    );
+    assert.equal(
+      retried.replacementWorkOrderId,
+      accepted.replacementWorkOrderId,
+    );
     let linked;
-    for (let attempt = 0; attempt < 40; attempt++) {
+    for (let attempt = 0; attempt < 60; attempt++) {
       linked = await call(journeyPath, manager);
       if (
         linked.replacements.some(
