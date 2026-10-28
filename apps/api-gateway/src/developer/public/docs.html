@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PBL6 · API Explorer</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/dev/assets/swagger-ui.css" />
+    <link rel="stylesheet" href="/dev/assets/portal.css" />
+    <script src="/dev/assets/swagger-ui-bundle.js" defer></script>
+    <script src="/dev/assets/docs.js" defer></script>
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/dev">PBL6 <span>DEVELOPER</span></a>
+      <nav>
+        <a href="/dev">Services</a
+        ><a href="/docs" aria-current="page">API Explorer</a>
+      </nav>
+    </header>
+    <main>
+      <section class="shell docs-intro">
+        <p class="eyebrow">API EXPLORER</p>
+        <h1>Thử API ngay trên Gateway</h1>
+        <div class="selector">
+          <label for="service">Service</label
+          ><select id="service" disabled>
+            <option>Đang tải…</option></select
+          ><span id="stage" class="muted"></span
+          ><a
+            id="download"
+            href="/docs/openapi/workorder.json"
+            target="_blank"
+            rel="noreferrer"
+            >OpenAPI JSON ↗</a
+          >
+        </div>
+        <p class="notice">
+          Để dùng API có quyền: chọn Identity → <code>POST /auth/login</code> →
+          lấy <code>accessToken</code> → bấm <strong>Authorize</strong> và dán
+          token (không thêm “Bearer”). Token chỉ giữ trong bộ nhớ trang; backend
+          vẫn kiểm tra role và tenant.
+        </p>
+        <p id="planned" class="notice warning" hidden>
+          Service này hiện mới có scaffold. Bạn có thể đọc contract; nút gọi thử
+          được tắt đến khi API nghiệp vụ được triển khai.
+        </p>
+        <p id="error" class="notice error" role="alert" hidden></p>
+      </section>
+      <div id="swagger-ui"></div>
+    </main>
+  </body>
+</html>
