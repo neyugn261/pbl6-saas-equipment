@@ -40,6 +40,16 @@ pnpm smoke:m1
 
 `pnpm smoke:m1` cần stack thật. Các ca kiểm thử và kết quả ghi trong `docs/testing/m1-test-cases.md`.
 
+## M2: thiết bị, yêu cầu, Work Order và bảo trì
+
+Các trang `/app` và `/portal` của M2 gọi API thật qua Gateway, kể cả khi cấu hình M1 đang ở chế độ mock. Khởi động các service Identity, Organization, Asset, Service Request, Work Order và Maintenance, chạy migration và seed DEMO theo README ở root trước khi mở web. Customer User chỉ có thể xem Service Request và phần tóm tắt đã công bố; Customer Admin được xem Maintenance theo phạm vi khách hàng của mình.
+
+Nút yêu cầu Work Order thay thế của Maintenance Task được bật khi backend có consumer `MaintenanceWorkOrderReplacementRequested.v1` và migration Work Order mới đã chạy. Sau khi cập nhật từ `develop`, chạy `pnpm --filter workorder-service db:migrate` trước khi thử luồng này. Đặt `VITE_M2_REPLACEMENT_ENABLED=false` trong `.env.local` nếu môi trường triển khai chưa có consumer; khởi động lại Vite sau khi đổi biến. Web giữ cùng `requestId` trong phiên trang để gửi lại an toàn và tự làm mới hành trình khi yêu cầu còn `PENDING`.
+
+Kiểm tra API thật bằng `node --env-file=.env apps/web/scripts/verify-m2-issue33.mjs` từ root. Lệnh cần stack local và dữ liệu DEMO. Có thể thêm `--expect-maintenance-outage` khi chủ động tắt Maintenance Service để kiểm tra trạng thái `UNAVAILABLE`. Chế độ `--exercise-replacement` hủy Work Order đang liên kết và tạo yêu cầu thay thế trên dữ liệu DEMO; chỉ chạy khi có thể chấp nhận thay đổi dữ liệu kiểm thử. Kết quả kiểm tra chi tiết: [docs/testing/m2-web-issue33.md](../../docs/testing/m2-web-issue33.md).
+
+Thêm `--exercise-equipment-update` để kiểm tra PATCH hồ sơ, xác nhận tình trạng với lý do và quyền sửa. Chế độ này ghi lịch sử xác nhận trên thiết bị DEMO rồi phục hồi các trường hồ sơ ban đầu.
+
 ## Mock contract tùy chọn
 
 Chỉ dùng để kiểm tra giao diện khi service chưa chạy. Đặt `VITE_M1_API_MODE=mock` và `VITE_IDENTITY_API_URL=/identity` trong `.env.local`, rồi chạy ba Prism server trên cổng 4010–4012 theo `docs/api/{organization,asset,service-request}.yaml`. Sau đó có thể chạy `apps/web/scripts/smoke-mocks.ps1`. Prism không lưu thay đổi sau POST và không thay thế smoke test qua gateway.

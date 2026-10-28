@@ -56,6 +56,14 @@ export const api = {
   ) => request<T>('organization', path, options),
   asset: <T>(path: string, options?: { method?: string; body?: unknown }) =>
     request<T>('asset', path, options),
+  assetM2: <T>(path: string, options?: { method?: string; body?: unknown }) =>
+    request<T>('assetM2', path, options),
   requests: <T>(path: string, options?: { method?: string; body?: unknown }) =>
     request<T>('requests', path, options),
+  requestsLive: <T>(path: string, options?: { method?: string; body?: unknown }) =>
+    request<T>('requestsLive', path, options),
+  workorders: <T>(path: string, options?: { method?: string; body?: unknown }) =>
+    request<T>('workorders', path, options),
+  maintenance: <T>(path: string, options?: { method?: string; body?: unknown }) =>
+    request<T>('maintenance', path, options),
 }

@@ -1,0 +1,74 @@
+.m2-page {
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.m2-page > header {
+  display: grid;
+  gap: 6px;
+}
+.m2-page h1 {
+  margin: 0;
+  font-size: 28px;
+}
+.m2-page .m1-section-body {
+  overflow-wrap: anywhere;
+}
+.m2-page pre {
+  overflow: auto;
+  max-height: 340px;
+  white-space: pre-wrap;
+}
+.m2-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+.m2-linked-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.m2-linked-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+.m2-linked-list span {
+  color: #64748b;
+}
+.m2-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.m2-page button {
+  width: fit-content;
+  margin-right: 8px;
+}
+.m2-editor {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+.m2-editor label {
+  display: grid;
+  gap: 5px;
+}
+.m2-editor input,
+.m2-editor select,
+.m2-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+}
+.m2-editor textarea {
+  min-height: 72px;
+}
