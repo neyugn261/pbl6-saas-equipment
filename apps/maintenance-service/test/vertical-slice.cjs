@@ -67,6 +67,8 @@ const technician = signTestAccessToken({
 const apps = [],
   queues = [],
   ids = new Set();
+const deliveries = [];
+let delayedReplacementId, delayedCreated;
 const exchange = 'pbl6.test.maintenance.' + randomUUID();
 let assetDb, maintenanceDb, woDb, bus;
 async function application(AppModule, override) {
@@ -229,6 +231,7 @@ async function main() {
       events,
       handler: async (e) => {
         ids.add(e.eventId);
+        deliveries.push(e);
         await handler(e);
       },
       retryDelayMs: 50,
@@ -242,7 +245,11 @@ async function main() {
       )
       .handle(e),
   );
-  subscribe('task', [Events.MaintenanceTaskDue], (e) =>
+  // Exercise the production WO subscription catalog, including replacement.
+  const { MAINTENANCE_EVENTS } = woRequire(
+    './dist/events/outbox-relay.service',
+  );
+  subscribe('task', MAINTENANCE_EVENTS, (e) =>
     workorderApp
       .get(
         woRequire('./dist/events/maintenance-events.consumer')
@@ -257,13 +264,22 @@ async function main() {
       Events.WorkOrderCompletedV2,
       Events.WorkOrderCancelledV2,
     ],
-    (e) =>
-      maintenanceApp
+    (e) => {
+      // Fault injection: deliver this replacement's real terminal before its Created.
+      if (
+        e.eventType === 'WorkOrderCreated' &&
+        e.aggregateId === delayedReplacementId
+      ) {
+        delayedCreated = e;
+        return;
+      }
+      return maintenanceApp
         .get(
           require('../dist/events/work-order-events.consumer')
             .WorkOrderEventsConsumer,
         )
-        .handle(e),
+        .handle(e);
+    },
   );
   subscribe(
     'history',
@@ -458,8 +474,226 @@ async function main() {
     replay.replacementWorkOrderId,
     replacement.replacementWorkOrderId,
   );
+  await wait(
+    () =>
+      call(
+        base,
+        'GET',
+        '/api/maintenance/maintenance-tasks/' + cancelledTask.id,
+      ),
+    (t) =>
+      t.status === 'WORK_ORDER_CREATED' &&
+      t.workOrderId === replacement.replacementWorkOrderId,
+    'replacement request → real replacement WO → Task link',
+    relays,
+  );
+  const replacementEvent = deliveries.find(
+    (e) =>
+      e.eventType === 'MaintenanceWorkOrderReplacementRequested' &&
+      e.payload.requestId === requestId,
+  );
+  const oldCancellation = deliveries.find(
+    (e) =>
+      e.eventType === 'WorkOrderCancelled' &&
+      e.aggregateId === cancelledTask.workOrderId,
+  );
+  const oldDue = deliveries.find(
+    (e) =>
+      e.eventType === 'MaintenanceTaskDue' &&
+      e.aggregateId === cancelledTask.id,
+  );
+  assert.ok(replacementEvent && oldCancellation && oldDue);
+  const duplicateReplacement = { ...replacementEvent, eventId: randomUUID() };
+  const staleCancellation = { ...oldCancellation, eventId: randomUUID() };
+  const replayedDue = { ...oldDue, eventId: randomUUID() };
+  await bus.publish(replacementEvent);
+  await bus.publish(duplicateReplacement);
+  await bus.publish(staleCancellation);
+  await bus.publish(replayedDue);
+  await wait(
+    () =>
+      woDb.processedEvent.count({
+        where: { eventId: duplicateReplacement.eventId },
+      }),
+    (count) => count === 1,
+    'replacement business duplicate',
+    relays,
+  );
+  await wait(
+    () =>
+      woDb.processedEvent.count({ where: { eventId: replayedDue.eventId } }),
+    (count) => count === 1,
+    'Due replay while replacement active',
+    relays,
+  );
+  await wait(
+    () =>
+      maintenanceDb.processedEvent.count({
+        where: { eventId: staleCancellation.eventId },
+      }),
+    (count) => count === 1,
+    'late cancellation of old WO',
+    relays,
+  );
+  assert.equal(
+    (
+      await call(
+        base,
+        'GET',
+        '/api/maintenance/maintenance-tasks/' + cancelledTask.id,
+      )
+    ).workOrderId,
+    replacement.replacementWorkOrderId,
+  );
+  assert.equal(
+    await woDb.workOrder.count({
+      where: { maintenanceTaskId: cancelledTask.id },
+    }),
+    2,
+  );
+  await call(
+    base,
+    'POST',
+    `/api/workorders/work-orders/${replacement.replacementWorkOrderId}/cancel`,
+    manager,
+    { reason: 'Reschedule replacement once more' },
+  );
+  await wait(
+    () =>
+      call(
+        base,
+        'GET',
+        '/api/maintenance/maintenance-tasks/' + cancelledTask.id,
+      ),
+    (t) => t.status === 'PENDING',
+    'replacement cancellation',
+    relays,
+  );
+  const nextReplacement = await call(
+    base,
+    'POST',
+    `/api/maintenance/maintenance-tasks/${cancelledTask.id}/replacement`,
+    manager,
+    { requestId: randomUUID() },
+    201,
+  );
+  delayedReplacementId = nextReplacement.replacementWorkOrderId;
+  await wait(
+    () =>
+      woDb.workOrder.findUnique({
+        where: { id: nextReplacement.replacementWorkOrderId },
+      }),
+    (wo) => wo?.status === 'CREATED',
+    'second replacement WO with supplied ID',
+    relays,
+  );
+  const replacementPath =
+    '/api/workorders/work-orders/' + nextReplacement.replacementWorkOrderId;
+  const finalOrder = await call(base, 'GET', replacementPath);
+  assert.equal(finalOrder.maintenanceTaskId, cancelledTask.id);
+  assert.equal(finalOrder.createdBy, null);
+  assert.equal(finalOrder.scheduledStart, '2026-03-30T17:00:00.000Z');
+  await call(base, 'POST', replacementPath + '/assign', manager, {
+    technicianId: tech.id,
+  });
+  for (const action of ['accept', 'start'])
+    await call(base, 'POST', replacementPath + '/' + action, technician, {});
+  await call(base, 'POST', replacementPath + '/complete', technician, {
+    problemDescription: 'Replacement inspection',
+    solution: 'Completed after rescheduling',
+    result: 'RESOLVED',
+    customerSummary: 'Replacement maintenance completed',
+  });
+  await wait(
+    () =>
+      call(
+        base,
+        'GET',
+        '/api/maintenance/maintenance-tasks/' + cancelledTask.id,
+      ),
+    (t) =>
+      t.status === 'COMPLETED' &&
+      t.workOrderId === nextReplacement.replacementWorkOrderId,
+    'terminal-before-Created replacement → completed Task',
+    relays,
+  );
+  await wait(
+    () => Promise.resolve(delayedCreated),
+    (e) => Boolean(e),
+    'held real replacement Created',
+    relays,
+  );
+  delayedReplacementId = undefined;
+  await bus.publish(delayedCreated);
+  const terminalReplays = [replacementEvent, oldCancellation, oldDue].map(
+    (e) => ({ ...e, eventId: randomUUID() }),
+  );
+  for (const event of terminalReplays) await bus.publish(event);
+  await wait(
+    () =>
+      maintenanceDb.processedEvent.count({
+        where: { eventId: delayedCreated.eventId },
+      }),
+    (count) => count === 1,
+    'late Created after terminal',
+    relays,
+  );
+  await wait(
+    async () =>
+      (await woDb.processedEvent.count({
+        where: {
+          eventId: {
+            in: [terminalReplays[0].eventId, terminalReplays[2].eventId],
+          },
+        },
+      })) +
+      (await maintenanceDb.processedEvent.count({
+        where: { eventId: terminalReplays[1].eventId },
+      })),
+    (count) => count === 3,
+    'all stale replays after completion are consumed',
+    relays,
+  );
+  await wait(
+    () =>
+      call(base, 'GET', '/api/assets/equipment/' + equipmentId + '/history'),
+    (page) =>
+      page.items.some(
+        (h) =>
+          h.referenceId === nextReplacement.replacementWorkOrderId &&
+          h.eventType === 'WORK_ORDER_COMPLETED',
+      ),
+    'replacement completion → Asset history',
+    relays,
+  );
+  const finalTask = await call(
+    base,
+    'GET',
+    '/api/maintenance/maintenance-tasks/' + cancelledTask.id,
+  );
+  assert.equal(finalTask.status, 'COMPLETED');
+  assert.equal(finalTask.workOrderId, nextReplacement.replacementWorkOrderId);
+  assert.equal(
+    await woDb.workOrder.count({
+      where: { maintenanceTaskId: cancelledTask.id },
+    }),
+    3,
+  );
+  assert.equal(
+    (
+      await maintenanceDb.maintenanceReplacementRequest.findUniqueOrThrow({
+        where: { requestId: nextReplacement.requestId },
+      })
+    ).status,
+    'LINKED',
+  );
+  assert.equal(
+    (await call(base, 'GET', replacementPath + '/service-report'))
+      .customerSummary,
+    'Replacement maintenance completed',
+  );
   console.log(
-    'PASS real WO cancellation → Task PENDING → durable idempotent replacement request; replacement WO producer is the Khuong handoff',
+    'PASS real cancellation → replacement request → supplied WO ID → Task link → next replacement → report/Task/Asset history; duplicate/replayed Due/stale cancellation and terminal-before-Created preserve the completed Task',
   );
   for (let i = 0; i < 2; i++) {
     // Asset runs in this process: do not block its HTTP event loop while the

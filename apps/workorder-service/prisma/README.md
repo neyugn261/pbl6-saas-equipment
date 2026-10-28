@@ -13,6 +13,11 @@ Notes for this database:
 
 - `uq_work_orders_maintenance_task` ignores `CANCELLED` Work Orders ([ADR 0002](../../../docs/decisions/0002-workorder-maintenance-task-index.md), audit F07).
 - `WorkOrder.serviceReports` is a list in Prisma although the database allows at most one report per Work Order (`service_reports.work_order_id` is UNIQUE): the composite FK `(tenant_id, work_order_id)` is not itself unique, which Prisma requires for a 1:1 relation.
+- `0004_maintenance_replacement_reference` adds nullable, unique replacement
+  request/predecessor references and a CHECK for Maintenance-only pairs
+  ([ADR 0011](../../../docs/decisions/0011-workorder-maintenance-replacement.md)).
+  Existing rows remain NULL. Apply before running the replacement consumer;
+  do not reset the DB or rewrite existing migrations.
 
 ## Commands (run in `apps/workorder-service`)
 

@@ -3,16 +3,22 @@
 | Thuộc tính | Giá trị |
 | --- | --- |
 | Người phụ trách | Khương — Member A theo bản phân công M2 người dùng cung cấp |
-| Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-27 |
-| Mốc code đã đối chiếu | `develop 988dbe0` sau PR #25; K6 tạo lần đầu `d658a56` |
-| Trạng thái tài liệu | Tuần 2 đã merge develop qua #25; K6 tạo lần đầu đã code/test local, chờ review/merge |
+| Ngày tạo / cập nhật gần nhất | 2026-10-26 / 2026-10-28 |
+| Mốc code đã đối chiếu | `develop 76c179b`; K6 replacement trên nhánh `feature/khuong-maintenance-replacement` |
+| Trạng thái tài liệu | K6 tạo lần đầu đã merge #26/#27; consumer replacement đã triển khai và kiểm thử local, chờ review/merge |
 | PR dependency | [#20](https://github.com/neyugn261/pbl6-saas-equipment/pull/20) — đã merge `fbbc97d` |
 | PR implementation | [#21](https://github.com/neyugn261/pbl6-saas-equipment/pull/21) — đã merge `b8935d1` |
-| Việc tiếp theo | Review K6 tạo lần đầu; Minh tích hợp producer/Task state và review contract thay thế; Huy sửa H4; K7/K8 tiếp tục |
+| Việc tiếp theo | Review K6 replacement và migration/ADR 0011 với Minh/Nguyên; Huy sửa H4; K7/K8 tiếp tục |
 
 Tài liệu lưu kế hoạch, phụ thuộc, tiêu chí hoàn thành và bằng chứng để Khương,
 thành viên nhóm hoặc AI tiếp tục cập nhật. Đây không phải biên bản nghiệm thu
 hay ADR mới. Việc viết tài liệu không có nghĩa các task đã được triển khai.
+
+**Cập nhật 28/10:** issue #31 đã có implementation và bằng chứng
+[K6 replacement](../testing/m2-maintenance-replacement-test-cases.md), gồm
+producer Maintenance thật qua Gateway/PostgreSQL/RabbitMQ. Các ghi nhận ngày
+26–27/10 bên dưới là lịch sử, không dùng câu “chờ producer/contract” cũ để
+đánh giá trạng thái mới. K6 local chưa đồng nghĩa đã merge hoặc M2 toàn nhóm đạt.
 
 Nguồn phân công là bản **“M2 — Phân công công việc cho 5 thành viên”**, ngày
 25/10/2026, đối chiếu `7cc48ba`, do người dùng cung cấp dưới tên

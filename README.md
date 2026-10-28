@@ -32,7 +32,7 @@ apps/
   identity-service/         :3001  ✅ auth (login/refresh/logout/me), claim customer_id, consumer tenant/membership events
   asset-service/            :3002  ✅ Equipment Model, Equipment, Warranty, QR và lịch sử; tenant/customer scope
   maintenance-service/      :3003  ✅ M2 Plan/Task API, scheduler, snapshot, WO inbox và lịch sử chi tiết
-  workorder-service/        :3004  ✅ M2: Technician/Skill, WO, assignment, thực thi/report và cancel; K6 tạo WO bảo trì lần đầu chờ review
+  workorder-service/        :3004  ✅ M2: Technician/Skill, WO, assignment/report/cancel; K6 Maintenance và consumer WO thay thế
   notification-service/     :3005  scaffold + schema notification_db
   organization-service/     :3006  ✅ Tenant, Branch, Customer, Site, Location và membership
   service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox

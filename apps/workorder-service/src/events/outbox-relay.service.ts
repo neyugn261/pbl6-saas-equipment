@@ -38,7 +38,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     });
     this.bus.subscribe({
       queue: MAINTENANCE_CONSUMER_QUEUE,
-      events: [Events.MaintenanceTaskDue],
+      events: MAINTENANCE_EVENTS,
       handler: async (envelope) => {
         await this.maintenance.handle(envelope);
       },
@@ -60,3 +60,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
 export const REQUEST_CONSUMER_QUEUE = 'workorder-service.service-requests';
 
 export const MAINTENANCE_CONSUMER_QUEUE = 'workorder-service.maintenance-tasks';
+export const MAINTENANCE_EVENTS = [
+  Events.MaintenanceTaskDue,
+  Events.MaintenanceWorkOrderReplacementRequested,
+] as const;
