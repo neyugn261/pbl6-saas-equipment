@@ -70,6 +70,10 @@ export interface RequestRecord {
   createdAt: string
 }
 export interface RequestDetail extends RequestRecord {
+  resolutionResult?: 'RESOLVED' | 'PARTIALLY_RESOLVED' | 'UNRESOLVED' | null
+  resolutionSummary?: string | null
+  resolvedWorkOrderNo?: string | null
+  resolutionCompletedAt?: string | null
   warrantyCheck: {
     result: 'IN_WARRANTY' | 'OUT_OF_WARRANTY' | 'NO_WARRANTY'
   } | null
