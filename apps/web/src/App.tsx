@@ -46,6 +46,7 @@ import { DossierPage, EquipmentFeedPage, HistoryFeedPage, ResourceHistoryPage, W
 import { rememberDemoRequest } from './routes/demo-request'
 import InvitePage from './routes/InvitePage'
 import QrPage from './routes/QrPage'
+import EstimatePanel from './routes/EstimatePanel'
 import { AppStoreProvider } from './sample/state/AppStore'
 import { DashboardPage as SampleDashboardPage } from './sample/pages/DashboardPage'
 import { CustomerDetailPage as SampleCustomerDetailPage, CustomerFormPage as SampleCustomerFormPage, CustomersPage as SampleCustomersPage } from './sample/pages/CustomersPage'
@@ -651,6 +652,7 @@ function RequestActivity({ id, version }: { id: string; version: number }) {
 }
 function RequestDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { profile } = useSession()
   const data = useLoad<RequestDetail>(
     () => api.requestsLive(`/service-requests/${id}`),
@@ -665,6 +667,33 @@ function RequestDetailPage() {
     'CUSTOMER',
   )
   const current = override?.id === data.value?.id ? override : data.value
+  async function refreshRequest() {
+    if (!current) return
+    setBusy(true)
+    setError(null)
+    try {
+      setOverride(await api.requestsLive(`/service-requests/${current.id}`))
+      setVersion((value) => value + 1)
+    } catch (cause) {
+      setError(cause)
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function createWorkOrder() {
+    if (!current) return
+    setBusy(true)
+    setError(null)
+    try {
+      const order = await api.workorders<{ id: string }>('/work-orders', {
+        method: 'POST', body: { serviceRequestId: current.id },
+      })
+      navigate(`/app/work-orders/${order.id}`)
+    } catch (cause) {
+      setError(cause)
+      if (cause instanceof ApiError && cause.status === 409) await refreshRequest()
+    } finally { setBusy(false) }
+  }
   async function run(action: string) {
     if (!current) return
     const required = ['reject', 'request-info', 'reopen'].includes(action)
@@ -732,6 +761,8 @@ function RequestDetailPage() {
             <div className="m1-entity-status"><StatusBadge status={current.status} /><PriorityBadge priority={current.priority} /><span>{requestTypeLabels[current.type] ?? current.type}</span></div>
             {error ? <Problem error={error} /> : null}
             <div className="m1-actions">
+              <button disabled={busy} onClick={() => void refreshRequest()}>Làm mới trạng thái</button>
+              {current.status === 'ACCEPTED' && profile?.roles.includes('SERVICE_MANAGER') && <button disabled={busy} onClick={() => void createWorkOrder()}>Tạo lệnh công việc</button>}
               {current.allowedActions
                 ?.filter((action) => actions.includes(action))
                 .map((action) => (
@@ -744,6 +775,8 @@ function RequestDetailPage() {
                   </button>
                 ))}
             </div>
+            {current.status === 'PROCESSING' && <p role="status">Đang chờ kết quả từ Work Order. Kết quả có thể xuất hiện sau ít phút; dùng “Làm mới trạng thái” để kiểm tra.</p>}
+            {(current.resolutionSummary || current.resolutionResult) && <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Kết quả dịch vụ</h2></div><div className="m1-section-body"><p>{current.resolutionSummary ?? '—'}</p><dl><dt>Kết quả</dt><dd>{current.resolutionResult ?? '—'}</dd><dt>Lệnh công việc</dt><dd>{current.resolvedWorkOrderNo ?? '—'}</dd><dt>Hoàn thành lúc</dt><dd>{formatDate(current.resolutionCompletedAt)}</dd></dl></div></section>}
             <div className="m1-request-detail-grid">
               <div>
                 <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Mô tả sự cố</h2></div><div className="m1-section-body m1-prose">{current.description}</div></section>
@@ -757,6 +790,7 @@ function RequestDetailPage() {
               <aside><section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Thông tin yêu cầu</h2></div><div className="m1-section-body"><dl><dt>Trạng thái</dt><dd><StatusBadge status={current.status} /></dd><dt>Ưu tiên</dt><dd><PriorityBadge priority={current.priority} /></dd><dt>Bảo hành</dt><dd>{current.warrantyCheck?.result ? <StatusBadge status={current.warrantyCheck.result} /> : 'Chưa kiểm tra'}</dd><dt>Loại yêu cầu</dt><dd>{requestTypeLabels[current.type] ?? current.type}</dd></dl></div></section></aside>
             </div>
             <RequestDossierExtras equipmentId={current.equipmentId} requestId={current.id} revision={version} />
+            <EstimatePanel requestId={current.id} onChange={() => void refreshRequest()} />
             <RequestActivity id={current.id} version={version} />
           </>
         )
@@ -931,16 +965,16 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/equipment-history', element: <HistoryFeedPage />, roles: sampleTenantRoles },
   { path: '/app/models/:id/history', element: <ResourceHistoryPage kind="model" />, roles: sampleTenantRoles },
   { path: '/app/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: sampleTenantRoles },
-  { path: '/app/service-requests', element: <RequestsPage />, roles: sampleTenantRoles },
-  { path: '/app/service-requests/new', element: <NewRequestPage />, roles: sampleTenantRoles },
-  { path: '/app/service-requests/:id', element: <RequestDetailPage />, roles: sampleTenantRoles },
+  { path: '/app/service-requests', element: <RequestsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
+  { path: '/app/service-requests/new', element: <NewRequestPage />, roles: ['SERVICE_MANAGER'] },
+  { path: '/app/service-requests/:id', element: <RequestDetailPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
   { path: '/app/work-orders', element: <WorkOrderListPage />, roles: sampleTenantRoles },
   { path: '/app/work-orders/:id', element: <WorkOrderPage />, roles: sampleTenantRoles },
-  { path: '/app/technicians', element: <LiveTechniciansPage />, roles: sampleTenantRoles },
-  { path: '/app/technicians/:id', element: <TechnicianPage />, roles: sampleTenantRoles },
-  { path: '/app/maintenance', element: <LiveMaintenancePage />, roles: sampleTenantRoles },
+  { path: '/app/technicians', element: <LiveTechniciansPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
+  { path: '/app/technicians/:id', element: <TechnicianPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
+  { path: '/app/maintenance', element: <LiveMaintenancePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
   { path: '/app/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/maintenance/:id', element: <MaintenanceRecordPage />, roles: sampleTenantRoles },
+  { path: '/app/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
   { path: '/app/inventory/parts', element: <PartsPage />, roles: sampleTenantRoles },
   { path: '/app/inventory/parts/:id', element: <PartDetailPage />, roles: sampleTenantRoles },
   { path: '/app/inventory/warehouses', element: <WarehousesPage />, roles: sampleTenantRoles },
