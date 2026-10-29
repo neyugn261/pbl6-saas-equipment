@@ -16,6 +16,8 @@ Môi trường: Windows, Docker PostgreSQL/RabbitMQ/Redis/MinIO, các service No
 | `apps/web/scripts/verify-m2-maintenance-plan.mjs` | Pass | Plan create/edit/pause/resume/inactive; Customer User bị từ chối |
 | Web TypeScript, ESLint, build, menu 8 vai trò | Pass | Build có cảnh báo bundle lớn hơn 500 kB |
 
+Sau khi người dùng đăng nhập Service Manager, kiểm tra trực tiếp trên trình duyệt local: các trang Work Order, Kỹ thuật viên, Bảo trì định kỳ, Lịch sử thiết bị và Lịch sử bảo trì đều tải dữ liệu; lọc Work Order theo `COMPLETED` trả đúng 6 bản ghi; nút mở/đóng biểu mẫu kế hoạch hoạt động. Giao diện các trang này đã được chỉnh để tiêu đề, form, trạng thái và lịch sử có bố cục rõ ràng. Đây là kiểm tra giao diện đọc/lọc; chưa thay thế thao tác tạo/sửa/xác nhận đầy đủ trên trình duyệt.
+
 Lần thử đầu của M2 tuần 1 thất bại do DB local thiếu migration `0005`; chạy lại sau migration đạt. Lần thử đầu của smoke M1 thiếu activation token theo cấu hình local; chạy lại với token dev/test bật tạm thời đạt. Lần thử đầu của smoke tuần 2 bị rate limit 429; chạy lại với giới hạn kiểm thử 50 đạt. Lần thử đầu của kịch bản Cost Estimate tìm thấy đường dẫn Gateway sai `/api/estimates/{id}` trong web; đã sửa thành `/api/service-requests/estimates/{id}` và chạy lại đạt. Các lần chạy tạo dữ liệu DEMO mới, không đụng production.
 
 ## Vai trò → màn hình → thao tác

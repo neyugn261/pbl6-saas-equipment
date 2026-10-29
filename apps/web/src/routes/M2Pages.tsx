@@ -34,6 +34,26 @@ type Dossier = {
 
 const asText = (value: unknown) =>
   value == null || value === "" ? "—" : String(value);
+const statusLabel: Record<string, string> = {
+  CREATED: 'Mới tạo', ASSIGNED: 'Đã phân công', ACCEPTED: 'Đã nhận',
+  TRAVELLING: 'Đang di chuyển', IN_PROGRESS: 'Đang thực hiện',
+  ON_HOLD: 'Tạm dừng', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy',
+  ACTIVE: 'Đang hoạt động', PAUSED: 'Tạm dừng', INACTIVE: 'Ngừng hoạt động',
+  AVAILABLE: 'Sẵn sàng', BUSY: 'Đang bận', OFF_DUTY: 'Nghỉ ca',
+  PENDING: 'Đang chờ', WORK_ORDER_CREATED: 'Đã tạo lệnh', FAILED: 'Thất bại',
+};
+const historyEventLabel: Record<string, string> = {
+  PLAN_CREATED: 'Tạo kế hoạch', PLAN_UPDATED: 'Cập nhật kế hoạch',
+  PLAN_STATUS_CHANGED: 'Đổi trạng thái kế hoạch', TASK_GENERATED: 'Tạo công việc bảo trì',
+  SCHEDULE_ADVANCED: 'Chuyển kỳ bảo trì', REPLACEMENT_REQUESTED: 'Yêu cầu lệnh thay thế',
+  WORK_ORDER_CREATED: 'Tạo lệnh công việc', WORK_ORDER_CANCELLED: 'Hủy lệnh công việc',
+  WORK_ORDER_COMPLETED: 'Hoàn tất lệnh công việc',
+  SERVICE_REQUEST_STATUS_CHANGED: 'Đổi trạng thái yêu cầu dịch vụ',
+};
+const eventLabel = (value: unknown) => {
+  const key = asText(value);
+  return key === '—' ? key : (historyEventLabel[key] ?? statusLabel[key] ?? key.replaceAll('_', ' ').toLowerCase());
+};
 const operationalLabels: Record<string, string> = {
   UNKNOWN: "Chưa xác nhận tình trạng vận hành",
   OPERATIONAL: "Hoạt động",
@@ -167,7 +187,7 @@ function HistoryRows({ items }: { items: Row[] }) {
       {items.map((item, index) => (
         <li key={asText(item.id ?? index)}>
           <strong>
-            {asText(item.eventType ?? item.newStatus ?? item.status)}
+            {eventLabel(item.eventType ?? item.newStatus ?? item.status)}
           </strong>
           <span>
             {" "}
@@ -256,9 +276,9 @@ function LinkedRows({
                   id,
               )}
             </Link>
-            <span>
-              {asText(item.status)} ·{" "}
-              {date(item.nextDueDate ?? item.scheduledDate ?? item.createdAt)}
+            <span className="m2-row-meta">
+              <span className={`m2-status m2-status--${String(item.status ?? '').toLowerCase()}`}>{statusLabel[String(item.status)] ?? asText(item.status)}</span>
+              <time>{date(item.nextDueDate ?? item.scheduledDate ?? item.createdAt)}</time>
             </span>
           </li>
         );
@@ -1472,6 +1492,7 @@ function MaintenancePlanForm({ plan, onSaved }: { plan?: Row; onSaved: () => voi
 export function MaintenancePage() {
   const { profile } = useSession();
   const [revision, setRevision] = useState(0);
+  const [showCreate, setShowCreate] = useState(false);
   const [tab, setTab] = useState<"plans" | "tasks">("plans");
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
@@ -1492,7 +1513,8 @@ export function MaintenancePage() {
   return (
     <div className="m2-page">
       <h1>Bảo trì định kỳ</h1>
-      {profile?.roles.includes('SERVICE_MANAGER') && <MaintenancePlanForm onSaved={() => setRevision((value) => value + 1)} />}
+      {profile?.roles.includes('SERVICE_MANAGER') && <button className="m2-create-toggle" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Đóng biểu mẫu' : '+ Tạo kế hoạch bảo trì'}</button>}
+      {showCreate && <MaintenancePlanForm onSaved={() => { setRevision((value) => value + 1); setShowCreate(false); }} />}
       <Link
         to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/maintenance-history`}
       >
@@ -1867,7 +1889,7 @@ export function TechniciansPage() {
                     {asText(row.employeeCode ?? row.userId)}
                   </Link>
                   <span>
-                    {asText(row.status)} · {asText(row.branchId)}
+                    <span className={`m2-status m2-status--${String(row.status ?? '').toLowerCase()}`}>{statusLabel[String(row.status)] ?? asText(row.status)}</span>
                   </span>
                 </li>
               ))}
