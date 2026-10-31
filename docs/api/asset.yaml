@@ -5,6 +5,7 @@ info:
   description: |
     M1/M2 local contract for review — owner: Minh. ADR 0010 dossier and filtered
     history endpoints are specified in equipment-dossier.yaml (same service).
+    ADR 0012 initial service setup endpoints are in equipment-registration.yaml.
     Conventions: docs/api/conventions.md. Every operation below requires a
     bearer access token. The tenant and, for CUSTOMER accounts, customer scope
     come only from the token (ADR 0003). PLATFORM_STAFF has no tenant scope.
@@ -21,7 +22,8 @@ info:
       covers a given day.
     Model changes create a separate model audit ledger. Equipment, warranty and QR
     writes create the history entries described on their operations. Reads
-    never create history.
+    never create history. Initial setup registration audit events are staff-only,
+    including history lists, timelines and direct entry reads.
 servers:
   - url: http://localhost:3002
     description: Local service (through the gateway later at /api/assets)
@@ -144,6 +146,10 @@ paths:
         - name: status
           in: query
           schema: { $ref: '#/components/schemas/EquipmentStatus' }
+        - name: registrationStatus
+          in: query
+          description: Staff-only; CUSTOMER receives 403 if this filter is supplied
+          schema: { type: string, enum: [NOT_RECORDED, DRAFT, PENDING_MAINTENANCE, COMPLETED] }
         - name: warranty
           in: query
           description: Filter by warranty state today
@@ -655,6 +661,8 @@ components:
       type: object
       required: [id, modelId, customerId, customerSiteId, locationId, assetCode, serialNumber, installationDate, handoverDate, status, createdAt, updatedAt, displayName, description, commissionedDate, technicalSpecifications, operationalStatus, operationalStatusUpdatedAt, operationalStatusUpdatedBy]
       properties:
+        registrationStatus: { type: string, enum: [NOT_RECORDED, DRAFT, PENDING_MAINTENANCE, COMPLETED], description: Staff list/detail only; initial setup progress is separate from equipment lifecycle }
+        registrationId: { type: [string, 'null'], format: uuid, description: Staff list/detail only; omitted for CUSTOMER }
         displayName: { type: [string, 'null'] }
         description: { type: [string, 'null'] }
         commissionedDate: { type: [string, 'null'], format: date }
