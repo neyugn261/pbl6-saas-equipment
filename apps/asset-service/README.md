@@ -132,3 +132,26 @@ the referenced customers, sites and locations. Fixed Asset IDs are listed in
 the second customer and has no warranty. The seed has no user actor and never
 reads another service database. These fixed periods are suitable for current
 demo dates; update the fixture plan before 2100.
+
+## Initial equipment registration (ADR 0012)
+
+See [API contract](../../docs/api/equipment-registration.yaml),
+[technical design](../../docs/plans/equipment-registration-technical-design.md)
+and [verification](../../docs/testing/equipment-registration.md).
+
+Apply both additive migrations before using the web handover workflow:
+
+```sh
+pnpm --filter asset-service --filter maintenance-service db:migrate
+```
+
+Asset owns the DRAFT → PENDING_MAINTENANCE → COMPLETED record and commits
+Warranty before calling Maintenance with the caller's token. Maintenance's
+internal PUT creates or links one Plan per tenant/registration; repeated calls
+return the same receipt without changing the current schedule. No cross-database
+transaction, new event or new role is introduced. A pending input is frozen;
+resume checks the original operation rather than starting another setup.
+
+Service Manager can complete the workflow. Tenant Admin can save a draft but
+has no maintenance:manage permission. Raw setup data is staff-only. Existing
+equipment remains NOT_RECORDED until explicitly reviewed; there is no backfill.

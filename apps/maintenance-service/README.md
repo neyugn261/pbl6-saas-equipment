@@ -141,3 +141,26 @@ not claimed until Khương implements the handoff.
 Migrations remain additive. The earlier snapshot migration refuses nonempty
 legacy Plans; follow ADR 0007 backfill review rather than inventing IDs. Runtime
 migration backfills anchors and Task snapshots using local Plan rows only.
+
+## Initial equipment registration (ADR 0012)
+
+See [API contract](../../docs/api/equipment-registration.yaml),
+[technical design](../../docs/plans/equipment-registration-technical-design.md)
+and [verification](../../docs/testing/equipment-registration.md).
+
+Apply both additive migrations before using the web handover workflow:
+
+```sh
+pnpm --filter asset-service --filter maintenance-service db:migrate
+```
+
+Asset owns the DRAFT → PENDING_MAINTENANCE → COMPLETED record and commits
+Warranty before calling Maintenance with the caller's token. Maintenance's
+internal PUT creates or links one Plan per tenant/registration; repeated calls
+return the same receipt without changing the current schedule. No cross-database
+transaction, new event or new role is introduced. A pending input is frozen;
+resume checks the original operation rather than starting another setup.
+
+Service Manager can complete the workflow. Tenant Admin can save a draft but
+has no maintenance:manage permission. Raw setup data is staff-only. Existing
+equipment remains NOT_RECORDED until explicitly reviewed; there is no backfill.

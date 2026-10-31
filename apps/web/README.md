@@ -55,3 +55,25 @@ Thêm `--exercise-equipment-update` để kiểm tra PATCH hồ sơ, xác nhận
 ## Mock contract tùy chọn
 
 Chỉ dùng để kiểm tra giao diện khi service chưa chạy. Đặt `VITE_M1_API_MODE=mock` và `VITE_IDENTITY_API_URL=/identity` trong `.env.local`, rồi chạy ba Prism server trên cổng 4010–4012 theo `docs/api/{organization,asset,service-request}.yaml`. Sau đó có thể chạy `apps/web/scripts/smoke-mocks.ps1`. Prism không lưu thay đổi sau POST và không thay thế smoke test qua gateway.
+
+## Ghi nhận thiết bị sau bàn giao (ADR 0012)
+
+Menu **Hồ sơ bàn giao** mở `/app/equipment-registrations`; nút **Ghi nhận bàn giao**
+chạy wizard 5 bước, có chọn/thêm Customer, Site, Location, Contact, Model,
+Equipment mới hoặc máy đã có; Warranty/Plan CREATE, KEEP, NONE hoặc lưu chưa
+xác nhận. `/app/customers` và `/app/equipment-models` dùng danh mục thật.
+Không cần nhập UUID hoặc tạo Equipment bằng công cụ API trước.
+
+Chạy migration Asset/Maintenance trước khi mở. Đăng nhập Service Manager để
+hoàn tất; Tenant Admin lưu draft và nhờ Service Manager xác nhận Maintenance.
+PENDING có nút kiểm tra/tiếp tục; kết quả POST chưa rõ được lookup lại theo
+key gốc. QR được cấp, tải ảnh và in sau hoàn tất. Danh sách thiết bị có lọc
+tiến độ thiết lập và phân trang phía server.
+
+```sh
+pnpm --filter web test
+pnpm --filter web lint
+pnpm --filter web build
+```
+
+Thiết kế, migration và kết quả API/browser: [equipment-registration.md](../../docs/testing/equipment-registration.md).
