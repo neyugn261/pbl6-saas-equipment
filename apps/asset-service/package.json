@@ -20,7 +20,7 @@
     "test:debug": "node --experimental-vm-modules --inspect-brk node_modules/jest/bin/jest.js --runInBand",
     "test:e2e": "prisma generate --no-hints && node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand",
     "test:db": "prisma generate --no-hints && node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --config ./test/jest-db.json --runInBand",
-    "typecheck": "prisma generate --no-hints && tsc --noEmit -p tsconfig.json",
+    "typecheck": "prisma generate --no-hints && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.registration.json",
     "prisma:generate": "prisma generate --no-hints",
     "db:migrate": "prisma migrate deploy",
     "db:seed:dev": "prisma generate --no-hints && nest build && prisma db seed",

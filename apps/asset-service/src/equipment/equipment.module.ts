@@ -1,3 +1,8 @@
+import { RegistrationService } from '../registrations/registration.service';
+import {
+  RegistrationController,
+  RegistrationProjectionController,
+} from '../registrations/registration.controller';
 import { Module } from '@nestjs/common';
 import { EquipmentModelModule } from '../equipment-models/equipment-model.module';
 import { OrganizationModule } from '../organization/organization.module';
@@ -25,6 +30,8 @@ import { DossierService } from '../dossier/dossier.service';
   imports: [EquipmentModelModule, OrganizationModule],
   controllers: [
     EquipmentController,
+    RegistrationController,
+    RegistrationProjectionController,
     InternalEquipmentController,
     EquipmentWarrantyController,
     WarrantyController,
@@ -35,6 +42,7 @@ import { DossierService } from '../dossier/dossier.service';
   ],
   providers: [
     EquipmentRepository,
+    RegistrationService,
     EquipmentService,
     WarrantyRepository,
     WarrantyService,

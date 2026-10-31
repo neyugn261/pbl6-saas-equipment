@@ -19,5 +19,10 @@
     "strict": true,
     "strictPropertyInitialization": false,
     "rootDir": "."
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test/registration-db.integration.ts"
+  ]
 }

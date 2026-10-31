@@ -46,6 +46,9 @@ export interface TenantRecord {
   status: 'ACTIVE' | 'SUSPENDED' | 'DISABLED'
 }
 export interface EquipmentRecord {
+  displayName?: string | null
+  registrationStatus?: string
+  registrationId?: string | null
   id: string
   modelId: string
   customerId: string

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   UnprocessableEntityException,
@@ -38,6 +39,8 @@ export interface EquipmentResponse {
   operationalStatus: string;
   operationalStatusUpdatedAt: string | null;
   operationalStatusUpdatedBy: string | null;
+  registrationStatus?: string;
+  registrationId?: string | null;
   id: string;
   modelId: string;
   customerId: string;
@@ -53,10 +56,16 @@ export interface EquipmentResponse {
 }
 
 export function equipmentResponse(
-  row: Equipment,
+  row: Equipment & { registration?: { id: string; status: string } | null },
   customer = false,
 ): EquipmentResponse {
   return {
+    ...(!customer && 'registration' in row
+      ? {
+          registrationStatus: row.registration?.status ?? 'NOT_RECORDED',
+          registrationId: row.registration?.id ?? null,
+        }
+      : {}),
     displayName: row.displayName ?? null,
     description: row.description ?? null,
     technicalSpecifications: row.technicalSpecifications ?? null,
@@ -116,6 +125,11 @@ export class EquipmentService {
     principal: Principal,
     query: ListEquipmentQueryDto,
   ): Promise<Page<EquipmentResponse>> {
+    if (principal.userType === 'CUSTOMER' && query.registrationStatus)
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Registration progress filters are staff-only',
+      });
     const { rows, total } = await this.repository.list(
       dataScope(principal),
       query,
@@ -133,6 +147,22 @@ export class EquipmentService {
     principal: Principal,
     input: CreateEquipmentDto,
   ): Promise<EquipmentResponse> {
+    await this.validateCreate(principal, input);
+    const { tenantId } = dataScope(principal);
+    return equipmentResponse(
+      await this.repository.createWithHistory(
+        tenantId,
+        principal.userId,
+        input,
+        principal.roles,
+      ),
+    );
+  }
+
+  async validateCreate(
+    principal: Principal,
+    input: CreateEquipmentDto,
+  ): Promise<void> {
     const { tenantId } = dataScope(principal);
     const model = await this.models.findScoped(tenantId, input.modelId);
     if (!model) invalidReference('MODEL_NOT_FOUND');
@@ -149,14 +179,6 @@ export class EquipmentService {
         code: 'VALIDATION_FAILED',
         message: 'Display name cannot be blank',
       });
-    return equipmentResponse(
-      await this.repository.createWithHistory(
-        tenantId,
-        principal.userId,
-        input,
-        principal.roles,
-      ),
-    );
   }
 
   async detail(principal: Principal, id: string) {

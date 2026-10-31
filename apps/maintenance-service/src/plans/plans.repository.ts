@@ -69,8 +69,14 @@ export class PlansRepository {
     fixtureId?: string,
     actorId?: string,
     roles: readonly string[] = [],
+    transaction?: Tx,
+    setup?: {
+      setupRegistrationId: string;
+      setupInputHash: string;
+      setupLinkedAt: Date;
+    },
   ) {
-    return this.db.$transaction(async (tx) => {
+    const write = async (tx: Tx) => {
       await lockEquipment(tx, tenantId, equipment.id);
       let snapshot = await tx.equipmentSnapshot.findUnique({
         where: {
@@ -137,6 +143,7 @@ export class PlansRepository {
       const row = await tx.maintenancePlan.create({
         data: {
           ...(fixtureId ? { id: fixtureId } : {}),
+          ...setup,
           tenantId,
           equipmentId: equipment.id,
           customerId: snapshot.customerId,
@@ -169,7 +176,8 @@ export class PlansRepository {
         { actorId, roles },
       );
       return row;
-    });
+    };
+    return transaction ? write(transaction) : this.db.$transaction(write);
   }
   patch(
     scope: DataScope,

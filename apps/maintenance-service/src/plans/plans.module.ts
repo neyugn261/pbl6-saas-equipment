@@ -1,3 +1,5 @@
+import { RegistrationPlanController } from '../registrations/registration-plan.controller';
+import { RegistrationPlanService } from '../registrations/registration-plan.service';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ServiceHttpClient } from '@pbl6/service-kit';
@@ -8,9 +10,15 @@ import { PlansService } from './plans.service';
 import { JourneyService } from './journey.service';
 import { JourneyController } from './journey.controller';
 @Module({
-  controllers: [PlansController, TasksController, JourneyController],
+  controllers: [
+    PlansController,
+    TasksController,
+    JourneyController,
+    RegistrationPlanController,
+  ],
   providers: [
     PlansRepository,
+    RegistrationPlanService,
     PlansService,
     JourneyService,
     {

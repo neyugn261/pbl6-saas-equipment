@@ -1,3 +1,6 @@
+import { useDirectory } from './routes/registration-data'
+import { CustomerDirectoryPage, CustomerCreatePage, CustomerWorkspacePage, EquipmentModelsPage } from './routes/EquipmentDirectories'
+import { EquipmentRegistrationPage, RegistrationListPage } from './routes/EquipmentRegistration'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   Link,
@@ -49,7 +52,6 @@ import QrPage from './routes/QrPage'
 import EstimatePanel from './routes/EstimatePanel'
 import { AppStoreProvider } from './sample/state/AppStore'
 import { DashboardPage as SampleDashboardPage } from './sample/pages/DashboardPage'
-import { CustomerDetailPage as SampleCustomerDetailPage, CustomerFormPage as SampleCustomerFormPage, CustomersPage as SampleCustomersPage } from './sample/pages/CustomersPage'
 import { OrganizationPage, PartDetailPage, PartsPage, PlatformAuxPage, PlatformDashboardPage, TenantDetailPage as SampleTenantDetailPage, TenantsPage as SampleTenantsPage, TransactionsPage, WarehousesPage } from './sample/pages/ManagementPage'
 import { PortalDashboardPage, PortalSimplePage } from './sample/pages/PortalPage'
 import { TenantFormPage } from './sample/pages/TenantFormPage'
@@ -231,6 +233,8 @@ function Layout({ children }: { children: ReactNode }) {
     '/users/invite': UserPlus,
   }
   const sampleItems: { path: string; label: string; icon: LucideIcon; group: string; roles: string[] }[] = [
+    { path: '/app/equipment-registrations', label: 'Hồ sơ bàn giao', icon: ClipboardList, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-models', label: 'Model thiết bị', icon: Boxes, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/work-orders', label: 'Lệnh công việc', icon: Wrench, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
     { path: '/app/equipment-history', label: 'Lịch sử thiết bị', icon: History, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
     { path: '/portal/equipment-history', label: 'Lịch sử thiết bị', icon: History, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN', 'CUSTOMER_USER'] },
@@ -257,14 +261,14 @@ function Layout({ children }: { children: ReactNode }) {
   const liveAdmin = menu.filter((item) => ['/tenants', '/users/invite'].includes(item.path) && has(profile.roles, item.roles))
   const navigation = [
     { path: '/dashboard', label: 'Tổng quan', icon: LayoutDashboard, group: 'Không gian làm việc' },
-    ...liveOperations.map((item) => ({ path: item.path, label: item.label, icon: icons[item.path], group: 'Vận hành dịch vụ' })),
+    ...liveOperations.map((item) => ({ path: item.path === '/customers' ? '/app/customers' : item.path, label: item.label, icon: icons[item.path], group: 'Vận hành dịch vụ' })),
     ...sampleItems.filter((item) => has(profile.roles, item.roles)),
     ...liveAdmin.map((item) => ({ path: item.path, label: item.label, icon: icons[item.path], group: 'Quản trị' })),
   ]
   const section = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`))
   const initials = profile.fullName.split(' ').slice(-2).map((part) => part[0]).join('').toUpperCase()
   const scope = profile.userType === 'PLATFORM_STAFF' ? 'Phạm vi nền tảng' : profile.userType === 'CUSTOMER' ? 'Cổng khách hàng' : 'Doanh nghiệp hiện tại'
-  const liveM2Page = /^\/(app|portal)\/(equipment(?:\/|$)|equipment-history$|warranties\/|models\/|service-requests(?:\/|$)|requests(?:\/|$)|work-orders(?:\/|$)|technicians(?:\/|$)|maintenance(?:\/|$)|maintenance-history$)/.test(location.pathname)
+  const liveM2Page = /^\/(app|portal)\/(equipment(?:\/|$)|equipment-history$|equipment-models(?:\/|$)|equipment-registrations(?:\/|$)|customers(?:\/|$)|warranties\/|models\/|service-requests(?:\/|$)|requests(?:\/|$)|work-orders(?:\/|$)|technicians(?:\/|$)|maintenance(?:\/|$)|maintenance-history$)/.test(location.pathname)
   const samplePage = !liveM2Page && (location.pathname.startsWith('/app/') || location.pathname === '/admin' || location.pathname.startsWith('/admin/') || location.pathname === '/portal' || (location.pathname.startsWith('/portal/') && !location.pathname.startsWith('/portal/qr/')))
   return (
     <div className={`m1-layout ${collapsed ? 'm1-layout--collapsed' : ''}`}>
@@ -483,24 +487,24 @@ function CustomerDetailPage() {
   )
 }
 function EquipmentPage() {
+  const { profile } = useSession()
+  const canManage = profile?.roles.some(role => ['TENANT_ADMIN', 'SERVICE_MANAGER'].includes(role))
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('')
-  const data = useLoad<Page<EquipmentRecord>>(
-    () => api.assetM2('/equipment?page=1&pageSize=100'),
-    'equipment',
-  )
+  const [search, setSearch] = useState(''), [page, setPage] = useState(1), [registrationStatus, setRegistrationStatus] = useState('')
+  const data = useDirectory<Page<EquipmentRecord>>('assetM2', `/equipment?page=${page}&pageSize=20&q=${encodeURIComponent(search)}${status ? `&status=${status}` : ''}${canManage && registrationStatus ? `&registrationStatus=${registrationStatus}` : ''}`)
   return (
-    <Frame title="Thiết bị" description="Theo dõi thiết bị đã bàn giao, bảo hành và lịch sử dịch vụ.">
+    <Frame title="Thiết bị" description="Theo dõi thiết bị đã bàn giao, bảo hành và lịch sử dịch vụ." action={canManage ? <Link className="m1-button" to="/app/equipment-registrations/new">+ Ghi nhận bàn giao</Link> : null}>
       {data.loading ? (
         <Loading />
       ) : data.error ? (
-        <Problem error={data.error} />
+        <p className="m1-error" role="alert">{data.error}</p>
       ) : (
         <>
-        <div className="m1-summary-strip"><div><strong>{data.value?.total ?? 0}</strong><span>Tổng thiết bị</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'ACTIVE').length ?? 0}</strong><span>Đang hoạt động</span></div><div><strong>{data.value?.items.filter((item) => item.warranty?.result === 'IN_WARRANTY').length ?? 0}</strong><span>Còn bảo hành</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'OUT_OF_SERVICE').length ?? 0}</strong><span>Cần chú ý</span></div></div>
+        <div className="m1-summary-strip"><div><strong>{data.value?.total ?? 0}</strong><span>Tổng thiết bị</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'ACTIVE').length ?? 0}</strong><span>Hoạt động trong trang</span></div><div><strong>{data.value?.items.filter((item) => item.warranty?.result === 'IN_WARRANTY').length ?? 0}</strong><span>Còn bảo hành trong trang</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'OUT_OF_SERVICE').length ?? 0}</strong><span>Cần chú ý trong trang</span></div></div>
         <div className="m1-card m1-table-card">
-          <div className="m1-table-toolbar"><label className="m1-table-search"><Search size={17} /><input aria-label="Tìm thiết bị" placeholder="Tìm mã tài sản, model, serial..." value={query} onChange={(event) => setQuery(event.target.value)} /></label><select aria-label="Lọc trạng thái" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Tất cả trạng thái</option><option value="ACTIVE">Hoạt động</option><option value="IN_SERVICE">Đang sử dụng</option><option value="OUT_OF_SERVICE">Ngừng hoạt động</option><option value="RETIRED">Ngừng sử dụng</option></select></div>
-          {!data.value?.items.filter((item) => `${item.assetCode} ${item.serialNumber} ${item.model?.name ?? ''}`.toLowerCase().includes(query.toLowerCase()) && (!status || item.status === status)).length ? <div className="m1-list-empty">Không tìm thấy thiết bị phù hợp.</div> : <>
+          <form onSubmit={e => { e.preventDefault(); setSearch(query); setPage(1) }} className="m1-table-toolbar"><label className="m1-table-search"><Search size={17} /><input aria-label="Tìm thiết bị" placeholder="Tìm mã tài sản, model, serial..." value={query} onChange={(event) => setQuery(event.target.value)} /></label><select aria-label="Lọc trạng thái" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}><option value="">Tất cả trạng thái</option><option value="ACTIVE">Hoạt động</option><option value="IN_SERVICE">Đang sử dụng</option><option value="OUT_OF_SERVICE">Ngừng hoạt động</option><option value="RETIRED">Ngừng sử dụng</option></select>{canManage && <select aria-label="Lọc thiết lập dịch vụ" value={registrationStatus} onChange={e => { setRegistrationStatus(e.target.value); setPage(1) }}><option value="">Tất cả hồ sơ</option><option value="NOT_RECORDED">Chưa ghi nhận</option><option value="DRAFT">Chưa hoàn tất</option><option value="PENDING_MAINTENANCE">Chờ bảo trì</option><option value="COMPLETED">Đã hoàn tất</option></select>}<button>Tìm</button></form>
+          {!data.value?.items.length ? <div className="m1-list-empty">Không tìm thấy thiết bị phù hợp.</div> : <>
           <table>
             <thead>
               <tr>
@@ -509,21 +513,23 @@ function EquipmentPage() {
                 <th>Số sê-ri</th>
                 <th>Bảo hành</th>
                 <th>Trạng thái</th>
+                {canManage && <th>Thiết lập dịch vụ</th>}
               </tr>
             </thead>
             <tbody>
-              {data.value?.items.filter((item) => `${item.assetCode} ${item.serialNumber} ${item.model?.name ?? ''}`.toLowerCase().includes(query.toLowerCase()) && (!status || item.status === status)).map((item) => (
+              {data.value?.items.map((item) => (
                 <tr key={item.id}>
                   <td><Link to={`/equipment/${item.id}`}>{item.assetCode}</Link></td>
-                  <td><strong>{item.model?.name ?? 'Thiết bị'}</strong></td>
+                  <td><strong>{item.displayName || item.model?.name || 'Thiết bị'}</strong></td>
                   <td>{item.serialNumber}</td>
                   <td>{item.warranty?.result ? <StatusBadge status={item.warranty.result} /> : '—'}</td>
                   <td><StatusBadge status={item.status} /></td>
+                  {canManage && <td><Link to={item.registrationId ? `/app/equipment-registrations/${item.registrationId}` : `/app/equipment-registrations/new?equipmentId=${item.id}`}>{item.registrationStatus === 'COMPLETED' ? 'Đã hoàn tất' : item.registrationStatus === 'PENDING_MAINTENANCE' ? 'Chờ bảo trì' : item.registrationStatus === 'DRAFT' ? 'Tiếp tục hồ sơ' : 'Hoàn thiện bàn giao'}</Link></td>}
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="m1-table-pagination">Hiển thị {data.value?.items.length ?? 0} trong {data.value?.total ?? 0} thiết bị</div>
+          <div className="m1-table-pagination">Trang {page} · {data.value?.total ?? 0} thiết bị <button disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</button><button disabled={page * 20 >= (data.value?.total ?? 0)} onClick={() => setPage(page + 1)}>Sau</button></div>
           </>}
         </div>
         </>
@@ -951,9 +957,13 @@ function EquipmentMaintenanceHistoryRoute() {
 }
 const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/dashboard', element: <SampleDashboardPage />, roles: sampleTenantRoles },
-  { path: '/app/customers', element: <SampleCustomersPage />, roles: sampleTenantRoles },
-  { path: '/app/customers/new', element: <SampleCustomerFormPage />, roles: sampleTenantRoles },
-  { path: '/app/customers/:id', element: <SampleCustomerDetailPage />, roles: sampleTenantRoles },
+  { path: '/app/customers', element: <CustomerDirectoryPage />, roles: menu[0].roles },
+  { path: '/app/customers/new', element: <CustomerCreatePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+  { path: '/app/customers/:id', element: <CustomerWorkspacePage />, roles: menu[0].roles },
+  { path: '/app/equipment-models', element: <EquipmentModelsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+  { path: '/app/equipment-registrations', element: <RegistrationListPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+  { path: '/app/equipment-registrations/new', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+  { path: '/app/equipment-registrations/:id', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
   { path: '/app/equipment', element: <EquipmentPage />, roles: sampleTenantRoles },
   { path: '/app/equipment/:id', element: <DossierPage />, roles: sampleTenantRoles },
   { path: '/app/equipment/:id/timeline', element: <HistoryFeedPageRoute />, roles: sampleTenantRoles },

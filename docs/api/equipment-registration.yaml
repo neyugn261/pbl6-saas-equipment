@@ -1,0 +1,842 @@
+openapi: 3.1.0
+info:
+  title: Equipment registration / handover
+  version: 0.1.0-local
+  description: Implemented supplement to Asset and Maintenance contracts, based on ADR
+    0012 and docs/plans/equipment-registration-technical-design.md. Reuse current Organization/Identity/RBAC/Gateway
+    and existing domain APIs. Additive migrations 20261031090000_equipment_registration and 20261031090000_plan_registration_link are service-owned. Public operations
+    use the Asset Gateway prefix; /internal operations require direct service origins and are blocked
+    by Gateway. All references and permission/state rules must also be enforced by the owning backend.
+servers:
+- url: /api/assets
+  description: Public API Gateway base
+security:
+- bearerAuth: []
+paths:
+  /equipment-registrations:
+    post:
+      operationId: createEquipmentRegistrationDraft
+      summary: Create a draft and register or select one equipment
+      description: Idempotency-Key is required. Same key/hash returns the same identity and its current
+        state. A different payload returns 409. NEW persists Equipment plus DRAFT in one Asset transaction;
+        Warranty and Plan are not created yet. Existing equipment with a registration returns REGISTRATION_ALREADY_EXISTS
+        after authorization. Warranty decisions need warranty:manage; confirmed Maintenance choices need
+        maintenance:manage.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - equipment:manage
+      responses:
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+        '201':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInput'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: listEquipmentRegistrations
+      summary: List registrations of the caller tenant
+      description: createKey lookup is additionally restricted to the original actor. Neither CUSTOMER
+        nor PLATFORM_STAFF can read this collection.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - equipment:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationPage'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/Status'
+      - name: equipmentId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: createKey
+        in: query
+        schema:
+          type: string
+          format: uuid
+  /equipment-registrations/{id}:
+    parameters:
+    - $ref: '#/components/parameters/RegistrationId'
+    get:
+      operationId: getEquipmentRegistration
+      summary: Read draft, immutable progress or completion receipt
+      description: ''
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - equipment:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+    patch:
+      operationId: patchEquipmentRegistrationDraft
+      summary: Replace submitted decision objects on a draft
+      description: DRAFT only, expectedVersion is mandatory. A changed Warranty choice requires warranty:manage.
+        A changed confirmed Maintenance choice requires maintenance:manage. Absent decision objects remain
+        unchanged; supplied objects replace the whole prior choice. No Equipment identity/owner/site update
+        is accepted here.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - equipment:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchInput'
+  /equipment-registrations/{id}/submit:
+    parameters:
+    - $ref: '#/components/parameters/RegistrationId'
+    post:
+      operationId: submitEquipmentRegistration
+      summary: Freeze choices, apply Warranty and attempt Maintenance
+      description: NONE Maintenance requires a preflight of existing ACTIVE/PAUSED plans. Validation failures
+        before Asset commit return errors without partial Warranty writes. After commit, downstream failures
+        return 202 with persisted PENDING state. No worker is promised by 202.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - equipment:manage
+      - warranty:manage
+      - maintenance:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+        '202':
+          description: Asset local work is saved; Maintenance result is not confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitInput'
+  /equipment-registrations/{id}/resume:
+    parameters:
+    - $ref: '#/components/parameters/RegistrationId'
+    post:
+      operationId: resumeEquipmentRegistration
+      summary: Continue the same frozen Maintenance request
+      description: No request body. COMPLETED is a no-op receipt. Pending choices are immutable, including
+        after a 404 lookup or timeout. The same registration is reused; do not create a replacement key.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - equipment:manage
+      - warranty:manage
+      - maintenance:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+        '202':
+          description: Asset local work is saved; Maintenance result is not confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+  /internal/equipment-registrations/{id}/maintenance-input:
+    servers:
+    - url: '{assetBaseUrl}'
+      variables:
+        assetBaseUrl:
+          default: http://localhost:3002
+          description: Direct Asset origin configured in the environment, not routed through the public
+            Gateway.
+    parameters:
+    - $ref: '#/components/parameters/RegistrationId'
+    get:
+      operationId: readFrozenMaintenanceSetupInput
+      summary: Read a narrow frozen source projection
+      description: PENDING or COMPLETED with CREATE/KEEP only. Rechecks tenant and permissions. Does not
+        expose tokens, unrelated draft, Warranty terms or raw errors. DRAFT is a state conflict.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - equipment:manage
+      - maintenance:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceInputProjection'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+  /internal/equipment-registrations/{id}/maintenance-plan:
+    servers:
+    - url: '{maintenanceBaseUrl}'
+      variables:
+        maintenanceBaseUrl:
+          default: http://localhost:3003
+          description: Direct Maintenance origin configured in the environment, not routed through the
+            public Gateway.
+    parameters:
+    - $ref: '#/components/parameters/RegistrationId'
+    put:
+      operationId: ensureRegistrationMaintenancePlan
+      summary: Create or link one plan idempotently
+      description: No plan body is accepted. Maintenance fetches the frozen Asset projection using the
+        caller token outside the write transaction. Under a registration advisory lock, matching setup
+        identity/hash returns the original linked Plan; mismatches return 409. CREATE uses the existing
+        Plan/snapshot logic; KEEP preserves schedule/status. Receipt metadata and Plan/history commit
+        together. Replay does not reset a subsequently changed Plan.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - maintenance:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceReceipt'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+    get:
+      operationId: lookupRegistrationMaintenancePlan
+      summary: Look up an already committed local receipt
+      description: GET has no business side effect. Scope by tenant. A 404 does not prove an earlier PUT
+        is no longer in flight and must not unlock mutable source choices.
+      tags:
+      - Equipment registration
+      x-user-types:
+      - TENANT_STAFF
+      x-permissions:
+      - maintenance:manage
+      responses:
+        '200':
+          description: Current resource or committed receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceReceipt'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    RegistrationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Error400:
+      description: Invalid shape, fields or dates
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error401:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error403:
+      description: Permission missing
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error404:
+      description: Missing or outside tenant scope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error409:
+      description: Version, idempotency, policy or registration conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error422:
+      description: Reference or business rule invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error502:
+      description: Upstream failure before local commit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error503:
+      description: Service unavailable before local commit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    EquipmentSource:
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required:
+        - mode
+        - data
+        properties:
+          mode:
+            type: string
+            const: NEW
+          data:
+            $ref: ./asset.yaml#/components/schemas/EquipmentInput
+      - type: object
+        additionalProperties: false
+        required:
+        - mode
+        - id
+        properties:
+          mode:
+            type: string
+            const: EXISTING
+          id:
+            type: string
+            format: uuid
+    Unconfirmed:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      properties:
+        mode:
+          type: string
+          const: UNCONFIRMED
+    NoPolicy:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      - reason
+      properties:
+        mode:
+          type: string
+          const: NONE
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          pattern: '\S'
+          description: Required and nonblank after trimming.
+    WarrantyCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      - startDate
+      - endDate
+      - warrantyType
+      properties:
+        mode:
+          type: string
+          const: CREATE
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        warrantyType:
+          type: string
+          minLength: 1
+          maxLength: 50
+        terms:
+          type: string
+    WarrantyKeep:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      - warrantyId
+      properties:
+        mode:
+          type: string
+          const: KEEP
+        warrantyId:
+          type: string
+          format: uuid
+    MaintenanceCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      - name
+      - frequencyUnit
+      - frequencyValue
+      - nextDueDate
+      properties:
+        mode:
+          type: string
+          const: CREATE
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+          maxLength: 10000
+        frequencyUnit:
+          type: string
+          enum:
+          - DAY
+          - WEEK
+          - MONTH
+          - YEAR
+        frequencyValue:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        nextDueDate:
+          type: string
+          format: date
+    MaintenanceKeep:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      - planId
+      properties:
+        mode:
+          type: string
+          const: KEEP
+        planId:
+          type: string
+          format: uuid
+    Status:
+      type: string
+      enum:
+      - DRAFT
+      - PENDING_MAINTENANCE
+      - COMPLETED
+    SubmitInput:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+    WarrantyDecision:
+      oneOf:
+      - $ref: '#/components/schemas/Unconfirmed'
+      - $ref: '#/components/schemas/WarrantyCreate'
+      - $ref: '#/components/schemas/WarrantyKeep'
+      - $ref: '#/components/schemas/NoPolicy'
+    MaintenanceDecision:
+      oneOf:
+      - $ref: '#/components/schemas/Unconfirmed'
+      - $ref: '#/components/schemas/MaintenanceCreate'
+      - $ref: '#/components/schemas/MaintenanceKeep'
+      - $ref: '#/components/schemas/NoPolicy'
+    CreateInput:
+      type: object
+      additionalProperties: false
+      required:
+      - equipment
+      properties:
+        equipment:
+          $ref: '#/components/schemas/EquipmentSource'
+        warranty:
+          $ref: '#/components/schemas/WarrantyDecision'
+        maintenance:
+          $ref: '#/components/schemas/MaintenanceDecision'
+    PatchInput:
+      type: object
+      additionalProperties: false
+      required:
+      - expectedVersion
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+        warranty:
+          $ref: '#/components/schemas/WarrantyDecision'
+        maintenance:
+          $ref: '#/components/schemas/MaintenanceDecision'
+      anyOf:
+      - required:
+        - warranty
+      - required:
+        - maintenance
+    Registration:
+      type: object
+      required:
+      - id
+      - equipmentId
+      - status
+      - version
+      - warrantyId
+      - maintenancePlanId
+      - lastErrorCode
+      - allowedActions
+      - completedAt
+      - warranty
+      - maintenance
+      - lastAttemptAt
+      - submittedAt
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        equipmentId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/Status'
+        version:
+          type: integer
+          minimum: 1
+        warranty:
+          $ref: '#/components/schemas/WarrantyDecision'
+        maintenance:
+          $ref: '#/components/schemas/MaintenanceDecision'
+        warrantyId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        maintenancePlanId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        lastErrorCode:
+          type:
+          - string
+          - 'null'
+        allowedActions:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+            - edit
+            - submit
+            - resume
+        lastAttemptAt:
+          type: [string, 'null']
+          format: date-time
+        submittedAt:
+          type: [string, 'null']
+          format: date-time
+        completedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    RegistrationPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Registration'
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+    MaintenanceInputProjection:
+      type: object
+      additionalProperties: false
+      required:
+      - registrationId
+      - equipmentId
+      - maintenance
+      - inputHash
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        equipmentId:
+          type: string
+          format: uuid
+        maintenance:
+          oneOf:
+          - $ref: '#/components/schemas/MaintenanceCreate'
+          - $ref: '#/components/schemas/MaintenanceKeep'
+        inputHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+    MaintenanceReceipt:
+      type: object
+      additionalProperties: false
+      required:
+      - registrationId
+      - equipmentId
+      - planId
+      - setupInputHash
+      - replay
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        equipmentId:
+          type: string
+          format: uuid
+        planId:
+          type: string
+          format: uuid
+        setupInputHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        replay:
+          type: boolean

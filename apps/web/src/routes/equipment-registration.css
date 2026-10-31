@@ -1,0 +1,272 @@
+.registration-page {
+  display: grid;
+  gap: 20px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-bottom: 32px;
+}
+.registration-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+.registration-header h1 {
+  margin: 7px 0;
+  font-size: 28px;
+  line-height: 1.25;
+}
+.registration-header p,
+.registration-page section > p {
+  color: #5d6b80;
+  line-height: 1.6;
+}
+.registration-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.registration-page .m1-card {
+  padding: 24px;
+  overflow-x: auto;
+}
+.registration-page h2 {
+  font-size: 19px;
+  margin: 0 0 16px;
+}
+.registration-page h3 {
+  font-size: 16px;
+}
+.registration-page label {
+  display: grid;
+  gap: 7px;
+  font-weight: 550;
+  color: #26354a;
+}
+.registration-page input,
+.registration-page select,
+.registration-page textarea {
+  padding: 11px 12px;
+  border: 1px solid #d6deea;
+  border-radius: 8px;
+  background: white;
+  color: #17243a;
+  font: inherit;
+  max-width: 100%;
+  min-width: 0;
+}
+.registration-page select {
+  width: 100%;
+}
+.registration-page textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.registration-page button {
+  padding: 10px 15px;
+  border: 1px solid #d6deea;
+  border-radius: 8px;
+  background: #fff;
+  color: #283b57;
+  font: inherit;
+  cursor: pointer;
+}
+.registration-page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.registration-page .registration-primary {
+  background: #4057df;
+  border-color: #4057df;
+  color: white;
+}
+.registration-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: end;
+}
+.registration-wide {
+  grid-column: 1/-1;
+}
+.registration-picker {
+  border: 1px solid #dfe5ef;
+  border-radius: 12px;
+  padding: 18px;
+  margin: 0 0 18px;
+  display: grid;
+  gap: 14px;
+}
+.registration-picker legend {
+  font-weight: 650;
+  padding: 0 7px;
+}
+.registration-picker .registration-actions input {
+  flex: 1;
+  min-width: 150px;
+}
+.registration-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  color: #66758b;
+  font-size: 14px;
+}
+.registration-pagination span {
+  margin-right: auto;
+}
+.registration-steps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.registration-steps button[aria-current='step'] {
+  background: #edf0ff;
+  color: #334bd1;
+  border-color: #8c9aeb;
+  font-weight: 650;
+}
+.registration-notice {
+  border: 1px solid #e6c983;
+  border-radius: 12px;
+  background: #fffaf0;
+  padding: 20px;
+  color: #745617;
+}
+.registration-success {
+  border-color: #a4d9bf;
+  background: #f1fbf5;
+  color: #215e41;
+}
+.registration-summary {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  margin: 0;
+}
+.registration-summary dt {
+  font-weight: 600;
+  color: #65748a;
+}
+.registration-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.registration-page table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.registration-page th,
+.registration-page td {
+  text-align: left;
+  padding: 15px 10px;
+  border-bottom: 1px solid #e8edf4;
+}
+.registration-page td small {
+  display: block;
+  color: #697a91;
+  margin-top: 5px;
+}
+.registration-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.registration-cards article {
+  border: 1px solid #e0e6ee;
+  border-radius: 10px;
+  padding: 18px;
+}
+.registration-inline-form {
+  border-color: #b0bdef !important;
+  background: #fafbff !important;
+}
+.registration-page a {
+  color: #3f56ca;
+}
+.registration-page a.m1-button {
+  color: white;
+}
+.registration-step {
+  min-height: 250px;
+}
+.registration-step > label {
+  margin-bottom: 20px;
+}
+.registration-page .m1-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .registration-header {
+    flex-direction: column;
+  }
+  .registration-fields,
+  .registration-cards {
+    grid-template-columns: 1fr;
+  }
+  .registration-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .registration-summary {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .registration-summary dd {
+    margin-bottom: 12px;
+  }
+  .registration-page .m1-card {
+    padding: 17px;
+  }
+  .registration-page button {
+    min-height: 44px;
+  }
+}
+
+.registration-qr {
+  margin-top: 20px;
+  padding: 20px;
+  background: white;
+  border-radius: 10px;
+  display: grid;
+  justify-items: center;
+  color: #162638;
+}
+.registration-qr img {
+  max-width: 100%;
+  height: auto;
+}
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .registration-qr,
+  .registration-qr * {
+    visibility: visible;
+  }
+  .registration-qr {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: 0;
+  }
+  .registration-qr button,
+  .registration-qr a {
+    display: none;
+  }
+}
+
+.registration-content {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.registration-content > label {
+  margin-bottom: 20px;
+}

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import type { DataScope } from '@pbl6/auth';
 import { scopeWhere } from '@pbl6/auth';
-import type { Warranty } from '../generated/prisma/client.js';
+import type { Prisma, Warranty } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
 import { dbDate } from '../equipment/equipment.repository';
 import type { CreateWarrantyDto } from './warranty.dto';
@@ -43,8 +43,9 @@ export class WarrantyRepository {
     actorId: string,
     input: CreateWarrantyDto,
     roles: readonly string[] = [],
+    transaction?: Prisma.TransactionClient,
   ): Promise<Warranty> {
-    return this.prisma.$transaction(async (tx) => {
+    const write = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`SELECT id FROM equipments WHERE tenant_id = ${scope.tenantId}::uuid AND id = ${equipmentId}::uuid FOR UPDATE`;
       const equipment = await tx.equipment.findFirst({
         where: { ...scopeWhere(scope), id: equipmentId },
@@ -101,7 +102,8 @@ export class WarrantyRepository {
         },
       });
       return warranty;
-    });
+    };
+    return transaction ? write(transaction) : this.prisma.$transaction(write);
   }
 
   async void(

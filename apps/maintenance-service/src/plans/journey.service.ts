@@ -57,6 +57,9 @@ export class JourneyService {
     )
       throw missing();
     const where: Prisma.MaintenanceHistoryWhereInput = {
+      ...(p.userType === 'CUSTOMER'
+        ? { NOT: { eventType: 'INITIAL_SETUP_LINKED' } }
+        : {}),
       tenantId: scope.tenantId,
       plan: {
         ...scopeWhere(scope),

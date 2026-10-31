@@ -39,6 +39,11 @@ model MaintenancePlan {
   tasks           MaintenanceTask[]
   history         MaintenanceHistory[]
 
+  setupRegistrationId String?              @map("setup_registration_id") @db.Uuid
+  setupInputHash      String?              @map("setup_input_hash") @db.Char(64)
+  setupLinkedAt       DateTime?            @map("setup_linked_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, setupRegistrationId])
   @@unique([tenantId, id])
   @@index([tenantId, nextDueDate, status], map: "idx_maintenance_plans_due")
   @@index([tenantId, equipmentId], map: "idx_maintenance_plans_equipment")

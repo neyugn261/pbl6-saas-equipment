@@ -423,3 +423,17 @@ Gateway có developer portal local: [Services](http://localhost:3000/dev) và
 Xem [hướng dẫn Gateway](apps/api-gateway/README.md#local-api-explorer-and-service-dashboard)
 và [kiểm chứng portal](docs/testing/gateway-developer-portal.md). Nhãn scaffold
 và health chưa có được hiển thị riêng; JWT cho API nghiệp vụ vẫn do backend kiểm tra.
+
+## Luồng ghi nhận thiết bị đã bàn giao
+
+Đã bổ sung wizard Customer → Site/Location/Contact → Model/Equipment → Warranty →
+Maintenance → QR, cùng danh mục khách hàng/model và tiến độ hồ sơ. Backend chỉ
+bổ sung trong Asset/Maintenance, giữ nguyên RBAC và database per service.
+
+```sh
+pnpm --filter asset-service --filter maintenance-service db:migrate
+```
+
+Trên web mở `/app/equipment-registrations/new` bằng Service Manager để hoàn tất;
+Tenant Admin có thể lưu draft. Xem [thiết kế và kiểm thử thực tế](docs/testing/equipment-registration.md)
+để biết contract, migration, ca retry và các giới hạn của đợt triển khai.

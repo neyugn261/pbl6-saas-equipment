@@ -495,6 +495,7 @@ export function DossierPage() {
           Hồ sơ thiết bị và dữ liệu liên kết · cập nhật {date(dossier?.asOf)}
         </p>
         {notice && <p role="status">{notice}</p>}
+        {canManageEquipment && dossier && <p><Link to={dossier.equipment.registrationId ? `/app/equipment-registrations/${dossier.equipment.registrationId}` : `/app/equipment-registrations/new?equipmentId=${id}`}>{dossier.equipment.registrationStatus === 'COMPLETED' ? 'Xem biên nhận thiết lập dịch vụ' : 'Hoàn thiện hồ sơ bàn giao, bảo hành và bảo trì'}</Link></p>}
       </header>
       <Result state={state}>
         {dossier && (

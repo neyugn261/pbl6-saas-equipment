@@ -15,6 +15,7 @@ import {
 } from 'class-validator';
 import { Prisma, type EquipmentHistory } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { historyVisibility } from './visibility';
 
 export class HistoryFeedQuery extends PaginationQueryDto {
   @IsOptional() @IsUUID() equipmentId?: string;
@@ -120,6 +121,7 @@ export class HistoryService {
       });
     // Customer/site filters describe current ownership; the entry context preserves the historical site.
     const where: Prisma.EquipmentHistoryWhereInput = {
+      ...historyVisibility(principal.userType === 'CUSTOMER'),
       tenantId: scope.tenantId,
       equipment: {
         ...scopeWhere(scope),
@@ -168,7 +170,12 @@ export class HistoryService {
   async detail(principal: Principal, id: string) {
     const scope = dataScope(principal);
     const row = await this.db.equipmentHistory.findFirst({
-      where: { id, tenantId: scope.tenantId, equipment: scopeWhere(scope) },
+      where: {
+        id,
+        tenantId: scope.tenantId,
+        equipment: scopeWhere(scope),
+        ...historyVisibility(principal.userType === 'CUSTOMER'),
+      },
     });
     if (!row)
       throw new NotFoundException({
@@ -181,7 +188,11 @@ export class HistoryService {
   async warranty(principal: Principal, id: string, query: HistoryFeedQuery) {
     const scope = dataScope(principal);
     const row = await this.db.warranty.findFirst({
-      where: { id, tenantId: scope.tenantId, equipment: scopeWhere(scope) },
+      where: {
+        id,
+        tenantId: scope.tenantId,
+        equipment: scopeWhere(scope),
+      },
     });
     if (!row)
       throw new NotFoundException({

@@ -70,6 +70,7 @@ model Equipment {
   warranties       Warranty[]
   qrCodes          EquipmentQrCode[]
   history          EquipmentHistory[]
+  registration     EquipmentRegistration?
 
   @@unique([tenantId, assetCode])
   @@unique([tenantId, modelId, serialNumber])
@@ -95,6 +96,9 @@ model Warranty {
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   equipment    Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
+  registrations EquipmentRegistration[]
+
+  @@unique([tenantId, equipmentId, id])
   @@index([tenantId, equipmentId, startDate, endDate], map: "idx_warranties_equipment_dates")
   @@map("warranties")
 }
@@ -185,4 +189,41 @@ model OutboxEvent {
   publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
 
   @@map("outbox_events")
+}
+
+/// Asset-owned initial service setup, separate from Equipment lifecycle status.
+model EquipmentRegistration {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  equipmentId          String    @map("equipment_id") @db.Uuid
+  status               String    @default("DRAFT") @db.VarChar(30)
+  version              Int       @default(1)
+  createActorId        String    @map("create_actor_id") @db.Uuid
+  createKey            String    @map("create_key") @db.Uuid
+  createRequestHash    String    @map("create_request_hash") @db.Char(64)
+  warrantyDecision     String    @default("UNCONFIRMED") @map("warranty_decision") @db.VarChar(20)
+  warrantyPayload      Json?     @map("warranty_payload")
+  warrantyReason       String?   @map("warranty_reason")
+  warrantyId           String?   @map("warranty_id") @db.Uuid
+  maintenanceDecision  String    @default("UNCONFIRMED") @map("maintenance_decision") @db.VarChar(20)
+  maintenancePayload   Json?     @map("maintenance_payload")
+  maintenanceReason    String?   @map("maintenance_reason")
+  maintenanceInputHash String?   @map("maintenance_input_hash") @db.Char(64)
+  maintenancePlanId    String?   @map("maintenance_plan_id") @db.Uuid
+  submittedBy          String?   @map("submitted_by") @db.Uuid
+  submittedAt          DateTime? @map("submitted_at") @db.Timestamptz(6)
+  completedBy          String?   @map("completed_by") @db.Uuid
+  completedAt          DateTime? @map("completed_at") @db.Timestamptz(6)
+  updatedBy            String    @map("updated_by") @db.Uuid
+  lastAttemptAt        DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+  lastErrorCode        String?   @map("last_error_code") @db.VarChar(80)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  equipment            Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  warranty             Warranty? @relation(fields: [tenantId, equipmentId, warrantyId], references: [tenantId, equipmentId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, equipmentId])
+  @@unique([tenantId, createActorId, createKey])
+  @@index([tenantId, status, updatedAt])
+  @@map("equipment_registrations")
 }

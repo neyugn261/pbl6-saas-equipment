@@ -3,6 +3,8 @@ info:
   title: Maintenance history, summary and Task journey
   version: 0.4.0-local
   description: |
+    ADR 0012 INITIAL_SETUP_LINKED audit entries are staff-only and excluded from
+    customer history pages/counts, including explicit event filters.
     ADR 0010 supplement to maintenance.yaml, owned by Minh. All endpoints require
     maintenance:read; CUSTOMER is limited to CUSTOMER_ADMIN by current RBAC.
     Scope follows the current local Plan customer snapshot. Snapshots are eventually
