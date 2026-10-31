@@ -22,6 +22,7 @@ import type {
   PatchEquipmentDto,
 } from './dto/equipment.dto';
 import { auditContext, changedFields, json } from '../history/audit';
+import { historyVisibility } from '../history/visibility';
 
 const missing = () =>
   new NotFoundException({
@@ -58,6 +59,7 @@ export type EquipmentDetailRow = Equipment & {
     updatedAt: Date;
   };
   qrCodes: { id: string }[];
+  registration?: { id: string; status: string } | null;
 };
 
 @Injectable()
@@ -81,6 +83,11 @@ export class EquipmentRepository {
     const q = query.q?.trim();
     const search = q ? escapeLikePattern(q) : undefined;
     const where: Prisma.EquipmentWhereInput = {
+      ...(query.registrationStatus === 'NOT_RECORDED'
+        ? { registration: { is: null } }
+        : query.registrationStatus
+          ? { registration: { is: { status: query.registrationStatus } } }
+          : {}),
       ...scopeWhere(scope),
       ...(scope.customerId === null && query.customerId
         ? { customerId: query.customerId }
@@ -129,6 +136,7 @@ export class EquipmentRepository {
       this.prisma.equipment.findMany({
         where,
         orderBy,
+        include: { registration: { select: { id: true, status: true } } },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
@@ -148,6 +156,7 @@ export class EquipmentRepository {
       where: { ...scopeWhere(scope), id },
       include: {
         model: true,
+        registration: { select: { id: true, status: true } },
         qrCodes: { where: { revokedAt: null }, select: { id: true }, take: 1 },
       },
     }) as Promise<EquipmentDetailRow | null>;
@@ -181,8 +190,9 @@ export class EquipmentRepository {
     actorId: string,
     input: CreateEquipmentDto,
     roles: readonly string[] = [],
+    transaction?: Prisma.TransactionClient,
   ): Promise<Equipment> {
-    return this.prisma.$transaction(async (tx) => {
+    const write = async (tx: Prisma.TransactionClient) => {
       // A model may be deactivated after the API's initial check while
       // Organization is called. Hold a shared row lock until registration commits.
       const models = await tx.$queryRaw<{ status: string }[]>`
@@ -251,7 +261,8 @@ export class EquipmentRepository {
         },
       });
       return equipment;
-    });
+    };
+    return transaction ? write(transaction) : this.prisma.$transaction(write);
   }
 
   async patchWithHistory(
@@ -474,7 +485,11 @@ export class EquipmentRepository {
   ): Promise<{ rows: EquipmentHistory[]; total: number }> {
     // Check equipment scope before querying history; history has no customer column.
     if (!(await this.findScoped(scope, id))) throw missing();
-    const where = { tenantId: scope.tenantId, equipmentId: id };
+    const where = {
+      tenantId: scope.tenantId,
+      equipmentId: id,
+      ...historyVisibility(scope.customerId !== null),
+    };
     const [rows, total] = await Promise.all([
       this.prisma.equipmentHistory.findMany({
         where,

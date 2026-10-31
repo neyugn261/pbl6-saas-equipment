@@ -115,7 +115,7 @@ describe('EquipmentRepository', () => {
     const repo = new EquipmentRepository({ equipment: { findFirst }, equipmentHistory: { findMany, count } } as unknown as PrismaService);
     await repo.history({ tenantId, customerId }, equipmentId, 3, 10);
     expect(findFirst).toHaveBeenCalledWith({ where: { tenantId, customerId, id: equipmentId } });
-    expect(findMany).toHaveBeenCalledWith({ where: { tenantId, equipmentId },
+    expect(findMany).toHaveBeenCalledWith({ where: expect.objectContaining({ tenantId, equipmentId }),
       orderBy: [{ occurredAt: 'desc' }, { id: 'asc' }], skip: 20, take: 10 });
   });
 });
