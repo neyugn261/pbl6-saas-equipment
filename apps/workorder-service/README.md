@@ -1,4 +1,4 @@
-# Work Order Service — M2 + M3 staff attachments
+# Work Order Service — M2 + M3 attachments/reporting
 
 M3-A1: Khương đã chốt attachment lifecycle/persistence và Q5 reporting contract.
 [Bàn giao A1](../../docs/planning/m3-khuong-a1.md),
@@ -7,7 +7,8 @@ Review A1 đã được Khương xác nhận. A2/A3 đã triển khai staff atta
 S3/MinIO adapter, policy và durable cleanup.
 [Bật runtime và kiểm thử A2/A3](../../docs/planning/m3-khuong-a2-a3.md).
 A4 internal SR projection đã triển khai; [bàn giao cho Huy](../../docs/planning/m3-khuong-a4.md).
-Public SR composition thuộc Huy; report aggregate A5 chưa triển khai.
+Public SR composition thuộc Huy. A5 report aggregate đã triển khai;
+[contract, fixture và bàn giao dashboard cho Hatsady](../../docs/planning/m3-khuong-a5.md).
 
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
@@ -66,6 +67,7 @@ Gateway bỏ prefix `/api/workorders`, ví dụ
 
 | Endpoint trong service | Quyền | Hành vi |
 | --- | --- | --- |
+| `GET /reports/work-orders/summary?from=…&to=…` | `report:read`, TENANT_STAFF | Tenant-wide: cohort theo createdAt, đủ 8 current status, completions theo completedAt; khoảng `[from, to)`, timezone rõ ràng |
 | `GET /technicians`, `GET /technicians/{id}` | `work_order:read` | Profile có skill, list hỗ trợ q/branch/status/skill và pagination |
 | `GET /technicians/me` | `work_order:execute` | Profile theo user ID của token; thiếu profile → 404 |
 | `POST /technicians`, `PATCH /technicians/{id}` | `technician:manage` | Kiểm tra Identity/branch qua HTTP, uniqueness và trạng thái theo D11 |
