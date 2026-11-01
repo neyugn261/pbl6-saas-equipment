@@ -31,6 +31,7 @@ describe('API Gateway (e2e)', () => {
             url: req.url,
             authorization: req.headers.authorization ?? null,
             correlationId: req.headers['x-correlation-id'] ?? null,
+            idempotencyKey: req.headers['idempotency-key'] ?? null,
             body: Buffer.concat(chunks).toString(),
           }),
         );
@@ -133,6 +134,18 @@ describe('API Gateway (e2e)', () => {
       .set('Access-Control-Request-Method', 'POST')
       .expect(204);
     expect(denied.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('permits attachment preflight and forwards Idempotency-Key through the WO route', async () => {
+    const path = '/api/workorders/work-orders/10000000-0000-4000-8000-000000000001/attachment-uploads';
+    const preflight = await request(app.getHttpServer()).options(path)
+      .set('Origin', 'http://localhost:5173').set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'content-type,authorization,idempotency-key').expect(204);
+    expect(String(preflight.headers['access-control-allow-headers']).toLowerCase()).toContain('idempotency-key');
+    const key = '10000000-0000-4000-8000-000000000002';
+    const response = await request(app.getHttpServer()).post(path)
+      .set('Authorization', 'Bearer test-token').set('Idempotency-Key', key).send({ fileName: 'fixture.png' }).expect(200);
+    expect(response.body).toMatchObject({ idempotencyKey: key, url: '/work-orders/10000000-0000-4000-8000-000000000001/attachment-uploads' });
   });
 
   it('proxies login with the JSON body and forwards both required headers', async () => {
