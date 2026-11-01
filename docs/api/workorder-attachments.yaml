@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: PBL6 Work Order and Service Report attachments — M3 contract
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Q1 and review confirmed by Khương on 2026-11-01 (ADR 0013).
-    Staff routes implemented in A2/A3; internal SR projection remains
-    contract-only A4. Supplements workorder.yaml; see workorder-attachments.md.
+    Staff routes A2/A3 and internal customer-safe SR projection A4 are implemented.
+    Public SR composition belongs to the SR owner. Supplements workorder.yaml;
+    see workorder-attachments.md and docs/planning/m3-khuong-a4.md.
     Uses existing catalog permissions, ADR 0003/0004/0006 and WO assignment scope.
     No new roles, invoice/payment flow, multipart upload or public bucket.
     Gateway strips /api/workorders; /internal paths remain blocked by Gateway.
@@ -33,7 +34,7 @@ info:
     CUSTOMER has no access to staff WO/report paths, even for CUSTOMER visibility.
     SR exposes published files using the narrowly scoped internal projection;
     see the SR-owner handoff in the companion document, not raw WO/report access.
-x-implementation-status: PARTIAL_M3_A2_A3
+x-implementation-status: IMPLEMENTED_M3_A2_A4
 servers:
   - url: http://localhost:3004
 security:
@@ -337,18 +338,25 @@ paths:
     get:
       tags: [Customer-safe internal projection]
       operationId: listPublishedRequestAttachments
-      x-implementation-status: CONTRACT_ONLY_M3_A4
+      x-implementation-status: IMPLEMENTED_M3_A4
+      x-permissions: [service_request:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       summary: SR read-composition endpoint returning CUSTOMER files only
       description: |
         service_request:read and original caller token required (ADR 0004).
         CUSTOMER is limited by tenant/customer claims to WO linked to this SR;
         staff also retain normal WO/assignment scope. No Maintenance-origin
         attachments, INTERNAL files, pending/deleted files or internal parent IDs.
-        Counts apply the same visibility/scope filter. SR must independently
+        Rows must have verified size/hash/type; legacy unverified rows are excluded.
+        WO/report files across every matching WO are merged before global
+        createdAt/id ascending pagination. List/count share one repeatable-read
+        snapshot. Counts apply the same visibility/scope filter. SR must independently
         authorize the request before composing this result. Gateway blocks this
         internal route. This is not raw WO/report access for CUSTOMER.
         Without a matching in-scope WO this source returns 404; SR may map it
-        to an empty attachment page only after authorizing its own SR first.
+        to an empty attachment page only after authorizing its own SR first,
+        and only for code WORK_ORDER_NOT_FOUND (not a generic route 404).
+        DB failure is 503 ATTACHMENT_SOURCE_UNAVAILABLE, never an empty page.
       parameters:
         - $ref: "#/components/parameters/ServiceRequestId"
         - $ref: "#/components/parameters/Page"
@@ -356,6 +364,9 @@ paths:
       responses:
         "200":
           description: Published files only; no storage keys, uploader or raw parent IDs
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
           content:
             application/json:
               schema:
@@ -366,13 +377,27 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
   /internal/service-request-attachments/{serviceRequestId}/{attachmentId}/download:
     get:
       tags: [Customer-safe internal projection]
       operationId: downloadPublishedRequestAttachment
-      x-implementation-status: CONTRACT_ONLY_M3_A4
+      x-implementation-status: IMPLEMENTED_M3_A4
+      x-permissions: [service_request:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
       summary: Recheck SR relation, scope and CUSTOMER visibility before signing
-      description: Same auth/filter as the internal list, additionally verifies attachment belongs to this SR. Hidden/deleted/wrong-parent files return 404. Never trusts caller-supplied WO/customer IDs.
+      description: |
+        Same auth/filter as the internal list, additionally verifies attachment
+        belongs to this SR. Hidden/deleted/wrong-parent/unverified/Maintenance
+        files return 404 ATTACHMENT_NOT_FOUND. Staff retain WO assignment scope.
+        Permission/scope/visibility is checked before storage HEAD/signing and
+        again before returning the new ticket; hide/delete/scope changes visible
+        at the final check suppress the ticket. Storage I/O is outside DB transactions. Existing
+        issued tickets may remain usable for at most 60 seconds (K8).
+        503 ATTACHMENT_STORAGE_UNAVAILABLE covers missing/unavailable objects;
+        503 ATTACHMENT_SOURCE_UNAVAILABLE covers projection DB failure.
+        Never trusts caller-supplied WO/customer IDs; no query parameters accepted.
       parameters:
         - $ref: "#/components/parameters/ServiceRequestId"
         - $ref: "#/components/parameters/AttachmentId"

@@ -7,11 +7,16 @@ import { S3AttachmentStorage } from './s3-attachment.storage';
 import { AttachmentCleanupRepository } from './attachment-cleanup.repository';
 import { AttachmentCleanupService } from './attachment-cleanup.service';
 import { AttachmentErrorInterceptor } from './attachment-error.interceptor';
+import { PublishedAttachmentsController } from './published-attachments.controller';
+import { PublishedAttachmentsRepository } from './published-attachments.repository';
+import { PublishedAttachmentsService } from './published-attachments.service';
 
 @Module({
-  controllers: [AttachmentsController],
+  controllers: [AttachmentsController, PublishedAttachmentsController],
   providers: [
     AttachmentErrorInterceptor,
+    PublishedAttachmentsRepository,
+    PublishedAttachmentsService,
     AttachmentsService,
     AttachmentsRepository,
     S3AttachmentStorage,

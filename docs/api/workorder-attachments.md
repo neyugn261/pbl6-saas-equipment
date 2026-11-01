@@ -6,7 +6,7 @@ thiết kế persistence, replay, fencing và cleanup. Bản contract phía owne
 web/mobile triển khai theo mock. **Khương xác nhận review đã chốt ngày 01/11/2026**;
 ghi nhận theo phiên làm việc, không tự tạo link approval GitHub. OpenAPI:
 [workorder-attachments.yaml](workorder-attachments.yaml). API này chưa có trong M2;
-**A2/A3 đã triển khai các staff routes**; internal SR projection vẫn thuộc A4.
+**A2/A3 đã triển khai các staff routes; A4 đã triển khai internal SR projection.**
 Runtime/kiểm thử: [bàn giao A2/A3](../planning/m3-khuong-a2-a3.md).
 
 ## Quyết định của contract
@@ -115,11 +115,11 @@ cũ chứa visibility đã bị manager đổi. Đổi actor không được nh�
 Abort lặp trả 204 và delete lặp trả 204 dưới read scope + manager/original uploader;
 lần đầu vẫn kiểm tra mutation state. ATTACHED abort trả 409 UPLOAD_ALREADY_ATTACHED.
 
-## SR owner handoff — review đã chốt, implementation thuộc Huy
+## SR owner handoff — internal A4 đã có, public composition thuộc Huy
 
 Public routes đề xuất ở SR: `GET /service-requests/{id}/result/attachments` và
 `GET /service-requests/{id}/result/attachments/{attachmentId}/download`. SR tự
-authorize request theo ADR 0003 rồi gọi các internal projection routes trong
+authorize request theo ADR 0003 rồi gọi các internal projection routes đã triển khai trong
 OpenAPI WO bằng **token người gọi**, correlation ID, theo ADR 0004.
 
 WO internal projection chỉ trả file CUSTOMER của WO có serviceRequestId đúng
@@ -134,11 +134,18 @@ WO internal không có WO phù hợp scope → 404; không đoán ownership củ
 chưa có trong dữ liệu local. Sau khi tự authorize SR, SR owner có thể ánh xạ
 source 404 thành trang rỗng. Có WO đúng scope nhưng không có file công bố → 200
 trang rỗng; INTERNAL không xuất hiện trong count.
-Nguồn WO unavailable phải trả lỗi/section unavailable, không giả trang rỗng.
+List gộp WO/report file của mọi WO đúng SR, sort createdAt/id tăng dần rồi phân
+trang một lần; count/list dùng cùng snapshot RepeatableRead. Chỉ metadata đã
+verify được phục vụ. Source DB lỗi trả 503 ATTACHMENT_SOURCE_UNAVAILABLE; lỗi
+storage hoặc object mất trả 503 ATTACHMENT_STORAGE_UNAVAILABLE. Nguồn WO
+unavailable phải trả lỗi/section unavailable, không giả trang rỗng.
 Download 404 không được ánh xạ thành trang rỗng. WO completion có thể đến trước
 report upload/publish; notification hoàn tất không đồng nghĩa file đã sẵn sàng.
-SR paths chưa được thêm vào service-request.yaml hoặc implementation trong K8;
-Huy sở hữu phần tích hợp đó và review contract trước khi M3 code.
+SR public paths chưa được thêm vào service-request.yaml hoặc implementation SR;
+Huy sở hữu phần đó. Chỉ ánh xạ source list 404 code WORK_ORDER_NOT_FOUND sau SR
+authorization; không nuốt generic route 404 khi cấu hình sai endpoint. Download
+recheck sau storage I/O để không trả ticket mới nếu file vừa hide/delete hoặc
+actor mất scope. Bàn giao/fixture và recipe cho Huy: [A4](../planning/m3-khuong-a4.md).
 
 ## Persistence cần chuẩn bị khi triển khai M3
 
@@ -188,5 +195,5 @@ transaction DB trong khi đọc/ghi storage. Thông số lease/retry/reconcile �
   sai, object thiếu; signed URLs không vào log/analytics/cache.
 
 K8 bàn giao OpenAPI + semantics + quyền + test matrix. Review đã được Khương xác
-nhận; A2/A3 có bằng chứng PostgreSQL/MinIO thật trong bàn giao. A4 public result
-composition và UI web/Android vẫn nghiệm thu riêng; không dùng API tests thay UI.
+nhận; A2/A3 có bằng chứng PostgreSQL/MinIO thật trong bàn giao. A4 internal projection đã có; public SR
+composition (Huy) và UI web/Android nghiệm thu riêng; không dùng API tests thay UI.

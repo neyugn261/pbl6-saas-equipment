@@ -59,7 +59,12 @@ async function main() {
   const Bucket = env.WORKORDER_ATTACHMENT_BUCKET;
   const { NestFactory } = require('@nestjs/core');
   const { ConfigService } = require('@nestjs/config');
-  const { configureApp, createLogger } = require('@pbl6/service-kit');
+  const {
+    configureApp,
+    createLogger,
+    ServiceHttpClient,
+    runWithCorrelationId,
+  } = require('@pbl6/service-kit');
   let wo, gateway, db;
   try {
     await admin.send(new CreateBucketCommand({ Bucket }));
@@ -192,6 +197,48 @@ async function main() {
       tenantId,
       customerId: order.customerId,
     });
+    // This is the caller contract for Huy's SR composition, not an SR public
+    // controller fixture. The original customer token goes directly to WO.
+    const projection = new ServiceHttpClient({
+      name: 'workorder-service',
+      baseUrl: await wo.getUrl(),
+    });
+    const projectionPath = `/internal/service-request-attachments/${order.serviceRequestId}`;
+    const published = await runWithCorrelationId('a4-smoke-correlation', () =>
+      projection.get(projectionPath, { accessToken: customer }),
+    );
+    assert.equal(published.total, 1);
+    assert.equal(published.items[0].id, file.id);
+    assert.deepEqual(Object.keys(published.items[0]).sort(), [
+      'createdAt',
+      'fileName',
+      'id',
+      'mimeType',
+      'sizeBytes',
+    ]);
+    const customerLink = await projection.get(
+      `${projectionPath}/${file.id}/download`,
+      { accessToken: customer },
+    );
+    assert.deepEqual(
+      Buffer.from(await (await fetch(customerLink.downloadUrl)).arrayBuffer()),
+      bytes,
+    );
+    for (const path of [
+      projectionPath,
+      `/api/workorders${projectionPath}`,
+      `/api/workorders/%69nternal/service-request-attachments/${order.serviceRequestId}`,
+      `/api/workorders${projectionPath}/${file.id}/download`,
+    ]) {
+      assert.equal(
+        (
+          await fetch(base + path, {
+            headers: { Authorization: `Bearer ${customer}` },
+          })
+        ).status,
+        404,
+      );
+    }
     await api(
       `/attachments/${file.id}/download`,
       'GET',
@@ -201,6 +248,16 @@ async function main() {
       customer,
     );
     await api(`/attachments/${file.id}`, 'DELETE', undefined, undefined, 204);
+    assert.equal(
+      (await projection.get(projectionPath, { accessToken: customer })).total,
+      0,
+    );
+    await assert.rejects(
+      projection.get(`${projectionPath}/${file.id}/download`, {
+        accessToken: customer,
+      }),
+      (error) => error.status === 404 && error.code === 'ATTACHMENT_NOT_FOUND',
+    );
     await api(
       `/attachment-uploads/${ticket.uploadId}/complete`,
       'POST',
@@ -223,7 +280,10 @@ async function main() {
         customerDenied: true,
         internalBlocked: true,
         corsIdempotency: true,
-        identity: 'test-signed JWT fixture; no live Identity flow',
+        publishedCustomerProjection: true,
+        customerSignedDownload: true,
+        identityAndSR:
+          'test JWT and shared caller client; no live Identity/SR public composition',
       }),
     );
   } finally {
