@@ -1,5 +1,12 @@
 # Work Order Service — M2 (K6 Maintenance và WO thay thế)
 
+M3-A1: Khương đã chốt attachment lifecycle/persistence và Q5 reporting contract.
+[Bàn giao A1](../../docs/planning/m3-khuong-a1.md),
+[ADR 0013](../../docs/decisions/0013-workorder-attachment-lifecycle.md).
+Migration 0005 được chuẩn bị để shared/schema review; chưa áp business DB trong
+lượt A1. Upload/cleanup/projection/report aggregate vẫn chưa có runtime; route
+trong contract M3 chưa phải API đã hoạt động.
+
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
 [OpenAPI](../../docs/api/workorder.yaml); trạng thái/quyền theo

@@ -19,6 +19,17 @@ Notes for this database:
   Existing rows remain NULL. Apply before running the replacement consumer;
   do not reset the DB or rewrite existing migrations.
 
+## M3-A1 persistence
+
+`0005_attachment_lifecycle` prepares M3 upload intent/idempotency/cleanup
+persistence and verified metadata/tombstones on the two existing attachment
+tables ([ADR 0013](../../../docs/decisions/0013-workorder-attachment-lifecycle.md)).
+Legacy size/hash/verifiedAt stay NULL together and must not be served until
+verified. Owner decision is confirmed; shared/schema review and a legacy
+inventory/backfill decision are required before business DB deployment. A1
+does not implement upload routes, storage access or workers. CHECK constraints
+for phase/target/lease/metadata and existing partial indexes remain raw SQL.
+
 ## Commands (run in `apps/workorder-service`)
 
 ```bash

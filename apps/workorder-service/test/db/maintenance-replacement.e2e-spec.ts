@@ -52,7 +52,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
   });
   beforeEach(async () => {
     await db.$executeRawUnsafe(
-      'TRUNCATE report_attachments, service_reports, work_order_attachments, work_logs, work_order_assignments, work_order_status_history, work_orders, technician_skills, skills, technicians, document_sequences, outbox_events, processed_events',
+      'TRUNCATE attachment_cleanup_jobs, attachment_idempotency, attachment_upload_intents, report_attachments, service_reports, work_order_attachments, work_logs, work_order_assignments, work_order_status_history, work_orders, technician_skills, skills, technicians, document_sequences, outbox_events, processed_events',
     );
     jest.resetAllMocks();
     for (const method of Object.values(refs))

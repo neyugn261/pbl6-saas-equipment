@@ -126,6 +126,7 @@ model WorkOrder {
   assignments       WorkOrderAssignment[]
   workLogs          WorkLog[]
   attachments       WorkOrderAttachment[]
+  attachmentUploads AttachmentUploadIntent[]
   /// At most one row: service_reports.work_order_id is UNIQUE in SQL. Modelled
   /// as a list because the composite FK (tenant_id, work_order_id) is not itself
   /// unique, which Prisma requires for a 1:1 relation.
@@ -210,8 +211,18 @@ model WorkOrderAttachment {
   /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
   visibility  String    @default("INTERNAL") @db.VarChar(20)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// NULL together for pre-M3 rows; only verified rows may be served by M3 APIs.
+  sizeBytes   Int?      @map("size_bytes")
+  checksumSha256 String? @map("checksum_sha256") @db.Char(64)
+  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedBy   String?   @map("deleted_by") @db.Uuid
+  visibilityChangedAt DateTime? @map("visibility_changed_at") @db.Timestamptz(6)
+  visibilityChangedBy String? @map("visibility_changed_by") @db.Uuid
   workOrder   WorkOrder @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  uploadResults AttachmentUploadIntent[] @relation("WorkOrderUploadResult")
 
+  @@unique([tenantId, workOrderId, id], map: "uq_wo_attachment_parent_id")
   @@index([workOrderId], map: "idx_work_order_attachments_order")
   @@map("work_order_attachments")
 }
@@ -231,8 +242,10 @@ model ServiceReport {
   workOrder          WorkOrder          @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   technician         Technician         @relation(fields: [tenantId, technicianId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   attachments        ReportAttachment[]
+  attachmentUploads  AttachmentUploadIntent[]
 
   @@unique([tenantId, id])
+  @@unique([tenantId, workOrderId, id], map: "uq_service_report_order_id")
   @@index([tenantId, technicianId, submittedAt(sort: Desc)], map: "idx_service_reports_technician_time")
   @@map("service_reports")
 }
@@ -249,10 +262,104 @@ model ReportAttachment {
   /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
   visibility      String        @default("INTERNAL") @db.VarChar(20)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// NULL together for pre-M3 rows; never invent metadata during migration.
+  sizeBytes       Int?          @map("size_bytes")
+  checksumSha256  String?       @map("checksum_sha256") @db.Char(64)
+  verifiedAt      DateTime?     @map("verified_at") @db.Timestamptz(6)
+  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz(6)
+  deletedBy       String?       @map("deleted_by") @db.Uuid
+  visibilityChangedAt DateTime? @map("visibility_changed_at") @db.Timestamptz(6)
+  visibilityChangedBy String?   @map("visibility_changed_by") @db.Uuid
   serviceReport   ServiceReport @relation(fields: [tenantId, serviceReportId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  uploadResults   AttachmentUploadIntent[] @relation("ReportUploadResult")
 
+  @@unique([tenantId, serviceReportId, id], map: "uq_report_attachment_parent_id")
   @@index([serviceReportId], map: "idx_report_attachments_report")
   @@map("report_attachments")
+}
+
+/// ADR 0013 / M3-A1: persistence only; upload routes and workers follow in A2/A3.
+/// State: INITIATED | ATTACHED | EXPIRED | ABORTED. Target: WORK_ORDER | REPORT.
+/// All targets have a WO; REPORT also has a tenant-and-WO-safe report FK.
+model AttachmentUploadIntent {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  uploadedBy    String   @map("uploaded_by") @db.Uuid
+  targetType    String   @map("target_type") @db.VarChar(20)
+  workOrderId   String   @map("work_order_id") @db.Uuid
+  serviceReportId String? @map("service_report_id") @db.Uuid
+  fileName      String   @map("file_name") @db.VarChar(255)
+  mimeType      String   @map("mime_type") @db.VarChar(100)
+  sizeBytes     Int      @map("size_bytes")
+  checksumSha256 String  @map("checksum_sha256") @db.Char(64)
+  visibility    String   @default("INTERNAL") @db.VarChar(20)
+  stagingKey    String   @unique(map: "uq_attachment_upload_staging_key") @map("staging_key") @db.VarChar(500)
+  status        String   @default("INITIATED") @db.VarChar(20)
+  expiresAt     DateTime @map("expires_at") @db.Timestamptz(6)
+  /// A fenced attempt; lease expiry cannot authorize a stale finalizer to commit.
+  attemptId     String?  @map("attempt_id") @db.Uuid
+  attemptFinalKey String? @map("attempt_final_key") @db.VarChar(500)
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  workOrderAttachmentId String? @unique(map: "uq_attachment_upload_wo_result") @map("work_order_attachment_id") @db.Uuid
+  reportAttachmentId String? @unique(map: "uq_attachment_upload_report_result") @map("report_attachment_id") @db.Uuid
+  attachedAt    DateTime? @map("attached_at") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workOrder     WorkOrder @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  serviceReport ServiceReport? @relation(fields: [tenantId, workOrderId, serviceReportId], references: [tenantId, workOrderId, id], onDelete: Restrict, onUpdate: NoAction)
+  workOrderAttachment WorkOrderAttachment? @relation("WorkOrderUploadResult", fields: [tenantId, workOrderId, workOrderAttachmentId], references: [tenantId, workOrderId, id], onDelete: Restrict, onUpdate: NoAction)
+  reportAttachment ReportAttachment? @relation("ReportUploadResult", fields: [tenantId, serviceReportId, reportAttachmentId], references: [tenantId, serviceReportId, id], onDelete: Restrict, onUpdate: NoAction)
+  idempotencyRecords AttachmentIdempotency[]
+  cleanupJobs   AttachmentCleanupJob[]
+
+  @@unique([tenantId, id], map: "uq_attachment_upload_tenant_id")
+  @@unique([tenantId, uploadedBy, id], map: "uq_attachment_upload_actor_id")
+  @@index([tenantId, workOrderId, targetType, status, expiresAt], map: "idx_attachment_upload_quota")
+  @@index([status, expiresAt], map: "idx_attachment_upload_expiry")
+  @@map("attachment_upload_intents")
+}
+
+/// PREPARE spans both target types; changing parent with the same key conflicts.
+/// Store references/fingerprints, never signed URLs or raw response bodies.
+model AttachmentIdempotency {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  operation   String   @db.VarChar(20)
+  key         String   @db.Uuid
+  fingerprint String   @db.Char(64)
+  uploadId    String   @map("upload_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  upload      AttachmentUploadIntent @relation(fields: [tenantId, userId, uploadId], references: [tenantId, uploadedBy, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, userId, operation, key], map: "uq_attachment_idempotency_scope")
+  @@index([tenantId, uploadId], map: "idx_attachment_idempotency_upload")
+  @@map("attachment_idempotency")
+}
+
+/// One durable record per object, registered before storage writes. A DONE job
+/// may be requeued by deletion/reconciliation; DONE is not a purge instruction.
+model AttachmentCleanupJob {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  uploadId    String   @map("upload_id") @db.Uuid
+  kind        String   @db.VarChar(20)
+  objectKey   String   @unique(map: "uq_attachment_cleanup_object") @map("object_key") @db.VarChar(500)
+  attemptId   String?  @map("attempt_id") @db.Uuid
+  status      String   @default("PENDING") @db.VarChar(20)
+  notBefore   DateTime @map("not_before") @db.Timestamptz(6)
+  attemptCount Int     @default(0) @map("attempt_count")
+  claimId     String?  @map("claim_id") @db.Uuid
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  lastErrorCode String? @map("last_error_code") @db.VarChar(80)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  upload      AttachmentUploadIntent @relation(fields: [tenantId, uploadId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([status, notBefore, leaseExpiresAt], map: "idx_attachment_cleanup_ready")
+  @@index([tenantId, uploadId], map: "idx_attachment_cleanup_upload")
+  @@map("attachment_cleanup_jobs")
 }
 
 /// Transactional outbox; id is the event id sent to consumers.
