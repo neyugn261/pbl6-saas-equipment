@@ -10,6 +10,7 @@ import { ReferencesModule } from './references/references.module';
 import { TechniciansModule } from './technicians/technicians.module';
 import { WorkOrdersModule } from './work-orders/work-orders.module';
 import { EventsModule } from './events/events.module';
+import { AttachmentsModule } from './attachments/attachments.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { EventsModule } from './events/events.module';
     TechniciansModule,
     WorkOrdersModule,
     EventsModule,
+    AttachmentsModule,
   ],
 })
 export class AppModule {}

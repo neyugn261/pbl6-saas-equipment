@@ -6,7 +6,8 @@ thiết kế persistence, replay, fencing và cleanup. Bản contract phía owne
 web/mobile triển khai theo mock. **Khương xác nhận review đã chốt ngày 01/11/2026**;
 ghi nhận theo phiên làm việc, không tự tạo link approval GitHub. OpenAPI:
 [workorder-attachments.yaml](workorder-attachments.yaml). API này chưa có trong M2;
-request vào các route mới hiện không được xem là upload đã triển khai.
+**A2/A3 đã triển khai các staff routes**; internal SR projection vẫn thuộc A4.
+Runtime/kiểm thử: [bàn giao A2/A3](../planning/m3-khuong-a2-a3.md).
 
 ## Quyết định của contract
 
@@ -143,8 +144,7 @@ Huy sở hữu phần tích hợp đó và review contract trước khi M3 code.
 
 Schema và migration **mới** `0005_attachment_lifecycle` bổ sung metadata verify,
 tombstone và last visibility actor/time vào hai bảng hiện có; thêm intent,
-idempotency và cleanup jobs. Không sửa migration visibility 0002. A1 chỉ chuẩn
-bị persistence, chưa triển khai route/worker/storage. Không apply business DB
+idempotency và cleanup jobs. Không sửa migration visibility 0002. A1 chuẩn bị persistence; A2/A3 đã bổ sung staff route/worker/storage. Không apply business DB
 trước shared/schema review và quyết định xử lý legacy.
 
 size/hash/verifiedAt của legacy để NULL cùng nhau; không backfill giả. API M3
@@ -161,6 +161,8 @@ Verification failure giữ intent chưa attach để báo lỗi; không publish 
 Expired/aborted không sống lại khi PUT đến muộn. ATTACHED lưu attachmentId và
 fingerprint để finalize replay trả cùng ID; deleted attachment không được
 recreate bởi replay. MVP không tự purge intent/idempotency/tombstone/cleanup rows.
+Row legacy chưa verify không được phục vụ. Row đã backfill verify nhưng thiếu
+cleanup ownership không được báo delete thành công; cần owner đối soát trước.
 File orphan vẫn phải dọn theo retry/claim và reconciliation ở ADR 0013.
 STAGING cleanup sớm nhất expiry + 60 giây, kể cả abort sớm; dọn ngay có thể bị
 PUT còn hạn tạo lại object. Final attempt/key và cleanup được ghi trước storage
@@ -185,6 +187,6 @@ transaction DB trong khi đọc/ghi storage. Thông số lease/retry/reconcile �
 - Filename path/header injection, loại ngoài allowlist, zero/oversize, checksum
   sai, object thiếu; signed URLs không vào log/analytics/cache.
 
-K8 bàn giao OpenAPI + semantics + quyền + test matrix. Owner review nội dung và
-consumer approvals cần được ghi trong PR; không gọi mock OpenAPI là test upload
-MinIO thực tế. Upload/MinIO implementation vẫn thuộc M3.
+K8 bàn giao OpenAPI + semantics + quyền + test matrix. Review đã được Khương xác
+nhận; A2/A3 có bằng chứng PostgreSQL/MinIO thật trong bàn giao. A4 public result
+composition và UI web/Android vẫn nghiệm thu riêng; không dùng API tests thay UI.

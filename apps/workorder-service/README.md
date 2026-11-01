@@ -1,11 +1,12 @@
-# Work Order Service — M2 (K6 Maintenance và WO thay thế)
+# Work Order Service — M2 + M3 staff attachments
 
 M3-A1: Khương đã chốt attachment lifecycle/persistence và Q5 reporting contract.
 [Bàn giao A1](../../docs/planning/m3-khuong-a1.md),
 [ADR 0013](../../docs/decisions/0013-workorder-attachment-lifecycle.md).
-Migration 0005 được chuẩn bị để shared/schema review; chưa áp business DB trong
-lượt A1. Upload/cleanup/projection/report aggregate vẫn chưa có runtime; route
-trong contract M3 chưa phải API đã hoạt động.
+Review A1 đã được Khương xác nhận. A2/A3 đã triển khai staff attachment APIs,
+S3/MinIO adapter, policy và durable cleanup.
+[Bật runtime và kiểm thử A2/A3](../../docs/planning/m3-khuong-a2-a3.md).
+Internal SR projection (A4) và report aggregate (A5) vẫn chưa triển khai.
 
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
@@ -41,7 +42,8 @@ cho Web/Android và smoke `pnpm --filter workorder-service test:demo`.
 
 K8 có [OpenAPI attachment](../../docs/api/workorder-attachments.yaml) và
 [quy tắc upload/quyền/visibility](../../docs/api/workorder-attachments.md) cho M3.
-Đây là contract bàn giao, chưa triển khai route upload hoặc MinIO trong M2.
+Contract M2 được hiện thực ở A2/A3 cho staff; xem implementation status từng
+operation trong YAML. CUSTOMER vẫn chỉ đi qua projection A4 chưa triển khai.
 
 Service đọc `.env` riêng rồi `.env` root; port `WORKORDER_SERVICE_PORT` mặc
 định 3004. Biến bắt buộc: `WORKORDER_DATABASE_URL`, JWT theo shared auth và
@@ -134,7 +136,7 @@ cần body; field lạ bị từ chối. Complete nhận body:
 `result`: RESOLVED/PARTIALLY_RESOLVED/UNRESOLVED. Mỗi WO chỉ có một report.
 Completed v2 chỉ chứa summary dành cho khách, không sao chép chẩn đoán nội bộ.
 Cancelled v2 mặc định `cancelServiceRequest=false`; true chỉ dành cho WO nguồn
-SR. Không phát Completed/Cancelled v1. Không có API sửa report hoặc upload.
+SR. Không phát Completed/Cancelled v1. Không có API sửa report; upload file report sau completion dùng staff routes A2/A3.
 
 Queue `workorder-service.service-requests` nhận ServiceRequestStatusChanged v1.
 Consumer CANCELLED dùng inbox và cùng source lock với create. WO CREATED/
