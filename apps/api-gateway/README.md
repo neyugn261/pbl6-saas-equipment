@@ -20,7 +20,7 @@ starting the gateway.
 | `/api/workorders/*` | `WORKORDER_SERVICE_URL` | `/*` |
 | `/api/maintenance/*` | `MAINTENANCE_SERVICE_URL` | `/*` |
 | `/api/inventory/*` | `INVENTORY_SERVICE_URL` | `/*` |
-| `/api/notifications/*` | `NOTIFICATION_SERVICE_URL` | `/*` |
+| `/api/notifications[/*]` | `NOTIFICATION_SERVICE_URL` | `/notifications[/*]` |
 
 The gateway forwards `Authorization` and `x-correlation-id`, generating a
 correlation ID when absent. Requests whose path contains `/internal/` receive

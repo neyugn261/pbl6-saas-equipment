@@ -69,8 +69,10 @@ jobs:
       MAINTENANCE_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/maintenance_shadow_db
       INVENTORY_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_db
       INVENTORY_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_shadow_db
+      INVENTORY_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/inventory_test_db
       NOTIFICATION_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_db
       NOTIFICATION_SHADOW_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_shadow_db
+      NOTIFICATION_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/notification_test_db
       IDENTITY_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/identity_test_db
       ORGANIZATION_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/organization_test_db
       ASSET_TEST_DATABASE_URL: postgresql://pbl6:pbl6_ci_password@localhost:5432/asset_test_db
@@ -154,6 +156,30 @@ jobs:
             else
               echo "maintenance-service: $script not declared yet"
             fi
+          done
+      - name: M3 Inventory and Notification test databases
+        run: |
+          set -euo pipefail
+          for pair in inventory:INVENTORY notification:NOTIFICATION; do
+            service="${pair%%:*}"
+            prefix="${pair##*:}"
+            url_var="${prefix}_TEST_DATABASE_URL"
+            test_url="${!url_var}"
+            actual="$(node -e 'process.stdout.write(new URL(process.argv[1]).pathname.slice(1))' "$test_url")"
+            if [ "$actual" != "${service}_test_db" ]; then
+              echo "Refusing $service test DB setup: got $actual" >&2
+              exit 1
+            fi
+            export "${prefix}_DATABASE_URL=$test_url"
+            pnpm --filter "${service}-service" db:migrate
+            for script in test:e2e:db test:db; do
+              if node -e 'process.exit(require(process.argv[1]).scripts[process.argv[2]] ? 0 : 1)' "./apps/${service}-service/package.json" "$script"; then
+                pnpm --filter "${service}-service" "$script"
+              else
+                echo "${service}-service: $script not declared yet"
+              fi
+            done
+            unset "${prefix}_DATABASE_URL"
           done
       - name: Minh M2 real Maintenance vertical slice (dedicated test databases)
         env:

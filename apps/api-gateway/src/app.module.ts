@@ -96,9 +96,9 @@ export class AppModule implements NestModule {
       .apply(InventoryProxyMiddleware)
       .forRoutes({ path: 'api/inventory/*path', method: RequestMethod.ALL });
 
-    consumer.apply(NotificationProxyMiddleware).forRoutes({
-      path: 'api/notifications/*path',
-      method: RequestMethod.ALL,
-    });
+    consumer.apply(NotificationProxyMiddleware).forRoutes(
+      { path: 'api/notifications', method: RequestMethod.ALL },
+      { path: 'api/notifications/*path', method: RequestMethod.ALL },
+    );
   }
 }

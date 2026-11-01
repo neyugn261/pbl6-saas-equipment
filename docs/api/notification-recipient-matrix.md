@@ -60,8 +60,8 @@ only for Completed.v2.
 
 Web/mobile currently have no Notification API consumer in this checkout.
 Confirm `readAt`, `unreadCount`, pagination and route mapping with their owners.
-The current Gateway strips `/api/notifications`, so the draft local
-`/notifications` path would publicly be `/api/notifications/notifications`;
-choose the final public mapping with the Gateway owner before M3. Do not
-silently repeat that prefix in UI code. The configured Notification port is
-3005; 3008 belongs to Inventory.
+The Gateway maps public `/api/notifications[/*]` to Notification Service
+`/notifications[/*]`; UI clients use the public path once. This route is
+covered by Gateway E2E, but it does not mean the Notification business API is
+implemented. The configured Notification port is 3005; 3008 belongs to
+Inventory.

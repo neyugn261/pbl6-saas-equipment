@@ -204,6 +204,7 @@ export class NotificationProxyMiddleware implements NestMiddleware {
     this.proxy = buildProxy(
       config.get('NOTIFICATION_SERVICE_URL', { infer: true }),
       '/api/notifications',
+      '/notifications',
     );
   }
   use(req: Request, res: Response, next: NextFunction): void {
