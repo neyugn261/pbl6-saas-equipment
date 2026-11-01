@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: PBL6 Work Order Service
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contract for M2 — owner: Work Order owner. Decisions: ADR 0006 and ADR 0008
     (D4/D4a cancellation, D5 `createdBy`, D6/D6a customer summary, D11
@@ -75,6 +75,8 @@ info:
     through `/complete` and reading `/service-report` belong to M2.
     M3 attachment contract (K8, not implemented by M2 routes):
     docs/api/workorder-attachments.yaml and workorder-attachments.md.
+    M3-A1/Q5 defines /reports/work-orders/summary below as CONTRACT_ONLY_M3;
+    it is not implemented until A5. See docs/planning/m3-khuong-a1.md.
 servers:
   - url: http://localhost:3004
     description: Local service (through the gateway at /api/workorders, prefix stripped)
@@ -87,9 +89,92 @@ tags:
   - name: Activity
   - name: Technicians
   - name: Skills
+  - name: Reports
+    description: M3 Q5 contract; not implemented until A5.
   - name: Internal
     description: Called by other services with the caller's token; not exposed by the gateway.
 paths:
+  /reports/work-orders/summary:
+    get:
+      tags: [Reports]
+      operationId: getWorkOrderSummary
+      summary: Aggregate WO creation cohort and completions in a time interval
+      x-implementation-status: CONTRACT_ONLY_M3
+      x-permissions: [report:read]
+      x-user-types: [TENANT_STAFF]
+      description: |
+        Q5 owner decision 2026-11-01; review completion confirmed by Khương. A5 implements
+        this route; A1 provides the contract only. Public Gateway path is
+        /api/workorders/reports/work-orders/summary. Tenant comes only from the
+        verified principal. Current catalog grants report:read to Tenant Admin
+        and Service Manager; no new role or permission.
+        Both RFC3339 timestamps with explicit Z/offset are required; from < to.
+        Unknown query parameters (including tenantId/customerId/timezone) fail
+        validation. Range is [from, to), compared as UTC instants. The response
+        echoes normalized UTC timestamps; display timezone is fixed to
+        Asia/Ho_Chi_Minh. Clients compute local calendar boundaries in +07:00
+        before sending timestamps. This endpoint performs no daily grouping.
+        createdCount counts WO with createdAt in the range, including cancelled
+        WO and both SR/Maintenance origins. createdByStatus is the CURRENT status
+        distribution of exactly that creation cohort, not status as of to.
+        completedCount independently counts status COMPLETED with completedAt in
+        the range, including WO created before from. It may exceed createdCount.
+        No completion ratio, duration, part cost or cross-service joins in v1.
+        Read all aggregates in one local DB statement or repeatable-read snapshot;
+        never add counts from a paginated list. Empty data gives zero for every
+        status. DB failure returns 503 REPORT_UNAVAILABLE, never false zeros.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+          example: '2026-10-31T17:00:00Z'
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+          example: '2026-11-30T17:00:00Z'
+      responses:
+        '200':
+          description: Tenant-wide WO aggregates; all status keys always present
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkOrderSummary' }
+              example:
+                from: '2026-10-31T17:00:00.000Z'
+                to: '2026-11-30T17:00:00.000Z'
+                timezone: Asia/Ho_Chi_Minh
+                createdCount: 4
+                createdByStatus:
+                  CREATED: 1
+                  ASSIGNED: 0
+                  ACCEPTED: 0
+                  TRAVELLING: 0
+                  IN_PROGRESS: 1
+                  ON_HOLD: 0
+                  COMPLETED: 1
+                  CANCELLED: 1
+                completedCount: 2
+        '400':
+          description: VALIDATION_FAILED for query shape/date; INVALID_REPORT_RANGE for from >= to
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: INVALID_ACCESS_TOKEN
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: FORBIDDEN; requires TENANT_STAFF and report:read
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: REPORT_UNAVAILABLE; aggregate could not be read
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /work-orders:
     get:
       tags: [Work orders]
@@ -761,6 +846,29 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
   schemas:
+    WorkOrderSummary:
+      type: object
+      additionalProperties: false
+      required: [from, to, timezone, createdCount, createdByStatus, completedCount]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        timezone: { type: string, const: Asia/Ho_Chi_Minh }
+        createdCount: { type: integer, minimum: 0 }
+        completedCount: { type: integer, minimum: 0 }
+        createdByStatus:
+          type: object
+          additionalProperties: false
+          required: [CREATED, ASSIGNED, ACCEPTED, TRAVELLING, IN_PROGRESS, ON_HOLD, COMPLETED, CANCELLED]
+          properties:
+            CREATED: { type: integer, minimum: 0 }
+            ASSIGNED: { type: integer, minimum: 0 }
+            ACCEPTED: { type: integer, minimum: 0 }
+            TRAVELLING: { type: integer, minimum: 0 }
+            IN_PROGRESS: { type: integer, minimum: 0 }
+            ON_HOLD: { type: integer, minimum: 0 }
+            COMPLETED: { type: integer, minimum: 0 }
+            CANCELLED: { type: integer, minimum: 0 }
     Error:
       type: object
       required: [code, message]

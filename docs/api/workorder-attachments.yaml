@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: PBL6 Work Order and Service Report attachments — M3 contract
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    K8 owner contract for consumer review. CONTRACT ONLY: these paths are not
+    Q1 owner decision confirmed by Khương on 2026-11-01; review completion confirmed by Khương. See ADR 0013. CONTRACT ONLY: these paths are not
     implemented in M2. Supplements workorder.yaml; see workorder-attachments.md.
     Uses existing catalog permissions, ADR 0003/0004/0006 and WO assignment scope.
     No new roles, invoice/payment flow, multipart upload or public bucket.
@@ -21,6 +21,12 @@ info:
     Reusing a still-valid staging PUT URL can never overwrite an attached file.
     Complete verifies actual bytes/type/hash at the server, parent scope/state,
     ownership and quota before DB attachment + upload state commit together.
+    Storage I/O is outside database transactions, with a durable fenced attempt
+    and cleanup record created before the final object write. No automatic
+    intent/idempotency/tombstone purge in MVP. Legacy unverified rows are not served.
+    Current token/catalog authorization follows ADR 0004 revocation latency;
+    no online account/session lookup is added. New finalization checks mutation
+    state; ATTACHED replay checks same uploader and current staff read scope.
     Report uploads require an existing submitted report and COMPLETED WO; mobile
     completes the report first, then uploads/retries attachments independently.
     CUSTOMER has no access to staff WO/report paths, even for CUSTOMER visibility.
@@ -40,13 +46,20 @@ paths:
     post:
       tags: [Upload intents]
       operationId: prepareWorkOrderAttachment
-      summary: Prepare an INTERNAL attachment upload for a non-terminal WO
+      summary: Prepare an attachment upload for a non-terminal WO (default INTERNAL)
       description: |
         TENANT_STAFF only. work_order:manage, or work_order:execute for the
         current ACCEPTED assignment in ACCEPTED/TRAVELLING/IN_PROGRESS/ON_HOLD.
         Other-tenant/unassigned WO is 404 after account-type/permission checks.
         COMPLETED/CANCELLED is 409. Only work_order:manage may request CUSTOMER
         visibility; technician uploads remain INTERNAL until a manager publishes.
+        Authorize target before looking up the key, then compare fingerprint
+        before quota/new-state checks. INITIATED replay needs mutation scope and
+        returns 201 with the same uploadId/headers/expiresAt, without renewing TTL.
+        Terminal-intent replay needs current read scope and the same uploader:
+        ATTACHED returns 409 UPLOAD_ALREADY_ATTACHED with details.attachmentId;
+        deleted result is 404 ATTACHMENT_NOT_FOUND; EXPIRED is 409 UPLOAD_EXPIRED;
+        ABORTED is 409 UPLOAD_ABORTED. PREPARE key scope spans both target types.
       parameters:
         - $ref: "#/components/parameters/WorkOrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -82,6 +95,10 @@ paths:
         report must exist. Past assignees who did not submit this report cannot
         mutate it. This adds a file, never changes the report/result or emits a
         second WorkOrderCompleted event. Technician visibility is INTERNAL only.
+        Prepare replay follows the same state/key rules as WO prepare: no new
+        slot or TTL; terminal-intent replay uses current read scope and uploader
+        identity. PREPARE uses one namespace across both target types; parent
+        and normalized metadata are part of the fingerprint (ADR 0013).
       parameters:
         - $ref: "#/components/parameters/WorkOrderId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -112,15 +129,21 @@ paths:
       operationId: completeAttachmentUpload
       summary: Verify the uploaded object and atomically register its attachment
       description: |
-        Same uploader userId, tenant and parent mutation scope as prepare,
-        checked again under lock. Body must be empty JSON. StorageKey, parentId,
+        Same uploader userId and tenant. A new finalization requires parent
+        mutation scope/state checked again under lock. Body must be empty JSON. StorageKey, parentId,
         tenantId, uploadedBy and verification results cannot be supplied.
         Original intent + actual stored object determine metadata. No object is
         409 UPLOAD_NOT_READY; expired intent is 409 UPLOAD_EXPIRED; mismatched
         bytes/type/hash is 422 UPLOAD_VERIFICATION_FAILED. No attachment is
-        registered on failure. Replay returns the same attachment without a
-        second row, including after a lost HTTP response. Parent/account access
-        is always rechecked; replay never restores a deleted attachment.
+        registered on failure. ABORTED is 409 UPLOAD_ABORTED; another unexpired
+        attempt lease is 409 UPLOAD_IN_PROGRESS (retry same key after a short wait).
+        ATTACHED replay requires same uploader and current work_order:read with
+        staff/assignment scope, not the original mutation state. It returns
+        current metadata for the same attachment, even if the WO since completed
+        or visibility changed. Deleted result is 404 ATTACHMENT_NOT_FOUND and is
+        never recreated. The original or a new FINALIZE key for the same upload
+        converges to the same result. Same key with another upload is 409
+        IDEMPOTENCY_KEY_REUSED after authorizing the target. No TTL renewal.
       parameters:
         - $ref: "#/components/parameters/UploadId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -155,9 +178,13 @@ paths:
       summary: Abort the caller's unfinished intent and release its quota slot
       description: |
         Same uploader/tenant and authorized parent; manager may abort within
-        its parent scope. Repeated abort is 204. ATTACHED is 409: delete the
+        its parent scope. First abort requires current mutation scope; repeated
+        ABORTED/EXPIRED abort is 204 under read scope plus manager/uploader identity.
+        ATTACHED is 409 UPLOAD_ALREADY_ATTACHED: delete the
         attachment instead. Expired/aborted intents never attach on late PUT.
         Orphan removal is durable/retryable cleanup, not a cross-storage transaction.
+        Staging cleanup runs no earlier than original URL expiry + 60 seconds;
+        periodic reconciliation catches late PUTs after an earlier deletion.
       parameters:
         - $ref: "#/components/parameters/UploadId"
       responses:
@@ -274,6 +301,8 @@ paths:
         scope. WO target must be non-terminal; report target must have an existing
         COMPLETED report. Deletion is replay-safe (204 while a deletion tombstone
         remains) and audited; metadata/tombstone + cleanup claim commit together.
+        Repeated delete requires current read scope plus manager/uploader identity;
+        it does not reapply mutation state. Unverified legacy rows are unservable.
         An already issued signed URL may remain usable until its short expiry.
       parameters:
         - $ref: "#/components/parameters/AttachmentId"
@@ -371,7 +400,7 @@ components:
       in: header
       name: Idempotency-Key
       required: true
-      description: UUID scoped by tenant, uploader and logical operation. Identical target/body replays the original result; reuse for another target/body is 409 IDEMPOTENCY_KEY_REUSED. Never extends the intent expiry.
+      description: UUID scoped by tenant, uploader and PREPARE or FINALIZE operation. PREPARE spans WO/report; parent is in the fingerprint, not the key scope. Identical payload follows state-specific replay rules above; another target/body is 409 IDEMPOTENCY_KEY_REUSED after target authorization. Never extends intent expiry. Fingerprint normalization is defined in ADR 0013.
       schema: { type: string, format: uuid }
     Page:
       in: query
