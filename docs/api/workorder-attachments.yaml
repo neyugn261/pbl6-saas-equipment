@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: PBL6 Work Order and Service Report attachments — M3 contract
-  version: 0.2.0
+  version: 0.3.0
   description: |
-    Q1 owner decision confirmed by Khương on 2026-11-01; review completion confirmed by Khương. See ADR 0013. CONTRACT ONLY: these paths are not
-    implemented in M2. Supplements workorder.yaml; see workorder-attachments.md.
+    Q1 and review confirmed by Khương on 2026-11-01 (ADR 0013).
+    Staff routes implemented in A2/A3; internal SR projection remains
+    contract-only A4. Supplements workorder.yaml; see workorder-attachments.md.
     Uses existing catalog permissions, ADR 0003/0004/0006 and WO assignment scope.
     No new roles, invoice/payment flow, multipart upload or public bucket.
     Gateway strips /api/workorders; /internal paths remain blocked by Gateway.
@@ -32,7 +33,7 @@ info:
     CUSTOMER has no access to staff WO/report paths, even for CUSTOMER visibility.
     SR exposes published files using the narrowly scoped internal projection;
     see the SR-owner handoff in the companion document, not raw WO/report access.
-x-implementation-status: CONTRACT_ONLY_M3
+x-implementation-status: PARTIAL_M3_A2_A3
 servers:
   - url: http://localhost:3004
 security:
@@ -46,6 +47,7 @@ paths:
     post:
       tags: [Upload intents]
       operationId: prepareWorkOrderAttachment
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: Prepare an attachment upload for a non-terminal WO (default INTERNAL)
       description: |
         TENANT_STAFF only. work_order:manage, or work_order:execute for the
@@ -88,6 +90,7 @@ paths:
     post:
       tags: [Upload intents]
       operationId: prepareReportAttachment
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: Prepare an attachment upload for an existing submitted report
       description: |
         TENANT_STAFF with work_order:manage, or the report's author Technician
@@ -127,6 +130,7 @@ paths:
     post:
       tags: [Upload intents]
       operationId: completeAttachmentUpload
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: Verify the uploaded object and atomically register its attachment
       description: |
         Same uploader userId and tenant. A new finalization requires parent
@@ -175,6 +179,7 @@ paths:
     delete:
       tags: [Upload intents]
       operationId: abortAttachmentUpload
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: Abort the caller's unfinished intent and release its quota slot
       description: |
         Same uploader/tenant and authorized parent; manager may abort within
@@ -202,6 +207,7 @@ paths:
     get:
       tags: [Attachments]
       operationId: listWorkOrderAttachments
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: List registered WO attachments in normal staff/assignment scope
       description: TENANT_STAFF with work_order:read; includes terminal WO reads and historical Technician assignment scope. Excludes pending/failed/deleted objects.
       parameters:
@@ -221,6 +227,7 @@ paths:
     get:
       tags: [Attachments]
       operationId: listReportAttachments
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: List files of the submitted report in normal staff/assignment scope
       parameters:
         - $ref: "#/components/parameters/WorkOrderId"
@@ -239,12 +246,15 @@ paths:
     get:
       tags: [Attachments]
       operationId: downloadStaffAttachment
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: Reauthorize a registered attachment and issue a signed GET URL
       description: |
         TENANT_STAFF with work_order:read and parent scope, including historical
         Technician read scope. No redirect: returns JSON. Signed URL is a bearer
         capability, valid at most 60 seconds; never include Authorization in the
         storage request or log/store the URL. Response has Cache-Control:no-store.
+        Object existence is checked by storage HEAD outside the DB transaction;
+        missing/unavailable storage returns 503 ATTACHMENT_STORAGE_UNAVAILABLE.
       parameters:
         - $ref: "#/components/parameters/AttachmentId"
       responses:
@@ -262,6 +272,7 @@ paths:
     patch:
       tags: [Attachments]
       operationId: setAttachmentVisibility
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: Manager publishes or hides an attachment, with an audit record
       description: |
         TENANT_STAFF with work_order:manage and tenant scope; no Technician or
@@ -295,12 +306,15 @@ paths:
     delete:
       tags: [Attachments]
       operationId: deleteAttachment
+      x-implementation-status: IMPLEMENTED_M3_A2_A3
       summary: Remove an attachment from application reads and queue blob cleanup
       description: |
         work_order:manage or original uploader still in the target's mutation
         scope. WO target must be non-terminal; report target must have an existing
         COMPLETED report. Deletion is replay-safe (204 while a deletion tombstone
         remains) and audited; metadata/tombstone + cleanup claim commit together.
+        Verified legacy metadata without durable cleanup ownership is refused
+        with 503 ATTACHMENT_STORAGE_UNAVAILABLE; no tombstone is acknowledged.
         Repeated delete requires current read scope plus manager/uploader identity;
         it does not reapply mutation state. Unverified legacy rows are unservable.
         An already issued signed URL may remain usable until its short expiry.
@@ -317,10 +331,13 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
   /internal/service-request-attachments/{serviceRequestId}:
     get:
       tags: [Customer-safe internal projection]
       operationId: listPublishedRequestAttachments
+      x-implementation-status: CONTRACT_ONLY_M3_A4
       summary: SR read-composition endpoint returning CUSTOMER files only
       description: |
         service_request:read and original caller token required (ADR 0004).
@@ -353,6 +370,7 @@ paths:
     get:
       tags: [Customer-safe internal projection]
       operationId: downloadPublishedRequestAttachment
+      x-implementation-status: CONTRACT_ONLY_M3_A4
       summary: Recheck SR relation, scope and CUSTOMER visibility before signing
       description: Same auth/filter as the internal list, additionally verifies attachment belongs to this SR. Hidden/deleted/wrong-parent files return 404. Never trusts caller-supplied WO/customer IDs.
       parameters:
