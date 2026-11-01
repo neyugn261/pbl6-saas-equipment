@@ -9,6 +9,7 @@ S3/MinIO adapter, policy và durable cleanup.
 A4 internal SR projection đã triển khai; [bàn giao cho Huy](../../docs/planning/m3-khuong-a4.md).
 Public SR composition thuộc Huy. A5 report aggregate đã triển khai;
 [contract, fixture và bàn giao dashboard cho Hatsady](../../docs/planning/m3-khuong-a5.md).
+A6 có [regression, evidence và các ca còn chờ tích hợp](../../docs/planning/m3-khuong-a6.md).
 
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
@@ -206,11 +207,23 @@ pnpm --filter workorder-service build
 pnpm --filter workorder-service db:check-drift
 ```
 
-DB suite yêu cầu `WORKORDER_TEST_DATABASE_URL` có tên DB chứa `test`. Suite áp
+DB suite yêu cầu `WORKORDER_TEST_DATABASE_URL` trỏ đúng DB `workorder_test_db`. Suite áp
 migration và **truncate dữ liệu trong DB test**, không chạy trên business DB.
 Trên volume cũ, tạo DB test theo root README bằng `dev-databases.sql` mới.
 HTTP bootstrap dùng fake DB; DB suite dùng PostgreSQL thật và fake upstream
 được khai báo rõ; unit HTTP client kiểm tra forwarding và lỗi upstream.
+
+Regression M3 tổng hợp (17 bước, có MinIO thật, Gateway và crash/restart worker):
+
+```bash
+pnpm --filter workorder-service test:m3
+```
+
+Cần DB test riêng, `WORKORDER_SHADOW_TEST_DATABASE_URL` trỏ đúng
+`workorder_shadow_test_db` và cấu hình MinIO test. Runner dừng khi có lỗi, ghi
+JSON kết quả ở thư mục tạm hoặc `WORKORDER_M3_EVIDENCE_PATH`; không chạy song
+song trên cùng DB test. [Hướng dẫn A6](../../docs/planning/m3-khuong-a6.md)
+ghi đầy đủ env, coverage và giới hạn SR/web/Android acceptance.
 
 Smoke tuần 1 cần sáu service Identity/Organization/Asset/SR/WO/Gateway và
 RabbitMQ thật, seed DEMO và biến `SEED_DEMO_PASSWORD` trong môi trường shell:

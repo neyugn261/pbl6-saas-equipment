@@ -23,6 +23,8 @@
     "test:attachments:storage": "prisma generate --no-hints && node scripts/test-attachment-storage.cjs",
     "test:attachments:gateway": "pnpm --filter api-gateway build && pnpm build && node scripts/smoke-attachment-gateway.cjs",
     "test:reports:gateway": "pnpm --filter api-gateway build && pnpm build && node scripts/smoke-workorder-report.cjs",
+    "test:attachments:restart": "pnpm build && node scripts/smoke-attachment-restart.cjs",
+    "test:m3": "node scripts/test-m3.cjs",
     "attachments:prepare": "pnpm build && node scripts/prepare-attachments.cjs",
     "typecheck": "prisma generate --no-hints && tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate --no-hints",

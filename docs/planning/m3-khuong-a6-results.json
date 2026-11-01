@@ -1,0 +1,125 @@
+{
+  "task": "M3-A6",
+  "startedAt": "2026-11-01T14:38:01.899Z",
+  "sourceHead": "bb18ded50e5d704d041af16ffe1a6e6a67b80ccc",
+  "workingTreeDirty": true,
+  "environment": {
+    "node": "v24.20.0",
+    "testDatabase": "workorder_test_db",
+    "shadowDatabase": "workorder_shadow_test_db",
+    "storage": "real S3/MinIO",
+    "broker": "disabled; consumer logic covered by DB fixtures"
+  },
+  "steps": [
+    {
+      "name": "packages-build",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 4813
+    },
+    {
+      "name": "wo-lint",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 480
+    },
+    {
+      "name": "wo-typecheck",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 3591
+    },
+    {
+      "name": "wo-unit",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 2545
+    },
+    {
+      "name": "wo-bootstrap",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 2139
+    },
+    {
+      "name": "migration-deploy-1",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1100
+    },
+    {
+      "name": "migration-deploy-2",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1093
+    },
+    {
+      "name": "migration-schema-drift",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1219
+    },
+    {
+      "name": "database-schema-drift",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1101
+    },
+    {
+      "name": "wo-db-regression",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 18614
+    },
+    {
+      "name": "real-minio-suites",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 8124
+    },
+    {
+      "name": "gateway-e2e",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1809
+    },
+    {
+      "name": "gateway-build",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1830
+    },
+    {
+      "name": "wo-build",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 3672
+    },
+    {
+      "name": "attachment-gateway-smoke",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1627
+    },
+    {
+      "name": "report-gateway-smoke",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 1364
+    },
+    {
+      "name": "cleanup-process-restart",
+      "status": "PASS",
+      "exitCode": 0,
+      "durationMs": 2156
+    }
+  ],
+  "acceptancePending": [
+    "Huy C4: real public SR authorization/composition + customer download",
+    "Hatsady E2/E3: web upload/customer file/report dashboard",
+    "Nguyen D3-D5: deployed storage endpoint and Android acceptance",
+    "Team: authenticated Identity + broker + full business demo"
+  ],
+  "finishedAt": "2026-11-01T14:38:59.199Z",
+  "status": "PASS_OWNER_REGRESSION"
+}
