@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: PBL6 Work Order Service
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Contract for M2 — owner: Work Order owner. Decisions: ADR 0006 and ADR 0008
     (D4/D4a cancellation, D5 `createdBy`, D6/D6a customer summary, D11
@@ -75,8 +75,8 @@ info:
     through `/complete` and reading `/service-report` belong to M2.
     M3 attachment contract (K8, not implemented by M2 routes):
     docs/api/workorder-attachments.yaml and workorder-attachments.md.
-    M3-A1/Q5 defines /reports/work-orders/summary below as CONTRACT_ONLY_M3;
-    it is not implemented until A5. See docs/planning/m3-khuong-a1.md.
+    M3-A5 implements /reports/work-orders/summary per the reviewed A1/Q5 contract.
+    Integration and fixtures: docs/planning/m3-khuong-a5.md.
 servers:
   - url: http://localhost:3004
     description: Local service (through the gateway at /api/workorders, prefix stripped)
@@ -90,7 +90,7 @@ tags:
   - name: Technicians
   - name: Skills
   - name: Reports
-    description: M3 Q5 contract; not implemented until A5.
+    description: M3-A5 tenant-wide WO aggregates, per reviewed Q5 contract.
   - name: Internal
     description: Called by other services with the caller's token; not exposed by the gateway.
 paths:
@@ -99,19 +99,23 @@ paths:
       tags: [Reports]
       operationId: getWorkOrderSummary
       summary: Aggregate WO creation cohort and completions in a time interval
-      x-implementation-status: CONTRACT_ONLY_M3
+      x-implementation-status: IMPLEMENTED_M3_A5
       x-permissions: [report:read]
       x-user-types: [TENANT_STAFF]
       description: |
-        Q5 owner decision 2026-11-01; review completion confirmed by Khương. A5 implements
-        this route; A1 provides the contract only. Public Gateway path is
+        Q5 owner decision 2026-11-01; review completion confirmed by Khương. Implemented
+        in A5. Public Gateway path is
         /api/workorders/reports/work-orders/summary. Tenant comes only from the
         verified principal. Current catalog grants report:read to Tenant Admin
         and Service Manager; no new role or permission.
         Both RFC3339 timestamps with explicit Z/offset are required; from < to.
+        Accept real calendar dates, hours 00-23, seconds 00-59 and at most six
+        fractional digits (PostgreSQL precision). Lowercase t/z is accepted.
+        Instants must normalize to UTC years 0001-9999.
         Unknown query parameters (including tenantId/customerId/timezone) fail
         validation. Range is [from, to), compared as UTC instants. The response
-        echoes normalized UTC timestamps; display timezone is fixed to
+        echoes normalized UTC timestamps (three fractional digits, or six when
+        microsecond precision is needed); display timezone is fixed to
         Asia/Ho_Chi_Minh. Clients compute local calendar boundaries in +07:00
         before sending timestamps. This endpoint performs no daily grouping.
         createdCount counts WO with createdAt in the range, including cancelled
@@ -137,6 +141,9 @@ paths:
       responses:
         '200':
           description: Tenant-wide WO aggregates; all status keys always present
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkOrderSummary' }
@@ -156,7 +163,7 @@ paths:
                   CANCELLED: 1
                 completedCount: 2
         '400':
-          description: VALIDATION_FAILED for query shape/date; INVALID_REPORT_RANGE for from >= to
+          description: VALIDATION_FAILED for query shape/date or UTC year outside 0001-9999; INVALID_REPORT_RANGE for from >= to
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
