@@ -111,6 +111,7 @@ describe('API Gateway (e2e)', () => {
       '/api/assets/internal/equipment/123',
       '/api/workorders/internal/work-orders/123',
       '/api/maintenance/%69nternal/maintenance-plans/123',
+      '/api/notifications/internal/recipients',
     ]) {
       await request(app.getHttpServer()).get(path).expect(404);
     }
@@ -238,6 +239,23 @@ describe('API Gateway (e2e)', () => {
         correlationId: 'm2-correlation',
       });
       expect(JSON.parse(res.body.body)).toEqual({ note: 'test' });
+    }
+  });
+
+  it('maps the public Notification inbox to its owning service', async () => {
+    for (const [publicPath, servicePath] of [
+      ['/api/notifications', '/notifications'],
+      ['/api/notifications/unread-count', '/notifications/unread-count'],
+      ['/api/notifications/123/read', '/notifications/123/read'],
+    ]) {
+      const res = await request(app.getHttpServer())
+        .get(publicPath)
+        .set('Authorization', 'Bearer notification-token')
+        .expect(200);
+      expect(res.body).toMatchObject({
+        url: servicePath,
+        authorization: 'Bearer notification-token',
+      });
     }
   });
 

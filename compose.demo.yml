@@ -1,0 +1,223 @@
+name: pbl6-demo
+
+x-app: &app
+  image: pbl6-backend:local
+  restart: unless-stopped
+  networks: [private]
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  healthcheck:
+    test: [CMD-SHELL, "node -e \"fetch('http://127.0.0.1:'+process.env.HEALTH_PORT+(process.env.HEALTH_PATH||'/health')).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+    interval: 10s
+    timeout: 3s
+    retries: 15
+  environment: &app-env
+    NODE_ENV: production
+    JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in the demo env file}
+    JWT_ISSUER: ${JWT_ISSUER:-pbl6-identity}
+    JWT_AUDIENCE: ${JWT_AUDIENCE:-pbl6}
+    RABBITMQ_URL: amqp://${RABBITMQ_USER:?}:${RABBITMQ_PASSWORD:?}@rabbitmq:5672
+    IDENTITY_SERVICE_URL: http://identity-service:3001
+    ASSET_SERVICE_URL: http://asset-service:3002
+    MAINTENANCE_SERVICE_URL: http://maintenance-service:3003
+    WORKORDER_SERVICE_URL: http://workorder-service:3004
+    NOTIFICATION_SERVICE_URL: http://notification-service:3005
+    ORGANIZATION_SERVICE_URL: http://organization-service:3006
+    SERVICE_REQUEST_SERVICE_URL: http://service-request-service:3007
+    INVENTORY_SERVICE_URL: http://inventory-service:3008
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pbl6
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the demo env file}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U pbl6 -d postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [private]
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?}
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [private]
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    networks: [private]
+
+  minio:
+    image: pgsty/silo:RELEASE.2026-10-18T00-00-00Z
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?}
+    volumes:
+      - minio_data:/data
+    ports:
+      - '${MINIO_PUBLIC_PORT:-9000}:9000'
+    networks: [private]
+
+  storage-init:
+    image: pgsty/silo:RELEASE.2026-10-18T00-00-00Z
+    restart: 'no'
+    entrypoint: [sh, /config/init.sh]
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?}
+      MINIO_BUCKET: ${MINIO_BUCKET:-pbl6-attachments}
+      DEMO_PUBLIC_URL: ${DEMO_PUBLIC_URL:?}
+    volumes:
+      - ./infrastructure/minio/init.sh:/config/init.sh:ro
+    depends_on: [minio]
+    networks: [private]
+
+  migrate:
+    <<: *app
+    restart: 'no'
+    healthcheck:
+      disable: true
+    working_dir: /workspace
+    command: [sh, -c, 'pnpm db:migrate && pnpm --filter identity-service db:seed']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      IDENTITY_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/identity_db
+      ORGANIZATION_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/organization_db
+      ASSET_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/asset_db
+      SERVICE_REQUEST_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/service_request_db
+      WORKORDER_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/workorder_db
+      MAINTENANCE_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/maintenance_db
+      INVENTORY_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/inventory_db
+      NOTIFICATION_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/notification_db
+
+  identity-service:
+    <<: *app
+    working_dir: /workspace/apps/identity-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3001'
+      IDENTITY_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/identity_db
+      IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'false'
+
+  organization-service:
+    <<: *app
+    working_dir: /workspace/apps/organization-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3006'
+      ORGANIZATION_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/organization_db
+
+  asset-service:
+    <<: *app
+    working_dir: /workspace/apps/asset-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3002'
+      ASSET_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/asset_db
+      ASSET_QR_PORTAL_BASE_URL: ${DEMO_PUBLIC_URL:?Set the web URL}/
+
+  service-request-service:
+    <<: *app
+    working_dir: /workspace/apps/service-request-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3007'
+      SERVICE_REQUEST_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/service_request_db
+
+  workorder-service:
+    <<: *app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      storage-init:
+        condition: service_completed_successfully
+    working_dir: /workspace/apps/workorder-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3004'
+      WORKORDER_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/workorder_db
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: '9000'
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?}
+      MINIO_BUCKET: ${MINIO_BUCKET:-pbl6-attachments}
+
+  maintenance-service:
+    <<: *app
+    working_dir: /workspace/apps/maintenance-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3003'
+      MAINTENANCE_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/maintenance_db
+
+  inventory-service:
+    <<: *app
+    working_dir: /workspace/apps/inventory-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3008'
+      HEALTH_PATH: /
+      INVENTORY_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/inventory_db
+
+  notification-service:
+    <<: *app
+    working_dir: /workspace/apps/notification-service
+    command: [node, dist/main.js]
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3005'
+      HEALTH_PATH: /
+      NOTIFICATION_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/notification_db
+
+  api-gateway:
+    <<: *app
+    working_dir: /workspace/apps/api-gateway
+    command: [node, dist/main.js]
+    ports:
+      - '${DEMO_GATEWAY_PORT:-3000}:3000'
+    environment:
+      <<: *app-env
+      HEALTH_PORT: '3000'
+      CORS_ORIGINS: ${DEMO_PUBLIC_URL:?}
+
+  web:
+    image: pbl6-web:local
+    restart: unless-stopped
+    ports:
+      - '${DEMO_WEB_PORT:-8080}:80'
+    depends_on: [api-gateway]
+    networks: [private]
+
+networks:
+  private:
+
+volumes:
+  postgres_data:
+  minio_data:

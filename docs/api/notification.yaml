@@ -23,7 +23,7 @@ info:
     notification-recipient-matrix.md.
 servers:
   - url: http://localhost:3005
-    description: Local service; Gateway already strips /api/notifications (M3 API path mapping needs owner review)
+    description: Local service; Gateway maps public /api/notifications to service /notifications
 security:
   - bearer: []
 tags:

@@ -94,6 +94,14 @@ flutter build apk --debug
 ```
 
 APK: `build/app/outputs/flutter-apk/app-debug.apk`.
+
+M3 baseline check on 01/11/2026: `dart analyze lib test` found no issues;
+`flutter test --no-pub` passed 102 tests with two opt-in backend suites skipped;
+`flutter build apk --debug --no-pub` produced an APK. Plain `flutter analyze`
+stopped before analysis because Windows Developer Mode is required for plugin
+symlinks on this machine. No Android device was connected for a live run, and
+the K8 attachment backend is not implemented yet, so these checks do not count
+as mobile file-upload acceptance.
 Để cài bản đã build lên thiết bị cụ thể:
 
 ```bash

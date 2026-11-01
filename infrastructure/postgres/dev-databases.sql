@@ -27,3 +27,5 @@ SELECT 'CREATE DATABASE asset_test_db' WHERE NOT EXISTS (SELECT FROM pg_database
 SELECT 'CREATE DATABASE service_request_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'service_request_test_db')\gexec
 SELECT 'CREATE DATABASE workorder_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'workorder_test_db')\gexec
 SELECT 'CREATE DATABASE maintenance_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'maintenance_test_db')\gexec
+SELECT 'CREATE DATABASE inventory_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'inventory_test_db')\gexec
+SELECT 'CREATE DATABASE notification_test_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'notification_test_db')\gexec
