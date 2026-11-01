@@ -6,7 +6,8 @@ M3-A1: Khương đã chốt attachment lifecycle/persistence và Q5 reporting co
 Review A1 đã được Khương xác nhận. A2/A3 đã triển khai staff attachment APIs,
 S3/MinIO adapter, policy và durable cleanup.
 [Bật runtime và kiểm thử A2/A3](../../docs/planning/m3-khuong-a2-a3.md).
-Internal SR projection (A4) và report aggregate (A5) vẫn chưa triển khai.
+A4 internal SR projection đã triển khai; [bàn giao cho Huy](../../docs/planning/m3-khuong-a4.md).
+Public SR composition thuộc Huy; report aggregate A5 chưa triển khai.
 
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
@@ -43,7 +44,8 @@ cho Web/Android và smoke `pnpm --filter workorder-service test:demo`.
 K8 có [OpenAPI attachment](../../docs/api/workorder-attachments.yaml) và
 [quy tắc upload/quyền/visibility](../../docs/api/workorder-attachments.md) cho M3.
 Contract M2 được hiện thực ở A2/A3 cho staff; xem implementation status từng
-operation trong YAML. CUSTOMER vẫn chỉ đi qua projection A4 chưa triển khai.
+operation trong YAML. CUSTOMER đọc file công bố qua SR composition sử dụng internal projection A4;
+không đọc staff WO/report API.
 
 Service đọc `.env` riêng rồi `.env` root; port `WORKORDER_SERVICE_PORT` mặc
 định 3004. Biến bắt buộc: `WORKORDER_DATABASE_URL`, JWT theo shared auth và
@@ -75,6 +77,8 @@ Gateway bỏ prefix `/api/workorders`, ví dụ
 | `PATCH /work-orders/{id}` | `work_order:manage` | Sửa trường cho phép ở WO chưa terminal; validate lịch sau khi ghép với giá trị cũ |
 | `GET /work-orders/{id}/history` | `work_order:read` | History cũ nhất trước, cùng scope đọc WO |
 | `GET /internal/work-orders/{id}` | `work_order:read` | Reference tối thiểu; Gateway chặn internal |
+| `GET /internal/service-request-attachments/{srId}` | `service_request:read` | A4: page metadata CUSTOMER đã verify theo tenant/customer hoặc staff assignment scope |
+| `GET /internal/service-request-attachments/{srId}/{attachmentId}/download` | `service_request:read` | A4: kiểm tra quan hệ SR/scope/visibility trước và sau storage signing; GET ticket no-store |
 
 Technician-only account chỉ đọc WO được hoặc từng được giao; `mine=true` chỉ
 lấy assignment hiện tại ASSIGNED/ACCEPTED. Nếu account có thêm role staff với

@@ -1,0 +1,78 @@
+{
+  "purpose": "M3-A4 contract examples for SR owner. Example IDs are not seed/demo fixtures; the reserved download URL is not usable and contains no real signature.",
+  "base": "WORKORDER_SERVICE_URL (direct service origin, never the Gateway)",
+  "headers": {
+    "Authorization": "Bearer <original-caller-token>",
+    "x-correlation-id": "a4-sr-composition"
+  },
+  "cases": [
+    {
+      "id": "published-list",
+      "method": "GET",
+      "path": "/internal/service-request-attachments/20000000-0000-4000-8000-000000000001?page=1&pageSize=20",
+      "status": 200,
+      "responseHeaders": { "Cache-Control": "no-store" },
+      "body": {
+        "items": [
+          { "id": "30000000-0000-4000-8000-000000000001", "fileName": "equipment-before.pdf", "mimeType": "application/pdf", "sizeBytes": 512, "createdAt": "2026-11-01T00:00:01.000Z" },
+          { "id": "30000000-0000-4000-8000-000000000002", "fileName": "service-result.png", "mimeType": "image/png", "sizeBytes": 2048, "createdAt": "2026-11-01T00:00:02.000Z" }
+        ],
+        "page": 1,
+        "pageSize": 20,
+        "total": 2
+      }
+    },
+    {
+      "id": "scoped-wo-no-published-files",
+      "method": "GET",
+      "path": "/internal/service-request-attachments/20000000-0000-4000-8000-000000000001",
+      "status": 200,
+      "body": { "items": [], "page": 1, "pageSize": 20, "total": 0 }
+    },
+    {
+      "id": "no-matching-scoped-wo",
+      "method": "GET",
+      "path": "/internal/service-request-attachments/20000000-0000-4000-8000-000000000003",
+      "status": 404,
+      "body": { "code": "WORK_ORDER_NOT_FOUND", "message": "Resource not found" },
+      "srHandling": "Only after authorizing the SR, this exact source list status/code may map to an empty page. Other 404 codes and download 404 must not be swallowed."
+    },
+    {
+      "id": "published-download",
+      "method": "GET",
+      "path": "/internal/service-request-attachments/20000000-0000-4000-8000-000000000001/30000000-0000-4000-8000-000000000002/download",
+      "status": 200,
+      "responseHeaders": { "Cache-Control": "no-store" },
+      "body": { "downloadUrl": "https://storage.example.invalid/temporary-ticket", "expiresAt": "2026-11-01T00:01:00.000Z" },
+      "srHandling": "Return no-store, never persist/cache/log this capability. Client uses storage GET without the API JWT."
+    },
+    {
+      "id": "hidden-deleted-unverified-wrong-sr-or-scope",
+      "method": "GET",
+      "path": "/internal/service-request-attachments/20000000-0000-4000-8000-000000000001/30000000-0000-4000-8000-000000000003/download",
+      "status": 404,
+      "body": { "code": "ATTACHMENT_NOT_FOUND", "message": "Resource not found" }
+    },
+    {
+      "id": "projection-db-unavailable",
+      "method": "GET",
+      "path": "/internal/service-request-attachments/20000000-0000-4000-8000-000000000001",
+      "status": 503,
+      "body": { "code": "ATTACHMENT_SOURCE_UNAVAILABLE", "message": "Published attachments are unavailable" },
+      "srHandling": "Section unavailable or propagated 503; never total=0 or a successful empty page."
+    },
+    {
+      "id": "storage-unavailable-or-object-missing",
+      "method": "GET",
+      "path": "/internal/service-request-attachments/20000000-0000-4000-8000-000000000001/30000000-0000-4000-8000-000000000002/download",
+      "status": 503,
+      "body": { "code": "ATTACHMENT_STORAGE_UNAVAILABLE", "message": "Attachment storage is unavailable" }
+    }
+  ],
+  "transportFailure": {
+    "kind": "connection-refused-or-timeout",
+    "sourceHttpResponse": null,
+    "sharedClientError": "UpstreamUnavailableError",
+    "srHandling": "Existing shared HTTP error mapping returns 503 UPSTREAM_UNAVAILABLE; never fabricate an empty page."
+  }
+}

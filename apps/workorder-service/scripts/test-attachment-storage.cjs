@@ -25,6 +25,7 @@ const result = spawnSync(
     '--runInBand',
     '--runTestsByPath',
     'test/db/attachment-flow.e2e-spec.ts',
+    'test/db/published-attachments.e2e-spec.ts',
   ],
   { env, stdio: 'inherit' },
 );
