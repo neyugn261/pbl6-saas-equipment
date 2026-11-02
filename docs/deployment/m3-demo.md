@@ -145,3 +145,6 @@ project is on D:; otherwise three plugin caches fail to relativize paths.
 The client retains upload keys within one session for a same-intent retry and
 does not send the API bearer token to MinIO. This does not count as Android
 device acceptance; `flutter devices` found no connected Android device.
+An available `Medium_Phone` emulator was started headlessly for this check,
+but ADB remained `offline` after boot and reconnect attempts. It was stopped;
+the APK was not installed or exercised on Android.
