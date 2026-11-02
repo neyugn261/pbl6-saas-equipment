@@ -29,6 +29,14 @@ isolated tests.
 - `GET /internal/service-requests/{id}` returns a scoped Service Request
   reference including its title and requires a tenant-staff access token and
   `service_request:read`.
+- Public result attachments are composed by Service Request after it
+  authorizes the request. `GET /service-requests/{id}/result/attachments`
+  returns only the customer-safe metadata projection; the corresponding
+  `.../{attachmentId}/download` route requests a fresh, short-lived URL.
+  Both calls forward the original token and correlation id to Work Order.
+  A missing related Work Order maps to an empty list; source/storage outages
+  remain 503 and are never represented as an empty page. Download responses
+  use `Cache-Control: no-store`.
 - Request number allocation, status history and `ServiceRequestCreated` /
   `ServiceRequestStatusChanged` outbox writes share database transactions.
   `OutboxRelay` publishes them to RabbitMQ when `RABBITMQ_URL` is configured.
@@ -64,8 +72,9 @@ isolated tests.
 - Errors follow `{code, message, details?}`; logs are JSON lines with the
   correlation id.
 
-Set `ASSET_SERVICE_URL` to the Asset Service base URL. It is validated at
-startup and is already listed in the root `.env.example`.
+Set `ASSET_SERVICE_URL` and `WORKORDER_SERVICE_URL` to the respective service
+base URLs. Both are validated at startup and are already listed in the root
+`.env.example`.
 For local runs without RabbitMQ, leave `RABBITMQ_URL` empty; events are retained
 in the outbox until the relay is enabled, and Work Order events are not consumed.
 Production requires the broker URL.
@@ -125,3 +134,11 @@ Test DB verification: confirm `SERVICE_REQUEST_TEST_DATABASE_URL` names a
 database containing `test` before running `pnpm --filter service-request-service
 test:e2e:db`; its setup applies migrations only to that URL. The separate P0
 diagnostic uses `--testRegex=work-order-ordering.repro.ts`.
+
+## Kiểm thử M3 Huy
+
+Bằng chứng kiểm thử, các lỗi C4 đã sửa và giới hạn DB/integration của lượt
+01/11/2026: [M3-HUY-TEST-EVIDENCE.md](M3-HUY-TEST-EVIDENCE.md).
+
+Lượt tiếp tục: [M3-HUY-CONTINUATION.md](M3-HUY-CONTINUATION.md) — C4 DB E2E,
+timeout HTTP thật, expiry validation và regression PostgreSQL/P0/drift.

@@ -458,6 +458,13 @@ export class ServiceRequestsService {
     };
   }
 
+  async authorizeResultAttachments(
+    principal: Principal,
+    requestId: string,
+  ): Promise<void> {
+    await this.findRequest(principal, requestId);
+  }
+
   async listEstimates(principal: Principal, requestId: string) {
     const request = await this.findRequest(principal, requestId);
     await this.expireEstimateIfDue(principal, request.id);

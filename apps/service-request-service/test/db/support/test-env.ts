@@ -13,6 +13,7 @@ export function applyTestEnv(): void {
     NODE_ENV: 'test',
     SERVICE_REQUEST_DATABASE_URL: testDatabaseUrl(),
     ASSET_SERVICE_URL: 'http://localhost:1',
+    WORKORDER_SERVICE_URL: 'http://localhost:1',
     RABBITMQ_URL: '',
   });
 }

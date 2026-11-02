@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: PBL6 Notification Service
-  version: 0.1.0-draft
+  version: 0.2.0-review
   description: |
-    M3-preparation draft only. This contract does not mean Notification Service,
-    email delivery, event consumers or a recipient directory are implemented.
+    Notification API implementation is in progress. This contract does not mean
+    the additive Notification migration or recipient event producers are merged.
     Conventions: docs/api/conventions.md; event versions and payloads:
     docs/architecture/events.md; authorization: ADR 0003, ADR 0004 and the
     shared permission catalog.
@@ -16,11 +16,10 @@ info:
     from allowlisted fields or templates, never copied from internal comments,
     technician notes or unrestricted event text.
 
-    Recipient resolution remains an open dependency: Identity has an internal
-    tenant user listing filtered by role/userType/status, but notification
-    consumers have no agreed machine identity for calling it, and that API
-    cannot list CUSTOMER users for a customer by customerId. See
-    notification-recipient-matrix.md.
+    Identity recipient snapshots are the approved local projection contract.
+    The API fails closed when the caller's current account/membership projection
+    is missing, inactive, or inconsistent with the verified principal. See
+    notification-recipient-matrix.md and the M3 Huy Q3 review.
 servers:
   - url: http://localhost:3005
     description: Local service; Gateway maps public /api/notifications to service /notifications
