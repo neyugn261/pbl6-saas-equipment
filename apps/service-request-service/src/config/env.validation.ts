@@ -6,6 +6,7 @@ export interface AppEnv extends JwtEnv {
   PORT: number;
   SERVICE_REQUEST_DATABASE_URL: string;
   ASSET_SERVICE_URL: string;
+  WORKORDER_SERVICE_URL: string;
   RABBITMQ_URL?: string;
 }
 
@@ -30,6 +31,10 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
       'SERVICE_REQUEST_DATABASE_URL',
     ),
     ASSET_SERVICE_URL: env.url('ASSET_SERVICE_URL', ['http:', 'https:']),
+    WORKORDER_SERVICE_URL: env.url('WORKORDER_SERVICE_URL', [
+      'http:',
+      'https:',
+    ]),
     ...(rabbitMqUrl ? { RABBITMQ_URL: rabbitMqUrl } : {}),
     ...readJwtEnv(env),
   });

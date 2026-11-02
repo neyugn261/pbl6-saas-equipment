@@ -23,6 +23,19 @@
 
 ## Description
 
+M3 status: authenticated list, unread-count, and mark-read APIs are implemented.
+Reads fail closed unless the verified principal matches the local Identity
+recipient snapshot. Migrations `0002` and `0003` have been applied and drift
+checked only on the isolated `notification_test_db`. The consumer binds only
+business event versions already present in the shared catalog; fan-out remains
+pending until recipient and Service Request projections exist. Snapshot and
+bootstrap handlers are implemented but have no broker binding because their
+shared event definitions and Identity producer are not in the catalog.
+
+See the [implementation readiness and verification](M3-INDEPENDENT-READINESS.md),
+[Q3 contract review](M3-HUY-Q3-REVIEW.md), and
+[Notification API contract](../../docs/api/notification.yaml).
+
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
 ## Project setup
@@ -52,6 +65,11 @@ $ pnpm run test
 
 # e2e tests
 $ pnpm run test:e2e
+
+# PostgreSQL integration tests require NOTIFICATION_TEST_DATABASE_URL
+# targeting notification_test_db. Set RABBITMQ_TEST_URL to enable the real
+# broker delivery/redelivery test against a dedicated test broker.
+$ pnpm run test:e2e:db
 
 # test coverage
 $ pnpm run test:cov

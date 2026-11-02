@@ -17,6 +17,8 @@ info:
     does not snapshot its warranty; `review` starts review and records the
     warranty snapshot atomically. Customer-visible resolution summaries are
     populated from `WorkOrderCompleted.v2`.
+    Result attachment routes authorize the Service Request before forwarding
+    the caller token to Work Order's customer-safe internal projection.
     Direct service paths below are implemented. The current Gateway maps
     `/api/service-requests/{id}` to `/service-requests/{id}`; do not repeat
     `/service-requests` in the suffix. Gateway routing for `/estimates/*`
@@ -191,6 +193,63 @@ paths:
                   type: array,
                   items: { $ref: "#/components/schemas/HistoryEntry" },
                 }
+  /service-requests/{requestId}/result/attachments:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Requests]
+      summary: List published result files for an authorized Service Request
+      description: |
+        Only CUSTOMER-visible, verified, non-deleted files are returned.
+        Work Order's WORK_ORDER_NOT_FOUND is mapped to an empty page only after
+        Service Request authorization; other upstream errors are not converted
+        to an empty result.
+      x-permissions: [service_request:read]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Published attachment metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublishedAttachmentsPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/UpstreamError" }
+        "503": { $ref: "#/components/responses/UpstreamUnavailable" }
+  /service-requests/{requestId}/result/attachments/{attachmentId}/download:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+      - name: attachmentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Requests]
+      summary: Get a short-lived URL for a published result file
+      description: |
+        Reauthorizes the Service Request, then asks Work Order to recheck file
+        relation, visibility, deletion and storage before signing. The URL is
+        not persisted or logged. Responses are Cache-Control: no-store.
+      x-permissions: [service_request:read]
+      responses:
+        "200":
+          description: Short-lived download capability
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AttachmentDownloadTicket" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/UpstreamError" }
+        "503": { $ref: "#/components/responses/UpstreamUnavailable" }
   /service-requests/{requestId}/review:
     parameters: [{ $ref: "#/components/parameters/RequestId" }]
     post:
@@ -508,6 +567,31 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Invalid access token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Required permission or customer scope is missing
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UpstreamError:
+      description: Work Order returned an unexpected error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UpstreamUnavailable:
+      description: Work Order or its storage is unavailable
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
     InvalidTransition:
       description: INVALID_STATE_TRANSITION (details.from, details.action)
       content:
@@ -528,6 +612,31 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
+    PublishedAttachment:
+      type: object
+      required: [id, fileName, mimeType, sizeBytes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string }
+        mimeType:
+          { type: string, enum: [image/jpeg, image/png, application/pdf] }
+        sizeBytes: { type: integer, minimum: 1, maximum: 10485760 }
+        createdAt: { type: string, format: date-time }
+    PublishedAttachmentsPage:
+      allOf:
+        - $ref: "#/components/schemas/PageMeta"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/PublishedAttachment" }
+    AttachmentDownloadTicket:
+      type: object
+      required: [downloadUrl, expiresAt]
+      properties:
+        downloadUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
     Status:
       type: string
       enum:

@@ -109,6 +109,25 @@ describe('ServiceRequestsService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('hides another customer request before result-attachment composition', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const prisma = {
+      serviceRequest: { findFirst },
+    } as unknown as PrismaService;
+    const service = new ServiceRequestsService(prisma, new FakeAssetClient());
+
+    await expect(
+      service.authorizeResultAttachments(principal('CUSTOMER'), REQUEST_ID),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        id: REQUEST_ID,
+        tenantId: TENANT_ID,
+        customerId: CUSTOMER_ID,
+      },
+    });
+  });
+
   it('derives the staff customer from equipment and defers warranty snapshot until review', async () => {
     const row = serviceRequest({ requestNo: 'SR-2026-0007' });
     const tx = {

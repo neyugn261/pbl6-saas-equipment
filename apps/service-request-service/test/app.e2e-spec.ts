@@ -73,6 +73,15 @@ describe('service-request-service bootstrap (e2e)', () => {
     expect(res.body.code).toBe('INVALID_ACCESS_TOKEN');
   });
 
+  it('requires authentication for public result attachment routes', async () => {
+    const res = await request(app.getHttpServer())
+      .get(
+        '/service-requests/00000000-0000-4000-8000-000000002001/result/attachments',
+      )
+      .expect(401);
+    expect(res.body.code).toBe('INVALID_ACCESS_TOKEN');
+  });
+
   it('does not expose the removed start-review action', async () => {
     const token = signTestAccessToken({
       role: 'SERVICE_MANAGER',
