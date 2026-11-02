@@ -127,6 +127,7 @@ model WorkOrder {
   workLogs          WorkLog[]
   attachments       WorkOrderAttachment[]
   attachmentUploads AttachmentUploadIntent[]
+  inventoryReservations WorkOrderInventoryReservation[]
   /// At most one row: service_reports.work_order_id is UNIQUE in SQL. Modelled
   /// as a list because the composite FK (tenant_id, work_order_id) is not itself
   /// unique, which Prisma requires for a 1:1 relation.
@@ -391,4 +392,27 @@ model ProcessedEvent {
 
   @@id([eventId, consumer])
   @@map("processed_events")
+}
+
+/// ADR 0014 / 0016. Logical references to Inventory, never a cross-DB FK.
+/// No automatic expiry. COMMITTED/RELEASED are immutable terminal outcomes.
+model WorkOrderInventoryReservation {
+  tenantId           String    @map("tenant_id") @db.Uuid
+  requestId          String    @map("request_id") @db.Uuid
+  workOrderId        String    @map("work_order_id") @db.Uuid
+  fingerprint        String    @db.Char(64)
+  actorId            String    @map("actor_id") @db.Uuid
+  inventoryRequest   Json      @map("inventory_request")
+  state              String    @db.VarChar(20)
+  inventoryUsageId   String?   @map("inventory_usage_id") @db.Uuid
+  stockTransactionId String?   @map("stock_transaction_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  settledAt          DateTime? @map("settled_at") @db.Timestamptz(6)
+  workOrder          WorkOrder @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "fk_wo_inventory_reservation_order")
+
+  @@id([tenantId, requestId])
+  @@unique([tenantId, inventoryUsageId], map: "uq_wo_inventory_reservation_usage")
+  @@unique([tenantId, stockTransactionId], map: "uq_wo_inventory_reservation_transaction")
+  @@index([tenantId, workOrderId, state], map: "idx_wo_inventory_reservation_held")
+  @@map("work_order_inventory_reservations")
 }

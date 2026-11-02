@@ -30,6 +30,15 @@ inventory/backfill decision are required before business DB deployment. A1
 does not implement upload routes, storage access or workers. CHECK constraints
 for phase/target/lease/metadata and existing partial indexes remain raw SQL.
 
+## Inventory reservations
+
+`0006_inventory_reservations` adds local WO holds/tombstones under ADR 0016.
+The only FK is tenant+WO to work_orders; Inventory usage/transaction IDs are
+logical references. CHECK constraints enforce hash/request shape and phase
+metadata; tenant+request identity and committed usage/ledger IDs are unique.
+No expiry/backfill/reset. Apply before using the reservation APIs; it does not
+change or delete existing rows. Shared/schema peer review remains required.
+
 ## Commands (run in `apps/workorder-service`)
 
 ```bash
