@@ -5,6 +5,10 @@ info:
   description: |
     M1/M2 local contract for review — owner: Minh. ADR 0010 dossier and filtered
     history endpoints are specified in equipment-dossier.yaml (same service).
+    ADR 0015 adds /equipment/{equipmentId}/service-parts and the serviceParts dossier
+    Section; see inventory-accountability.yaml for the projection schema. Asset
+    validates local equipment scope first, forwards the caller JWT and allowlists
+    customer fields. A dependency outage is UNAVAILABLE, not an empty history.
     ADR 0012 initial service setup endpoints are in equipment-registration.yaml.
     Conventions: docs/api/conventions.md. Every operation below requires a
     bearer access token. The tenant and, for CUSTOMER accounts, customer scope

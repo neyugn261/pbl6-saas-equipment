@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-11-02T10:21:32.934Z",
+  "producer": "inventory-service",
+  "database": "inventory_test_db",
+  "transport": "real RabbitMQ with retry and explicit replay",
+  "events": [
+    {
+      "eventId": "d59a4535-29ae-423d-b2dd-442952754331",
+      "eventType": "LowStockDetected",
+      "eventVersion": 1,
+      "producer": "inventory-service",
+      "tenantId": "836a359e-a3bf-4618-be14-2183d413a884",
+      "aggregateType": "Stock",
+      "aggregateId": "da8edeea-4be7-4d72-93e8-ac8df0fb4435",
+      "occurredAt": "2026-11-02T10:21:32.718Z",
+      "correlationId": null,
+      "payload": {
+        "partId": "d1840bd5-b2f9-4b92-a7cc-af7e3f91793d",
+        "partSku": "BROKER-PROBE",
+        "stockId": "da8edeea-4be7-4d72-93e8-ac8df0fb4435",
+        "quantity": "4.99",
+        "minQuantity": "5.00",
+        "warehouseId": "d0da1d2c-64b6-42aa-91a4-bf54c516f042"
+      }
+    },
+    {
+      "eventId": "7c1fb1c3-cc88-40aa-999e-b855a8825d31",
+      "eventType": "LowStockDetected",
+      "eventVersion": 1,
+      "producer": "inventory-service",
+      "tenantId": "836a359e-a3bf-4618-be14-2183d413a884",
+      "aggregateType": "Stock",
+      "aggregateId": "da8edeea-4be7-4d72-93e8-ac8df0fb4435",
+      "occurredAt": "2026-11-02T10:21:32.645Z",
+      "correlationId": null,
+      "payload": {
+        "partId": "d1840bd5-b2f9-4b92-a7cc-af7e3f91793d",
+        "partSku": "BROKER-PROBE",
+        "stockId": "da8edeea-4be7-4d72-93e8-ac8df0fb4435",
+        "quantity": "4.00",
+        "minQuantity": "5.00",
+        "warehouseId": "d0da1d2c-64b6-42aa-91a4-bf54c516f042"
+      }
+    }
+  ],
+  "deliveryCount": 4,
+  "notificationConsumer": "NOT_RUN: owned by Huy",
+  "gatewayAndUI": "NOT_RUN: owned by Nguyen/Hatsady"
+}

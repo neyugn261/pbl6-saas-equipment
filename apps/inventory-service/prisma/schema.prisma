@@ -23,6 +23,7 @@ model Part {
   sku               String             @db.VarChar(100)
   name              String             @db.VarChar(200)
   unit              String             @db.VarChar(30)
+  allowFractional   Boolean            @default(false) @map("allow_fractional")
   description       String?
   status            String             @default("ACTIVE") @db.VarChar(30)
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -63,16 +64,17 @@ model Warehouse {
 /// is set when an alert event is written and cleared on replenishment.
 /// quantity and min_quantity are >= 0 (CHECK in SQL).
 model Stock {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String    @map("tenant_id") @db.Uuid
-  warehouseId       String    @map("warehouse_id") @db.Uuid
-  partId            String    @map("part_id") @db.Uuid
-  quantity          Decimal   @default(0) @db.Decimal(12, 2)
-  minQuantity       Decimal   @default(0) @map("min_quantity") @db.Decimal(12, 2)
-  lowStockAlertedAt DateTime? @map("low_stock_alerted_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  warehouse         Warehouse @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  part              Part      @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  warehouseId         String    @map("warehouse_id") @db.Uuid
+  partId              String    @map("part_id") @db.Uuid
+  quantity            Decimal   @default(0) @db.Decimal(12, 2)
+  quantityQuarantined Decimal   @default(0) @map("quantity_quarantined") @db.Decimal(12, 2)
+  minQuantity         Decimal   @default(0) @map("min_quantity") @db.Decimal(12, 2)
+  lowStockAlertedAt   DateTime? @map("low_stock_alerted_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  warehouse           Warehouse @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  part                Part      @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([warehouseId, partId])
   @@index([tenantId, partId, warehouseId], map: "idx_stocks_part_warehouse")
@@ -83,55 +85,139 @@ model Stock {
 ///   IN : RECEIVE, RETURN, ADJUST_IN    OUT: ISSUE, ADJUST_OUT
 /// The matching stocks.quantity change happens in the same transaction.
 model StockTransaction {
-  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String          @map("tenant_id") @db.Uuid
-  warehouseId    String          @map("warehouse_id") @db.Uuid
-  partId         String          @map("part_id") @db.Uuid
-  type           String          @db.VarChar(20)
-  quantity       Decimal         @db.Decimal(12, 2)
-  referenceType  String?         @map("reference_type") @db.VarChar(30)
-  referenceId    String?         @map("reference_id") @db.Uuid
-  note           String?
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String          @map("tenant_id") @db.Uuid
+  warehouseId          String          @map("warehouse_id") @db.Uuid
+  partId               String          @map("part_id") @db.Uuid
+  type                 String          @db.VarChar(20)
+  quantity             Decimal         @db.Decimal(12, 2)
+  referenceType        String?         @map("reference_type") @db.VarChar(30)
+  referenceId          String?         @map("reference_id") @db.Uuid
+  note                 String?
+  reasonCode           String?         @map("reason_code") @db.VarChar(40)
+  documentReference    String?         @map("document_reference") @db.VarChar(150)
+  relatedTransactionId String?         @map("related_transaction_id") @db.Uuid
+  returnCondition      String?         @map("return_condition") @db.VarChar(30)
+  partSnapshot         Json?           @map("part_snapshot")
+  warehouseSnapshot    Json?           @map("warehouse_snapshot")
+  quarantineBefore     Decimal?        @map("quarantine_before") @db.Decimal(12, 2)
+  quarantineAfter      Decimal?        @map("quarantine_after") @db.Decimal(12, 2)
   /// Logical reference to identity_db.users.id
-  createdBy      String?         @map("created_by") @db.Uuid
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  warehouse      Warehouse       @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  part           Part            @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  createdBy            String?         @map("created_by") @db.Uuid
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  balanceBefore        Decimal?        @map("balance_before") @db.Decimal(12, 2)
+  balanceAfter         Decimal?        @map("balance_after") @db.Decimal(12, 2)
+  workOrderPartId      String?         @map("work_order_part_id") @db.Uuid
+  returnedUsage        WorkOrderPart?  @relation("UsageReturns", fields: [tenantId, workOrderPartId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "stock_transactions_return_usage_fk")
+  warehouse            Warehouse       @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  part                 Part            @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   /// At most one row: work_order_parts.stock_transaction_id is UNIQUE in SQL.
   /// Modelled as a list because the composite FK is not itself unique.
-  workOrderParts WorkOrderPart[]
+  workOrderParts       WorkOrderPart[] @relation("UsageIssue")
 
   @@unique([tenantId, id])
   @@index([tenantId, partId, createdAt(sort: Desc)], map: "idx_stock_transactions_part_time")
   @@index([tenantId, warehouseId, createdAt(sort: Desc)], map: "idx_stock_transactions_warehouse_time")
   @@index([referenceType, referenceId], map: "idx_stock_transactions_reference")
+  @@index([tenantId, workOrderPartId], map: "idx_stock_transactions_usage")
   @@map("stock_transactions")
 }
 
 /// Parts issued for a Work Order; each row is backed by exactly one ISSUE
 /// stock transaction.
 model WorkOrderPart {
-  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String           @map("tenant_id") @db.Uuid
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String              @map("tenant_id") @db.Uuid
   /// Logical reference to workorder_db.work_orders.id
-  workOrderId        String           @map("work_order_id") @db.Uuid
-  partId             String           @map("part_id") @db.Uuid
-  warehouseId        String           @map("warehouse_id") @db.Uuid
-  stockTransactionId String           @unique @map("stock_transaction_id") @db.Uuid
-  /// Issued quantity; consumed = quantityUsed - quantityReturned (ADR 0006).
-  quantityUsed       Decimal          @map("quantity_used") @db.Decimal(12, 2)
-  quantityReturned   Decimal          @default(0) @map("quantity_returned") @db.Decimal(12, 2)
-  unitCost           Decimal?         @map("unit_cost") @db.Decimal(14, 2)
+  workOrderId           String              @map("work_order_id") @db.Uuid
+  partId                String              @map("part_id") @db.Uuid
+  warehouseId           String              @map("warehouse_id") @db.Uuid
+  stockTransactionId    String              @unique @map("stock_transaction_id") @db.Uuid
+  /// Legacy column name: ISSUED quantity. Confirmed use is separate (ADR 0015).
+  quantityUsed          Decimal             @map("quantity_used") @db.Decimal(12, 2)
+  quantityReturned      Decimal             @default(0) @map("quantity_returned") @db.Decimal(12, 2)
+  unitCost              Decimal?            @map("unit_cost") @db.Decimal(14, 2)
+  unitCostCurrency      String?             @map("unit_cost_currency") @db.Char(3)
   /// Logical reference to identity_db.users.id
-  recordedBy         String           @map("recorded_by") @db.Uuid
-  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  part               Part             @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  warehouse          Warehouse        @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  stockTransaction   StockTransaction @relation(fields: [tenantId, stockTransactionId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  recordedBy            String              @map("recorded_by") @db.Uuid
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  part                  Part                @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  warehouse             Warehouse           @relation(fields: [tenantId, warehouseId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  stockTransaction      StockTransaction    @relation("UsageIssue", fields: [tenantId, stockTransactionId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  returns               StockTransaction[]  @relation("UsageReturns")
+  quantityConfirmedUsed Decimal             @default(0) @map("quantity_confirmed_used") @db.Decimal(12, 2)
+  partSnapshot          Json?               @map("part_snapshot")
+  warehouseSnapshot     Json?               @map("warehouse_snapshot")
+  confirmations         UsageConfirmation[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, workOrderId], map: "idx_work_order_parts_work_order")
   @@index([tenantId, partId, createdAt(sort: Desc)], map: "idx_work_order_parts_part")
   @@map("work_order_parts")
+}
+
+/// Append-only confirmation/reversal history. No raw customer financial claims.
+model UsageConfirmation {
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String        @map("tenant_id") @db.Uuid
+  workOrderPartId        String        @map("work_order_part_id") @db.Uuid
+  workOrderId            String        @map("work_order_id") @db.Uuid
+  equipmentId            String        @map("equipment_id") @db.Uuid
+  customerId             String        @map("customer_id") @db.Uuid
+  serviceReportId        String        @map("service_report_id") @db.Uuid
+  workOrderNo            String        @map("work_order_no") @db.VarChar(100)
+  kind                   String        @db.VarChar(20)
+  quantity               Decimal       @db.Decimal(12, 2)
+  reversesId             String?       @unique @map("reverses_id") @db.Uuid
+  customerReason         String        @map("customer_reason") @db.VarChar(2000)
+  removedPartDisposition String        @map("removed_part_disposition") @db.VarChar(40)
+  removedPartNote        String?       @map("removed_part_note") @db.VarChar(2000)
+  note                   String?
+  actorId                String        @map("actor_id") @db.Uuid
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  usage                  WorkOrderPart @relation(fields: [tenantId, workOrderPartId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, equipmentId, customerId, createdAt], map: "idx_usage_confirmations_equipment")
+  @@map("usage_confirmations")
+}
+
+model InventoryAudit {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  entityType String   @map("entity_type") @db.VarChar(30)
+  entityId   String   @map("entity_id") @db.Uuid
+  action     String   @db.VarChar(30)
+  actorId    String   @map("actor_id") @db.Uuid
+  before     Json?
+  after      Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, entityType, entityId, createdAt], map: "idx_inventory_audit_entity")
+  @@map("inventory_audit")
+}
+
+/// Durable idempotency and Inventory half of the WO reservation protocol.
+/// No bearer token is stored. An unresolved ISSUE must be retried with a current
+/// authorized caller; it never expires automatically or releases on a timer.
+model InventoryOperation {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String    @map("tenant_id") @db.Uuid
+  key                  String    @db.Uuid
+  operation            String    @db.VarChar(20)
+  fingerprint          String    @db.VarChar(64)
+  request              Json
+  actorId              String    @map("actor_id") @db.Uuid
+  workOrderId          String?   @map("work_order_id") @db.Uuid
+  state                String    @default("PENDING") @db.VarChar(20)
+  response             Json?
+  httpStatus           Int?      @map("http_status")
+  reservationSettledAt DateTime? @map("reservation_settled_at") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, key])
+  @@index([tenantId, state, createdAt], map: "idx_inventory_operations_recovery")
+  @@map("inventory_operations")
 }
 
 /// Transactional outbox; id is the event id sent to consumers.

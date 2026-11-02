@@ -1278,6 +1278,47 @@ CREATE TABLE outbox_events (
 CREATE INDEX idx_outbox_events_pending ON outbox_events (available_at) WHERE status = 'PENDING';
 
 -- ============================================================================
+-- Inventory M3 additive runtime (ADR 0014 / inventory_db migration 0003).
+-- Additive runtime records. Keep 0001/0002, their checks and partial indexes.
+CREATE TABLE inventory_operations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  key UUID NOT NULL,
+  operation VARCHAR(20) NOT NULL CHECK (operation IN ('RECEIVE','ADJUST','ISSUE','RETURN')),
+  fingerprint VARCHAR(64) NOT NULL CHECK (fingerprint ~ '^[0-9a-f]{64}$'),
+  request JSONB NOT NULL,
+  actor_id UUID NOT NULL,
+  work_order_id UUID,
+  state VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING','COMMITTED','ABORTED')),
+  response JSONB,
+  http_status INTEGER,
+  reservation_settled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, key),
+  CHECK ((operation = 'ISSUE') = (work_order_id IS NOT NULL)),
+  CHECK ((state = 'PENDING' AND response IS NULL AND http_status IS NULL AND reservation_settled_at IS NULL)
+      OR (state = 'COMMITTED' AND response IS NOT NULL AND http_status BETWEEN 200 AND 299)
+      OR (state = 'ABORTED' AND operation = 'ISSUE' AND response IS NOT NULL AND http_status BETWEEN 400 AND 499)),
+  CHECK (reservation_settled_at IS NULL OR (operation = 'ISSUE' AND state <> 'PENDING'))
+);
+CREATE INDEX idx_inventory_operations_recovery ON inventory_operations(tenant_id,state,created_at);
+
+ALTER TABLE work_order_parts ADD CONSTRAINT work_order_parts_tenant_id_id_key UNIQUE(tenant_id,id);
+ALTER TABLE stock_transactions
+  ADD COLUMN balance_before NUMERIC(12,2),
+  ADD COLUMN balance_after NUMERIC(12,2),
+  ADD COLUMN work_order_part_id UUID,
+  ADD CONSTRAINT stock_transactions_return_usage_fk FOREIGN KEY(tenant_id,work_order_part_id)
+    REFERENCES work_order_parts(tenant_id,id) ON DELETE RESTRICT ON UPDATE NO ACTION,
+  ADD CONSTRAINT stock_transactions_balances CHECK (
+    (balance_before IS NULL AND balance_after IS NULL) OR
+    (balance_before IS NOT NULL AND balance_after IS NOT NULL AND balance_before >= 0 AND balance_after >= 0
+      AND balance_after = balance_before + CASE WHEN type IN ('RECEIVE','RETURN','ADJUST_IN') THEN quantity ELSE -quantity END)),
+  ADD CONSTRAINT stock_transactions_usage_type CHECK (work_order_part_id IS NULL OR type = 'RETURN');
+CREATE INDEX idx_stock_transactions_usage ON stock_transactions(tenant_id,work_order_part_id);
+
+-- ============================================================================
 -- 8. notification_db  (Notification Service)
 -- ============================================================================
 \connect notification_db
@@ -1620,3 +1661,95 @@ ALTER TABLE attachment_cleanup_jobs
    (status = 'PENDING' AND claim_id IS NULL AND lease_expires_at IS NULL AND completed_at IS NULL)
    OR (status = 'CLAIMED' AND claim_id IS NOT NULL AND lease_expires_at IS NOT NULL AND completed_at IS NULL)
    OR (status = 'DONE' AND claim_id IS NULL AND lease_expires_at IS NULL AND completed_at IS NOT NULL));
+
+
+-- Inventory M3 accountability additive migration: 0004_inventory_accountability
+\connect inventory_db
+
+-- Preserve pre-existing fractional catalog; new parts require explicit opt-in.
+ALTER TABLE parts ADD COLUMN allow_fractional BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE parts ALTER COLUMN allow_fractional SET DEFAULT false;
+ALTER TABLE stocks ADD COLUMN quantity_quarantined NUMERIC(12,2) NOT NULL DEFAULT 0
+  CHECK (quantity_quarantined >= 0);
+ALTER TABLE work_order_parts
+  ADD COLUMN quantity_confirmed_used NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ADD COLUMN part_snapshot JSONB,
+  ADD COLUMN warehouse_snapshot JSONB,
+  ADD CONSTRAINT usage_reconciliation CHECK (quantity_confirmed_used >= 0
+    AND quantity_confirmed_used + quantity_returned <= quantity_used);
+
+ALTER TABLE stock_transactions
+  ADD COLUMN reason_code VARCHAR(40),
+  ADD COLUMN document_reference VARCHAR(150),
+  ADD COLUMN related_transaction_id UUID,
+  ADD COLUMN return_condition VARCHAR(30) CHECK (return_condition IN ('GOOD','DAMAGED','PENDING_INSPECTION')),
+  ADD COLUMN part_snapshot JSONB,
+  ADD COLUMN warehouse_snapshot JSONB,
+  ADD COLUMN quarantine_before NUMERIC(12,2),
+  ADD COLUMN quarantine_after NUMERIC(12,2);
+ALTER TABLE stock_transactions DROP CONSTRAINT stock_transactions_type_check;
+ALTER TABLE stock_transactions ADD CONSTRAINT stock_transactions_type_check
+  CHECK (type IN ('RECEIVE','ISSUE','RETURN','ADJUST_IN','ADJUST_OUT','RELEASE','SCRAP'));
+ALTER TABLE stock_transactions DROP CONSTRAINT stock_transactions_balances;
+ALTER TABLE stock_transactions ADD CONSTRAINT stock_transactions_balances CHECK (
+  (balance_before IS NULL AND balance_after IS NULL) OR
+  (balance_before IS NOT NULL AND balance_after IS NOT NULL AND balance_before >= 0 AND balance_after >= 0
+    AND balance_after = balance_before + CASE
+      WHEN type IN ('RECEIVE','ADJUST_IN','RELEASE') OR (type = 'RETURN' AND COALESCE(return_condition,'GOOD') = 'GOOD') THEN quantity
+      WHEN type IN ('ISSUE','ADJUST_OUT') THEN -quantity ELSE 0 END));
+ALTER TABLE stock_transactions ADD CONSTRAINT stock_transactions_quarantine_balances CHECK (
+  (quarantine_before IS NULL AND quarantine_after IS NULL) OR
+  (quarantine_before IS NOT NULL AND quarantine_after IS NOT NULL AND quarantine_before >= 0 AND quarantine_after >= 0
+    AND quarantine_after = quarantine_before + CASE
+      WHEN type = 'RETURN' AND return_condition IN ('DAMAGED','PENDING_INSPECTION') THEN quantity
+      WHEN type IN ('RELEASE','SCRAP') THEN -quantity ELSE 0 END));
+
+ALTER TABLE inventory_operations DROP CONSTRAINT inventory_operations_operation_check;
+ALTER TABLE inventory_operations ADD CONSTRAINT inventory_operations_operation_check
+  CHECK (operation IN ('RECEIVE','ADJUST','ISSUE','RETURN','INSPECT','CONFIRM_USE','REVERSE_USE'));
+
+CREATE TABLE usage_confirmations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  work_order_part_id UUID NOT NULL,
+  work_order_id UUID NOT NULL,
+  equipment_id UUID NOT NULL,
+  customer_id UUID NOT NULL,
+  service_report_id UUID NOT NULL,
+  work_order_no VARCHAR(100) NOT NULL,
+  kind VARCHAR(20) NOT NULL CHECK (kind IN ('CONFIRM','REVERSE')),
+  quantity NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
+  reverses_id UUID UNIQUE,
+  customer_reason VARCHAR(2000) NOT NULL,
+  removed_part_disposition VARCHAR(40) NOT NULL,
+  removed_part_note VARCHAR(2000),
+  note TEXT,
+  actor_id UUID NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT usage_confirmations_tenant_id_work_order_part_id_fkey
+    FOREIGN KEY(tenant_id,work_order_part_id) REFERENCES work_order_parts(tenant_id,id) ON DELETE RESTRICT ON UPDATE NO ACTION,
+  CHECK ((kind = 'REVERSE') = (reverses_id IS NOT NULL)),
+  CHECK (removed_part_disposition IN ('NOT_APPLICABLE','RETURNED_TO_CUSTOMER','RETAINED_FOR_REVIEW','DISPOSED_WITH_CONSENT'))
+);
+CREATE INDEX idx_usage_confirmations_equipment ON usage_confirmations(tenant_id,equipment_id,customer_id,created_at);
+CREATE TABLE inventory_audit (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  entity_type VARCHAR(30) NOT NULL,
+  entity_id UUID NOT NULL,
+  action VARCHAR(30) NOT NULL,
+  actor_id UUID NOT NULL,
+  before JSONB,
+  after JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_inventory_audit_entity ON inventory_audit(tenant_id,entity_type,entity_id,created_at);
+
+
+-- Inventory M3 accountability additive migration: 0005_internal_cost_currency
+\connect inventory_db
+
+-- Legacy reference costs retain an explicitly unknown currency.
+ALTER TABLE work_order_parts ADD COLUMN unit_cost_currency CHAR(3),
+  ADD CONSTRAINT work_order_parts_cost_currency CHECK
+    (unit_cost_currency IS NULL OR (unit_cost IS NOT NULL AND unit_cost_currency ~ '^[A-Z]{3}$'));

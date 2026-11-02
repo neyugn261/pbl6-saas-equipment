@@ -42,7 +42,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - name: Bootstrap e2e (no database)
-        run: pnpm --filter organization-service --filter asset-service --filter service-request-service --filter maintenance-service --filter workorder-service test:e2e
+        run: pnpm --filter organization-service --filter asset-service --filter service-request-service --filter maintenance-service --filter inventory-service --filter workorder-service test:e2e
       - name: API Gateway e2e tests
         working-directory: apps/api-gateway
         run: pnpm test:e2e
@@ -176,6 +176,8 @@ jobs:
             fi
           done
       - name: M3 Inventory and Notification test databases
+        env:
+          RABBITMQ_TEST_URL: amqp://pbl6:pbl6_dev_password@127.0.0.1:5672
         run: |
           set -euo pipefail
           for pair in inventory:INVENTORY notification:NOTIFICATION; do

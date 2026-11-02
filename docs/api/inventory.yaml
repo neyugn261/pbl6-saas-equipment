@@ -1,22 +1,38 @@
 openapi: 3.1.0
 info:
-  title: Inventory Service API — M3 draft prepared in M2
-  version: 0.1.0
+  title: Inventory Service API — M3 runtime
+  version: 0.3.0
   description: |
-    REVIEW DRAFT, not an implemented API. Owner Minh; review with Khương
-    (Work Order), Huy (LowStockDetected) and Nguyên (permissions/test DB).
-    Tenant comes exclusively from the verified token. TENANT_STAFF only;
-    CUSTOMER cannot access stock or part usage. No procurement or invoicing.
+    Owner Minh. Local Inventory runtime is implemented; Work Order reservation
+    contract is awaiting Khương's implementation/review. ISSUE fails closed with
+    503 when that capability is unavailable. Notification audience and UI remain
+    Huy/Hatsady responsibilities. See ADR 0014 and inventory-reservations.yaml.
+    Tenant comes exclusively from the verified token. Stock/catalog/ledger are
+    TENANT_STAFF only. A separate equipment-scoped service-parts projection is
+    available to CUSTOMER with equipment:read and live Asset ownership validation.
+    ADR 0015 defines confirmed use, quarantine, history and internal cost semantics.
     Quantities use decimal strings NUMERIC(12,2), costs NUMERIC(14,2);
     never compute using binary floating point. Mutations are local DB transactions.
     Inventory validates Branch via Organization and Work Order via the scoped
     /internal/work-orders/{id}, forwarding the caller token/correlation ID.
-    Source availability is checked before a write; no cross-service transaction
-    is claimed. Race with WO completion is an open review item in the handoff.
+    ISSUE requires a durable WO reservation blocking completion/cancellation until
+    Inventory has COMMITTED or ABORTED and WO verifies the proof through an API.
+    No timer expiry, status-only fallback, or cross-database transaction is used.
 servers: [{ url: / }]
 security: [{ bearer: [] }]
-x-review-notes: ../plans/minh-m2-handoff.md
+x-review-notes: ../plans/minh-m3-inventory-handoff.md
+x-reservation-contract: ./inventory-reservations.yaml
 paths:
+  /inventory-audit:
+    $ref: './inventory-accountability.yaml#/paths/~1inventory-audit'
+  /stock-transactions/{id}/inspect:
+    $ref: './inventory-accountability.yaml#/paths/~1stock-transactions~1{id}~1inspect'
+  /work-order-parts/{id}/confirm-use:
+    $ref: './inventory-accountability.yaml#/paths/~1work-order-parts~1{id}~1confirm-use'
+  /usage-confirmations/{id}/reverse:
+    $ref: './inventory-accountability.yaml#/paths/~1usage-confirmations~1{id}~1reverse'
+  /equipment/{id}/service-parts:
+    $ref: './inventory-accountability.yaml#/paths/~1equipment~1{id}~1service-parts'
   /parts:
     get:
       summary: List parts in tenant, with optional q and status filters
@@ -245,7 +261,7 @@ paths:
     put:
       summary: Configure minimum quantity (new Stock starts at 0); cannot set quantity
       description: |
-        REVIEW proposal: crossing below the configured minimum also emits an
+        Crossing below the configured minimum also emits an
         alert if no alert is latched. Stock and LowStockDetected outbox update
         atomically. Replenishing to quantity >= minQuantity clears the latch.
       x-permissions: [inventory:manage]
@@ -283,6 +299,8 @@ paths:
             schema: { type: string, format: uuid },
           }
         - { name: partId, in: query, schema: { type: string, format: uuid } }
+        - { name: workOrderId, in: query, schema: { type: string, format: uuid } }
+        - { name: relatedTransactionId, in: query, schema: { type: string, format: uuid } }
         - {
             name: type,
             in: query,
@@ -336,11 +354,13 @@ paths:
               allOf:
                 - { $ref: "#/components/schemas/StockMutationFields" }
                 - type: object
-                  required: [direction, note]
+                  required: [direction, note, reasonCode]
                   properties:
                     {
                       direction:
                         { type: string, enum: [ADJUST_IN, ADJUST_OUT] },
+                      reasonCode: { type: string, enum: [COUNT_VARIANCE, DAMAGE, LOSS, CORRECTION, OTHER] },
+                      relatedTransactionId: { type: string, format: uuid, description: 'Required only for CORRECTION; opposite-direction source receipt/adjustment, bounded by original quantity' },
                     }
               unevaluatedProperties: false
       responses:
@@ -385,12 +405,19 @@ paths:
           }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
-      summary: Issue stock to a nonterminal Work Order (F09)
+      summary: Issue stock under a durable Work Order reservation (F09)
       description: |
-        Validate scoped WO by forwarded token. COMPLETED/CANCELLED are rejected.
+        Prepare a durable operation; acquire WO reservation with the forwarded
+        caller token. WO must reject COMPLETED/CANCELLED and block terminal
+        transitions while HELD. Missing reservation API returns 503 without stock
+        writes; retry the SAME key or use inventory-operations recovery routes.
         Lock Stock; decrement quantity, create exactly one ISSUE ledger entry,
         create one WorkOrderPart pointing at that entry, and write any low-stock
         event in one transaction. quantityUsed means issued, not net consumed.
+        After commit, settle the hold by verified Inventory proof. A settlement
+        outage preserves successful stock writes and returns the original result
+        with X-Inventory-Reservation-State=PENDING_FINALIZE. Retry the same key
+        with a current authorized token. Keys and response snapshots never expire.
       x-permissions: [inventory:issue]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -402,7 +429,10 @@ paths:
                 - { $ref: "#/components/schemas/StockMutationFields" }
                 - type: object
                   properties:
-                    { unitCost: { $ref: "#/components/schemas/Money" } }
+                    {
+                      unitCost: { $ref: "#/components/schemas/Money", description: 'Optional internal reference cost; never a customer price. Supply with currency or omit both.' },
+                      unitCostCurrency: { type: string, pattern: '^[A-Z]{3}$' }
+                    }
               unevaluatedProperties: false
       responses:
         "201":
@@ -432,10 +462,13 @@ paths:
       summary: Return unused issued parts to their original warehouse (ADR 0006)
       description: |
         Lock usage and stock; RETURN ledger referenceType=WORK_ORDER and
-        referenceId=workOrderId. Increase Stock and quantityReturned atomically;
+        referenceId=workOrderId. GOOD increases available stock; DAMAGED and
+        PENDING_INSPECTION increase quarantine only. Update quantityReturned atomically;
         never change original quantityUsed or its ISSUE transaction. Return total
-        cannot exceed issued quantity. Proposal allows returns after WO terminal
-        state to reconcile unused parts; owner review is required before M3 code.
+        plus confirmed-used cannot exceed issued quantity. Returns after WO terminal and after
+        Part/Warehouse INACTIVE are allowed for reconciliation. A new return
+        validates scoped WO; successful retries remain available during an outage.
+        New RETURN entries include workOrderPartId, balanceBefore and balanceAfter.
       x-permissions: [inventory:issue]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -445,10 +478,11 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [quantity, note]
+              required: [quantity, note, condition]
               properties:
                 quantity: { $ref: "#/components/schemas/PositiveQuantity" }
                 note: { type: string, minLength: 1, maxLength: 2000 }
+                condition: { type: string, enum: [GOOD, DAMAGED, PENDING_INSPECTION] }
       responses:
         "200":
           {
@@ -484,8 +518,11 @@ components:
       description: |
         Client UUID retained durably with tenant, endpoint, canonical payload hash
         and response. Same key/body returns the original result; another body or
-        endpoint with the same tenant/key returns 409. Proposed M3 migration;
-        not yet stored in the current schema. No automatic expiry during MVP.
+        endpoint with the same tenant/key returns 409. Decimal strings and UUIDs
+        are normalized before hashing. Migration 0003 stores the request, actor,
+        response and phase. ISSUE may be PENDING after a timeout; retry the SAME
+        key, not a fresh key. No automatic expiry during MVP. Replay still checks
+        current authentication, permissions and tenant scope.
       schema: { type: string, format: uuid }
   schemas:
     Status: { type: string, enum: [ACTIVE, INACTIVE] }
@@ -505,7 +542,7 @@ components:
         examples: ["125000.00"],
       }
     TransactionType:
-      { type: string, enum: [RECEIVE, ISSUE, RETURN, ADJUST_IN, ADJUST_OUT] }
+      { type: string, enum: [RECEIVE, ISSUE, RETURN, ADJUST_IN, ADJUST_OUT, RELEASE, SCRAP] }
     PartInput:
       allOf: [{ $ref: "#/components/schemas/PartFields" }]
       unevaluatedProperties: false
@@ -516,14 +553,15 @@ components:
         sku: { type: string, minLength: 1, maxLength: 100 }
         name: { type: string, minLength: 1, maxLength: 200 }
         unit: { type: string, minLength: 1, maxLength: 30 }
-        description: { type: [string, "null"] }
+        allowFractional: { type: boolean, default: false, description: 'Immutable quantity policy. Legacy parts retain true; no historical rounding.' }
+        description: { type: [string, "null"], maxLength: 4000 }
     PartPatch:
       type: object
       additionalProperties: false
       minProperties: 1
       properties:
         name: { type: string, minLength: 1, maxLength: 200 }
-        description: { type: [string, "null"] }
+        description: { type: [string, "null"], maxLength: 4000 }
         status: { $ref: "#/components/schemas/Status" }
     Part:
       allOf:
@@ -545,14 +583,14 @@ components:
         branchId: { type: string, format: uuid }
         code: { type: string, minLength: 1, maxLength: 50 }
         name: { type: string, minLength: 1, maxLength: 150 }
-        address: { type: [string, "null"] }
+        address: { type: [string, "null"], maxLength: 4000 }
     WarehousePatch:
       type: object
       additionalProperties: false
       minProperties: 1
       properties:
         name: { type: string, minLength: 1, maxLength: 150 }
-        address: { type: [string, "null"] }
+        address: { type: [string, "null"], maxLength: 4000 }
         status: { $ref: "#/components/schemas/Status" }
     Warehouse:
       allOf:
@@ -581,6 +619,18 @@ components:
         warehouseId: { type: string, format: uuid }
         partId: { type: string, format: uuid }
         quantity: { $ref: "#/components/schemas/Quantity" }
+        quantityQuarantined: { $ref: "#/components/schemas/Quantity", description: 'Not available for ISSUE' }
+        quantityPhysicalAtWarehouse:
+          type: string
+          readOnly: true
+          pattern: '^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$'
+          description: >-
+            Available plus quarantine; stock list only. This derived sum can exceed
+            the 10 integer digits allowed in either individual stock bucket.
+        isLowStock: { type: boolean }
+        shortageQuantity: { $ref: "#/components/schemas/Quantity" }
+        part: { $ref: "#/components/schemas/Part" }
+        warehouse: { $ref: "#/components/schemas/Warehouse" }
         minQuantity: { $ref: "#/components/schemas/Quantity" }
         lowStockAlertedAt: { type: [string, "null"], format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -592,8 +642,10 @@ components:
         partId: { type: string, format: uuid }
         quantity: { $ref: "#/components/schemas/PositiveQuantity" }
         note: { type: string, minLength: 1, maxLength: 2000 }
+        documentReference: { type: string, minLength: 1, maxLength: 150 }
     StockMutation:
       allOf: [{ $ref: "#/components/schemas/StockMutationFields" }]
+      anyOf: [{ required: [note] }, { required: [documentReference] }]
       unevaluatedProperties: false
     Transaction:
       type: object
@@ -611,6 +663,17 @@ components:
           createdAt,
         ]
       properties:
+        reasonCode: { type: [string, 'null'] }
+        documentReference: { type: [string, 'null'] }
+        relatedTransactionId: { type: [string, 'null'], format: uuid }
+        returnCondition: { type: [string, 'null'], enum: [GOOD, DAMAGED, PENDING_INSPECTION, null] }
+        quarantineBefore: { anyOf: [{ $ref: '#/components/schemas/Quantity' }, { type: 'null' }] }
+        quarantineAfter: { anyOf: [{ $ref: '#/components/schemas/Quantity' }, { type: 'null' }] }
+        partSnapshot: { type: [object, 'null'], description: 'Historical SKU/name/unit/quantity policy; null for legacy rows' }
+        warehouseSnapshot: { type: [object, 'null'] }
+        balanceBefore: { anyOf: [{ $ref: "#/components/schemas/Quantity" }, { type: "null" }], description: "Null only for legacy rows; never guessed" }
+        balanceAfter: { anyOf: [{ $ref: "#/components/schemas/Quantity" }, { type: "null" }] }
+        workOrderPartId: { type: [string, "null"], format: uuid, description: "Exact originating usage for a RETURN; null otherwise" }
         id: { type: string, format: uuid }
         warehouseId: { type: string, format: uuid }
         partId: { type: string, format: uuid }
@@ -637,6 +700,17 @@ components:
           createdAt,
         ]
       properties:
+        quantityConsumed: { $ref: "#/components/schemas/Quantity", description: "Confirmed-used only; no longer inferred from unreturned issued quantity (ADR 0015)" }
+        quantityIssued: { $ref: '#/components/schemas/Quantity' }
+        quantityOutstanding: { $ref: '#/components/schemas/Quantity', description: 'Issued minus returned; includes confirmed use' }
+        quantityConfirmedUsed: { $ref: '#/components/schemas/Quantity' }
+        quantityUnreconciled: { $ref: '#/components/schemas/Quantity', description: 'Issued minus returned minus confirmed used' }
+        confirmations: { type: array, items: { $ref: './inventory-accountability.yaml#/components/schemas/Confirmation' } }
+        partSnapshot: { type: [object, 'null'] }
+        warehouseSnapshot: { type: [object, 'null'] }
+        costMeaning: { const: INTERNAL_REFERENCE_COST_NOT_CUSTOMER_PRICE }
+        unitCostCurrency: { type: [string, 'null'], pattern: '^[A-Z]{3}$' }
+        returns: { type: array, items: { $ref: "#/components/schemas/Transaction" }, description: "Present in GET usage list; linked return ledger rows" }
         id: { type: string, format: uuid }
         workOrderId: { type: string, format: uuid }
         partId: { type: string, format: uuid }

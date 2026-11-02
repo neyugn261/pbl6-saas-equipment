@@ -1,0 +1,195 @@
+openapi: 3.1.0
+info:
+  title: Inventory operation recovery and proposed Work Order reservation protocol
+  version: 0.1.0
+  description: |
+    Inventory endpoints implemented by Minh. WO endpoints below are a PROPOSED
+    handoff to Khương and are NOT implemented in current develop. Owner review
+    and real inter-service race/restart tests are required before ISSUE acceptance.
+    Tenant and permissions come from the current verified TENANT_STAFF JWT.
+    Forward caller token/correlation ID. Internal routes are blocked at Gateway.
+    No auto-expiry or status-only fallback. See ADR 0014.
+security: [{ bearer: [] }]
+paths:
+  /inventory-operations:
+    get:
+      x-owner: Minh
+      x-implemented: true
+      x-permissions: [inventory:read]
+      description: List ISSUE operations, newest first with id tie-break. Page defaults 1/20, max pageSize 100.
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: state, in: query, schema: { type: string, enum: [PENDING, COMMITTED, ABORTED] } }
+        - { name: workOrderId, in: query, schema: { type: string, format: uuid } }
+        - { name: reservationPending, in: query, schema: { type: boolean }, description: True includes PENDING or terminal operations not yet settled at WO }
+      responses:
+        '200':
+          description: Recovery list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, page, pageSize, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Operation' } }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  total: { type: integer }
+  /inventory-operations/{key}:
+    parameters: [{ $ref: '#/components/parameters/Key' }]
+    get:
+      x-owner: Minh
+      x-implemented: true
+      x-permissions: [inventory:read]
+      responses:
+        '200': { $ref: '#/components/responses/Proof' }
+        '404': { description: Missing or another tenant }
+  /internal/inventory-operations/{key}:
+    parameters: [{ $ref: '#/components/parameters/Key' }]
+    get:
+      x-owner: Minh
+      x-implemented: true
+      x-permissions: [inventory:issue]
+      description: WO must verify operation=ISSUE, tenant, workOrderId, key and fingerprint before reserve/settle. A PENDING proof grants no terminal release.
+      responses:
+        '200': { $ref: '#/components/responses/Proof' }
+        '404': { description: Missing or another tenant }
+  /inventory-operations/{key}/retry:
+    parameters: [{ $ref: '#/components/parameters/Key' }]
+    post:
+      x-owner: Minh
+      x-implemented: true
+      x-permissions: [inventory:issue]
+      description: Resume the exact stored ISSUE with a current authorized token. COMMITTED replays the original usage response and retries settlement; ABORTED replays the original failure and retries release. Never reissues committed stock.
+      responses:
+        '201':
+          description: Original committed usage, even if finalization still pending; inspect header
+          headers:
+            X-Inventory-Reservation-State: { schema: { type: string, enum: [SETTLED, PENDING_FINALIZE] } }
+          content:
+            application/json: { schema: { $ref: './inventory.yaml#/components/schemas/WorkOrderPart' } }
+        '409': { description: Stored abort/conflict; inspect operation proof }
+        '503': { description: Still pending; preserve key and retry or explicitly abort }
+  /inventory-operations/{key}/abort:
+    parameters: [{ $ref: '#/components/parameters/Key' }]
+    post:
+      x-owner: Minh
+      x-implemented: true
+      x-permissions: [inventory:issue]
+      description: Under the operation key lock, abort only an uncommitted ISSUE, then attempt verified WO release. Repeat is safe. Committed stock needs RETURN, not abort. No timer expires this operation.
+      responses:
+        '200':
+          description: Operation ABORTED; may still await WO release
+          headers:
+            X-Inventory-Reservation-State: { schema: { type: string, enum: [SETTLED, PENDING_RELEASE] } }
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Operation' } }
+        '409': { description: Already committed or not an ISSUE }
+  /internal/work-orders/{workOrderId}/inventory-reservations:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      x-owner: Khương
+      x-implemented: false
+      x-permissions: [inventory:issue, work_order:read]
+      description: |
+        PROPOSED. Fetch Inventory proof with caller JWT; validate ISSUE/PENDING,
+        tenant/WO/key/fingerprint and derive original request from proof. Under
+        the same WO row lock used by EVERY complete/cancel path, require a
+        nonterminal scoped WO and persist HELD keyed by tenant/requestId. Same
+        request/fingerprint replays original reservation; different identity 409.
+        Existing RELEASED tombstone never becomes HELD again. A held reservation
+        blocks complete/cancel (409); no expiry or automatic unlock on network timeout.
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/ReservationRequest' } }
+      responses:
+        '201': { $ref: '#/components/responses/Reservation' }
+        '200': { $ref: '#/components/responses/Reservation' }
+        '409': { description: Terminal WO, mismatched identity, conflicting reservation/proof }
+  /internal/work-orders/{workOrderId}/inventory-reservations/settle:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      x-owner: Khương
+      x-implemented: false
+      x-permissions: [inventory:issue, work_order:read]
+      description: |
+        PROPOSED. Fetch proof with caller JWT; require the exact tenant/WO/key/hash
+        and Inventory phase matching outcome. PENDING or unavailable Inventory
+        must NEVER release a hold. COMMITTED -> verify response usage/transaction
+        identifiers, then HELD->COMMITTED. ABORTED -> HELD->RELEASED, or persist a
+        RELEASED tombstone if reservation was never observed, so delayed reserve
+        cannot create a new hold. Serialize transitions with WO row + reservation
+        identity locks. Repeated same terminal outcome is idempotent. COMMITTED
+        and RELEASED cannot be reversed, even if a contradictory proof is supplied.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/ReservationRequest' }
+                - type: object
+                  required: [outcome]
+                  properties: { outcome: { type: string, enum: [COMMITTED, ABORTED] } }
+              unevaluatedProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Reservation' }
+        '409': { description: Invalid/mismatched proof or immutable reservation conflict }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Key: { name: key, in: path, required: true, schema: { type: string, format: uuid } }
+    WorkOrderId: { name: workOrderId, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    ReservationRequest:
+      type: object
+      required: [requestId, fingerprint]
+      properties:
+        requestId: { type: string, format: uuid, description: Exact Inventory idempotency key }
+        fingerprint: { type: string, pattern: '^[0-9a-f]{64}$' }
+    Reservation:
+      allOf:
+        - { $ref: '#/components/schemas/ReservationRequest' }
+        - type: object
+          required: [workOrderId, state]
+          properties:
+            workOrderId: { type: string, format: uuid }
+            state: { type: string, enum: [HELD, COMMITTED, RELEASED] }
+    Operation:
+      type: object
+      required: [key, tenantId, operation, fingerprint, request, actorId, workOrderId, state, httpStatus, response, reservationSettledAt, createdAt, updatedAt]
+      properties:
+        key: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        operation: { const: ISSUE }
+        fingerprint: { type: string, pattern: '^[0-9a-f]{64}$' }
+        request: { type: object, description: Normalized business request, no token }
+        actorId: { type: string, format: uuid }
+        workOrderId: { type: [string, 'null'], format: uuid }
+        state: { type: string, enum: [PENDING, COMMITTED, ABORTED] }
+        httpStatus: { type: [integer, 'null'] }
+        response: { description: Immutable original usage/ledger or error; null while PENDING }
+        reservationSettledAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        recovery:
+          type: object
+          properties:
+            stockOutcome: { enum: [ISSUED, NOT_ISSUED, UNCONFIRMED] }
+            synchronization: { enum: [SETTLED, PENDING_FINALIZE, PENDING_RELEASE, PENDING] }
+            responsibleActorId: { type: string, format: uuid }
+            pendingSince: { type: [string, 'null'], format: date-time }
+            nextActions: { type: array, items: { enum: [RETRY_SAME_OPERATION, ABORT_BEFORE_COMMIT, RETRY_SETTLEMENT] } }
+            mayCreateReplacementOperation: { type: boolean }
+  responses:
+    Proof:
+      description: Tenant-scoped operation proof
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Operation' } }
+    Reservation:
+      description: Exact durable reservation identity/state
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Reservation' } }

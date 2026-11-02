@@ -12,7 +12,12 @@ import { HistoryFeedQuery, HistoryService } from '../history/history.service';
 import { WarrantyService } from '../warranties/warranty.service';
 
 type Row = Record<string, unknown>;
-type Source = 'ORGANIZATION' | 'SERVICE_REQUEST' | 'WORKORDER' | 'MAINTENANCE';
+type Source =
+  | 'ORGANIZATION'
+  | 'SERVICE_REQUEST'
+  | 'WORKORDER'
+  | 'MAINTENANCE'
+  | 'INVENTORY';
 export type Section<T> =
   | { status: 'AVAILABLE'; data: T; fetchedAt: string }
   | {
@@ -92,13 +97,15 @@ export class DossierService {
   ) {}
   private permitted(p: Principal, source: Source) {
     const permission: PermissionCode =
-      source === 'ORGANIZATION'
-        ? 'customer:read'
-        : source === 'SERVICE_REQUEST'
-          ? 'service_request:read'
-          : source === 'WORKORDER'
-            ? 'work_order:read'
-            : 'maintenance:read';
+      source === 'INVENTORY'
+        ? 'equipment:read'
+        : source === 'ORGANIZATION'
+          ? 'customer:read'
+          : source === 'SERVICE_REQUEST'
+            ? 'service_request:read'
+            : source === 'WORKORDER'
+              ? 'work_order:read'
+              : 'maintenance:read';
     return (
       p.permissions.has(permission) &&
       (source !== 'WORKORDER' || p.userType === 'TENANT_STAFF')
@@ -138,6 +145,66 @@ export class DossierService {
       !same(row.customerId, core.customerId)
     )
       throw new NotFoundException();
+  }
+  async serviceParts(p: Principal, id: string, q: PaginationQueryDto) {
+    await this.equipment.detail(p, id);
+    return this.partsSection(p, id, q);
+  }
+  private partsSection(p: Principal, id: string, q: PaginationQueryDto) {
+    return this.section(p, 'INVENTORY', async (c) => {
+      const page = asRow(
+        await c.get(`/equipment/${id}/service-parts`, {
+          accessToken: p.accessToken,
+          query: { page: q.page, pageSize: q.pageSize },
+        }),
+      );
+      if (!Array.isArray(page.items)) throw new Error('Invalid parts history');
+      const items = page.items.map((value) => {
+        const row = asRow(value);
+        if (!same(row.equipmentId, id)) throw new NotFoundException();
+        const part = row.part
+          ? keys(asRow(row.part), ['sku', 'name', 'unit'])
+          : null;
+        return {
+          ...keys(row, [
+            'id',
+            'workOrderId',
+            'workOrderNo',
+            'serviceReportId',
+            'equipmentId',
+            'kind',
+            'correctsConfirmationId',
+            'quantity',
+            'effectiveQuantity',
+            'isReversed',
+            'reason',
+            'removedPartDisposition',
+            'removedPartNote',
+            'recordedAt',
+          ]),
+          part,
+          costDisclosure: {
+            status: 'NOT_PROVIDED_BY_INVENTORY',
+            source: 'SERVICE_REQUEST_APPROVED_ESTIMATE',
+          },
+          warrantyDisclosure: {
+            status: 'NOT_DETERMINED_BY_INVENTORY',
+            automaticallyRenewsEquipmentWarranty: false,
+          },
+        };
+      });
+      return {
+        ...keys(page, [
+          'total',
+          'page',
+          'pageSize',
+          'totalPages',
+          'meaning',
+          'legacyHistoryMayBeIncomplete',
+        ]),
+        items,
+      };
+    });
   }
   private requestView(row: Row) {
     const status = row.status;
@@ -234,6 +301,7 @@ export class DossierService {
       workOrders,
       maintenance,
       maintenanceHistory,
+      serviceParts,
       latestCompletion,
     ] = await Promise.all([
       this.warranties.list(p, id),
@@ -344,6 +412,7 @@ export class DossierService {
           query: { equipmentId: id, page: 1, pageSize: 5 },
         }),
       ),
+      this.partsSection(p, id, preview),
       this.history.latestCompletion(p, id),
     ]);
     const missingFields = [
@@ -388,6 +457,7 @@ export class DossierService {
       workOrders,
       maintenance,
       maintenanceHistory,
+      serviceParts,
       timelinePreview: history,
       previewLimit: 5,
       asOf: new Date().toISOString(),

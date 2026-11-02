@@ -1,0 +1,207 @@
+openapi: 3.1.0
+info:
+  title: Inventory M3 accountability additions
+  version: 0.3.0
+  description: |
+    Implemented Inventory/Asset additions under ADR 0015. Not evidence that WO
+    reservation, customer charges/coverage or frontend integration is complete.
+    TENANT_STAFF mutations use existing permissions. Confirmation is an inventory
+    record against a real completed report, not a replacement for submitting it.
+    All mutation bodies reject unknown fields. Preserve Idempotency-Key on retry.
+servers: [{ url: / }]
+security: [{ bearer: [] }]
+paths:
+  /inventory-audit:
+    get:
+      summary: Paginated before/after catalog and threshold history (staff only)
+      x-permissions: [inventory:read]
+      parameters:
+        - { $ref: './inventory.yaml#/components/parameters/Page' }
+        - { $ref: './inventory.yaml#/components/parameters/PageSize' }
+        - { name: entityType, in: query, schema: { enum: [PART, WAREHOUSE, STOCK] } }
+        - { name: entityId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Tenant-filtered audit page; immutable actorId, before, after, action, timestamp
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: './inventory.yaml#/components/schemas/PageFields' }
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Audit' } }
+  /stock-transactions/{id}/inspect:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      summary: Release inspected quarantine to available stock or scrap it
+      description: |
+        Source id must be a DAMAGED/PENDING_INSPECTION return in this tenant.
+        All dispositions together cannot exceed that return's quantity. RELEASE
+        requires active catalog/warehouse; SCRAP permits inactive. Both retain
+        provenance and available/quarantine before/after balances. Atomic and idempotent.
+      x-permissions: [inventory:manage]
+      parameters: [{ $ref: './inventory.yaml#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [quantity, disposition, note]
+              properties:
+                quantity: { $ref: './inventory.yaml#/components/schemas/PositiveQuantity' }
+                disposition: { enum: [RELEASE, SCRAP] }
+                note: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201':
+          description: Immutable disposition ledger entry
+          content:
+            application/json: { schema: { $ref: './inventory.yaml#/components/schemas/Transaction' } }
+        '409': { description: Source already fully processed or insufficient quarantine }
+        '422': { description: Wrong source or inactive release target }
+  /work-order-parts/{id}/confirm-use:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      summary: Technician who completed the report confirms actual use against a completed service report
+      x-permissions: [work_order:execute, service_report:submit]
+      description: |
+        Calls real scoped WO detail, assignment history and service-report APIs with the caller JWT.
+        Report ID, WO, technician and equipment/customer association must match.
+        Only COMPLETED accepted. Confirmed + returned <= issued under the same row
+        locks as RETURN. Each confirmation is incremental and immutable. Replays
+        recheck completed report assignment; original result is stable. RemovedPartNote is
+        customer-visible and required for a disposition other than NOT_APPLICABLE.
+        The stock count is unchanged. There is no inferred or backdated installation time.
+      parameters: [{ $ref: './inventory.yaml#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/ConfirmInput' } }
+      responses:
+        '201':
+          description: Confirmation; updates confirmed quantity and stores idempotent result atomically
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Confirmation' } }
+        '403': { description: Not the Technician of the completed report }
+        '409': { description: WO is not completed, key mismatch or excessive confirmed quantity }
+        '422': { description: Wrong report/technician or missing removed-component explanation }
+  /usage-confirmations/{id}/reverse:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      summary: Inventory Staff reverses an erroneous confirmation once, retaining the original
+      x-permissions: [inventory:issue]
+      parameters: [{ $ref: './inventory.yaml#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [note]
+              properties: { note: { type: string, minLength: 1, maxLength: 2000 } }
+      responses:
+        '201':
+          description: Full reversal of this confirmation; original remains visible as corrected
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Confirmation' } }
+        '409': { description: Already reversed or idempotency key mismatch }
+  /equipment/{id}/service-parts:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: Customer-safe confirmed parts and corrections for one scoped Equipment
+      x-permissions: [equipment:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      description: |
+        Inventory validates live Asset scope with the user's JWT before reading.
+        Tenant + equipment + customer filter applies. No raw stock, cost, warehouse,
+        actor IDs or internal notes. Reversed originals have effectiveQuantity=0
+        even when the reversal is on another page; reversal rows are corrections,
+        not another installation. Part snapshot is historical, not a live rename.
+        Cost/warranty are explicitly NOT_PROVIDED_BY_INVENTORY/NOT_DETERMINED_BY_INVENTORY.
+        Missing price never means free and replacement never automatically resets
+        equipment warranty. Actual decisions come from SR/approved estimates.
+        Legacy confirmed-use history can be incomplete; empty means no recorded
+        confirmations, not proof that no physical repair occurred.
+        Asset exposes /equipment/{equipmentId}/service-parts via its own Gateway
+        route and includes a bounded preview in dossier. Asset wraps the page in
+        AVAILABLE/UNAVAILABLE/RESTRICTED/NOT_CONFIGURED/NOT_FOUND Section semantics.
+      parameters:
+        - { $ref: './inventory.yaml#/components/parameters/Page' }
+        - { $ref: './inventory.yaml#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: Inventory page (Asset wraps it in a Section)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: './inventory.yaml#/components/schemas/PageFields' }
+                  - type: object
+                    properties:
+                      meaning: { const: CONFIRMED_USE_AND_CORRECTIONS_ONLY }
+                      legacyHistoryMayBeIncomplete: { const: true }
+                      items: { type: array, items: { $ref: '#/components/schemas/ServicePart' } }
+        '404': { description: Equipment outside caller scope }
+        '503': { description: Asset access cannot be verified; never returns an empty success on outage }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    ConfirmInput:
+      type: object
+      additionalProperties: false
+      required: [quantity, serviceReportId, customerReason, removedPartDisposition]
+      properties:
+        quantity: { $ref: './inventory.yaml#/components/schemas/PositiveQuantity' }
+        serviceReportId: { type: string, format: uuid }
+        customerReason: { type: string, minLength: 1, maxLength: 2000 }
+        removedPartDisposition: { enum: [NOT_APPLICABLE, RETURNED_TO_CUSTOMER, RETAINED_FOR_REVIEW, DISPOSED_WITH_CONSENT] }
+        removedPartNote: { type: string, minLength: 1, maxLength: 2000 }
+        note: { type: string, minLength: 1, maxLength: 2000, description: Internal only }
+    Confirmation:
+      type: object
+      required: [id, tenantId, workOrderPartId, workOrderId, equipmentId, customerId, serviceReportId, kind, quantity, actorId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { enum: [CONFIRM, REVERSE] }
+        quantity: { $ref: './inventory.yaml#/components/schemas/PositiveQuantity' }
+        reversesId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+    ServicePart:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        equipmentId: { type: string, format: uuid }
+        workOrderId: { type: string, format: uuid }
+        workOrderNo: { type: string }
+        serviceReportId: { type: string, format: uuid }
+        kind: { enum: [CONFIRM, REVERSE] }
+        correctsConfirmationId: { type: [string, 'null'], format: uuid }
+        isReversed: { type: boolean }
+        effectiveQuantity: { $ref: './inventory.yaml#/components/schemas/Quantity' }
+        quantity: { $ref: './inventory.yaml#/components/schemas/PositiveQuantity' }
+        part: { type: [object, 'null'] }
+        reason: { type: string }
+        removedPartDisposition: { type: string }
+        removedPartNote: { type: [string, 'null'] }
+        recordedAt: { type: string, format: date-time }
+        costDisclosure: { type: object }
+        warrantyDisclosure: { type: object }
+    Audit:
+      type: object
+      required: [id, entityType, entityId, action, actorId, before, after, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        entityType: { enum: [PART, WAREHOUSE, STOCK] }
+        entityId: { type: string, format: uuid }
+        action: { enum: [CREATE, UPDATE, THRESHOLD] }
+        actorId: { type: string, format: uuid }
+        before: { type: [object, 'null'] }
+        after: { type: object }
+        createdAt: { type: string, format: date-time }

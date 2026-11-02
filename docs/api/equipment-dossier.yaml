@@ -15,6 +15,27 @@ info:
 servers: [{ url: /api/assets }]
 security: [{ bearer: [] }]
 paths:
+  /equipment/{equipmentId}/service-parts:
+    get:
+      summary: Confirmed service parts and corrections; scoped customer-safe Inventory composition
+      description: |
+        Same equipment:read and local tenant/customer checks as dossier. Inventory
+        is queried with the caller JWT. Returns a Section wrapping a bounded page;
+        an upstream outage is UNAVAILABLE, never a fabricated empty history. Schema
+        of data.items is inventory-accountability.yaml ServicePart. Dossier also
+        includes serviceParts as a five-item preview. recordedAt is confirmation
+        recording time, not a claimed installation date. Costs/warranty decisions
+        come from Service Request, not internal Inventory unitCost.
+      parameters:
+        - { name: equipmentId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Source Section
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Section' } }
+        '404': { description: Equipment outside caller scope }
   /equipment/{equipmentId}/dossier:
     parameters: [{ $ref: '#/components/parameters/EquipmentId' }]
     get:
