@@ -6,6 +6,7 @@ import '../../ui/components.dart';
 import '../../ui/theme.dart';
 import 'equipment_reads.dart';
 import 'job_actions.dart';
+import 'job_attachments.dart';
 import 'work_order_workflow.dart';
 import 'service_report_read.dart';
 export 'service_report_read.dart';
@@ -121,8 +122,12 @@ class _JobReadScreenState extends State<JobReadScreen>
       if (_tab == 2)
         ServiceReportRead(repo: repo, workOrderId: w.id, revision: _revision),
       if (_tab == 3)
-        const Notice(
-          'Tệp đính kèm chờ backend M3. Chưa có danh sách tệp thật.',
+        JobAttachments(
+          repo: repo,
+          orderId: w.id,
+          revision: _revision,
+          canUploadWorkOrder: !w.terminal && w.currentFor(repo.user.id),
+          reportCompleted: w.status == 'COMPLETED',
         ),
       if (_tab == 4)
         const Notice(

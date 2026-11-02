@@ -89,11 +89,15 @@ describe('Equipment registration — real Asset/Maintenance HTTP and dedicated P
     const maintenanceTest = requireTestDatabaseUrl(
       'MAINTENANCE_TEST_DATABASE_URL',
     );
-    execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
-      cwd: resolve('../maintenance-service'),
-      env: { ...process.env, MAINTENANCE_DATABASE_URL: maintenanceTest },
-      stdio: 'pipe',
-    });
+    execFileSync(
+      process.execPath,
+      ['node_modules/prisma/build/index.js', 'migrate', 'deploy'],
+      {
+        cwd: resolve('../maintenance-service'),
+        env: { ...process.env, MAINTENANCE_DATABASE_URL: maintenanceTest },
+        stdio: 'pipe',
+      },
+    );
     const mc = config({
       MAINTENANCE_DATABASE_URL: maintenanceTest,
       ASSET_SERVICE_URL: 'http://placeholder.test',

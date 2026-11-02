@@ -140,6 +140,24 @@ jobs:
       - name: Work Order database e2e tests
         working-directory: apps/workorder-service
         run: pnpm test:e2e:db
+      - name: M3 attachment Gateway and MinIO smoke
+        env:
+          MINIO_ENDPOINT: 127.0.0.1
+          MINIO_PORT: '9000'
+          MINIO_USE_SSL: 'false'
+          MINIO_REGION: us-east-1
+          MINIO_PUBLIC_ENDPOINT: http://127.0.0.1:9000
+          MINIO_ACCESS_KEY: pbl6
+          MINIO_SECRET_KEY: pbl6_minio_password
+          CORS_ORIGINS: http://localhost:5173
+        run: |
+          docker compose up -d minio
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/live > /dev/null; then break; fi
+            if [ "$attempt" = 30 ]; then docker compose logs minio; exit 1; fi
+            sleep 2
+          done
+          pnpm --filter workorder-service test:attachments:gateway
       - name: Maintenance test DB migration and owner-provided suite
         run: |
           set -euo pipefail

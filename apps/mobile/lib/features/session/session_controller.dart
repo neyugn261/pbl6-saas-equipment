@@ -189,6 +189,7 @@ class SessionController extends ChangeNotifier {
     String method,
     String path, {
     Object? body,
+    String? idempotencyKey,
   }) async {
     final epoch = _epoch;
     final tokens = await _usableTokens(epoch);
@@ -199,6 +200,7 @@ class SessionController extends ChangeNotifier {
         path,
         body: body,
         accessToken: tokens.accessToken,
+        idempotencyKey: idempotencyKey,
       );
       _check(epoch);
       return response;
@@ -223,6 +225,7 @@ class SessionController extends ChangeNotifier {
           path,
           body: body,
           accessToken: renewed.accessToken,
+          idempotencyKey: idempotencyKey,
         );
         _check(epoch);
         return response;
