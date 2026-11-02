@@ -113,6 +113,8 @@ describe('API Gateway (e2e)', () => {
       '/api/workorders/internal/work-orders/123',
       '/api/maintenance/%69nternal/maintenance-plans/123',
       '/api/notifications/internal/recipients',
+      '/api/workorders/internal/service-request-attachments/123',
+      '/api/service-requests/internal/service-request-attachments/123',
     ]) {
       await request(app.getHttpServer()).get(path).expect(404);
     }
@@ -220,6 +222,14 @@ describe('API Gateway (e2e)', () => {
       ['/api/assets/equipment', '/equipment'],
       ['/api/service-requests', '/service-requests'],
       ['/api/service-requests/123/accept', '/service-requests/123/accept'],
+      [
+        '/api/service-requests/123/result/attachments?page=2',
+        '/service-requests/123/result/attachments?page=2',
+      ],
+      [
+        '/api/service-requests/123/result/attachments/456/download',
+        '/service-requests/123/result/attachments/456/download',
+      ],
     ];
     for (const [gatewayPath, upstreamPath] of routes) {
       const res = await request(app.getHttpServer()).get(gatewayPath);

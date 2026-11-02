@@ -23,6 +23,7 @@ class GatewayClient {
     String path, {
     Object? body,
     String? accessToken,
+    String? idempotencyKey,
   }) async {
     final route = Uri.parse(path);
     if (!path.startsWith('/') ||
@@ -48,6 +49,9 @@ class GatewayClient {
           ).join();
     if (accessToken != null) {
       request.headers['authorization'] = 'Bearer $accessToken';
+    }
+    if (idempotencyKey != null) {
+      request.headers['idempotency-key'] = idempotencyKey;
     }
     if (body != null) {
       request.headers['content-type'] = 'application/json';

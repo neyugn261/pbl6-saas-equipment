@@ -35,8 +35,12 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   http: ^1.6.0
+  crypto: 3.0.8
   # Native flush adapter uses this version's documented storageNamespace.
   flutter_secure_storage: 11.2.0
+  image_picker: ^1.2.4
+  file_picker: ^13.3.1
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

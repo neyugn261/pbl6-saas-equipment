@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../ui/components.dart';
 import '../../ui/theme.dart';
 import '../session/session_controller.dart';
+import 'attachment_client.dart';
 import 'equipment_reads.dart';
 import 'job_reads.dart';
 import 'read_widgets.dart';
@@ -45,6 +46,28 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
       (path) => request('GET', path),
       user,
       write: (path, body) => request('POST', path, body: body),
+      attachments: AttachmentClient(
+        api: (method, path, {body, idempotencyKey}) {
+          if (widget.session.user?.id != user.id ||
+              widget.session.user?.tenantId != user.tenantId ||
+              widget.session.user?.roles.join(',') != user.roles.join(',')) {
+            throw const ApiException('SESSION_CHANGED');
+          }
+          return widget.session.authorizedRequest(
+            method,
+            path,
+            body: body,
+            idempotencyKey: idempotencyKey,
+          );
+        },
+        sessionScope: () =>
+            widget.session.phase == SessionPhase.authenticated &&
+                widget.session.user?.id == user.id &&
+                widget.session.user?.tenantId == user.tenantId &&
+                widget.session.user?.roles.join(',') == user.roles.join(',')
+            ? '${user.tenantId}/${user.id}/${user.roles.join(',')}'
+            : '',
+      ),
     );
     repo.addListener(_businessChanged);
     _work = repo.personalWork();

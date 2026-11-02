@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/api/api_exception.dart';
 import '../session/session_models.dart';
+import 'attachment_client.dart';
 
 typedef Json = Map<String, dynamic>;
 typedef GatewayRead = Future<Object?> Function(String path);
@@ -228,11 +229,13 @@ class PersonalWork {
 /// Public Gateway reads and Technician commands. No credentials or DB access.
 /// No durable business cache: a workspace and its data die with the session.
 class WorkspaceRepository extends ChangeNotifier {
-  WorkspaceRepository(this.read, this.user, {this.write});
+  WorkspaceRepository(this.read, this.user, {this.write, this.attachments});
   final GatewayRead read;
   final GatewayWrite? write;
+  final AttachmentClient? attachments;
   final SessionUser user;
   final pendingCommands = <String, PendingWorkOrderCommand>{};
+  final pendingUploads = <String, AttachmentAttempt>{};
   bool _closed = false;
   void changed() {
     if (!_closed) notifyListeners();
@@ -241,6 +244,7 @@ class WorkspaceRepository extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    attachments?.close();
     super.dispose();
   }
 

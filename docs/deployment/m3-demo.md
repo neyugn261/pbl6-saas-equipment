@@ -21,6 +21,11 @@ Compose embeds them in service URLs. Set `DEMO_PUBLIC_URL` to the URL opened in
 the browser, without a trailing slash. For Android on another device, use a
 hostname/IP reachable from that device; `localhost` refers to the device
 itself. `JWT_ACCESS_SECRET` must be at least 32 random characters.
+Set `DEMO_STORAGE_PUBLIC_URL` to the S3 origin reachable by the browser and
+Android client (host plus `MINIO_PUBLIC_PORT`). The Work Order storage adapter
+uses this exact origin when signing URLs. Its container runs in development
+mode in this local HTTP demo because production mode requires HTTPS storage;
+remote staging must supply HTTPS before enabling attachments.
 
 ```bash
 docker build -f infrastructure/docker/backend.Dockerfile -t pbl6-backend:local .
@@ -52,7 +57,12 @@ docker compose --env-file .env.demo -f compose.demo.yml logs --tail=100 api-gate
 Open `DEMO_PUBLIC_URL`. Nginx serves the web app and forwards `/gateway/api/*`
 to Gateway `/api/*`. Mobile debug builds use a Gateway origin such as
 `http://10.0.2.2:3000` for an Android emulator or the host's reachable LAN
-address and `DEMO_GATEWAY_PORT` on a physical device. The Gateway `/health`
+address and `DEMO_GATEWAY_PORT` on a physical device. For mobile attachments,
+set `DEMO_STORAGE_PUBLIC_URL` to an address reachable from both Android and the
+host browser, normally the host LAN address and MinIO port. `localhost` in a
+signed URL points back to the Android device. Recreate Work Order after changing
+this endpoint and request a fresh ticket. Debug Android permits local HTTP;
+release requires HTTPS. The Gateway `/health`
 checks the M1 service chain; Compose
 also checks individual service processes. Inventory and Notification currently
 have only scaffold root handlers, so their Compose probes check `/` and do not
@@ -77,7 +87,8 @@ docker compose --env-file .env.demo -f compose.demo.yml run --rm -e NODE_ENV=dev
 ```
 
 The commands use development mode only inside one-off seed containers. Normal
-service containers keep `NODE_ENV=production`. The demo accounts and tenant
+service containers keep `NODE_ENV=production`, except Work Order, which uses
+development mode for local HTTP MinIO signing. The demo accounts and tenant
 code are listed in the root README. Do not print the password or access tokens
 in demo logs or slides.
 
@@ -94,10 +105,12 @@ run again and must complete before new app containers start.
 
 ## Current limits
 
-- Attachment storage is not operational yet. The Work Order owner must supply
-  its MinIO adapter, internal/public signing endpoint configuration and an
-  upload test from browser and Android. The private bucket and CORS alone do
-  not enable uploads.
+- The Work Order attachment API and MinIO adapter are implemented on the merged
+  A2–A4 branch. A signed PUT/finalize/download through this Compose stack was
+  verified with `scripts/smoke-m3-attachment.mjs`. The mobile file screen and
+  transport pass local tests, but camera, picker and signed URL use on Android
+  still need a device integration run. Browser file UI also needs an
+  integration run.
 - Notification/Inventory business APIs and activation delivery remain separate
   M3 owner work. Their containers starting is not an acceptance result.
 
@@ -114,3 +127,21 @@ login succeeded through `/gateway/api/auth/login`. Direct Gateway on port 3009
 and the web proxy both returned 200 for `/health`; a direct request to
 `/api/identity/internal/users` returned 404. These checks do not prove
 attachment upload or a full browser/Android business flow.
+
+On 02/11/2026, after pulling Work Order A2–A4, the backend image was rebuilt,
+the additive migration applied, and a real Work Order file passed prepare,
+signed PUT, finalize, list, signed GET and byte comparison through Gateway and
+MinIO. Replaying the same prepare key returned the same attachment. To repeat
+on an isolated demo WO, set `SEED_DEMO_PASSWORD`, `PBL6_M3_GATEWAY_URL` and
+`PBL6_M3_WORK_ORDER_ID`, then run `node scripts/smoke-m3-attachment.mjs`.
+The script prints no token or signed URL. It does not exercise Customer SR
+composition, browser UI or Android UI.
+
+Mobile M3 attachment transport and screen were checked with `dart analyze`
+(no issues), `flutter test` (104 passed, 2 opt-in backend tests skipped),
+and `flutter build apk --debug` (APK built). Kotlin incremental compilation is
+disabled for this Windows checkout because Pub sources are on C: while the
+project is on D:; otherwise three plugin caches fail to relativize paths.
+The client retains upload keys within one session for a same-intent retry and
+does not send the API bearer token to MinIO. This does not count as Android
+device acceptance; `flutter devices` found no connected Android device.
