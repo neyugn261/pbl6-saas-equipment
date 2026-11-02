@@ -2,6 +2,9 @@
 
 `identity_db` is owned only by Identity Service. Its structure comes from
 `docs/erd/pbl6-schema-v3.1.sql` (section 1) and ADR 0001.
+The M3 recipient/outbox and activation delivery delta is documented in
+`docs/erd/m3-identity-recipient-and-mail.md` and ADR 0017; its executable SQL
+is migration `20261102090000_notification_recipient_outbox`.
 
 ## Rules
 

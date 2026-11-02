@@ -30,7 +30,9 @@ function envelope(
     eventVersion: 1,
     producer: 'organization-service',
     tenantId,
-    aggregateType: eventType.startsWith('Tenant') ? 'Tenant' : 'CustomerUserMembership',
+    aggregateType: eventType.startsWith('Tenant')
+      ? 'Tenant'
+      : 'CustomerUserMembership',
     aggregateId,
     occurredAt: new Date().toISOString(),
     correlationId: 'e2e',
@@ -52,8 +54,17 @@ describe('Directory events and the customer_id claim (e2e)', () => {
   const loginCustomer = () =>
     http()
       .post('/auth/login')
-      .send({ tenantCode: 'TENANT-A', email: 'buyer@customer.com', password: PASSWORD });
-  const membership = (status: 'ACTIVE' | 'INACTIVE', changedAt: string, customerId = CUSTOMER_A, userId = customerUserId) =>
+      .send({
+        tenantCode: 'TENANT-A',
+        email: 'buyer@customer.com',
+        password: PASSWORD,
+      });
+  const membership = (
+    status: 'ACTIVE' | 'INACTIVE',
+    changedAt: string,
+    customerId = CUSTOMER_A,
+    userId = customerUserId,
+  ) =>
     envelope('CustomerMembershipChanged', tenantId, membershipId, {
       membershipId,
       userId,
@@ -85,19 +96,59 @@ describe('Directory events and the customer_id claim (e2e)', () => {
 
   it('issues customer_id = null while the account has no customer link', async () => {
     const res = await loginCustomer().expect(200);
-    expect(decode(res.body.accessToken)).toMatchObject({ user_type: 'CUSTOMER', customer_id: null });
+    expect(decode(res.body.accessToken)).toMatchObject({
+      user_type: 'CUSTOMER',
+      customer_id: null,
+    });
     expect(res.body.user.customerId).toBeNull();
   });
 
   it('puts the customer of an active membership into the token and the profile', async () => {
-    await expect(handler.handle(membership('ACTIVE', '2026-10-01T00:00:00Z'))).resolves.toBe('processed');
+    await expect(
+      handler.handle(membership('ACTIVE', '2026-10-01T00:00:00Z')),
+    ).resolves.toBe('processed');
     const res = await loginCustomer().expect(200);
-    expect(decode(res.body.accessToken)).toMatchObject({ customer_id: CUSTOMER_A });
+    expect(decode(res.body.accessToken)).toMatchObject({
+      customer_id: CUSTOMER_A,
+    });
     const me = await http()
       .get('/auth/me')
       .set('authorization', `Bearer ${res.body.accessToken}`)
       .expect(200);
     expect(me.body.customerId).toBe(CUSTOMER_A);
+  });
+
+  it('writes one ordered recipient snapshot per accepted membership change', async () => {
+    const first = membership('ACTIVE', '2026-10-01T00:00:00Z');
+    await expect(handler.handle(first)).resolves.toBe('processed');
+    await expect(handler.handle(first)).resolves.toBe('duplicate');
+    await expect(
+      handler.handle(membership('INACTIVE', '2026-09-30T00:00:00Z')),
+    ).resolves.toBe('processed');
+    await expect(
+      handler.handle(membership('INACTIVE', '2026-10-02T00:00:00Z')),
+    ).resolves.toBe('processed');
+
+    const rows = await prisma.outboxEvent.findMany({
+      where: {
+        aggregateId: customerUserId,
+        eventType: 'NotificationRecipientSnapshot',
+      },
+      orderBy: { occurredAt: 'asc' },
+    });
+    expect(rows).toHaveLength(2);
+    const snapshots = rows.map(
+      (row) => (row.payload as { data: Record<string, unknown> }).data,
+    );
+    expect(snapshots.map((snapshot) => snapshot.revision)).toEqual(['1', '2']);
+    expect(snapshots[1].customerMembership).toMatchObject({
+      customerId: CUSTOMER_A,
+      status: 'INACTIVE',
+    });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: customerUserId },
+    });
+    expect(user.recipientRevision).toBe(2n);
   });
 
   it('processes a redelivered event only once', async () => {
@@ -108,9 +159,15 @@ describe('Directory events and the customer_id claim (e2e)', () => {
   });
 
   it('ignores a membership change older than the stored one', async () => {
-    await handler.handle(membership('ACTIVE', '2026-10-05T00:00:00Z', CUSTOMER_B));
-    await handler.handle(membership('ACTIVE', '2026-10-01T00:00:00Z', CUSTOMER_A));
-    const link = await prisma.userCustomerLink.findUniqueOrThrow({ where: { userId: customerUserId } });
+    await handler.handle(
+      membership('ACTIVE', '2026-10-05T00:00:00Z', CUSTOMER_B),
+    );
+    await handler.handle(
+      membership('ACTIVE', '2026-10-01T00:00:00Z', CUSTOMER_A),
+    );
+    const link = await prisma.userCustomerLink.findUniqueOrThrow({
+      where: { userId: customerUserId },
+    });
     expect(link.customerId).toBe(CUSTOMER_B);
   });
 
@@ -122,7 +179,9 @@ describe('Directory events and the customer_id claim (e2e)', () => {
       .post('/auth/refresh')
       .send({ refreshToken: login.body.refreshToken })
       .expect(200);
-    expect(decode(refreshed.body.accessToken)).toMatchObject({ customer_id: null });
+    expect(decode(refreshed.body.accessToken)).toMatchObject({
+      customer_id: null,
+    });
   });
 
   it('refuses to link a staff account to a customer and records nothing', async () => {
@@ -134,7 +193,9 @@ describe('Directory events and the customer_id claim (e2e)', () => {
       roles: ['DISPATCHER'],
     });
     await expect(
-      handler.handle(membership('ACTIVE', '2026-10-01T00:00:00Z', CUSTOMER_A, staffId)),
+      handler.handle(
+        membership('ACTIVE', '2026-10-01T00:00:00Z', CUSTOMER_A, staffId),
+      ),
     ).rejects.toThrow(/Only CUSTOMER accounts/);
     expect(await prisma.userCustomerLink.count()).toBe(0);
     // The inbox row rolled back with the failed write, so a retry is possible.
@@ -151,7 +212,9 @@ describe('Directory events and the customer_id claim (e2e)', () => {
       roles: ['CUSTOMER_USER'],
     });
     await expect(
-      handler.handle(membership('ACTIVE', '2026-10-01T00:00:00Z', CUSTOMER_A, outsider)),
+      handler.handle(
+        membership('ACTIVE', '2026-10-01T00:00:00Z', CUSTOMER_A, outsider),
+      ),
     ).rejects.toThrow(/tenant does not match/);
   });
 
@@ -173,7 +236,13 @@ describe('Directory events and the customer_id claim (e2e)', () => {
       roles: ['TENANT_ADMIN'],
     });
     const login = () =>
-      http().post('/auth/login').send({ tenantCode: 'NEWCO', email: 'admin@newco.com', password: PASSWORD });
+      http()
+        .post('/auth/login')
+        .send({
+          tenantCode: 'NEWCO',
+          email: 'admin@newco.com',
+          password: PASSWORD,
+        });
     await login().expect(200);
 
     const status = (value: string, previous: string, changedAt: string) =>

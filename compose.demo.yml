@@ -58,6 +58,14 @@ services:
       retries: 20
     networks: [private]
 
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '${DEMO_MAILPIT_PORT:-8025}:8025'
+      - '127.0.0.1:${DEMO_SMTP_PORT:-1025}:1025'
+    networks: [private]
+
   redis:
     image: redis:8-alpine
     restart: unless-stopped
@@ -119,6 +127,11 @@ services:
       HEALTH_PORT: '3001'
       IDENTITY_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/identity_db
       IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'false'
+      IDENTITY_ACTIVATION_ENCRYPTION_KEY: ${IDENTITY_ACTIVATION_ENCRYPTION_KEY:?Set a random 32-byte hex key}
+      IDENTITY_ACTIVATION_URL_BASE: ${DEMO_PUBLIC_URL:?}/activate#token=
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_FROM: ${SMTP_FROM:-PBL6 Demo <no-reply@pbl6.local>}
 
   organization-service:
     <<: *app

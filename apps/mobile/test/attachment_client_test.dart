@@ -92,4 +92,111 @@ void main() {
     );
     client.close();
   });
+
+  test(
+    'reports PUT bytes and cancels before finalize using the same upload ID',
+    () async {
+      var finalized = false, aborted = false;
+      final progress = <int>[];
+      late AttachmentClient client;
+      client = AttachmentClient(
+        sessionScope: () => 'tenant/user',
+        storage: MockClient((request) async => http.Response('', 200)),
+        api: (method, path, {body, idempotencyKey}) async {
+          if (path.endsWith('/attachment-uploads')) {
+            return {
+              'uploadId': 'upload-id',
+              'method': 'PUT',
+              'uploadUrl': 'https://storage.invalid/staging',
+              'headers': {'Content-Type': 'image/png'},
+              'expiresAt': DateTime.now()
+                  .add(const Duration(minutes: 1))
+                  .toUtc()
+                  .toIso8601String(),
+            };
+          }
+          if (method == 'DELETE') {
+            aborted = true;
+            expect(path, '/api/workorders/attachment-uploads/upload-id');
+            return null;
+          }
+          finalized = true;
+          return {'id': 'attachment-id'};
+        },
+      );
+      final attempt = client.create(
+        workOrderId: 'order-id',
+        report: false,
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        bytes: Uint8List(128 * 1024),
+      );
+      await expectLater(
+        client.upload(
+          attempt,
+          onProgress: (sent, total) {
+            progress.add(sent);
+            expect(total, 128 * 1024);
+            if (sent == 64 * 1024) {
+              expect(client.cancelActivePut(attempt), isTrue);
+            }
+          },
+        ),
+        throwsA(
+          isA<ApiException>().having((e) => e.code, 'code', 'UPLOAD_CANCELLED'),
+        ),
+      );
+      expect(progress, [0, 64 * 1024]);
+      expect(finalized, isFalse);
+      await client.abort(attempt);
+      expect(aborted, isTrue);
+      client.close();
+    },
+  );
+
+  test('session switch during PUT prevents finalize', () async {
+    var scope = 'tenant/first-user';
+    var finalized = false;
+    final client = AttachmentClient(
+      sessionScope: () => scope,
+      storage: MockClient((request) async => http.Response('', 200)),
+      api: (method, path, {body, idempotencyKey}) async {
+        if (path.endsWith('/attachment-uploads')) {
+          return {
+            'uploadId': 'upload-id',
+            'method': 'PUT',
+            'uploadUrl': 'https://storage.invalid/staging',
+            'headers': {'Content-Type': 'image/png'},
+            'expiresAt': DateTime.now()
+                .add(const Duration(minutes: 1))
+                .toUtc()
+                .toIso8601String(),
+          };
+        }
+        finalized = true;
+        return {'id': 'attachment-id'};
+      },
+    );
+    final attempt = client.create(
+      workOrderId: 'order-id',
+      report: false,
+      fileName: 'photo.png',
+      mimeType: 'image/png',
+      bytes: Uint8List(128 * 1024),
+    );
+    await expectLater(
+      client.upload(
+        attempt,
+        onProgress: (sent, _) {
+          if (sent == 64 * 1024) scope = 'tenant/other-user';
+        },
+      ),
+      throwsA(
+        isA<ApiException>().having((e) => e.code, 'code', 'SESSION_CHANGED'),
+      ),
+    );
+    expect(finalized, isFalse);
+    expect(attempt.putSucceeded, isFalse);
+    client.close();
+  });
 }

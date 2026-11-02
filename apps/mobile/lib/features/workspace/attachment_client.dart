@@ -43,6 +43,8 @@ class AttachmentAttempt {
   Map<String, String>? headers;
   DateTime? expiresAt;
   bool putSucceeded = false;
+  Completer<void>? _abortPut;
+  bool get isPutActive => _abortPut != null;
 }
 
 /// One session's K8 transport. Callers retain an attempt after uncertain
@@ -101,7 +103,18 @@ class AttachmentClient {
     throw const ApiException('INVALID_RESPONSE');
   }
 
-  Future<Map<String, dynamic>> upload(AttachmentAttempt attempt) async {
+  bool cancelActivePut(AttachmentAttempt attempt) {
+    _check(attempt);
+    final trigger = attempt._abortPut;
+    if (trigger == null || trigger.isCompleted) return false;
+    trigger.complete();
+    return true;
+  }
+
+  Future<Map<String, dynamic>> upload(
+    AttachmentAttempt attempt, {
+    void Function(int sentBytes, int totalBytes)? onProgress,
+  }) async {
     _check(attempt);
     if (attempt.uploadId == null) {
       final suffix = attempt.report ? '/service-report' : '';
@@ -153,16 +166,41 @@ class AttachmentClient {
       if (DateTime.now().isAfter(attempt.expiresAt!)) {
         throw const ApiException('UPLOAD_EXPIRED', status: 409);
       }
-      final request = http.Request('PUT', Uri.parse(attempt.uploadUrl!))
-        ..followRedirects = false
-        ..headers.addAll(attempt.headers!)
-        ..bodyBytes = attempt.bytes;
+      final abort = Completer<void>();
+      attempt._abortPut = abort;
+      final request =
+          http.AbortableStreamedRequest(
+              'PUT',
+              Uri.parse(attempt.uploadUrl!),
+              abortTrigger: abort.future,
+            )
+            ..followRedirects = false
+            ..headers.addAll(attempt.headers!)
+            ..contentLength = attempt.bytes.length;
       try {
-        final response = await _storage
+        final responseFuture = _storage
             .send(request)
             .timeout(const Duration(seconds: 30));
+        onProgress?.call(0, attempt.bytes.length);
+        for (
+          var offset = 0;
+          offset < attempt.bytes.length;
+          offset += 64 * 1024
+        ) {
+          if (sessionScope() != attempt.scope && !abort.isCompleted) {
+            abort.complete();
+          }
+          if (abort.isCompleted) break;
+          final end = min(offset + 64 * 1024, attempt.bytes.length);
+          request.sink.add(attempt.bytes.sublist(offset, end));
+          onProgress?.call(end, attempt.bytes.length);
+          await Future<void>.delayed(Duration.zero);
+        }
+        unawaited(request.sink.close());
+        final response = await responseFuture;
         await response.stream.drain<void>();
         _check(attempt);
+        if (abort.isCompleted) throw const ApiException('UPLOAD_CANCELLED');
         if (response.statusCode < 200 || response.statusCode >= 300) {
           throw ApiException(
             'ATTACHMENT_STORAGE_UNAVAILABLE',
@@ -172,8 +210,15 @@ class AttachmentClient {
         attempt.putSucceeded = true;
       } on TimeoutException {
         throw const ApiException('TIMEOUT');
+      } on http.RequestAbortedException {
+        _check(attempt);
+        throw const ApiException('UPLOAD_CANCELLED');
       } on http.ClientException {
+        _check(attempt);
+        if (abort.isCompleted) throw const ApiException('UPLOAD_CANCELLED');
         throw const ApiException('NETWORK_ERROR');
+      } finally {
+        attempt._abortPut = null;
       }
     }
     final result = _object(

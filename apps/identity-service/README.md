@@ -1,5 +1,13 @@
 # Identity Service
 
+M3 Notification directory: tenant user invite, activation, role/status changes
+and accepted Organization membership events enqueue
+`NotificationRecipientSnapshot.v1` in a transactional outbox with a monotonic
+per-user revision. Backfill existing users with
+`pnpm recipient:bootstrap <tenant-uuid>`; a failed run resumes on retry. The
+`NotificationRecipientBootstrapCompleted.v1` marker means all snapshots were
+queued, not that Notification has consumed them. See ADR 0017.
+
 Owns authentication, accounts, the fixed RBAC catalog and sessions
 (`identity_db`). Reference implementation for the other NestJS services:
 validated configuration, Prisma migrations with drift check, unit + e2e tests
@@ -20,18 +28,24 @@ against a real PostgreSQL.
 | `POST` | `/auth/logout` | — | `{refreshToken}` | `204` (always) |
 | `GET` | `/auth/me` | Bearer | — | `200` profile |
 | `GET` | `/users` | Bearer + `user:read` | Query filters | Tenant or customer-scoped page |
-| `POST` | `/users` | Bearer + `user:manage` | Invite input | `201` INVITED user + activation token |
+| `POST` | `/users` | Bearer + `user:manage` | Invite input | `201` INVITED user; token only when local exposure is enabled |
 | `POST` | `/users/activate` | Activation token | `{token, password}` | `200` tokens + ACTIVE profile |
 | `GET` | `/users/:id` | Bearer + `user:read` | — | `200` profile / `404` outside scope |
 | `PATCH` | `/users/:id/roles` | Bearer + `role:assign` | `{roles}` | `200` updated profile |
 | `POST` | `/users/:id/status` | Bearer + `user:manage` | `{status}` | `200` updated profile |
-| `POST` | `/platform/tenants/:tenantId/admins` | Platform Admin | `{email, fullName, phone?}` | `201` INVITED Tenant Admin + token |
+| `POST` | `/platform/tenants/:tenantId/admins` | Platform Admin | `{email, fullName, phone?}` | `201` INVITED Tenant Admin; token only when local exposure is enabled |
 | `POST` | `/platform/tenants/:tenantId/admins/:id/status` | Platform Admin | `{status}` | `200` updated Tenant Admin / `409` last active admin |
 | `PATCH` | `/platform/tenants/:tenantId/admins/:id/roles` | Platform Admin | `{roles: []}` or `{roles: ["TENANT_ADMIN"]}` | `200` updated roles / `409` last active admin |
 
 Invitation tokens expire after 24 hours. `IDENTITY_EXPOSE_ACTIVATION_TOKEN`
 defaults to `false`; set it to `true` only for local development or tests that
 need to copy the token. The service rejects this setting in production.
+With SMTP configured, Identity stores an encrypted activation link in a
+private, retryable job created with the account token. It sends the link by
+email and never publishes it in RabbitMQ. Production requires SMTP,
+`IDENTITY_ACTIVATION_URL_BASE` ending in `#token=`, and a 32-byte hex
+`IDENTITY_ACTIVATION_ENCRYPTION_KEY`. Drain pending jobs before rotating the
+key; see ADR 0017 and the M3 demo runbook.
 | `GET` | `/internal/users/:id` | Tenant staff or scoped Customer Admin token | — | Tenant-scoped identity snapshot |
 | `GET` | `/internal/users` | Tenant staff token | `role`, `status`, pagination | Tenant-scoped minimal user page |
 

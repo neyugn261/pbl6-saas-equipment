@@ -9,6 +9,7 @@ import {
 } from '@pbl6/event-contracts';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { enqueueRecipientSnapshot, lockRecipient } from './recipient-snapshots';
 
 /** Inbox consumer name and broker queue of the directory read models. */
 export const DIRECTORY_CONSUMER = 'identity-service.directory';
@@ -48,7 +49,11 @@ export class DirectoryEventHandler {
         if (isEvent(envelope, Events.TenantCreated)) {
           await this.upsertTenant(tx, envelope.payload, envelope.occurredAt);
         } else if (isEvent(envelope, Events.TenantStatusChanged)) {
-          await this.upsertTenant(tx, envelope.payload, envelope.payload.changedAt);
+          await this.upsertTenant(
+            tx,
+            envelope.payload,
+            envelope.payload.changedAt,
+          );
         } else if (isEvent(envelope, Events.CustomerMembershipChanged)) {
           await this.upsertCustomerLink(tx, envelope);
         } else {
@@ -86,9 +91,10 @@ export class DirectoryEventHandler {
       throw new Error('CustomerMembershipChanged must carry a tenantId');
     }
     const membership = envelope.payload;
+    await lockRecipient(tx, membership.userId);
     // The trigger trg_user_customer_links_guard rejects a non-CUSTOMER account
     // or another tenant; the error makes the broker retry, then dead-letter.
-    await tx.$executeRawUnsafe(
+    const changed = await tx.$executeRawUnsafe(
       `INSERT INTO user_customer_links
           (user_id, tenant_id, customer_id, membership_id, status, source_changed_at)
        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::timestamptz)
@@ -107,5 +113,8 @@ export class DirectoryEventHandler {
       membership.status,
       membership.changedAt,
     );
+    if (changed === 1) {
+      await enqueueRecipientSnapshot(tx, membership.userId);
+    }
   }
 }

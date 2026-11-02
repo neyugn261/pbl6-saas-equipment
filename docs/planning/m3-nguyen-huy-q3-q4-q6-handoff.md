@@ -6,6 +6,20 @@ thiết kế/contract trong phạm vi sở hữu; không có nghĩa code, migrat
 chưa tồn tại đã được merge. Contract dùng chung vẫn cần producer và consumer
 review theo `docs/architecture/events.md` trước khi triển khai.
 
+## Cập nhật trên nhánh `codex/nguyen-m3-integration` (chưa merge)
+
+Sau baseline, Nguyên đã bổ sung hai event vào `packages/event-contracts`,
+Identity outbox/revision/bootstrap, private activation delivery và Mailpit demo
+theo [ADR 0017](../decisions/0017-identity-recipient-and-activation-delivery.md).
+Migration mới là `20261102090000_notification_recipient_outbox`; ERD delta ở
+[`docs/erd/m3-identity-recipient-and-mail.md`](../erd/m3-identity-recipient-and-mail.md).
+Đây là code trên nhánh tích hợp, **chưa merge vào develop** và chưa thay cho
+consumer review của Huy. Identity E2E và schema drift chạy trên test DB;
+API invite→Identity→Mailpit SMTP smoke đã PASS (mail vào Mailpit, job SENT và xóa
+ciphertext). Bootstrap qua RabbitMQ→Notification chưa chạy vì consumer C3
+chưa có trên nhánh tích hợp.
+Huy có thể review contract ngay; Notification migration/consumer vẫn do Huy.
+
 ## Trạng thái ngắn
 
 | Nội dung | Trạng thái | Owner / bước tiếp theo |

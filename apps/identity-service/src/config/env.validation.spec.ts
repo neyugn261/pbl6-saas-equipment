@@ -70,4 +70,30 @@ describe('validateEnv', () => {
       validateEnv({ ...valid, IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'yes' }),
     ).toThrow('IDENTITY_EXPOSE_ACTIVATION_TOKEN');
   });
+
+  it('requires complete activation mail configuration in production', () => {
+    expect(() => validateEnv({ ...valid, NODE_ENV: 'production' })).toThrow(
+      'Production Identity requires activation mail configuration',
+    );
+    expect(() =>
+      validateEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        IDENTITY_ACTIVATION_ENCRYPTION_KEY: 'short',
+        IDENTITY_ACTIVATION_URL_BASE: 'https://portal.example/activate#token=',
+        SMTP_HOST: 'mailpit',
+        SMTP_FROM: 'PBL6 <no-reply@pbl6.local>',
+      }),
+    ).toThrow('IDENTITY_ACTIVATION_ENCRYPTION_KEY');
+    expect(
+      validateEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        IDENTITY_ACTIVATION_ENCRYPTION_KEY: 'ab'.repeat(32),
+        IDENTITY_ACTIVATION_URL_BASE: 'https://portal.example/activate#token=',
+        SMTP_HOST: 'mailpit',
+        SMTP_FROM: 'PBL6 <no-reply@pbl6.local>',
+      }).SMTP_HOST,
+    ).toBe('mailpit');
+  });
 });

@@ -22,7 +22,7 @@ export async function createTestApp(): Promise<{
 /** Clears all identity data except the role and permission catalogs. */
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE auth_sessions, account_tokens, user_customer_links, user_roles, users, tenant_directory, processed_events',
+    'TRUNCATE auth_sessions, activation_deliveries, account_tokens, user_customer_links, user_roles, users, tenant_directory, processed_events, outbox_events, recipient_bootstrap_users, recipient_bootstrap_runs',
   );
 }
 

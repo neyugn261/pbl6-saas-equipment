@@ -4,6 +4,8 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { signTestAccessToken } from '@pbl6/testing';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { UsersRepository } from '../src/users/users.repository';
+import { encryptActivationUrl } from '../src/users/activation-secret';
 import {
   createTenant,
   createTestApp,
@@ -112,6 +114,42 @@ describe('Identity Users & Internal API (e2e)', () => {
       role: 'PLATFORM_ADMIN',
       userId: platformAdminId,
     });
+  });
+
+  it('commits invitation, encrypted delivery and recipient snapshot together', async () => {
+    const repository = app.get(UsersRepository);
+    const rawLink = 'https://portal.example/activate#token=private-test-token';
+    const ciphertext = encryptActivationUrl(rawLink, 'ab'.repeat(32));
+    const user = await repository.createInvitation({
+      tenantId: tenantA,
+      userType: 'TENANT_STAFF',
+      email: 'new.tech@tenant-a.com',
+      fullName: 'New Technician',
+      roleCodes: ['TECHNICIAN'],
+      assignedBy: adminUserIdA,
+      tokenHash: 'a'.repeat(64),
+      expiresAt: new Date(Date.now() + 60_000),
+      activationCiphertext: ciphertext,
+    });
+    const stored = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+    });
+    const token = await prisma.accountToken.findFirstOrThrow({
+      where: { userId: user.id },
+    });
+    const delivery = await prisma.activationDelivery.findUniqueOrThrow({
+      where: { tokenId: token.id },
+    });
+    const events = await prisma.outboxEvent.findMany({
+      where: { aggregateId: user.id },
+    });
+    expect(stored.recipientRevision).toBe(1n);
+    expect(delivery.ciphertext).toBe(ciphertext);
+    expect(delivery.ciphertext).not.toContain('private-test-token');
+    expect(events).toHaveLength(1);
+    expect(JSON.stringify(events[0].payload)).not.toContain(
+      'private-test-token',
+    );
   });
 
   describe('Platform tenant provisioning', () => {

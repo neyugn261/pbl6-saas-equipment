@@ -82,6 +82,32 @@ export interface CustomerMembershipChangedV1 {
   changedAt: string;
 }
 
+/** Identity's full, versioned directory row for Notification (M3 Q3). */
+export interface NotificationRecipientSnapshotV1 {
+  userId: string;
+  userType: 'TENANT_STAFF' | 'CUSTOMER';
+  accountStatus: 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED';
+  /** Sorted, unique role codes from Identity. */
+  roles: string[];
+  customerMembership: {
+    membershipId: string;
+    customerId: string;
+    status: MembershipStatus;
+    sourceChangedAt: string;
+  } | null;
+  /** Per-user monotonic bigint encoded as decimal text for JSON safety. */
+  revision: string;
+  bootstrapRunId: string | null;
+}
+
+/** Marker may reach Notification before the snapshots from this run. */
+export interface NotificationRecipientBootstrapCompletedV1 {
+  bootstrapRunId: string;
+  expectedUsers: number;
+  startedAt: string;
+  completedAt: string;
+}
+
 export interface ServiceRequestCreatedV1 {
   serviceRequestId: string;
   requestNo: string;
@@ -211,24 +237,40 @@ export interface LowStockDetectedV1 {
 
 export const Events = {
   EquipmentMoved: define<EquipmentMovedV1>({
-    type: 'EquipmentMoved', version: 1, aggregateType: 'Equipment', producer: 'asset-service',
+    type: 'EquipmentMoved',
+    version: 1,
+    aggregateType: 'Equipment',
+    producer: 'asset-service',
     fields: {
-      equipmentId: is.uuid, customerId: is.uuid,
-      customerSiteId: is.nullable(is.uuid), locationId: is.nullable(is.uuid),
-      snapshotVersion: (value) => Number.isSafeInteger(value) && (value as number) > 0,
+      equipmentId: is.uuid,
+      customerId: is.uuid,
+      customerSiteId: is.nullable(is.uuid),
+      locationId: is.nullable(is.uuid),
+      snapshotVersion: (value) =>
+        Number.isSafeInteger(value) && (value as number) > 0,
       changedAt: is.isoDateTime,
     },
   }),
-  MaintenanceWorkOrderReplacementRequested: define<MaintenanceWorkOrderReplacementRequestedV1>({
-    type: 'MaintenanceWorkOrderReplacementRequested', version: 1,
-    aggregateType: 'MaintenanceTask', producer: 'maintenance-service',
-    fields: {
-      requestId: is.uuid, previousWorkOrderId: is.uuid, replacementWorkOrderId: is.uuid,
-      requestedBy: is.uuid, maintenanceTaskId: is.uuid, maintenancePlanId: is.uuid,
-      equipmentId: is.uuid, customerId: is.uuid, customerSiteId: is.nullable(is.uuid),
-      scheduledDate: is.isoDate, title: is.string(200),
-    },
-  }),
+  MaintenanceWorkOrderReplacementRequested:
+    define<MaintenanceWorkOrderReplacementRequestedV1>({
+      type: 'MaintenanceWorkOrderReplacementRequested',
+      version: 1,
+      aggregateType: 'MaintenanceTask',
+      producer: 'maintenance-service',
+      fields: {
+        requestId: is.uuid,
+        previousWorkOrderId: is.uuid,
+        replacementWorkOrderId: is.uuid,
+        requestedBy: is.uuid,
+        maintenanceTaskId: is.uuid,
+        maintenancePlanId: is.uuid,
+        equipmentId: is.uuid,
+        customerId: is.uuid,
+        customerSiteId: is.nullable(is.uuid),
+        scheduledDate: is.isoDate,
+        title: is.string(200),
+      },
+    }),
   TenantCreated: define<TenantCreatedV1>({
     type: 'TenantCreated',
     version: 1,
@@ -267,6 +309,47 @@ export const Events = {
       changedAt: is.isoDateTime,
     },
   }),
+  NotificationRecipientSnapshot: define<NotificationRecipientSnapshotV1>({
+    type: 'NotificationRecipientSnapshot',
+    version: 1,
+    aggregateType: 'User',
+    producer: 'identity-service',
+    fields: {
+      userId: is.uuid,
+      userType: is.oneOf(['TENANT_STAFF', 'CUSTOMER']),
+      accountStatus: is.oneOf(['INVITED', 'ACTIVE', 'SUSPENDED', 'DISABLED']),
+      roles: (value) =>
+        is.arrayOf(is.string(50), 8)(value) &&
+        (value as string[]).every(
+          (role, index, roles) => index === 0 || roles[index - 1] < role,
+        ),
+      customerMembership: is.nullable(
+        is.object({
+          membershipId: is.uuid,
+          customerId: is.uuid,
+          status: is.oneOf(MEMBERSHIP_STATUSES),
+          sourceChangedAt: is.isoDateTime,
+        }),
+      ),
+      revision: (value) =>
+        typeof value === 'string' && /^[1-9][0-9]*$/.test(value),
+      bootstrapRunId: is.nullable(is.uuid),
+    },
+  }),
+  NotificationRecipientBootstrapCompleted:
+    define<NotificationRecipientBootstrapCompletedV1>({
+      type: 'NotificationRecipientBootstrapCompleted',
+      version: 1,
+      aggregateType: 'RecipientBootstrap',
+      producer: 'identity-service',
+      fields: {
+        bootstrapRunId: is.uuid,
+        expectedUsers: (value) =>
+          Number.isSafeInteger(value) && (value as number) >= 0,
+        startedAt: is.isoDateTime,
+        completedAt: is.isoDateTime,
+      },
+    }),
   ServiceRequestCreated: define<ServiceRequestCreatedV1>({
     type: 'ServiceRequestCreated',
     version: 1,
