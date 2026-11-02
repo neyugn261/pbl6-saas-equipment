@@ -11,7 +11,7 @@ trước khi ghép consumer Notification.
 | D2 compose staging/demo | Đã có image, migrate gate, service health, volume và network riêng | `docs/deployment/m3-demo.md`; backend image mới build, migration/seed demo PASS, Identity mới healthy và kết nối RabbitMQ, Mailpit đã nhận thư. |
 | D3 Gateway + MinIO | Public mapping Notification/SR và signed storage theo runbook; private bucket | Gateway→MinIO signed PUT/GET smoke đã ghi trong runbook. SR C4/controller và Notification API thật phụ thuộc owner Huy. |
 | D4 Mobile file | Client và màn hình live có camera/gallery/file, hash, prepare/PUT/finalize, tải URL, retry cùng key, phần trăm byte PUT và hủy PUT đang chạy | Android Files→Gateway→MinIO upload/finalize và Chrome signed download PASS trên emulator; phần trăm/hủy/đổi phiên đã qua unit, chưa thử thao tác hủy giữa PUT trên thiết bị với tệp lớn. |
-| D5 Mobile/CI regression | Flutter analyze, 106 test toàn bộ, thêm 1 test hồi quy targeted và APK debug PASS; Android runtime đã chạy | Demo Gateway: Manager phân công, Technician nhận việc, bắt đầu, gửi báo cáo, WO hoàn thành, đính kèm tệp báo cáo và tải xuống PASS trên emulator. Lỗi mất trạng thái upload khi quay lại từ Android Files đã được sửa và thử lại thành công. |
+| D5 Mobile/CI regression | Flutter analyze, 106 test toàn bộ, thêm 1 test hồi quy targeted và APK debug PASS; Android runtime đã chạy | Demo Gateway: Manager phân công, Technician nhận việc, bắt đầu, gửi báo cáo, WO hoàn thành, đính kèm tệp báo cáo và tải xuống PASS trên emulator. Mất mạng và retry đọc WO PASS; đổi assignment giữa thao tác chưa thử trên Android. Lỗi mất trạng thái upload khi quay lại từ Android Files đã được sửa và thử lại thành công. |
 | D6 Runbook/bàn giao | Runbook build/migrate/start/health/stop, storage/RabbitMQ/Mailpit/bootstrap | `docs/deployment/m3-demo.md`; một người khác cần dựng lại stack và chạy nghiệp vụ toàn tuyến để nghiệm thu cuối. |
 
 ## Lệnh kiểm tra D1 đã chạy
@@ -32,8 +32,8 @@ trước khi ghép consumer Notification.
 1. Huy review/merge hai event v1, triển khai recipient projection, durable pending,
    customer context và Notification API; sau đó chạy bootstrap→RabbitMQ→C3 thật.
 2. Ghép SR C4 của Huy với WO A4 và Gateway để chạy file CUSTOMER end-to-end.
-3. Thử hủy giữa PUT và retry với tệp lớn trên Android; unit đã bao phủ nhưng
-   lần upload demo 67 byte hoàn tất quá nhanh để thao tác hủy.
+3. Thử hủy giữa PUT, retry và đổi assignment giữa thao tác trên Android; unit
+   đã bao phủ nhưng upload demo 67 byte và 6 MiB đều hoàn tất quá nhanh để hủy.
 4. Dựng lại stack từ nhánh sau khi merge và chạy toàn tuyến cùng Notification
    consumer và Service Request/Customer Portal của các owner liên quan.
 
@@ -50,6 +50,9 @@ trước khi ghép consumer Notification.
   chi tiết trong lúc refresh. APK mới thử lại PASS.
 - Tệp thử 6 MiB cũng upload/finalize trên emulator; kết nối local vẫn hoàn tất
   trước khi có thể bấm hủy, nên chưa tính là PASS cho thao tác hủy giữa PUT.
+- Tắt Wi-Fi và mobile data trên emulator rồi tải lại WO: ứng dụng hiện lỗi
+  “Không kết nối được máy chủ” và nút “Thử lại”. Bật lại mạng, bấm “Thử lại”:
+  WO và danh sách tệp tải lại thành công, không phát sinh mutation mới.
 - Chạm tệp báo cáo mở Chrome với signed URL; Chrome tải một bản 67 byte vào
   Downloads. URL ký và thông tin đăng nhập không được lưu trong tài liệu.
 - MinIO public URL của môi trường local được đổi trong `.env.demo` bị git ignore
