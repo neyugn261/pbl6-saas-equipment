@@ -9,6 +9,7 @@ export interface AppEnv extends JwtEnv {
   ORGANIZATION_SERVICE_URL: string;
   ASSET_SERVICE_URL: string;
   SERVICE_REQUEST_SERVICE_URL: string;
+  INVENTORY_SERVICE_URL?: string;
   RABBITMQ_URL?: string;
   WORKORDER_ATTACHMENTS_ENABLED: boolean;
   WORKORDER_ATTACHMENT_WORKER_ENABLED: boolean;
@@ -110,6 +111,10 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
     ]),
     ASSET_SERVICE_URL: env.url('ASSET_SERVICE_URL', ['http:', 'https:']),
     SERVICE_REQUEST_SERVICE_URL: env.url('SERVICE_REQUEST_SERVICE_URL', [
+      'http:',
+      'https:',
+    ]),
+    INVENTORY_SERVICE_URL: env.optionalUrl('INVENTORY_SERVICE_URL', [
       'http:',
       'https:',
     ]),

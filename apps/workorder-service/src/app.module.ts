@@ -12,6 +12,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
 import { EventsModule } from './events/events.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { ReportsModule } from './reports/reports.module';
+import { InventoryReservationsModule } from './inventory-reservations/inventory-reservations.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ReportsModule } from './reports/reports.module';
     EventsModule,
     AttachmentsModule,
     ReportsModule,
+    InventoryReservationsModule,
   ],
 })
 export class AppModule {}

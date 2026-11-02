@@ -5,6 +5,7 @@ import { getCorrelationId } from '@pbl6/service-kit';
 import { PrismaService } from '../prisma/prisma.service';
 import { missing } from '../common/errors';
 import { lockMaintenanceTask } from '../common/maintenance-source';
+import { assertNoInventoryHold } from '../inventory-reservations/inventory-reservations.repository';
 import {
   lockServiceRequest,
   workOrderInclude,
@@ -110,6 +111,7 @@ export class WorkOrderWorkflowRepository {
     cancelServiceRequest: boolean,
   ) {
     const { tx, order, now } = context;
+    await assertNoInventoryHold(tx, order.tenantId, order.id);
     const assignment = order.assignments[0];
     if (assignment) {
       await this.lockTechnicians(tx, order.tenantId, [assignment.technicianId]);

@@ -10,6 +10,11 @@ A4 internal SR projection đã triển khai; [bàn giao cho Huy](../../docs/plan
 Public SR composition thuộc Huy. A5 report aggregate đã triển khai;
 [contract, fixture và bàn giao dashboard cho Hatsady](../../docs/planning/m3-khuong-a5.md).
 A6 có [regression, evidence và các ca còn chờ tích hợp](../../docs/planning/m3-khuong-a6.md).
+Sau Inventory PR #54, WO đã triển khai [reservation và handoff ISSUE thật](../../docs/planning/m3-khuong-inventory-reservations.md)
+theo [ADR 0016](../../docs/decisions/0016-workorder-inventory-reservations.md).
+Áp migration WO `0006_inventory_reservations` trước khi ghép; cấu hình
+`INVENTORY_SERVICE_URL` để WO xác minh operation proof. HELD chặn complete/cancel
+qua HTTP và event; phục hồi qua Inventory retry/abort cùng key, không tự hết hạn.
 
 Work Order sở hữu `workorder_db`, Technician và Skill. Đã triển khai nền
 tảng, profile/skill, WO, assignment, thực thi, Service Report và hủy SR/WO. API theo
@@ -68,6 +73,7 @@ Gateway bỏ prefix `/api/workorders`, ví dụ
 
 | Endpoint trong service | Quyền | Hành vi |
 | --- | --- | --- |
+| `POST /internal/work-orders/{id}/inventory-reservations`, `/settle` | TENANT_STAFF, `inventory:issue` + `work_order:read` | Xác minh proof qua Inventory bằng original token; HELD/COMMITTED/RELEASED bền vững; Gateway chặn internal |
 | `GET /reports/work-orders/summary?from=…&to=…` | `report:read`, TENANT_STAFF | Tenant-wide: cohort theo createdAt, đủ 8 current status, completions theo completedAt; khoảng `[from, to)`, timezone rõ ràng |
 | `GET /technicians`, `GET /technicians/{id}` | `work_order:read` | Profile có skill, list hỗ trợ q/branch/status/skill và pagination |
 | `GET /technicians/me` | `work_order:execute` | Profile theo user ID của token; thiếu profile → 404 |
@@ -224,6 +230,19 @@ Cần DB test riêng, `WORKORDER_SHADOW_TEST_DATABASE_URL` trỏ đúng
 JSON kết quả ở thư mục tạm hoặc `WORKORDER_M3_EVIDENCE_PATH`; không chạy song
 song trên cùng DB test. [Hướng dẫn A6](../../docs/planning/m3-khuong-a6.md)
 ghi đầy đủ env, coverage và giới hạn SR/web/Android acceptance.
+
+Ghép reservation bằng Gateway/Inventory/WO và PostgreSQL thật (DB test riêng,
+không cần broker/MinIO cho riêng suite này):
+
+```bash
+pnpm --filter workorder-service test:inventory:integration
+```
+
+Cần `WORKORDER_TEST_DATABASE_URL` = `workorder_test_db` và
+`INVENTORY_TEST_DATABASE_URL` = `inventory_test_db`. Script áp migration chỉ lên
+hai DB test, dùng fixture tenant riêng và dọn dữ liệu/process sau lượt. Kiểm tra
+WO SIGKILL/restart, Inventory application restart, timeout/replay, concurrent issue
+và terminal gate. Không thay thế live Identity, broker hay web/Android acceptance.
 
 Smoke tuần 1 cần sáu service Identity/Organization/Asset/SR/WO/Gateway và
 RabbitMQ thật, seed DEMO và biến `SEED_DEMO_PASSWORD` trong môi trường shell:

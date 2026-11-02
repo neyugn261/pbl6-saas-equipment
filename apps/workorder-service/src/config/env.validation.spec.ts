@@ -9,6 +9,16 @@ const valid = {
   JWT_ACCESS_SECRET: 'x'.repeat(32),
 };
 describe('Work Order environment', () => {
+  it('validates an optional Inventory proof URL without making existing WO startup depend on Inventory', () => {
+    expect(validateEnv(valid).INVENTORY_SERVICE_URL).toBeUndefined();
+    expect(
+      validateEnv({ ...valid, INVENTORY_SERVICE_URL: 'http://inventory.test' })
+        .INVENTORY_SERVICE_URL,
+    ).toBe('http://inventory.test');
+    expect(() =>
+      validateEnv({ ...valid, INVENTORY_SERVICE_URL: 'file:///tmp/inventory' }),
+    ).toThrow('INVENTORY_SERVICE_URL');
+  });
   it('uses the service port and permits broker-free local runs', () => {
     expect(validateEnv(valid).PORT).toBe(3004);
     expect(validateEnv({ ...valid, [PORT_VARIABLE]: '4100' }).PORT).toBe(4100);

@@ -25,6 +25,7 @@
     "test:reports:gateway": "pnpm --filter api-gateway build && pnpm build && node scripts/smoke-workorder-report.cjs",
     "test:attachments:restart": "pnpm build && node scripts/smoke-attachment-restart.cjs",
     "test:m3": "node scripts/test-m3.cjs",
+    "test:inventory:integration": "pnpm --filter inventory-service --filter api-gateway build && pnpm build && node scripts/smoke-inventory-reservations.cjs",
     "attachments:prepare": "pnpm build && node scripts/prepare-attachments.cjs",
     "typecheck": "prisma generate --no-hints && tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate --no-hints",

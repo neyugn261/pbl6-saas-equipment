@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
-  title: Inventory operation recovery and proposed Work Order reservation protocol
-  version: 0.1.0
+  title: Inventory operation recovery and Work Order reservation protocol
+  version: 0.2.0
   description: |
-    Inventory endpoints implemented by Minh. WO endpoints below are a PROPOSED
-    handoff to Khương and are NOT implemented in current develop. Owner review
-    and real inter-service race/restart tests are required before ISSUE acceptance.
+    Inventory endpoints implemented by Minh. WO endpoints implemented by Khương
+    per ADR 0016 with migration 0006_inventory_reservations. Peer/shared-schema
+    review and client acceptance are required before business deployment.
     Tenant and permissions come from the current verified TENANT_STAFF JWT.
     Forward caller token/correlation ID. Internal routes are blocked at Gateway.
     No auto-expiry or status-only fallback. See ADR 0014.
@@ -90,10 +90,11 @@ paths:
     parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
     post:
       x-owner: Khương
-      x-implemented: false
+      x-implemented: true
+      x-user-types: [TENANT_STAFF]
       x-permissions: [inventory:issue, work_order:read]
       description: |
-        PROPOSED. Fetch Inventory proof with caller JWT; validate ISSUE/PENDING,
+        Fetch Inventory proof with caller JWT; validate ISSUE/PENDING,
         tenant/WO/key/fingerprint and derive original request from proof. Under
         the same WO row lock used by EVERY complete/cancel path, require a
         nonterminal scoped WO and persist HELD keyed by tenant/requestId. Same
@@ -105,17 +106,22 @@ paths:
         content:
           application/json: { schema: { $ref: '#/components/schemas/ReservationRequest' } }
       responses:
-        '201': { $ref: '#/components/responses/Reservation' }
         '200': { $ref: '#/components/responses/Reservation' }
+        '400': { description: VALIDATION_FAILED; invalid DTO/path or unknown body/query field }
+        '401': { description: Invalid bearer or Inventory source 401 }
+        '403': { description: Missing staff/permissions or Inventory source 403 }
+        '404': { description: WORK_ORDER_NOT_FOUND; missing or outside caller scope }
         '409': { description: Terminal WO, mismatched identity, conflicting reservation/proof }
+        '503': { description: INVENTORY_PROOF_UNAVAILABLE; missing URL, source route/network/5xx failure; never a fabricated abort }
   /internal/work-orders/{workOrderId}/inventory-reservations/settle:
     parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
     post:
       x-owner: Khương
-      x-implemented: false
+      x-implemented: true
+      x-user-types: [TENANT_STAFF]
       x-permissions: [inventory:issue, work_order:read]
       description: |
-        PROPOSED. Fetch proof with caller JWT; require the exact tenant/WO/key/hash
+        Fetch proof with caller JWT; require the exact tenant/WO/key/hash
         and Inventory phase matching outcome. PENDING or unavailable Inventory
         must NEVER release a hold. COMMITTED -> verify response usage/transaction
         identifiers, then HELD->COMMITTED. ABORTED -> HELD->RELEASED, or persist a
@@ -136,7 +142,12 @@ paths:
               unevaluatedProperties: false
       responses:
         '200': { $ref: '#/components/responses/Reservation' }
+        '400': { description: VALIDATION_FAILED; invalid DTO/path or unknown body/query field }
+        '401': { description: Invalid bearer or Inventory source 401 }
+        '403': { description: Missing staff/permissions or Inventory source 403 }
+        '404': { description: WORK_ORDER_NOT_FOUND; missing or outside caller scope }
         '409': { description: Invalid/mismatched proof or immutable reservation conflict }
+        '503': { description: INVENTORY_PROOF_UNAVAILABLE; existing HELD remains blocked }
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -191,5 +202,7 @@ components:
         application/json: { schema: { $ref: '#/components/schemas/Operation' } }
     Reservation:
       description: Exact durable reservation identity/state
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
       content:
         application/json: { schema: { $ref: '#/components/schemas/Reservation' } }

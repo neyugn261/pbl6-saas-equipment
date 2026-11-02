@@ -23,6 +23,7 @@ import {
   WorkLogDto,
 } from './workflow.dto';
 import { workOrderView } from './work-orders.repository';
+import { assertNoInventoryHold } from '../inventory-reservations/inventory-reservations.repository';
 
 type ActionInput = Partial<
   AssignWorkOrderDto & CancelWorkOrderDto & ReasonDto
@@ -70,6 +71,8 @@ export class WorkOrderWorkflowService {
         );
         return workOrderView(await this.repo.view(tx, id), p);
       }
+      if (action === 'complete')
+        await assertNoInventoryHold(tx, order.tenantId, id);
       const technicianIds = [
         assignment?.technicianId,
         action === 'assign' ? input.technicianId : undefined,

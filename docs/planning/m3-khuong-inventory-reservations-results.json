@@ -1,0 +1,145 @@
+{
+  "task": "M3 WO-Inventory reservations",
+  "recordedAt": "2026-11-02T14:16:31.630284+00:00",
+  "ownerRegression": {
+    "task": "M3-A6",
+    "startedAt": "2026-11-02T14:04:22.411Z",
+    "sourceHead": "4bd53c6c1dafee01f74fc970ef86c9b9d6b88be4",
+    "workingTreeDirty": true,
+    "environment": {
+      "node": "v24.20.0",
+      "testDatabase": "workorder_test_db",
+      "shadowDatabase": "workorder_shadow_test_db",
+      "storage": "real S3/MinIO",
+      "broker": "disabled; consumer logic covered by DB fixtures"
+    },
+    "steps": [
+      {
+        "name": "packages-build",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 4490
+      },
+      {
+        "name": "wo-lint",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 473
+      },
+      {
+        "name": "wo-typecheck",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2647
+      },
+      {
+        "name": "wo-unit",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2791
+      },
+      {
+        "name": "wo-bootstrap",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2822
+      },
+      {
+        "name": "migration-deploy-1",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1077
+      },
+      {
+        "name": "migration-deploy-2",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1060
+      },
+      {
+        "name": "migration-schema-drift",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1197
+      },
+      {
+        "name": "database-schema-drift",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1064
+      },
+      {
+        "name": "wo-db-regression",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 19812
+      },
+      {
+        "name": "real-minio-suites",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 7577
+      },
+      {
+        "name": "gateway-e2e",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2158
+      },
+      {
+        "name": "gateway-build",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1842
+      },
+      {
+        "name": "wo-build",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 3972
+      },
+      {
+        "name": "attachment-gateway-smoke",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1618
+      },
+      {
+        "name": "report-gateway-smoke",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 1385
+      },
+      {
+        "name": "cleanup-process-restart",
+        "status": "PASS",
+        "exitCode": 0,
+        "durationMs": 2206
+      }
+    ],
+    "acceptancePending": [
+      "Huy C4: real public SR authorization/composition + customer download",
+      "Hatsady E2/E3: web upload/customer file/report dashboard",
+      "Nguyen D3-D5: deployed storage endpoint and Android acceptance",
+      "Team: authenticated Identity + broker + full business demo"
+    ],
+    "finishedAt": "2026-11-02T14:05:20.622Z",
+    "status": "PASS_OWNER_REGRESSION"
+  },
+  "liveIntegration": {
+    "command": "pnpm --filter workorder-service test:inventory:integration",
+    "exitCode": 0,
+    "status": "PASS",
+    "scenarios": 10,
+    "realServices": [
+      "Gateway",
+      "Inventory",
+      "WorkOrder"
+    ],
+    "realPostgreSQL": true,
+    "woProcessRestart": "SIGKILL",
+    "inventoryApplicationRestart": true,
+    "faultHooks": "response loss/boundary timing only; actual HTTP proof and stock writes",
+    "identity": "test JWT; no live Identity/Organization/broker/UI acceptance"
+  }
+}

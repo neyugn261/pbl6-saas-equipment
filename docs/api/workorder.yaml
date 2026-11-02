@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: PBL6 Work Order Service
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Contract for M2 — owner: Work Order owner. Decisions: ADR 0006 and ADR 0008
     (D4/D4a cancellation, D5 `createdBy`, D6/D6a customer summary, D11
@@ -77,6 +77,9 @@ info:
     docs/api/workorder-attachments.yaml and workorder-attachments.md.
     M3-A5 implements /reports/work-orders/summary per the reviewed A1/Q5 contract.
     Integration and fixtures: docs/planning/m3-khuong-a5.md.
+    Inventory reservation reserve/settle are implemented per ADR 0016 and
+    inventory-reservations.yaml. HELD blocks every complete/cancel with 409
+    INVENTORY_RESERVATION_HELD, including SR event cancellation. No timer expiry.
 servers:
   - url: http://localhost:3004
     description: Local service (through the gateway at /api/workorders, prefix stripped)
@@ -94,6 +97,10 @@ tags:
   - name: Internal
     description: Called by other services with the caller's token; not exposed by the gateway.
 paths:
+  /internal/work-orders/{workOrderId}/inventory-reservations:
+    $ref: './inventory-reservations.yaml#/paths/~1internal~1work-orders~1{workOrderId}~1inventory-reservations'
+  /internal/work-orders/{workOrderId}/inventory-reservations/settle:
+    $ref: './inventory-reservations.yaml#/paths/~1internal~1work-orders~1{workOrderId}~1inventory-reservations~1settle'
   /reports/work-orders/summary:
     get:
       tags: [Reports]

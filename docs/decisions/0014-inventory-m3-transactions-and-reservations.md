@@ -13,6 +13,8 @@ terminal/INACTIVE và quy tắc latch bên dưới trong chat ngày 02/11. Phầ
 là đề xuất cụ thể cần Khương review/triển khai; chưa có peer approval hoặc nghiệm
 thu runtime của owner khác. Không tự đánh dấu toàn nhóm hoàn thành M3.
 
+> Cập nhật phía WO: implementation reservation theo [ADR 0016](0016-workorder-inventory-reservations.md), migration WO 0006, được chuẩn bị theo yêu cầu Khương. Các đoạn mô tả WO chưa có API bên dưới là hiện trạng tại base `79a4568`; xem handoff mới để ghép và review.
+
 ## Quyết định trong Inventory
 
 - Chỉ TENANT_STAFF có permission hiện hành. `inventory:read` cho đọc;
