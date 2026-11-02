@@ -48,6 +48,8 @@ trước khi ghép consumer Notification.
   và thông báo “Đã đính kèm”. Ở APK trước, refresh khi quay lại từ file picker
   tháo widget upload dù yêu cầu đã thành công; `job_reads.dart` hiện giữ màn
   chi tiết trong lúc refresh. APK mới thử lại PASS.
+- Tệp thử 6 MiB cũng upload/finalize trên emulator; kết nối local vẫn hoàn tất
+  trước khi có thể bấm hủy, nên chưa tính là PASS cho thao tác hủy giữa PUT.
 - Chạm tệp báo cáo mở Chrome với signed URL; Chrome tải một bản 67 byte vào
   Downloads. URL ký và thông tin đăng nhập không được lưu trong tài liệu.
 - MinIO public URL của môi trường local được đổi trong `.env.demo` bị git ignore
