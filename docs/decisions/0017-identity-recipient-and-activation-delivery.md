@@ -66,3 +66,10 @@ integration remain separate acceptance steps.
 The bootstrap CLI was also exercised on an isolated two-user tenant: run
 COMPLETED with 2/2 snapshots and one completion marker; rerunning without
 `--new` reused that run without queueing duplicates.
+
+On 03/11/2026 the rebuilt demo stack applied this migration. Bootstrap of the
+demo tenant enqueued eight snapshots and one marker; the Identity outbox relay
+marked all nine `PUBLISHED` after connecting to RabbitMQ. A separate invitation
+through Gateway reached Mailpit SMTP, and the encrypted job reached `SENT`
+with ciphertext cleared. Notification consumer processing remains unverified
+until its projection and inbox are implemented.

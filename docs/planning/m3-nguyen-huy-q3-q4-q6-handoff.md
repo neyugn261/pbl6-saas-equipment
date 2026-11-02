@@ -1,6 +1,6 @@
 # M3 — Nguyên bàn giao Q3/Q4/Q6 cho Huy
 
-Ngày đối chiếu: 02/11/2026. Baseline: `origin/develop` tại `53a0a6e` sau
+Ngày đối chiếu: 03/11/2026. Baseline: `origin/develop` tại `53a0a6e` sau
 `git fetch origin develop`. **APPROVED** dưới đây nghĩa là Nguyên chấp thuận
 thiết kế/contract trong phạm vi sở hữu; không có nghĩa code, migration hoặc PR
 chưa tồn tại đã được merge. Contract dùng chung vẫn cần producer và consumer
@@ -13,21 +13,22 @@ Identity outbox/revision/bootstrap, private activation delivery và Mailpit demo
 theo [ADR 0017](../decisions/0017-identity-recipient-and-activation-delivery.md).
 Migration mới là `20261102090000_notification_recipient_outbox`; ERD delta ở
 [`docs/erd/m3-identity-recipient-and-mail.md`](../erd/m3-identity-recipient-and-mail.md).
-Đây là code trên nhánh tích hợp, **chưa merge vào develop** và chưa thay cho
+Commit `b96ae03` trên nhánh tích hợp **chưa merge vào develop** và chưa thay cho
 consumer review của Huy. Identity E2E và schema drift chạy trên test DB;
-API invite→Identity→Mailpit SMTP smoke đã PASS (mail vào Mailpit, job SENT và xóa
-ciphertext). Bootstrap qua RabbitMQ→Notification chưa chạy vì consumer C3
-chưa có trên nhánh tích hợp.
+Gateway invite→Identity→Mailpit SMTP đã PASS trên demo stack (mail vào Mailpit,
+job SENT và xóa ciphertext). Bootstrap 8 recipient snapshot + 1 marker đã
+được Identity outbox publish lên RabbitMQ; bước RabbitMQ→Notification chưa
+chạy vì consumer C3 chưa có trên nhánh tích hợp.
 Huy có thể review contract ngay; Notification migration/consumer vẫn do Huy.
 
 ## Trạng thái ngắn
 
 | Nội dung | Trạng thái | Owner / bước tiếp theo |
 | --- | --- | --- |
-| Q3 event-driven local recipient projection, không gọi Identity/Organization đồng bộ từ consumer | **APPROVED (thiết kế)** theo ADR 0004; chưa có producer | Nguyên: event catalog, Identity outbox/revision/bootstrap. Huy: Notification projection/consumer. |
-| Q3 event name, payload và bootstrap protocol bên dưới | **APPROVED (contract để review)**; **chưa có trong `packages/event-contracts`** | Nguyên mở PR contract; Huy review consumer trước merge. Không bind queue theo tên mới trước khi contract merge. |
+| Q3 event-driven local recipient projection, không gọi Identity/Organization đồng bộ từ consumer | **APPROVED (thiết kế)** theo ADR 0004; producer đã có ở `b96ae03` | Nguyên: event catalog, Identity outbox/revision/bootstrap. Huy: Notification projection/consumer. |
+| Q3 event name, payload và bootstrap protocol bên dưới | **PROPOSED cho consumer review**; đã có trong `packages/event-contracts` ở `b96ae03` | Huy review contract trước merge/bind queue. Thay đổi payload cần phối hợp cả producer và consumer. |
 | Notification schema nguyên tắc bên dưới | **APPROVED (phạm vi migration)**; SQL/Prisma cụ thể **BLOCKED** vì `M3-HUY-Q3-REVIEW.md` chưa được cung cấp trên `develop` hoặc nhánh Huy hiện thấy | Huy gửi proposal, cập nhật ERD/API/recipient matrix và test; Nguyên review migration. Không sửa `0001_init`. |
-| Q4 Identity sở hữu token, queue và SMTP delivery cho activation | **APPROVED (quyết định owner của Nguyên)**; implementation/demo **BLOCKED** | Nguyên thực hiện ở Identity và Mailpit. Huy không đưa activation token vào Notification. C5 cần cập nhật trong kế hoạch/PR review với Huy. |
+| Q4 Identity sở hữu token, queue và SMTP delivery cho activation | **APPROVED (quyết định owner của Nguyên)**; implementation và demo SMTP đã PASS ở `b96ae03` | Nguyên giữ Identity/Mailpit; Huy không đưa activation token vào Notification. C5 cần cập nhật owner trong kế hoạch nhóm. |
 | Q6 Gateway Notification mapping và chặn `/internal/*` | **APPROVED / MERGED** qua PR #53 | Nguyên giữ Gateway; Huy triển khai API ở Notification theo prefix dưới đây. |
 | Q6 hai URL SR result attachments | **APPROVED (URL/mapping)**; C4 business route **chưa merge ở baseline** | Huy merge SR C4, Khương duy trì WO A4, Nguyên/Gateway smoke sau merge. |
 
@@ -139,15 +140,16 @@ API production**. Tạo job cùng transaction với token; idempotency theo
 `account_token.id`, payload link được mã hóa ở trạng thái lưu, worker giải mã
 trong bộ nhớ, retry với backoff đến khi SENT/EXPIRED, xóa ciphertext khi xong.
 SMTP chỉ bảo đảm at-least-once nên một mail có thể được gửi lại với cùng link;
-không tạo token mới khi retry. Key/rotation, resend và retention được chốt
-trong Identity ADR/migration PR của Nguyên trước code.
+không tạo token mới khi retry. Key/rotation và giới hạn vận hành nằm trong
+ADR 0017; migration và worker có ở commit `b96ae03`.
 
 Không có contract chuyển secret sang Notification vì C5 email adapter chuyển
 về Nguyên/Identity. Huy giữ Notification in-app C2/C3/C6, review rằng
 Notification không nhận/lưu activation token, và phối hợp test end-to-end C5;
 task ownership/acceptance C5 cần cập nhật chính thức trong kế hoạch M3.
-`compose.demo.yml` hiện **chưa có Mailpit**, chưa có bằng chứng email thật;
-Nguyên thêm Mailpit/env/runbook và smoke trước khi nhận C5 hoàn tất.
+`compose.demo.yml` đã có Mailpit. Gateway invite tới một tài khoản demo riêng
+ngày 03/11 trả 201; Identity worker ghi job `SENT`, ciphertext `NULL` và
+Mailpit nhận một thư. Không đưa token/link vào bằng chứng chia sẻ.
 
 ## Q6 — Routes, commits và test environment
 
@@ -173,10 +175,13 @@ qua Gateway trước khi đánh dấu end-to-end PASS.
 RabbitMQ, Work Order, MinIO và Notification scaffold, giữ DB riêng; seed dev
 cô lập theo `docs/api/fixtures.md` với `SEED_DEMO_PASSWORD` tự đặt. Private
 MinIO signed PUT/GET qua Gateway đã có smoke 02/11; Notification business
-consumer và Mailpit chưa có nên **chưa có môi trường full Q3/Q4 E2E**. Chạy
+consumer chưa có nên **chưa có Q3 end-to-end tới Notification**. Demo bootstrap
+tenant `00000000-0000-4000-8000-000000000001` tạo 8 snapshot và 1 marker;
+cả 9 outbox row ở trạng thái `PUBLISHED` ngày 03/11. Q4 Gateway→Mailpit đã
+chạy thật. Chạy
 trên stack/DB test riêng, không reset volume hay dùng seed trên DB chung.
 
 Huy nên cập nhật tối thiểu `origin/develop` `53a0a6e` (PR #53/#54/#55), rồi
-review PR event/Identity của Nguyên trước khi bật C3. Không có commit/PR đã
-merge cho Identity recipient producer, bootstrap, activation delivery,
-Notification schema hoặc C4 ở baseline này.
+review commit `b96ae03` trên `codex/nguyen-m3-integration` trước khi bật C3.
+Không có commit/PR đã merge cho Identity recipient producer, bootstrap,
+activation delivery, Notification schema hoặc C4 ở baseline này.

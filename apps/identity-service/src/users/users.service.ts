@@ -65,10 +65,7 @@ export class UsersService {
     return this.usersRepo.toProfile(user);
   }
 
-  /**
-   * Invite a new user: create an INVITED account and return the raw activation
-   * token so the caller (or a notification job) can send it via email.
-   */
+  /** Create an INVITED account and a private activation delivery job. */
   async inviteUser(
     principal: Principal,
     dto: InviteUserDto,

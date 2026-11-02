@@ -136,8 +136,10 @@ run again and must complete before new app containers start.
   branch. API invite→Identity job→Mailpit SMTP passed against
   `identity_test_db` on 02/11/2026 (test message received, encrypted job
   marked SENT with ciphertext cleared).
-  A full Gateway invite and bootstrap→Notification run still need live demo
-  acceptance. Notification/Inventory containers starting does not prove their
+  A Gateway invite→Identity→Mailpit run also passed on the demo stack on
+  03/11/2026. Identity published eight bootstrap snapshots and one completion
+  marker to RabbitMQ. The bootstrap→Notification consumer run still needs
+  implementation and acceptance. Notification/Inventory containers starting does not prove their
   M3 business APIs are ready.
 
 ## Verification on 01/11/2026
@@ -180,3 +182,14 @@ APK displayed the completed attachment and success notice. For emulator access,
 set `DEMO_STORAGE_PUBLIC_URL` in ignored `.env.demo` to the host LAN URL or
 another URL reachable from the emulator, then recreate Work Order. `localhost`
 in that value points to the emulator itself and cannot serve signed PUT/GET.
+
+On 03/11/2026 the backend image with Identity D1 was rebuilt and the demo
+`migrate` job applied the new Identity migration and completed the catalog
+seed. Identity started healthy and connected to RabbitMQ. Running
+`recipient:bootstrap` for the isolated demo tenant enqueued eight snapshots
+and one marker; all nine Identity outbox rows became `PUBLISHED`. A Tenant
+Admin invitation through Gateway created an encrypted delivery job; Identity
+SMTP sent it to Mailpit, and the job reached `SENT` with ciphertext cleared.
+No activation link or bearer token was copied into this evidence. The
+Notification projection/consumer is still absent, so this does not prove
+delivery of business notifications.

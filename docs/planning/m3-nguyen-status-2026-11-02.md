@@ -7,8 +7,8 @@ trước khi ghép consumer Notification.
 
 | Task | Hiện trạng | Bằng chứng / việc còn lại |
 | --- | --- | --- |
-| D1 shared contracts + Identity | Producer, outbox/revision, bootstrap, activation delivery và Mailpit đã triển khai | Event package 24 PASS; Identity unit 16 PASS, E2E 92 PASS; schema drift 0; bootstrap test 2/2 snapshot + marker; API invite→Mailpit SMTP smoke 1 PASS. Huy cần review contract và triển khai Notification projection/consumer; chưa có C3 end-to-end. |
-| D2 compose staging/demo | Đã có image, migrate gate, service health, volume và network riêng | `docs/deployment/m3-demo.md`; Mailpit mới thêm và Compose config hợp lệ. Cần rebuild image cho code D1 trên demo stack trước nghiệm thu đầy đủ. |
+| D1 shared contracts + Identity | Producer, outbox/revision, bootstrap, activation delivery và Mailpit đã triển khai | Event package 24 PASS; Identity unit 16 PASS, E2E 92 PASS; schema drift 0; bootstrap test 2/2 snapshot + marker. Demo: 8 snapshot + 1 marker đều PUBLISHED lên RabbitMQ, Gateway invite→Mailpit SMTP PASS và job SENT/ciphertext NULL. Huy cần review contract và triển khai Notification projection/consumer; chưa có C3 end-to-end. |
+| D2 compose staging/demo | Đã có image, migrate gate, service health, volume và network riêng | `docs/deployment/m3-demo.md`; backend image mới build, migration/seed demo PASS, Identity mới healthy và kết nối RabbitMQ, Mailpit đã nhận thư. |
 | D3 Gateway + MinIO | Public mapping Notification/SR và signed storage theo runbook; private bucket | Gateway→MinIO signed PUT/GET smoke đã ghi trong runbook. SR C4/controller và Notification API thật phụ thuộc owner Huy. |
 | D4 Mobile file | Client và màn hình live có camera/gallery/file, hash, prepare/PUT/finalize, tải URL, retry cùng key, phần trăm byte PUT và hủy PUT đang chạy | Android Files→Gateway→MinIO upload/finalize và Chrome signed download PASS trên emulator; phần trăm/hủy/đổi phiên đã qua unit, chưa thử thao tác hủy giữa PUT trên thiết bị với tệp lớn. |
 | D5 Mobile/CI regression | Flutter analyze, 106 test toàn bộ, thêm 1 test hồi quy targeted và APK debug PASS; Android runtime đã chạy | Demo Gateway: Manager phân công, Technician nhận việc, bắt đầu, gửi báo cáo, WO hoàn thành, đính kèm tệp báo cáo và tải xuống PASS trên emulator. Lỗi mất trạng thái upload khi quay lại từ Android Files đã được sửa và thử lại thành công. |
@@ -21,6 +21,11 @@ trước khi ghép consumer Notification.
 - Shared events: TypeScript và 24/24 unit PASS (3 test tích hợp RabbitMQ được skip theo cấu hình package).
 - Compose demo: `docker compose --env-file infrastructure/demo.env.example -f compose.demo.yml config --quiet` PASS.
 - Mailpit: optional `mailpit.e2e-spec.ts` PASS trên `identity_test_db`, Mailpit API xác nhận đúng recipient. Không in token hoặc link vào evidence.
+- Demo stack 03/11: backend image build PASS; migration Identity mới và seed PASS;
+  Identity healthy, kết nối RabbitMQ. Bootstrap tenant demo tạo 8 snapshot và
+  1 marker; tất cả 9 row `outbox_events` ở trạng thái `PUBLISHED`. Gateway
+  invite tài khoản thử nghiệm→Identity worker→Mailpit PASS; job `SENT` và
+  ciphertext `NULL`. Notification consumer chưa nhận vì C3 chưa triển khai.
 
 ## Phụ thuộc trước khi đánh dấu M3 hoàn tất
 
