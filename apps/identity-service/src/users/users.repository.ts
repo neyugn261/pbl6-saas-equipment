@@ -10,6 +10,10 @@ import type {
   UserSummary,
   UserProfile,
 } from './users.types';
+import {
+  enqueueRecipientSnapshot,
+  lockRecipient,
+} from '../events/recipient-snapshots';
 
 const userWithRoles = {
   include: {
@@ -196,6 +200,7 @@ export class UsersRepository {
     assignedBy: string;
     tokenHash: string;
     expiresAt: Date;
+    activationCiphertext?: string;
   }): Promise<User> {
     return this.prisma.$transaction(async (tx) => {
       const roles = await tx.role.findMany({
@@ -226,7 +231,7 @@ export class UsersRepository {
           },
         });
       }
-      await tx.accountToken.create({
+      const token = await tx.accountToken.create({
         data: {
           userId: user.id,
           purpose: 'ACCOUNT_ACTIVATION',
@@ -234,6 +239,18 @@ export class UsersRepository {
           expiresAt: data.expiresAt,
         },
       });
+      if (data.activationCiphertext) {
+        await tx.activationDelivery.create({
+          data: {
+            tokenId: token.id,
+            email: data.email,
+            ciphertext: data.activationCiphertext,
+          },
+        });
+      }
+      if (user.userType !== 'PLATFORM_STAFF') {
+        await enqueueRecipientSnapshot(tx, user.id);
+      }
       return user;
     });
   }
@@ -247,6 +264,7 @@ export class UsersRepository {
     assignedBy: string;
     tokenHash: string;
     expiresAt: Date;
+    activationCiphertext?: string;
   }): Promise<string | null> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`
@@ -277,7 +295,14 @@ export class UsersRepository {
           },
           data: { usedAt: new Date() },
         });
-        await tx.accountToken.create({
+        await tx.$executeRaw`
+          UPDATE activation_deliveries SET status = 'EXPIRED', ciphertext = NULL
+          WHERE status = 'PENDING' AND token_id IN (
+            SELECT id FROM account_tokens
+            WHERE user_id = ${existing.id}::uuid AND purpose = 'ACCOUNT_ACTIVATION'
+              AND used_at IS NOT NULL
+          )`;
+        const token = await tx.accountToken.create({
           data: {
             userId: existing.id,
             purpose: 'ACCOUNT_ACTIVATION',
@@ -285,6 +310,15 @@ export class UsersRepository {
             expiresAt: data.expiresAt,
           },
         });
+        if (data.activationCiphertext) {
+          await tx.activationDelivery.create({
+            data: {
+              tokenId: token.id,
+              email: data.email,
+              ciphertext: data.activationCiphertext,
+            },
+          });
+        }
         return existing.id;
       }
       const role = await tx.role.findUniqueOrThrow({
@@ -304,7 +338,7 @@ export class UsersRepository {
       await tx.userRole.create({
         data: { userId: user.id, roleId: role.id, assignedBy: data.assignedBy },
       });
-      await tx.accountToken.create({
+      const token = await tx.accountToken.create({
         data: {
           userId: user.id,
           purpose: 'ACCOUNT_ACTIVATION',
@@ -312,6 +346,16 @@ export class UsersRepository {
           expiresAt: data.expiresAt,
         },
       });
+      if (data.activationCiphertext) {
+        await tx.activationDelivery.create({
+          data: {
+            tokenId: token.id,
+            email: data.email,
+            ciphertext: data.activationCiphertext,
+          },
+        });
+      }
+      await enqueueRecipientSnapshot(tx, user.id);
       return user.id;
     });
   }
@@ -328,14 +372,16 @@ export class UsersRepository {
       select: { id: true, code: true },
     });
 
-    await this.prisma.$transaction([
-      this.prisma.userRole.deleteMany({ where: { userId } }),
-      ...roles.map((role) =>
-        this.prisma.userRole.create({
+    await this.prisma.$transaction(async (tx) => {
+      await lockRecipient(tx, userId);
+      await tx.userRole.deleteMany({ where: { userId } });
+      for (const role of roles) {
+        await tx.userRole.create({
           data: { userId, roleId: role.id, assignedBy },
-        }),
-      ),
-    ]);
+        });
+      }
+      await enqueueRecipientSnapshot(tx, userId);
+    });
   }
 
   /** Platform role changes share the same tenant lock as admin suspensions. */
@@ -355,6 +401,9 @@ export class UsersRepository {
         JOIN roles r ON r.id = ur.role_id
         WHERE u.tenant_id = ${tenantId}::uuid AND r.code = 'TENANT_ADMIN'
         ORDER BY u.id FOR UPDATE OF u`;
+      const locked = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+      if (locked.length === 0) return 'stale';
       const user = await tx.user.findUnique({
         where: { id: userId },
         ...userWithRoles,
@@ -395,6 +444,7 @@ export class UsersRepository {
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      await enqueueRecipientSnapshot(tx, userId);
       return 'updated';
     });
   }
@@ -420,6 +470,7 @@ export class UsersRepository {
           JOIN roles r ON r.id = ur.role_id
           WHERE u.tenant_id = ${tenantId}::uuid AND r.code = 'TENANT_ADMIN'
           ORDER BY u.id FOR UPDATE OF u`;
+        await lockRecipient(tx, id);
         const activeAdmins = await tx.user.count({
           where: {
             tenantId,
@@ -428,6 +479,8 @@ export class UsersRepository {
           },
         });
         if (activeAdmins <= 1) return 'last-admin';
+      } else {
+        await lockRecipient(tx, id);
       }
 
       const changed = await tx.user.updateMany({
@@ -441,6 +494,7 @@ export class UsersRepository {
           data: { revokedAt: new Date() },
         });
       }
+      await enqueueRecipientSnapshot(tx, id);
       return 'updated';
     });
   }
@@ -451,6 +505,7 @@ export class UsersRepository {
     tokenId: string,
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
+      await lockRecipient(tx, userId);
       const now = new Date();
       const claimed = await tx.accountToken.updateMany({
         where: { id: tokenId, usedAt: null, expiresAt: { gt: now } },
@@ -465,6 +520,11 @@ export class UsersRepository {
       if (activated.count !== 1) {
         throw new Error('Invited user state changed during activation');
       }
+      await tx.activationDelivery.updateMany({
+        where: { tokenId, status: 'PENDING' },
+        data: { status: 'EXPIRED', ciphertext: null },
+      });
+      await enqueueRecipientSnapshot(tx, userId);
       return true;
     });
   }

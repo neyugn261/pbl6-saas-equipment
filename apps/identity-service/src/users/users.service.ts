@@ -28,6 +28,7 @@ import type { InviteUserResult } from './users.types';
 import type { IdentityEnv } from '../config/env.validation';
 import type { UserWithRoles } from './users.repository';
 import { isCustomerAdminVisible } from './customer-admin-scope';
+import { encryptActivationUrl } from './activation-secret';
 
 const ACTIVATION_TOKEN_TTL_HOURS = 24;
 
@@ -64,10 +65,7 @@ export class UsersService {
     return this.usersRepo.toProfile(user);
   }
 
-  /**
-   * Invite a new user: create an INVITED account and return the raw activation
-   * token so the caller (or a notification job) can send it via email.
-   */
+  /** Create an INVITED account and a private activation delivery job. */
   async inviteUser(
     principal: Principal,
     dto: InviteUserDto,
@@ -127,6 +125,7 @@ export class UsersService {
       assignedBy: principal.userId,
       tokenHash: this.hashToken(rawToken),
       expiresAt: this.activationExpiry(),
+      activationCiphertext: this.activationCiphertext(rawToken),
     });
     if (!userId) {
       throw new ConflictException({
@@ -172,6 +171,7 @@ export class UsersService {
       assignedBy: inviterId,
       tokenHash,
       expiresAt,
+      activationCiphertext: this.activationCiphertext(rawToken),
     });
 
     // Re-read with roles
@@ -192,6 +192,18 @@ export class UsersService {
 
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private activationCiphertext(token: string): string | undefined {
+    const key = this.config.get('IDENTITY_ACTIVATION_ENCRYPTION_KEY', {
+      infer: true,
+    });
+    const base = this.config.get('IDENTITY_ACTIVATION_URL_BASE', {
+      infer: true,
+    });
+    return key && base
+      ? encryptActivationUrl(`${base}${encodeURIComponent(token)}`, key)
+      : undefined;
   }
 
   private activationExpiry(): Date {

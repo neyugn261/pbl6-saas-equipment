@@ -33,6 +33,8 @@ class JobAttachments extends StatefulWidget {
 class _JobAttachmentsState extends State<JobAttachments> {
   AttachmentAttempt? _pending;
   bool _busy = false;
+  bool _cancelRequested = false;
+  double? _progress;
   int _revision = 0;
   String? _notice;
 
@@ -113,21 +115,49 @@ class _JobAttachmentsState extends State<JobAttachments> {
   Future<void> _upload() async {
     final attempt = _pending;
     if (attempt == null || _busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _cancelRequested = false;
+      _progress = attempt.putSucceeded ? 1 : null;
+    });
     try {
-      await widget.repo.attachments!.upload(attempt);
+      await widget.repo.attachments!.upload(
+        attempt,
+        onProgress: (sent, total) {
+          if (mounted && _pending == attempt) {
+            setState(() => _progress = sent / total);
+          }
+        },
+      );
       widget.repo.pendingUploads.remove(widget.orderId);
       if (mounted) {
         setState(() {
           _pending = null;
+          _progress = null;
           _notice = 'Đã đính kèm ${attempt.fileName}.';
           _revision++;
         });
       }
     } on ApiException catch (error) {
-      if (mounted) setState(() => _notice = error.userMessage);
+      if (mounted) {
+        setState(
+          () => _notice = error.code == 'UPLOAD_CANCELLED'
+              ? 'Đang hủy lần tải này…'
+              : error.userMessage,
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
+      if (_cancelRequested) await _abort();
+    }
+  }
+
+  Future<void> _cancel() async {
+    final attempt = _pending;
+    if (attempt == null || _cancelRequested) return;
+    if (!_busy) return _abort();
+    if (widget.repo.attachments!.cancelActivePut(attempt)) {
+      setState(() => _cancelRequested = true);
     }
   }
 
@@ -141,6 +171,8 @@ class _JobAttachmentsState extends State<JobAttachments> {
       if (mounted) {
         setState(() {
           _pending = null;
+          _progress = null;
+          _cancelRequested = false;
           _notice = null;
         });
       }
@@ -235,14 +267,29 @@ class _JobAttachmentsState extends State<JobAttachments> {
               ? 'Đang tải ${_pending!.fileName}…'
               : 'Tệp ${_pending!.fileName} chưa được xác nhận. Thử lại cùng lần tải hoặc hủy.',
           action: _busy
-              ? const CircularProgressIndicator()
+              ? Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    if (_progress == null)
+                      const CircularProgressIndicator()
+                    else ...[
+                      LinearProgressIndicator(value: _progress),
+                      Text('${(_progress! * 100).round()}%'),
+                    ],
+                    if (_pending!.isPutActive)
+                      TextButton(
+                        onPressed: _cancelRequested ? null : _cancel,
+                        child: const Text('Hủy tải'),
+                      ),
+                  ],
+                )
               : Wrap(
                   children: [
                     TextButton(
                       onPressed: _upload,
                       child: const Text('Thử lại'),
                     ),
-                    TextButton(onPressed: _abort, child: const Text('Hủy')),
+                    TextButton(onPressed: _cancel, child: const Text('Hủy')),
                   ],
                 ),
         ),

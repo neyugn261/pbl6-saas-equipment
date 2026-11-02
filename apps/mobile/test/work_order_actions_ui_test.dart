@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pbl6_technician/core/api/api_exception.dart';
+import 'package:pbl6_technician/features/workspace/job_attachments.dart';
 import 'package:pbl6_technician/features/workspace/job_reads.dart';
 import 'package:pbl6_technician/features/workspace/report_form.dart';
 import 'package:pbl6_technician/ui/theme.dart';
@@ -53,6 +54,24 @@ void main() {
     await tap(t, 'report-next');
   }
 
+  testWidgets(
+    'refresh keeps attachment state mounted while the order request is pending',
+    (t) async {
+      await open(t, 'IN_PROGRESS');
+      await t.tap(find.text('Tệp'));
+      await t.pump();
+      final attachment = t.element(find.byType(JobAttachments));
+      final gate = Completer<void>();
+      server.beforeRead = (path) =>
+          path.endsWith('/work-orders/$orderId') ? gate.future : Future.value();
+      await t.tap(find.byTooltip('Tải lại'));
+      await t.pump();
+      expect(t.element(find.byType(JobAttachments)), same(attachment));
+      gate.complete();
+      await t.pumpAndSettle();
+      expect(t.element(find.byType(JobAttachments)), same(attachment));
+    },
+  );
   testWidgets(
     'accept/travel/start/hold/resume and note submit real callbacks',
     (t) async {

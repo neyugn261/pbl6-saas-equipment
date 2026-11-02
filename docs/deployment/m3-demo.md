@@ -3,7 +3,8 @@
 This stack is separate from `docker-compose.yml`, which remains the local
 infrastructure setup. Run all commands from the repository root. The demo stack
 exposes the web app on `DEMO_WEB_PORT`, the Gateway for Android on
-`DEMO_GATEWAY_PORT`, and MinIO's S3 endpoint on `MINIO_PUBLIC_PORT`.
+`DEMO_GATEWAY_PORT`, MinIO's S3 endpoint on `MINIO_PUBLIC_PORT`, and Mailpit's
+mailbox UI on `DEMO_MAILPIT_PORT` (default 8025).
 PostgreSQL, RabbitMQ, Redis, the individual service ports and the MinIO console
 stay on the private Compose network.
 The included Nginx configuration serves HTTP for a local demo. A remote staging
@@ -21,6 +22,10 @@ Compose embeds them in service URLs. Set `DEMO_PUBLIC_URL` to the URL opened in
 the browser, without a trailing slash. For Android on another device, use a
 hostname/IP reachable from that device; `localhost` refers to the device
 itself. `JWT_ACCESS_SECRET` must be at least 32 random characters.
+Set `IDENTITY_ACTIVATION_ENCRYPTION_KEY` to 32 random bytes encoded as 64 hex
+characters (`openssl rand -hex 32`). Keep it stable until pending deliveries
+have drained or expired. Identity sends activation mail through private
+Mailpit SMTP; links open `DEMO_PUBLIC_URL/activate#token=...`.
 Set `DEMO_STORAGE_PUBLIC_URL` to the S3 origin reachable by the browser and
 Android client (host plus `MINIO_PUBLIC_PORT`). The Work Order storage adapter
 uses this exact origin when signing URLs. Its container runs in development
@@ -51,6 +56,7 @@ issues rather than deleting the volume.
 docker compose --env-file .env.demo -f compose.demo.yml logs migrate
 docker compose --env-file .env.demo -f compose.demo.yml ps
 docker compose --env-file .env.demo -f compose.demo.yml exec rabbitmq rabbitmq-diagnostics -q ping
+docker compose --env-file .env.demo -f compose.demo.yml ps mailpit
 docker compose --env-file .env.demo -f compose.demo.yml logs --tail=100 api-gateway
 ```
 
@@ -92,6 +98,20 @@ development mode for local HTTP MinIO signing. The demo accounts and tenant
 code are listed in the root README. Do not print the password or access tokens
 in demo logs or slides.
 
+After merging the Notification recipient consumer, backfill existing tenant
+users once per tenant. Use the tenant UUID from your isolated demo fixture:
+
+```bash
+docker compose --env-file .env.demo -f compose.demo.yml exec identity-service pnpm recipient:bootstrap <tenant-uuid>
+```
+
+The command prints a durable run UUID and queued count. Rerun after a failure
+to resume; `--new` starts a fresh run after the current one finishes. Confirm
+Notification has received the marker and expected snapshots before declaring
+the projection complete. For activation, invite a disposable account through
+the normal API, open Mailpit on host port `DEMO_MAILPIT_PORT`, and follow its
+link. Keep the link out of shared test evidence and logs.
+
 Stop without removing data:
 
 ```bash
@@ -107,12 +127,20 @@ run again and must complete before new app containers start.
 
 - The Work Order attachment API and MinIO adapter are implemented on the merged
   A2–A4 branch. A signed PUT/finalize/download through this Compose stack was
-  verified with `scripts/smoke-m3-attachment.mjs`. The mobile file screen and
-  transport pass local tests, but camera, picker and signed URL use on Android
-  still need a device integration run. Browser file UI also needs an
-  integration run.
-- Notification/Inventory business APIs and activation delivery remain separate
-  M3 owner work. Their containers starting is not an acceptance result.
+  verified with `scripts/smoke-m3-attachment.mjs`. Android Files upload of a
+  report attachment and Chrome signed download passed on the `Medium_Phone`
+  emulator on 03/11/2026. PUT progress/cancel pass unit tests; cancelling a
+  large PUT on the emulator and camera/gallery still need runtime checks.
+  Browser file UI also needs an integration run.
+- Identity recipient producer and activation delivery are implemented on this
+  branch. API invite→Identity job→Mailpit SMTP passed against
+  `identity_test_db` on 02/11/2026 (test message received, encrypted job
+  marked SENT with ciphertext cleared).
+  A Gateway invite→Identity→Mailpit run also passed on the demo stack on
+  03/11/2026. Identity published eight bootstrap snapshots and one completion
+  marker to RabbitMQ. The bootstrap→Notification consumer run still needs
+  implementation and acceptance. Notification/Inventory containers starting does not prove their
+  M3 business APIs are ready.
 
 ## Verification on 01/11/2026
 
@@ -137,14 +165,31 @@ on an isolated demo WO, set `SEED_DEMO_PASSWORD`, `PBL6_M3_GATEWAY_URL` and
 The script prints no token or signed URL. It does not exercise Customer SR
 composition, browser UI or Android UI.
 
-Mobile M3 attachment transport and screen were checked with `dart analyze`
-(no issues), `flutter test` (104 passed, 2 opt-in backend tests skipped),
-and `flutter build apk --debug` (APK built). Kotlin incremental compilation is
+Mobile M3 attachment transport and screen were checked with `flutter analyze`
+(no issues), `flutter test` (106 passed, 2 opt-in backend tests skipped),
+and `flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:3009`
+(APK built). Kotlin incremental compilation is
 disabled for this Windows checkout because Pub sources are on C: while the
 project is on D:; otherwise three plugin caches fail to relativize paths.
 The client retains upload keys within one session for a same-intent retry and
-does not send the API bearer token to MinIO. This does not count as Android
-device acceptance; `flutter devices` found no connected Android device.
-An available `Medium_Phone` emulator was started headlessly for this check,
-but ADB remained `offline` after boot and reconnect attempts. It was stopped;
-the APK was not installed or exercised on Android.
+does not send the API bearer token to MinIO. The `Medium_Phone` emulator was
+subsequently brought online and the APK installed. Manager assignment and
+Technician accept/start/report completion passed through Gateway; Android
+Files upload/finalize and Chrome signed download passed with a 67-byte fixture.
+Returning from the picker originally interrupted the upload UI during the
+screen's refresh; the screen now keeps its detail widget mounted and the rebuilt
+APK displayed the completed attachment and success notice. For emulator access,
+set `DEMO_STORAGE_PUBLIC_URL` in ignored `.env.demo` to the host LAN URL or
+another URL reachable from the emulator, then recreate Work Order. `localhost`
+in that value points to the emulator itself and cannot serve signed PUT/GET.
+
+On 03/11/2026 the backend image with Identity D1 was rebuilt and the demo
+`migrate` job applied the new Identity migration and completed the catalog
+seed. Identity started healthy and connected to RabbitMQ. Running
+`recipient:bootstrap` for the isolated demo tenant enqueued eight snapshots
+and one marker; all nine Identity outbox rows became `PUBLISHED`. A Tenant
+Admin invitation through Gateway created an encrypted delivery job; Identity
+SMTP sent it to Mailpit, and the job reached `SENT` with ciphertext cleared.
+No activation link or bearer token was copied into this evidence. The
+Notification projection/consumer is still absent, so this does not prove
+delivery of business notifications.

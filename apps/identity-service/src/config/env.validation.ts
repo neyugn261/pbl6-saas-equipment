@@ -11,6 +11,11 @@ export interface IdentityEnv extends JwtEnv {
   IDENTITY_EXPOSE_ACTIVATION_TOKEN: boolean;
   /** Unset = event consumers disabled (e2e tests, running without RabbitMQ). */
   RABBITMQ_URL: string | undefined;
+  IDENTITY_ACTIVATION_ENCRYPTION_KEY: string | undefined;
+  IDENTITY_ACTIVATION_URL_BASE: string | undefined;
+  SMTP_HOST: string | undefined;
+  SMTP_PORT: number;
+  SMTP_FROM: string | undefined;
 }
 
 export const PORT_VARIABLE = 'IDENTITY_SERVICE_PORT';
@@ -33,7 +38,36 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
   }
   const exposeActivationToken = exposeValue === 'true';
   if (nodeEnv === 'production' && exposeActivationToken) {
-    env.fail('IDENTITY_EXPOSE_ACTIVATION_TOKEN cannot be enabled in production');
+    env.fail(
+      'IDENTITY_EXPOSE_ACTIVATION_TOKEN cannot be enabled in production',
+    );
+  }
+  const mailKey = env.optionalString('IDENTITY_ACTIVATION_ENCRYPTION_KEY');
+  const mailUrl = env.optionalUrl('IDENTITY_ACTIVATION_URL_BASE', [
+    'http:',
+    'https:',
+  ]);
+  const smtpHost = env.optionalString('SMTP_HOST');
+  const smtpFrom = env.optionalString('SMTP_FROM');
+  if (mailKey && !/^[a-f0-9]{64}$/i.test(mailKey)) {
+    env.fail('IDENTITY_ACTIVATION_ENCRYPTION_KEY must be 32 bytes in hex');
+  }
+  if (mailUrl && !mailUrl.endsWith('#token=')) {
+    env.fail('IDENTITY_ACTIVATION_URL_BASE must end with #token=');
+  }
+  if (
+    [mailKey, mailUrl, smtpHost, smtpFrom].some(Boolean) &&
+    ![mailKey, mailUrl, smtpHost, smtpFrom].every(Boolean)
+  ) {
+    env.fail(
+      'Activation mail requires key, URL base, SMTP_HOST and SMTP_FROM together',
+    );
+  }
+  if (
+    nodeEnv === 'production' &&
+    ![mailKey, mailUrl, smtpHost, smtpFrom].every(Boolean)
+  ) {
+    env.fail('Production Identity requires activation mail configuration');
   }
 
   return env.done({
@@ -58,5 +92,10 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
     }),
     IDENTITY_EXPOSE_ACTIVATION_TOKEN: exposeActivationToken,
     RABBITMQ_URL: env.optionalUrl('RABBITMQ_URL', ['amqp:', 'amqps:']),
+    IDENTITY_ACTIVATION_ENCRYPTION_KEY: mailKey,
+    IDENTITY_ACTIVATION_URL_BASE: mailUrl,
+    SMTP_HOST: smtpHost,
+    SMTP_PORT: env.port('SMTP_PORT', 1025),
+    SMTP_FROM: smtpFrom,
   });
 }

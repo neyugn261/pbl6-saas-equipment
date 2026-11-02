@@ -73,9 +73,11 @@ class _JobReadScreenState extends State<JobReadScreen>
           refresh: _refresh,
           children: [
             if (workflow.notice != null) Notice(workflow.notice!),
-            if (workflow.loading)
+            if (workflow.order != null)
+              _detail(workflow.order!)
+            else if (workflow.loading)
               const Center(child: CircularProgressIndicator())
-            else if (workflow.order == null)
+            else
               Notice(
                 workflow.loadError?.userMessage ?? 'Không đọc được công việc.',
                 action: TextButton(
@@ -83,8 +85,6 @@ class _JobReadScreenState extends State<JobReadScreen>
                   child: const Text('Thử lại'),
                 ),
               )
-            else
-              _detail(workflow.order!),
           ],
         ),
       ),

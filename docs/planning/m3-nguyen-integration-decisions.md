@@ -1,5 +1,10 @@
 # M3 — Nguyên's Q3/Q4/Q6 proposal for Huy's review
 
+This 02/11 draft is superseded for handoff by
+[Nguyên's Q3/Q4/Q6 decision and status](m3-nguyen-huy-q3-q4-q6-handoff.md).
+Use that document for the event name, single-customer membership invariant and
+current `origin/develop` baseline; the text below remains the earlier proposal.
+
 Status: **proposal, 02/11/2026**. Huy has no separate Prisma schema proposal
 yet. This is the review input; it does not amend ADR 0004 or authorize a
 migration before producer and consumer review.

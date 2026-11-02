@@ -2,14 +2,17 @@
 export type Check = (value: unknown) => boolean;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const ISO_DATE_TIME =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 export const is = {
   uuid: ((value) => typeof value === 'string' && UUID.test(value)) as Check,
   string:
     (maxLength = 10_000): Check =>
     (value) =>
-      typeof value === 'string' && value.length > 0 && value.length <= maxLength,
+      typeof value === 'string' &&
+      value.length > 0 &&
+      value.length <= maxLength,
   isoDateTime: ((value) =>
     typeof value === 'string' &&
     ISO_DATE_TIME.test(value) &&
@@ -23,12 +26,22 @@ export const is = {
     /^\d{4}-\d{2}-\d{2}$/.test(value) &&
     !Number.isNaN(Date.parse(value))) as Check,
   /** Decimal as a string, e.g. "12.50" (money and quantities never travel as floats). */
-  decimal: ((value) => typeof value === 'string' && /^-?\d{1,12}(\.\d{1,4})?$/.test(value)) as Check,
+  decimal: ((value) =>
+    typeof value === 'string' &&
+    /^-?\d{1,12}(\.\d{1,4})?$/.test(value)) as Check,
   boolean: ((value) => typeof value === 'boolean') as Check,
   nullable:
     (check: Check): Check =>
     (value) =>
       value === null || check(value),
+  arrayOf:
+    (check: Check, maxLength = 100): Check =>
+    (value) =>
+      Array.isArray(value) && value.length <= maxLength && value.every(check),
+  object:
+    (fields: Record<string, Check>): Check =>
+    (value) =>
+      shapeProblems(value, fields).length === 0,
 };
 
 /**

@@ -67,6 +67,8 @@ model User {
   fullName      String            @map("full_name") @db.VarChar(150)
   phone         String?           @db.VarChar(30)
   status        String            @default("INVITED") @db.VarChar(30)
+  /// Monotonic per-user Notification directory revision, including bootstrap.
+  recipientRevision BigInt         @default(0) @map("recipient_revision")
   lastLoginAt   DateTime?         @map("last_login_at") @db.Timestamptz(6)
   createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -121,9 +123,28 @@ model AccountToken {
   usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  activationDelivery ActivationDelivery?
 
   @@index([userId, purpose, expiresAt], map: "idx_account_tokens_user_purpose")
   @@map("account_tokens")
+}
+
+/// Private activation delivery. Secret is AES-256-GCM ciphertext and is
+/// cleared after delivery, expiry or permanent failure.
+model ActivationDelivery {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tokenId     String    @unique @map("token_id") @db.Uuid
+  email       String    @db.VarChar(255)
+  ciphertext  String?   @db.Text
+  status      String    @default("PENDING") @db.VarChar(20)
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  sentAt      DateTime? @map("sent_at") @db.Timestamptz(6)
+  lastError   String?   @map("last_error") @db.VarChar(100)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  token       AccountToken @relation(fields: [tokenId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("activation_deliveries")
 }
 
 /// Local read model of tenants fed by Organization Service events.
@@ -168,4 +189,48 @@ model ProcessedEvent {
 
   @@id([eventId, consumer])
   @@map("processed_events")
+}
+
+/// Transactional outbox for Identity's recipient directory snapshots.
+model OutboxEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  eventType     String    @map("event_type") @db.VarChar(100)
+  eventVersion  Int       @default(1) @map("event_version") @db.SmallInt
+  payload       Json
+  status        String    @default("PENDING") @db.VarChar(20)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastError     String?   @map("last_error")
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+/// One durable bootstrap per tenant; marker queued only after all snapshots.
+model RecipientBootstrapRun {
+  id            String    @id @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  status        String    @default("RUNNING") @db.VarChar(20)
+  expectedUsers Int       @map("expected_users")
+  enqueuedUsers Int       @default(0) @map("enqueued_users")
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  users         RecipientBootstrapUser[]
+
+  @@index([tenantId, startedAt], map: "idx_recipient_bootstrap_tenant")
+  @@map("recipient_bootstrap_runs")
+}
+
+model RecipientBootstrapUser {
+  runId      String    @map("run_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  enqueuedAt DateTime? @map("enqueued_at") @db.Timestamptz(6)
+  run        RecipientBootstrapRun @relation(fields: [runId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([runId, userId])
+  @@map("recipient_bootstrap_users")
 }

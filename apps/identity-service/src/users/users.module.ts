@@ -5,11 +5,12 @@ import { RolesController } from './roles.controller';
 import { UsersService } from './users.service';
 import { UsersRepository } from './users.repository';
 import { AuthModule } from '../auth/auth.module';
+import { ActivationDeliveryWorker } from './activation-delivery.worker';
 
 @Module({
   imports: [AuthModule],
   controllers: [UsersController, PlatformAdminsController, RolesController],
-  providers: [UsersService, UsersRepository],
+  providers: [UsersService, UsersRepository, ActivationDeliveryWorker],
   exports: [UsersRepository],
 })
 export class UsersModule {}
