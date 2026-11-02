@@ -1,19 +1,50 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
+import { HealthModule } from '@pbl6/service-kit';
+import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { validateEnv } from './config/env.validation';
+import { PrismaService } from './prisma/prisma.service';
+import { PrismaModule } from './prisma/prisma.module';
+import {
+  InventoryController,
+  InternalInventoryController,
+  UsageConfirmationController,
+  ServicePartsController,
+} from './inventory/inventory.controller';
+import { InventoryService } from './inventory/inventory.service';
+import { InventoryRepository } from './inventory/inventory.repository';
+import { ReferencesClient } from './inventory/references.client';
+import { EventsService } from './events/events.service';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      // Service-local .env first, then the monorepo root .env.
       envFilePath: ['.env', '../../.env'],
       validate: validateEnv,
     }),
+    PrismaModule,
+    AuthModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: jwtOptionsFromConfig,
+    }),
+    HealthModule.forRootAsync({
+      inject: [PrismaService],
+      useFactory: (db: PrismaService) => [prismaHealthCheck(db)],
+    }),
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [
+    InventoryController,
+    InternalInventoryController,
+    UsageConfirmationController,
+    ServicePartsController,
+  ],
+  providers: [
+    InventoryRepository,
+    InventoryService,
+    ReferencesClient,
+    EventsService,
+  ],
 })
 export class AppModule {}

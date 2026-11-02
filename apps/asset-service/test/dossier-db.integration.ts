@@ -24,6 +24,7 @@ Object.assign(process.env, testJwtEnv(), {
   SERVICE_REQUEST_SERVICE_URL: 'http://requests.test',
   WORKORDER_SERVICE_URL: 'http://workorder.test',
   MAINTENANCE_SERVICE_URL: 'http://maintenance.test',
+  INVENTORY_SERVICE_URL: 'http://inventory.test',
 });
 const tenantId = randomUUID(),
   customerId = randomUUID(),
@@ -201,6 +202,78 @@ it('authorizes equipment before upstream calls and validates query filters', asy
     .get('/equipment-history?from=2026-02-01&to=2026-01-01')
     .set(headers())
     .expect(400);
+});
+it('composes customer service parts with an allowlist and distinguishes unavailable history from an empty list', async () => {
+  fetchMock = fakeSources();
+  fetchMock.mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        items: [
+          {
+            id: randomUUID(),
+            equipmentId,
+            workOrderId: refId,
+            workOrderNo: 'WO-TEST',
+            serviceReportId: randomUUID(),
+            kind: 'CONFIRM',
+            quantity: '1.00',
+            effectiveQuantity: '1.00',
+            part: {
+              name: 'Filter',
+              sku: 'FILTER',
+              unit: 'cái',
+              secret: 'private part info',
+            },
+            reason: 'Replaced blocked filter',
+            unitCost: '999',
+            warehouseId: randomUUID(),
+            note: 'private workshop note',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }),
+      { status: 200 },
+    ),
+  );
+  const view = await request(app.getHttpServer())
+    .get(`/equipment/${equipmentId}/service-parts`)
+    .set(headers(customer))
+    .expect(200);
+  expect(view.body.status).toBe('AVAILABLE');
+  expect(view.body.data.items[0].part).toEqual({
+    name: 'Filter',
+    sku: 'FILTER',
+    unit: 'cái',
+  });
+  expect(JSON.stringify(view.body)).not.toMatch(/private|unitCost|warehouseId/);
+  expect(fetchMock.mock.calls[0][1].headers.authorization).toBe(
+    `Bearer ${customer}`,
+  );
+  fetchMock.mockClear();
+  await request(app.getHttpServer())
+    .get(`/equipment/${equipmentId}/service-parts`)
+    .set(headers(foreign))
+    .expect(404);
+  expect(fetchMock).not.toHaveBeenCalled();
+  fetchMock.mockRejectedValue(new Error('private connection details'));
+  const outage = await request(app.getHttpServer())
+    .get(`/equipment/${equipmentId}/service-parts`)
+    .set(headers(customer))
+    .expect(200);
+  expect(outage.body).toEqual({ status: 'UNAVAILABLE', data: null });
+  fetchMock.mockResolvedValue(
+    new Response(
+      JSON.stringify({ items: [{ equipmentId: randomUUID() }], total: 1 }),
+      { status: 200 },
+    ),
+  );
+  const mismatch = await request(app.getHttpServer())
+    .get(`/equipment/${equipmentId}/service-parts`)
+    .set(headers(customer))
+    .expect(200);
+  expect(mismatch.body.status).toBe('NOT_FOUND');
 });
 it('keeps customer WO/Maintenance restricted and hides internal audit reasons', async () => {
   await request(app.getHttpServer())

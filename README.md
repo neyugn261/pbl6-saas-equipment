@@ -36,7 +36,7 @@ apps/
   notification-service/     :3005  scaffold + schema notification_db
   organization-service/     :3006  ✅ Tenant, Branch, Customer, Site, Location và membership
   service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox
-  inventory-service/        :3008  scaffold + schema inventory_db
+  inventory-service/        :3008  ✅ M3 catalogue, stock/ledger, idempotency, LowStock; ISSUE awaits WO reservation integration
   web/                      :5173  React UI kết nối API qua Gateway
   mobile/                          Flutter template
 packages/                   thư viện dùng chung: service-kit, auth, event-contracts, testing (packages/README.md)

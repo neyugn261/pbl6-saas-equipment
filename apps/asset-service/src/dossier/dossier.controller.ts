@@ -6,11 +6,19 @@ import {
   type Principal,
 } from '@pbl6/auth';
 import { DossierService, LinkedQuery } from './dossier.service';
+import { PaginationQueryDto } from '@pbl6/service-kit';
 @Controller('equipment/:equipmentId')
 @RequirePermissions('equipment:read')
 @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
 export class DossierController {
   constructor(private readonly dossier: DossierService) {}
+  @Get('service-parts') parts(
+    @CurrentUser() p: Principal,
+    @Param('equipmentId', ParseUUIDPipe) id: string,
+    @Query() q: PaginationQueryDto,
+  ) {
+    return this.dossier.serviceParts(p, id, q);
+  }
   @Get('dossier') detail(
     @CurrentUser() p: Principal,
     @Param('equipmentId', ParseUUIDPipe) id: string,

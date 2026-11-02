@@ -12,7 +12,21 @@ never be dropped by a later migration.
 Notes for this database:
 
 - `StockTransaction.workOrderParts` is a list in Prisma although `work_order_parts.stock_transaction_id` is UNIQUE (same composite-FK reason as above).
-- Open design points from the audit still apply: F09 (`work_order_parts` part/warehouse/quantity are not forced to match the ISSUE transaction).
+- F09 is enforced by the runtime's single stock/ledger/usage transaction and tested
+  rollback. The original FK alone does not force every usage field to equal its
+  ISSUE ledger field; do not bypass the owning service with direct SQL writes.
+- `0002_work_order_part_returns` keeps quantityUsed immutable and caps returns.
+- `0003_inventory_runtime` adds durable tenant/key operations (including ISSUE
+  PENDING/COMMITTED/ABORTED), exact before/after ledger balances and a tenant FK from
+  each new RETURN to its originating usage. Legacy nullable fields remain unknown.
+  SQL checks validate balance arithmetic, states/outcomes and RETURN link type.
+- WO reservation rows belong to workorder_db and are not created here. There is
+  no cross-database FK; see ADR 0014 and the proposed owner contract.
+- `0004_inventory_accountability` adds quarantine, catalog audit, snapshots and
+  confirmed-use/reversal records. Issued/returned/confirmed quantities are bounded
+  together. New parts default to whole quantities; existing fractional data remains.
+- `0005_internal_cost_currency` pairs new internal reference costs with currency;
+  existing costs with unknown currency stay nullable. See ADR 0015.
 
 ## Commands (run in `apps/inventory-service`)
 

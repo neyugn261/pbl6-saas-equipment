@@ -35,7 +35,7 @@ with pre-release or already queued messages; producers publish v2:
 | `WorkOrderCancelled.v2` | workorder-service | M2 | `WorkOrderCancelled.v1` fields + `cancelServiceRequest` | service-request (→ CANCELLED when `cancelServiceRequest`, else → ACCEPTED; ADR 0008 D4a), maintenance |
 | `MaintenanceTaskDue.v1` | maintenance-service | M2 | `maintenanceTaskId, maintenancePlanId, equipmentId, customerId, customerSiteId\|null, scheduledDate (YYYY-MM-DD), title` | workorder (create WO) |
 | `MaintenanceWorkOrderReplacementRequested.v1` | maintenance-service | M2 | Due snapshot fields + `requestId, previousWorkOrderId, replacementWorkOrderId, requestedBy` | workorder (explicit manager request, fixed allocated replacement WO ID; ADR 0011) |
-| `LowStockDetected.v1` | inventory-service | M3 | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
+| `LowStockDetected.v1` | inventory-service | M3 producer implemented; Notification integration pending | `stockId, partId, partSku, warehouseId, quantity, minQuantity` (decimal strings) | notification (M3) |
 
 `MaintenanceTaskDue` carries a customer snapshot because event consumers do
 not call other services synchronously (ADR 0004); Maintenance keeps that

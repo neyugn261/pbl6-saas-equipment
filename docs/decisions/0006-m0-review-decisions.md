@@ -98,6 +98,10 @@ Attachments:
 
 Parts:
 
+> M3 update: ADR 0015 supersedes the inferred consumed quantity and unconditional
+> return-to-available rule below with confirmed use and condition-based quarantine.
+> The original decisions are retained here as history.
+
 - Issued, returned and consumed quantities are tracked per Work Order part:
   consumed = issued − returned.
 - `inventory_db.work_order_parts` keeps `quantity_used` as the issued quantity
