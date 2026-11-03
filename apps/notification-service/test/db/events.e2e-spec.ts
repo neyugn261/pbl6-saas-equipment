@@ -106,10 +106,7 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
     }
     verified = true;
     events = new NotificationEventsService(db as PrismaService);
-    projections = new RecipientProjectionService(
-      db as PrismaService,
-      events,
-    );
+    projections = new RecipientProjectionService(db as PrismaService, events);
   });
 
   afterAll(async () => {
@@ -143,25 +140,17 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
   });
 
   it('handles marker-first bootstrap, monotonic snapshots, and pending event replay', async () => {
-    const markerId = randomUUID();
-    eventIds.push(markerId);
-    const marker: EventEnvelope = {
-      eventId: markerId,
-      eventType: 'NotificationRecipientBootstrapCompleted',
-      eventVersion: 1,
-      producer: 'identity-service',
-      tenantId,
-      aggregateType: 'Tenant',
-      aggregateId: tenantId,
-      occurredAt: '2026-11-02T00:00:05.000Z',
-      correlationId: null,
-      payload: {
+    const marker = envelope(
+      Events.NotificationRecipientBootstrapCompleted,
+      {
         bootstrapRunId,
         expectedUsers: 4,
         startedAt: '2026-11-02T00:00:00.000Z',
         completedAt: '2026-11-02T00:00:05.000Z',
       },
-    };
+      bootstrapRunId,
+      '2026-11-02T00:00:05.000Z',
+    );
     await projections.applyBootstrapCompleted(marker);
     expect(
       await db.recipientBootstrapRun.findUnique({
@@ -182,18 +171,12 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
         '7',
         null,
       ),
-      recipientSnapshot(
-        users.customer,
-        'CUSTOMER',
-        'CUSTOMER_USER',
-        '5',
-        {
-          membershipId: randomUUID(),
-          customerId,
-          status: 'ACTIVE',
-          sourceChangedAt: '2026-11-02T00:00:00.000Z',
-        },
-      ),
+      recipientSnapshot(users.customer, 'CUSTOMER', 'CUSTOMER_USER', '5', {
+        membershipId: randomUUID(),
+        customerId,
+        status: 'ACTIVE',
+        sourceChangedAt: '2026-11-02T00:00:00.000Z',
+      }),
       recipientSnapshot(
         users.technician,
         'TENANT_STAFF',
@@ -281,7 +264,10 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
           },
         },
       }),
-    ).toMatchObject({ status: 'RETRYING', reason: 'WAITING_FOR_SERVICE_REQUEST_PROJECTION' });
+    ).toMatchObject({
+      status: 'RETRYING',
+      reason: 'WAITING_FOR_SERVICE_REQUEST_PROJECTION',
+    });
 
     await events.handle(serviceRequest);
     await events.handle(serviceRequest);
@@ -301,7 +287,10 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
     expect(
       workOrderNotices.find((row) => row.userId === users.customer),
     ).toMatchObject({
-      payload: { resourceType: 'SERVICE_REQUEST', resourceId: serviceRequestId },
+      payload: {
+        resourceType: 'SERVICE_REQUEST',
+        resourceId: serviceRequestId,
+      },
       content: 'Work order WO-NOTIFY-1 was created for your service request.',
     });
     expect(
@@ -448,7 +437,10 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
     });
     expect(customerCompletion).toMatchObject({
       customerId,
-      payload: { resourceType: 'SERVICE_REQUEST', resourceId: serviceRequestId },
+      payload: {
+        resourceType: 'SERVICE_REQUEST',
+        resourceId: serviceRequestId,
+      },
       content: 'Customer-safe completion summary',
     });
     expect(
@@ -700,25 +692,19 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
 
     const zeroUserRunId = randomUUID();
     bootstrapRunIds.push(zeroUserRunId);
-    const zeroMarkerId = randomUUID();
-    eventIds.push(zeroMarkerId);
-    await projections.applyBootstrapCompleted({
-      eventId: zeroMarkerId,
-      eventType: 'NotificationRecipientBootstrapCompleted',
-      eventVersion: 1,
-      producer: 'identity-service',
-      tenantId,
-      aggregateType: 'Tenant',
-      aggregateId: tenantId,
-      occurredAt: '2026-11-02T00:02:00.000Z',
-      correlationId: null,
-      payload: {
-        bootstrapRunId: zeroUserRunId,
-        expectedUsers: 0,
-        startedAt: '2026-11-02T00:01:00.000Z',
-        completedAt: '2026-11-02T00:02:00.000Z',
-      },
-    });
+    await projections.applyBootstrapCompleted(
+      envelope(
+        Events.NotificationRecipientBootstrapCompleted,
+        {
+          bootstrapRunId: zeroUserRunId,
+          expectedUsers: 0,
+          startedAt: '2026-11-02T00:01:00.000Z',
+          completedAt: '2026-11-02T00:02:00.000Z',
+        },
+        zeroUserRunId,
+        '2026-11-02T00:02:00.000Z',
+      ),
+    );
     expect(
       await db.recipientBootstrapRun.findUnique({
         where: { bootstrapRunId: zeroUserRunId },

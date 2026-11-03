@@ -1,5 +1,10 @@
 # Rà soát tích hợp M3 cuối — 03/11/2026
 
+Đây là kết quả lịch sử tại baseline bên dưới. Hai lỗi marker/build đã được sửa
+trên nhánh `fix/notification-bootstrap-prisma-build`; xem
+[báo cáo fix và kiểm tra lại](2026-11-03-notification-bootstrap-fix.md).
+Không dùng kết quả lỗi của baseline làm trạng thái của bản đã deploy fix.
+
 Baseline: `origin/develop@3bcf42f` (merge `fixdemo`, gồm `32583c7` nối recipient và
 PR #58 sửa web). Đã kiểm tra lại source, unit/regression, migration và luồng API
 thật. **Chưa đủ điều kiện chốt M3/chuyển M4: còn một lỗi chặn Notification bootstrap.**

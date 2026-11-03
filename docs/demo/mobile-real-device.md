@@ -110,9 +110,11 @@ transition tạo mới.
 
 Nhận file từ camera/gallery/Files và upload attachment đã có code trong app
 hiện tại; các ghi chú M2/preview cũ trong README không đại diện cho toàn bộ M3.
-Notification recipient bootstrap trên baseline 3bcf42f còn blocker đã ghi trong
-[báo cáo M3](../reports/2026-11-03-m3-final-readiness.md); không dùng việc chạy
-mobile/đăng nhập thành công để kết luận Notification đã nghiệm thu.
+Hai lỗi Notification bootstrap/build của baseline 3bcf42f đã được sửa trên
+nhánh `fix/notification-bootstrap-prisma-build`, xem
+[kết quả kiểm tra](../reports/2026-11-03-notification-bootstrap-fix.md). Cần deploy
+bản mới và bootstrap lại trên stack demo; việc mobile đăng nhập thành công chưa
+chứng minh Notification trên stack đó đã nghiệm thu.
 
 ## 4. Build APK để cài và dùng độc lập
 

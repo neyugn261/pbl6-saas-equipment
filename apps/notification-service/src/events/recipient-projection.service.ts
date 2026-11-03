@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { isRoleCode, ROLE_USER_TYPES, type RoleCode } from '@pbl6/auth';
 import { isUUID, isISO8601 } from 'class-validator';
-import type { EventEnvelope } from '@pbl6/event-contracts';
+import { Events, type EventEnvelope } from '@pbl6/event-contracts';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationEventsService } from './notification-events.service';
@@ -534,15 +534,15 @@ export class RecipientProjectionService {
   private parseBootstrapMarker(
     envelope: EventEnvelope,
   ): BootstrapMarkerInput | undefined {
+    const definition = Events.NotificationRecipientBootstrapCompleted;
     if (
-      envelope.eventType !== 'NotificationRecipientBootstrapCompleted' ||
-      envelope.eventVersion !== 1 ||
-      envelope.producer !== 'identity-service' ||
+      envelope.eventType !== definition.type ||
+      envelope.eventVersion !== definition.version ||
+      envelope.producer !== definition.producer ||
       !isUUID(envelope.eventId) ||
       !envelope.tenantId ||
       !isUUID(envelope.tenantId) ||
-      envelope.aggregateType !== 'Tenant' ||
-      envelope.aggregateId !== envelope.tenantId ||
+      envelope.aggregateType !== definition.aggregateType ||
       !isISO8601(envelope.occurredAt)
     ) {
       return undefined;
@@ -558,6 +558,7 @@ export class RecipientProjectionService {
       ]) ||
       typeof payload.bootstrapRunId !== 'string' ||
       !isUUID(payload.bootstrapRunId) ||
+      envelope.aggregateId !== payload.bootstrapRunId ||
       !Number.isSafeInteger(payload.expectedUsers) ||
       typeof payload.expectedUsers !== 'number' ||
       payload.expectedUsers < 0 ||
