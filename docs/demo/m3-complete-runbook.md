@@ -11,6 +11,9 @@ bootstrap của Identity bị Notification từ chối do sai `aggregateType/agg
 Phải merge bản sửa của Huy và qua cổng kiểm tra ở mục 5 trước khi trình diễn
 Notification hoặc ghi nhận M3 hoàn tất. Xem [báo cáo và bằng chứng](../reports/2026-11-03-m3-final-readiness.md).
 
+Chạy Android emulator, điện thoại thật qua Wi-Fi/USB và build APK:
+[hướng dẫn Mobile trên thiết bị thật](mobile-real-device.md).
+
 ## 1. Chuẩn bị nhánh và cấu hình
 
 Tại root repository:
