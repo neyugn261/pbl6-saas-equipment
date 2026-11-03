@@ -50,15 +50,25 @@ import { rememberDemoRequest } from './routes/demo-request'
 import InvitePage from './routes/InvitePage'
 import QrPage from './routes/QrPage'
 import EstimatePanel from './routes/EstimatePanel'
+import { NotificationInbox, NotificationBell } from './features/notifications/NotificationInbox'
+import { AttachmentsPanel } from './features/attachments/AttachmentsPanel'
+import { WorkOrderReportsPage } from './features/reports/WorkOrderReports'
+import {
+  InventoryPartPage,
+  InventoryPartsPage,
+  InventoryTransactionsPage,
+  InventoryWarehousesPage,
+} from './features/inventory/InventoryPages'
 import { AppStoreProvider } from './sample/state/AppStore'
 import { DashboardPage as SampleDashboardPage } from './sample/pages/DashboardPage'
-import { OrganizationPage, PartDetailPage, PartsPage, PlatformAuxPage, PlatformDashboardPage, TenantDetailPage as SampleTenantDetailPage, TenantsPage as SampleTenantsPage, TransactionsPage, WarehousesPage } from './sample/pages/ManagementPage'
+import { OrganizationPage, PlatformAuxPage, PlatformDashboardPage, TenantDetailPage as SampleTenantDetailPage, TenantsPage as SampleTenantsPage } from './sample/pages/ManagementPage'
 import { PortalDashboardPage, PortalSimplePage } from './sample/pages/PortalPage'
 import { TenantFormPage } from './sample/pages/TenantFormPage'
 import {
   login,
   logout,
   restoreSession,
+  getSessionGeneration,
   SessionProvider,
   useSession,
 } from './auth/session'
@@ -250,6 +260,7 @@ function Layout({ children }: { children: ReactNode }) {
     { path: '/app/organization/users', label: 'Người dùng', icon: Users, group: 'Tổ chức', roles: ['TENANT_ADMIN'] },
     { path: '/app/organization/roles', label: 'Vai trò & quyền', icon: ShieldCheck, group: 'Tổ chức', roles: ['TENANT_ADMIN'] },
     { path: '/app/reports', label: 'Báo cáo', icon: Gauge, group: 'Hệ thống', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/notifications', label: 'Thông báo', icon: Bell, group: 'Hệ thống', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'INVENTORY_STAFF', 'TECHNICIAN'] },
     { path: '/app/settings', label: 'Cài đặt', icon: Settings, group: 'Hệ thống', roles: ['TENANT_ADMIN'] },
     { path: '/admin/audit-logs', label: 'Nhật ký kiểm toán', icon: History, group: 'Nền tảng', roles: ['PLATFORM_ADMIN'] },
     { path: '/admin/settings', label: 'Cài đặt nền tảng', icon: Settings, group: 'Nền tảng', roles: ['PLATFORM_ADMIN'] },
@@ -268,7 +279,7 @@ function Layout({ children }: { children: ReactNode }) {
   const section = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`))
   const initials = profile.fullName.split(' ').slice(-2).map((part) => part[0]).join('').toUpperCase()
   const scope = profile.userType === 'PLATFORM_STAFF' ? 'Phạm vi nền tảng' : profile.userType === 'CUSTOMER' ? 'Cổng khách hàng' : 'Doanh nghiệp hiện tại'
-  const liveM2Page = /^\/(app|portal)\/(equipment(?:\/|$)|equipment-history$|equipment-models(?:\/|$)|equipment-registrations(?:\/|$)|customers(?:\/|$)|warranties\/|models\/|service-requests(?:\/|$)|requests(?:\/|$)|work-orders(?:\/|$)|technicians(?:\/|$)|maintenance(?:\/|$)|maintenance-history$)/.test(location.pathname)
+  const liveM2Page = /^\/(app|portal)\/(equipment(?:\/|$)|equipment-history$|equipment-models(?:\/|$)|equipment-registrations(?:\/|$)|customers(?:\/|$)|warranties\/|models\/|service-requests(?:\/|$)|requests(?:\/|$)|work-orders(?:\/|$)|technicians(?:\/|$)|maintenance(?:\/|$)|maintenance-history$|inventory(?:\/|$)|reports$|notifications$)/.test(location.pathname)
   const samplePage = !liveM2Page && (location.pathname.startsWith('/app/') || location.pathname === '/admin' || location.pathname.startsWith('/admin/') || location.pathname === '/portal' || (location.pathname.startsWith('/portal/') && !location.pathname.startsWith('/portal/qr/')))
   return (
     <div className={`m1-layout ${collapsed ? 'm1-layout--collapsed' : ''}`}>
@@ -307,7 +318,7 @@ function Layout({ children }: { children: ReactNode }) {
             <button className="m1-topbar-icon m1-desktop-collapse" aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'} onClick={() => setCollapsed((value) => !value)}><PanelLeftClose size={19} /></button>
             <Link className="m1-topbar-search" to={has(profile.roles, menu[1].roles) ? '/equipment' : '/tenants'}><Search size={17} /><span>{has(profile.roles, menu[1].roles) ? 'Tra cứu thiết bị' : 'Xem doanh nghiệp'}</span></Link>
           </div>
-          <div className="m1-topbar-user"><span className="m1-avatar">{initials}</span><span><strong>{profile.fullName}</strong><small>{profile.roles.map((role) => roleLabels[role] ?? role).join(', ')}</small></span></div>
+          <div className="m1-topbar-user">{profile.userType !== 'PLATFORM_STAFF' && <NotificationBell href={profile.userType === 'CUSTOMER' ? '/portal/notifications' : '/app/notifications'} />}<span className="m1-avatar">{initials}</span><span><strong>{profile.fullName}</strong><small>{profile.roles.map((role) => roleLabels[role] ?? role).join(', ')}</small></span></div>
         </header>
         <main className="m1-main">
           <nav className="m1-breadcrumbs" aria-label="Đường dẫn"><Link to="/dashboard">Trang chủ</Link>{location.pathname !== '/dashboard' && <><ChevronRight size={14} /><Link to={section?.path ?? '/dashboard'}>{section?.label ?? 'Trang'}</Link>{section && location.pathname !== section.path && <><ChevronRight size={14} /><span>{location.pathname.endsWith('/new') ? 'Tạo mới' : 'Chi tiết'}</span></>}</>}</nav>
@@ -320,6 +331,8 @@ function Layout({ children }: { children: ReactNode }) {
   )
 }
 function useLoad<T>(load: () => Promise<T>, key: string) {
+  const sessionGeneration = getSessionGeneration()
+  const requestKey = `${key}:session-${sessionGeneration}`
   const [state, setState] = useState<{
     key: string
     value: T | null
@@ -329,19 +342,19 @@ function useLoad<T>(load: () => Promise<T>, key: string) {
     let active = true
     load()
       .then((value) => {
-        if (active) setState({ key, value, error: null })
+        if (active) setState({ key: requestKey, value, error: null })
       })
       .catch((error) => {
-        if (active) setState({ key, value: null, error })
+        if (active) setState({ key: requestKey, value: null, error })
       })
     return () => {
       active = false
     }
-  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [requestKey]) // eslint-disable-line react-hooks/exhaustive-deps
   return {
-    value: state.key === key ? state.value : null,
-    error: state.key === key ? state.error : null,
-    loading: state.key !== key,
+    value: state.key === requestKey ? state.value : null,
+    error: state.key === requestKey ? state.error : null,
+    loading: state.key !== requestKey,
   }
 }
 function Frame({
@@ -660,11 +673,12 @@ function RequestDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { profile } = useSession()
+  const sessionGeneration = getSessionGeneration()
   const data = useLoad<RequestDetail>(
     () => api.requestsLive(`/service-requests/${id}`),
     id ?? '',
   )
-  const [override, setOverride] = useState<RequestDetail | null>(null)
+  const [override, setOverride] = useState<{ generation: number; value: RequestDetail } | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const [version, setVersion] = useState(0)
@@ -672,36 +686,43 @@ function RequestDetailPage() {
   const [visibility, setVisibility] = useState<'CUSTOMER' | 'INTERNAL'>(
     'CUSTOMER',
   )
-  const current = override?.id === data.value?.id ? override : data.value
-  async function refreshRequest() {
-    if (!current) return
+  const currentOverride = override?.generation === sessionGeneration ? override.value : null
+  const current = currentOverride?.id === data.value?.id ? currentOverride : data.value
+  async function refreshRequest(conflict?: unknown) {
+    if (!current || getSessionGeneration() !== sessionGeneration) return
     setBusy(true)
-    setError(null)
+    setError(conflict ?? null)
     try {
-      setOverride(await api.requestsLive(`/service-requests/${current.id}`))
+      const refreshed = await api.requestsLive<RequestDetail>(`/service-requests/${current.id}`)
+      if (getSessionGeneration() !== sessionGeneration) return
+      setOverride({ generation: sessionGeneration, value: refreshed })
       setVersion((value) => value + 1)
     } catch (cause) {
-      setError(cause)
+      setError(conflict
+        ? new Error(`${conflict instanceof Error ? conflict.message : String(conflict)} · Không thể làm mới yêu cầu: ${cause instanceof Error ? cause.message : String(cause)}`)
+        : cause)
     } finally {
       setBusy(false)
     }
   }
   async function createWorkOrder() {
-    if (!current) return
+    if (!current || getSessionGeneration() !== sessionGeneration) return
     setBusy(true)
     setError(null)
     try {
       const order = await api.workorders<{ id: string }>('/work-orders', {
         method: 'POST', body: { serviceRequestId: current.id },
       })
+      if (getSessionGeneration() !== sessionGeneration) return
       navigate(`/app/work-orders/${order.id}`)
     } catch (cause) {
-      setError(cause)
-      if (cause instanceof ApiError && cause.status === 409) await refreshRequest()
+      if (getSessionGeneration() === sessionGeneration && cause instanceof ApiError && cause.status === 409)
+        await refreshRequest(cause)
+      else if (getSessionGeneration() === sessionGeneration) setError(cause)
     } finally { setBusy(false) }
   }
   async function run(action: string) {
-    if (!current) return
+    if (!current || getSessionGeneration() !== sessionGeneration) return
     const required = ['reject', 'request-info', 'reopen'].includes(action)
     const optional = action === 'cancel'
     const reason = required || optional ? window.prompt('Lý do') : null
@@ -714,9 +735,17 @@ function RequestDetailPage() {
         method: 'POST',
         ...(reason ? { body: { reason } } : {}),
       })
-      setOverride(await api.requestsLive(`/service-requests/${current.id}`))
+      if (getSessionGeneration() !== sessionGeneration) return
+      const refreshed = await api.requestsLive<RequestDetail>(`/service-requests/${current.id}`)
+      if (getSessionGeneration() !== sessionGeneration) return
+      setOverride({ generation: sessionGeneration, value: refreshed })
       setVersion((value) => value + 1)
     } catch (cause) {
+      if (getSessionGeneration() !== sessionGeneration) return
+      if (cause instanceof ApiError && cause.status === 409) {
+        await refreshRequest(cause)
+        return
+      }
       setError(cause)
     } finally {
       setBusy(false)
@@ -724,7 +753,7 @@ function RequestDetailPage() {
   }
   async function addComment(event: FormEvent) {
     event.preventDefault()
-    if (!current || !comment.trim()) return
+    if (!current || !comment.trim() || getSessionGeneration() !== sessionGeneration) return
     setBusy(true)
     setError(null)
     try {
@@ -736,10 +765,18 @@ function RequestDetailPage() {
             profile?.userType === 'CUSTOMER' ? 'CUSTOMER' : visibility,
         },
       })
+      if (getSessionGeneration() !== sessionGeneration) return
       setComment('')
-      setOverride(await api.requestsLive(`/service-requests/${current.id}`))
+      const refreshed = await api.requestsLive<RequestDetail>(`/service-requests/${current.id}`)
+      if (getSessionGeneration() !== sessionGeneration) return
+      setOverride({ generation: sessionGeneration, value: refreshed })
       setVersion((value) => value + 1)
     } catch (cause) {
+      if (getSessionGeneration() !== sessionGeneration) return
+      if (cause instanceof ApiError && cause.status === 409) {
+        await refreshRequest(cause)
+        return
+      }
       setError(cause)
     } finally {
       setBusy(false)
@@ -783,6 +820,7 @@ function RequestDetailPage() {
             </div>
             {current.status === 'PROCESSING' && <p role="status">Đang chờ kết quả từ Work Order. Kết quả có thể xuất hiện sau ít phút; dùng “Làm mới trạng thái” để kiểm tra.</p>}
             {(current.resolutionSummary || current.resolutionResult) && <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Kết quả dịch vụ</h2></div><div className="m1-section-body"><p>{current.resolutionSummary ?? '—'}</p><dl><dt>Kết quả</dt><dd>{current.resolutionResult ?? '—'}</dd><dt>Lệnh công việc</dt><dd>{current.resolvedWorkOrderNo ?? '—'}</dd><dt>Hoàn thành lúc</dt><dd>{formatDate(current.resolutionCompletedAt)}</dd></dl></div></section>}
+            <AttachmentsPanel kind="SERVICE_REQUEST_RESULT" requestId={current.id} />
             <div className="m1-request-detail-grid">
               <div>
                 <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Mô tả sự cố</h2></div><div className="m1-section-body m1-prose">{current.description}</div></section>
@@ -796,7 +834,7 @@ function RequestDetailPage() {
               <aside><section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Thông tin yêu cầu</h2></div><div className="m1-section-body"><dl><dt>Trạng thái</dt><dd><StatusBadge status={current.status} /></dd><dt>Ưu tiên</dt><dd><PriorityBadge priority={current.priority} /></dd><dt>Bảo hành</dt><dd>{current.warrantyCheck?.result ? <StatusBadge status={current.warrantyCheck.result} /> : 'Chưa kiểm tra'}</dd><dt>Loại yêu cầu</dt><dd>{requestTypeLabels[current.type] ?? current.type}</dd></dl></div></section></aside>
             </div>
             <RequestDossierExtras equipmentId={current.equipmentId} requestId={current.id} revision={version} />
-            <EstimatePanel requestId={current.id} onChange={() => void refreshRequest()} />
+            <EstimatePanel requestId={current.id} allowedActions={current.allowedActions ?? []} onChange={() => void refreshRequest()} />
             <RequestActivity id={current.id} version={version} />
           </>
         )
@@ -985,14 +1023,15 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/maintenance', element: <LiveMaintenancePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
   { path: '/app/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
   { path: '/app/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
-  { path: '/app/inventory/parts', element: <PartsPage />, roles: sampleTenantRoles },
-  { path: '/app/inventory/parts/:id', element: <PartDetailPage />, roles: sampleTenantRoles },
-  { path: '/app/inventory/warehouses', element: <WarehousesPage />, roles: sampleTenantRoles },
-  { path: '/app/inventory/transactions', element: <TransactionsPage />, roles: sampleTenantRoles },
+  { path: '/app/inventory/parts', element: <InventoryPartsPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
+  { path: '/app/inventory/parts/:id', element: <InventoryPartPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
+  { path: '/app/inventory/warehouses', element: <InventoryWarehousesPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
+  { path: '/app/inventory/transactions', element: <InventoryTransactionsPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
   { path: '/app/organization/branches', element: <OrganizationPage type="branches" />, roles: sampleTenantRoles },
   { path: '/app/organization/users', element: <OrganizationPage type="users" />, roles: sampleTenantRoles },
   { path: '/app/organization/roles', element: <OrganizationPage type="roles" />, roles: sampleTenantRoles },
-  { path: '/app/reports', element: <OrganizationPage type="reports" />, roles: sampleTenantRoles },
+  { path: '/app/reports', element: <WorkOrderReportsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+  { path: '/app/notifications', element: <NotificationInbox />, roles: sampleTenantRoles },
   { path: '/app/settings', element: <OrganizationPage type="settings" />, roles: sampleTenantRoles },
   { path: '/admin', element: <PlatformDashboardPage />, roles: ['PLATFORM_ADMIN'] },
   { path: '/admin/tenants', element: <SampleTenantsPage />, roles: ['PLATFORM_ADMIN'] },
@@ -1018,7 +1057,7 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/portal/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/locations', element: <PortalSimplePage type="locations" />, roles: sampleCustomerRoles },
-  { path: '/portal/notifications', element: <PortalSimplePage type="notifications" />, roles: sampleCustomerRoles },
+  { path: '/portal/notifications', element: <NotificationInbox />, roles: sampleCustomerRoles },
   { path: '/portal/profile', element: <PortalSimplePage type="profile" />, roles: sampleCustomerRoles },
 ]
 function Authenticated() {

@@ -7,6 +7,8 @@ import { has, menu } from '../auth/access'
 import { useSession } from '../auth/session'
 import { PriorityBadge, StatusBadge } from '../components/Badges'
 import type { CustomerRecord, EquipmentRecord, Page, RequestRecord, TenantRecord } from '../types/domain'
+import { WorkOrderSummaryPanel } from '../features/reports/WorkOrderReports'
+import { getSessionGeneration } from '../auth/session'
 
 interface Summary {
   customers?: number
@@ -26,15 +28,18 @@ const statusGroups = [
 
 export default function DashboardPage() {
   const { profile } = useSession()
+  const sessionGeneration = getSessionGeneration()
   const roles = profile?.roles ?? []
   const canCustomers = has(roles, menu[0].roles)
   const canEquipment = has(roles, menu[1].roles)
   const canRequests = has(roles, menu[2].roles)
   const canTenants = has(roles, menu[3].roles)
-  const [state, setState] = useState<{ summary: Summary; loading: boolean; partialError: boolean }>({
+  const canWorkOrderReport = has(roles, ['TENANT_ADMIN', 'SERVICE_MANAGER'])
+  const [state, setState] = useState<{ summary: Summary; loading: boolean; partialError: boolean; generation: number }>({
     summary: initialSummary,
     loading: true,
     partialError: false,
+    generation: -1,
   })
 
   useEffect(() => {
@@ -46,21 +51,24 @@ export default function DashboardPage() {
     if (canRequests) loads.push(api.requests<Page<RequestRecord>>('/service-requests?page=1&pageSize=100').then((page) => { summary.requests = page.total; summary.recentRequests = page.items }))
     if (canTenants) loads.push(api.organization<Page<TenantRecord>>('/tenants?page=1&pageSize=1').then((page) => { summary.tenants = page.total }))
     Promise.allSettled(loads).then((results) => {
-      if (active) setState({ summary, loading: false, partialError: results.some((result) => result.status === 'rejected') })
+      if (active) setState({ summary, loading: false, partialError: results.some((result) => result.status === 'rejected'), generation: sessionGeneration })
     })
     return () => { active = false }
-  }, [canCustomers, canEquipment, canRequests, canTenants])
+  }, [canCustomers, canEquipment, canRequests, canTenants, sessionGeneration])
 
   if (!profile) return null
   const today = new Date()
   const dateLabel = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Ho_Chi_Minh' }).format(today)
+  const currentSession = state.generation === sessionGeneration
+  const summary = currentSession ? state.summary : initialSummary
+  const loading = !currentSession || state.loading
   const metrics = [
-    { label: 'Khách hàng', value: state.summary.customers, path: '/customers', icon: Building2, tone: 'blue', visible: canCustomers },
-    { label: 'Tổng thiết bị', value: state.summary.equipment, path: '/equipment', icon: Boxes, tone: 'violet', visible: canEquipment },
-    { label: 'Yêu cầu dịch vụ', value: state.summary.requests, path: '/requests', icon: ClipboardList, tone: 'amber', visible: canRequests },
-    { label: 'Doanh nghiệp', value: state.summary.tenants, path: '/tenants', icon: ShieldCheck, tone: 'green', visible: canTenants },
+    { label: 'Khách hàng', value: summary.customers, path: '/customers', icon: Building2, tone: 'blue', visible: canCustomers },
+    { label: 'Tổng thiết bị', value: summary.equipment, path: '/equipment', icon: Boxes, tone: 'violet', visible: canEquipment },
+    { label: 'Yêu cầu dịch vụ', value: summary.requests, path: '/requests', icon: ClipboardList, tone: 'amber', visible: canRequests },
+    { label: 'Doanh nghiệp', value: summary.tenants, path: '/tenants', icon: ShieldCheck, tone: 'green', visible: canTenants },
   ].filter((metric) => metric.visible)
-  const recent = state.summary.recentRequests
+  const recent = summary.recentRequests
   const monthly = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth() - 5 + index, 1)
     return { month: `T${date.getMonth() + 1}`, value: recent.filter((request) => { const created = new Date(request.createdAt); return created.getMonth() === date.getMonth() && created.getFullYear() === date.getFullYear() }).length }
@@ -78,14 +86,15 @@ export default function DashboardPage() {
         </div>
         {canRequests && <Link className="m1-button" to="/requests">Xem yêu cầu dịch vụ</Link>}
       </header>
-      {state.partialError && <p className="m1-error" role="alert">Một số số liệu chưa tải được. Bạn vẫn có thể mở từng mục trong menu.</p>}
+      {currentSession && state.partialError && <p className="m1-error" role="alert">Một số số liệu chưa tải được. Bạn vẫn có thể mở từng mục trong menu.</p>}
+      {canWorkOrderReport && <WorkOrderSummaryPanel />}
       <div className="metrics-grid">
         {metrics.map(({ label, value, path, icon: Icon, tone }) => (
           <Link className="metric-card" to={path} key={path}>
             <span className={`metric-card__icon metric-card__icon--${tone}`}><Icon size={20} /></span>
             <span className="metric-card__body">
               <small>{label}</small>
-              <strong>{state.loading ? '…' : value ?? '—'}</strong>
+              <strong>{loading ? '…' : value ?? '—'}</strong>
               <span>Xem chi tiết <ArrowRight size={13} /></span>
             </span>
           </Link>
@@ -105,7 +114,7 @@ export default function DashboardPage() {
         {canRequests && (
           <section className="m1-card dashboard-section">
             <div className="dashboard-section__header"><div><h2>Yêu cầu cần chú ý</h2><p>Ưu tiên cao hoặc đang chờ xử lý</p></div><Link to="/requests">Xem tất cả <ArrowRight size={14} /></Link></div>
-            {state.loading ? <p className="dashboard-empty">Đang tải…</p> : highlighted.length ? (
+            {loading ? <p className="dashboard-empty">Đang tải…</p> : highlighted.length ? (
               <div className="dashboard-request-list">
                 {highlighted.map((request) => (
                   <Link to={`/requests/${request.id}`} key={request.id}>
