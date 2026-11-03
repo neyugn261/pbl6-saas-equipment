@@ -101,6 +101,7 @@ Terminal chuẩn bị, root repository:
 
 ```bash
 pnpm db:migrate
+pnpm --filter "./apps/**" --if-present build
 pnpm identity:seed:dev
 pnpm --filter workorder-service attachments:prepare
 ```
@@ -112,6 +113,7 @@ xóa volume hoặc reset DB đang dùng để xử lý lỗi migration.
 
 Nếu đã seed trước đây, seed sẽ tái sử dụng dữ liệu và giữ thay đổi nghiệp vụ;
 không kỳ vọng seed đưa tồn kho/WO đã hoàn thành về trạng thái ban đầu.
+Hoàn tất toàn bộ build ở bước này, trước khi chạy `dev:backend`.
 
 ## 3. Khởi động ứng dụng và seed theo phụ thuộc
 
@@ -124,17 +126,22 @@ pnpm dev:backend
 Chờ các service khởi động. Terminal B, root:
 
 ```bash
-pnpm --filter organization-service db:seed:dev
-pnpm --filter asset-service db:seed:dev
-pnpm --filter workorder-service db:seed:dev
-pnpm --filter inventory-service db:seed:dev
-pnpm --filter maintenance-service build
-pnpm --filter maintenance-service db:seed:dev
+pnpm --filter organization-service exec prisma db seed
+pnpm --filter asset-service exec prisma db seed
+pnpm --filter workorder-service exec node scripts/seed-dev.cjs
+pnpm --filter inventory-service exec node dist/demo/seed-dev.js
+pnpm --filter maintenance-service exec node scripts/seed-dev.cjs
 ```
 
 Identity phải đang chạy để Organization link user; WO/Inventory cần Identity và
-Organization thật; Maintenance seed cần Asset thật. Seed/build có thể khiến watch
-restart; chờ health ổn định lại rồi mới thao tác tiếp.
+Organization thật; Maintenance seed cần Asset thật. Các lệnh trên gọi trực tiếp
+seed đã build, không generate/build lại trong lúc watcher đang chạy.
+
+**Không chạy `build`, `attachments:prepare` hoặc các wrapper `db:seed:dev` có kèm
+build khi `dev:backend` đang chạy.** Nest xóa `dist` trước build; watcher có thể
+restart đúng lúc `dist/main` chưa được emit, báo MODULE_NOT_FOUND dù TypeScript
+không lỗi. Khi đó Gateway sẽ báo ECONNREFUSED tới service đã ngừng. Nếu cần build
+lại, Ctrl+C terminal backend, hoàn tất build/provision, rồi chạy lại backend.
 
 Terminal C, root:
 
