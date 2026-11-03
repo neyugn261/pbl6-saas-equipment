@@ -56,7 +56,7 @@ export function NotificationInbox() {
   useEffect(() => {
     let active = true
     api.notifications<Page<Notification>>(
-      `/notifications?page=${page}&pageSize=20&readStatus=${filter}`,
+      `?page=${page}&pageSize=20&readStatus=${filter}`,
     ).then((value) => {
       if (active) {
         setResultState({ key: queryKey, result: value, error: '' })
@@ -74,7 +74,7 @@ export function NotificationInbox() {
     setBusyId(id)
     setActionError(null)
     try {
-      await api.notifications<Notification>(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' })
+      await api.notifications<Notification>(`/${encodeURIComponent(id)}/read`, { method: 'PATCH' })
       if (getSessionGeneration() !== operationGeneration) return
       setRevision((value) => value + 1)
       window.dispatchEvent(new Event('pbl6:notifications-changed'))
@@ -139,7 +139,7 @@ export function NotificationBell({ href }: { href: string }) {
   useEffect(() => {
     let active = true
     const update = () => {
-      api.notifications<{ unreadCount: number }>('/notifications/unread-count').then(
+      api.notifications<{ unreadCount: number }>('/unread-count').then(
         (value) => {
           if (active) { setCount(value.unreadCount); setCountGeneration(sessionGeneration); setError('') }
         },

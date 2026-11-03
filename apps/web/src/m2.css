@@ -167,6 +167,7 @@
 .m2-inventory-table th,
 .m2-inventory-table td { padding: 11px 12px; border-bottom: 1px solid #e8edf3; text-align: left; white-space: nowrap; }
 .m2-inventory-table th { color: #64748b; font-size: 11px; }
+.inventory-mutation-fields { margin: 0; padding: 0; border: 0; min-width: 0; }
 .m2-inventory-table td { color: #334155; font-size: 12px; }
 .notification-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; color: inherit; text-decoration: none; }
 .notification-bell__count { position: absolute; top: -5px; right: -7px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; color: #fff; background: #d14343; font-size: 9px; font-weight: 750; line-height: 16px; text-align: center; }

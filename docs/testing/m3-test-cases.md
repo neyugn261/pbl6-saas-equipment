@@ -51,3 +51,41 @@ passed from a successful typecheck or production build.
 The existing handover evidence is documented in
 [equipment-registration.md](./equipment-registration.md). That is prior
 evidence, not a regression run for this task.
+
+## Regression for Notification paths and stock retry — 2026-11-03
+
+Branch: `fix/hatsady-m3-notification-inventory-retry`, based on `develop@6cac11b`.
+
+The Notification component now appends relative collection/query, unread-count
+and mark-read paths to the configured Notification base exactly once. Stock
+mutations persist the original key/path/body before POST, lock editing while
+unresolved, and explicitly retry the saved intent for RECEIVE/ADJUST/ISSUE/RETURN.
+Saved intents survive navigation/reload in the same tab, are scoped by tenant/user,
+and cannot be replayed by an obsolete session. A late response cannot erase a newer
+saved intent. Matching ISSUE recovery/proof resolves the local pending state;
+reservation settlement remains under the existing backend recovery workflow.
+
+| Check | Result |
+|---|---|
+| `cd apps/web && ./node_modules/.bin/eslint .` | PASS |
+| `cd apps/web && ./node_modules/.bin/tsc -b` | PASS |
+| `node --test apps/web/test/*.test.mjs` | PASS — 27/27 (20 M3 regression + 7 session regression) |
+| `cd apps/web && ./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build` | PASS — existing large JavaScript chunk warning |
+
+These commands execute the tools used by the Web package scripts directly.
+The pnpm script wrapper attempted an automatic workspace install and stalled on
+registry downloads; it was stopped. No dependencies or lockfile were changed.
+
+The new tests execute the real API client, configuration, Notification component
+and Inventory component handlers/effects using a small hook host and deterministic
+fetch/sessionStorage doubles. They cover filter/pagination, unread refresh after
+mark-read, stock commit followed by response loss, exact replay after reload,
+duplicate submit, first business rejection versus later authorization failure,
+401 renewal, tenant/user isolation, storage failure, ISSUE proof/recovery, and a
+late success after navigation. This is automated component/transport evidence;
+it does not execute a browser DOM, Gateway process, PostgreSQL or RabbitMQ.
+
+All browser/API acceptance rows above remain **NOT RUN**. Prioritize E2-06 and
+E3-02–E3-06 against the real stack, dropping the POST response after backend commit
+and confirming that retry/reload leaves one stock transaction. Also confirm
+matching ISSUE retry/abort and settlement through the existing recovery panel.
