@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
-import { useSession } from "../auth/session";
+import { getSessionGeneration, useSession } from "../auth/session";
 import type { Page } from "../types/domain";
+import { AttachmentsPanel } from "../features/attachments/AttachmentsPanel";
 
 type Row = Record<string, unknown>;
 type Availability =
@@ -78,6 +79,7 @@ const message: Record<Exclude<Availability, "AVAILABLE">, string> = {
 };
 
 function useRemote<T>(key: string, load: () => Promise<T>) {
+  const generation = getSessionGeneration();
   const [state, setState] = useState<{
     key: string;
     value?: T;
@@ -86,14 +88,15 @@ function useRemote<T>(key: string, load: () => Promise<T>) {
   }>({ key: "", loading: true });
   useEffect(() => {
     let active = true;
+    const requestKey = `${key}:session-${generation}`;
     load().then(
       (value) => {
-        if (active) setState({ key, value, loading: false });
+        if (active) setState({ key: requestKey, value, loading: false });
       },
       (error) => {
         if (active)
           setState({
-            key,
+            key: requestKey,
             error:
               error instanceof ApiError
                 ? `${error.status} · ${error.message}`
@@ -107,8 +110,8 @@ function useRemote<T>(key: string, load: () => Promise<T>) {
     };
     // The key identifies the server query; callers construct a fresh load function each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-  return state.key === key
+  }, [key, generation]);
+  return state.key === `${key}:session-${generation}`
     ? state
     : {
         key,
@@ -697,6 +700,7 @@ export function DossierPage() {
           </>
         )}
       </Result>
+      {state.value && id && <AttachmentsPanel kind="WORK_ORDER" workOrderId={id} />}
     </div>
   );
 }
@@ -1066,27 +1070,43 @@ export function WorkOrderListPage() {
 }
 
 function WorkOrderControls({ order, id, refresh }: { order: Row; id: string; refresh: () => void }) {
+  const sessionGeneration = getSessionGeneration();
   const actions = Array.isArray(order.allowedActions) ? order.allowedActions as string[] : [];
   const [technicianId, setTechnicianId] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [reason, setReason] = useState('');
+  const [cancelRequest, setCancelRequest] = useState(false);
+  const [report, setReport] = useState({ problemDescription: '', rootCause: '', solution: '', result: 'RESOLVED', customerSummary: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const technicians = useRemote<Page<Row>>(`wo-technicians:${actions.includes('assign')}`, () =>
     actions.includes('assign') ? api.workorders('/technicians?page=1&pageSize=100') : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 100 }),
   );
   async function perform(path: string, method: string, body?: unknown) {
+    if (getSessionGeneration() !== sessionGeneration) return;
     setBusy(true); setError('');
     try {
       await api.workorders(`/work-orders/${id}${path}`, { method, body });
-      refresh();
+      if (getSessionGeneration() === sessionGeneration) refresh();
     } catch (cause) {
-      setError(cause instanceof ApiError ? `${cause.status} · ${cause.message}` : String(cause));
-      if (cause instanceof ApiError && cause.status === 409) refresh();
+      if (getSessionGeneration() !== sessionGeneration) return;
+      setError(cause instanceof ApiError ? `${cause.status} · ${cause.code} · ${cause.message}` : String(cause));
+      refresh();
     } finally { setBusy(false); }
   }
-  if (!actions.some((action) => ['assign', 'update', 'cancel'].includes(action))) return null;
-  return <Card title="Điều phối lệnh công việc">
+  const transitions: { action: string; path: string; label: string; body?: unknown }[] = [
+    { action: 'accept', path: '/accept', label: 'Nhận lệnh', body: {} },
+    { action: 'reject', path: '/reject', label: 'Từ chối phân công', body: { reason } },
+    { action: 'start-travel', path: '/start-travel', label: 'Bắt đầu di chuyển', body: {} },
+    { action: 'start', path: '/start', label: 'Bắt đầu công việc', body: {} },
+    { action: 'hold', path: '/hold', label: 'Tạm dừng', body: { reason } },
+    { action: 'resume', path: '/resume', label: 'Tiếp tục công việc', body: {} },
+    { action: 'complete', path: '/complete', label: 'Hoàn tất và gửi báo cáo', body: report },
+    { action: 'cancel', path: '/cancel', label: 'Hủy Work Order', body: { reason, cancelServiceRequest: cancelRequest } },
+  ];
+  if (!actions.some((action) => ['assign', 'update', 'cancel', 'accept', 'reject', 'start-travel', 'start', 'hold', 'resume', 'complete'].includes(action))) return null;
+  return <Card title="Thao tác Work Order">
     {error && <p className="m1-error" role="alert">{error}</p>}
     {actions.includes('assign') && <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); void perform('/assign', 'POST', { technicianId }); }}>
       <label>Kỹ thuật viên <select required value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}><option value="">Chọn kỹ thuật viên</option>{technicians.value?.items.filter((row) => row.status === 'AVAILABLE' || row.status === 'BUSY').map((row) => <option key={String(row.id)} value={String(row.id)}>{asText(row.employeeCode ?? row.userId)} · {asText(row.status)}</option>)}</select></label>
@@ -1099,7 +1119,29 @@ function WorkOrderControls({ order, id, refresh }: { order: Row; id: string; ref
       <button disabled={busy}>Lưu lịch dự kiến</button>
       <p>Để trống mốc không cần thay đổi.</p>
     </form>}
-    {actions.includes('cancel') && <button disabled={busy} onClick={() => { const reason = window.prompt('Lý do hủy lệnh công việc'); if (reason?.trim()) void perform('/cancel', 'POST', { reason: reason.trim(), cancelServiceRequest: false }); }}>Hủy lệnh công việc</button>}
+    {actions.some((action) => ['reject', 'hold', 'cancel'].includes(action)) && <label>Lý do thao tác
+      <input maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} />
+    </label>}
+    {actions.includes('complete') && <fieldset className="m2-editor">
+      <legend>Báo cáo dịch vụ bắt buộc khi hoàn tất</legend>
+      <label>Mô tả sự cố<input required maxLength={5000} value={report.problemDescription} onChange={(event) => setReport({ ...report, problemDescription: event.target.value })} /></label>
+      <label>Nguyên nhân<input maxLength={5000} value={report.rootCause} onChange={(event) => setReport({ ...report, rootCause: event.target.value })} /></label>
+      <label>Giải pháp<input required maxLength={5000} value={report.solution} onChange={(event) => setReport({ ...report, solution: event.target.value })} /></label>
+      <label>Kết quả<select value={report.result} onChange={(event) => setReport({ ...report, result: event.target.value })}><option value="RESOLVED">Đã xử lý</option><option value="PARTIALLY_RESOLVED">Xử lý một phần</option><option value="UNRESOLVED">Chưa xử lý được</option></select></label>
+      <label>Tóm tắt hiển thị khách hàng<input required maxLength={2000} value={report.customerSummary} onChange={(event) => setReport({ ...report, customerSummary: event.target.value })} /></label>
+    </fieldset>}
+    {actions.includes('cancel') && Boolean(order.serviceRequestId) && <label><input type="checkbox" checked={cancelRequest} onChange={(event) => setCancelRequest(event.target.checked)} /> Đồng thời hủy Service Request</label>}
+    {actions.includes('cancel') && !cancelRequest && <p>Hủy Work Order không tự hủy Service Request; yêu cầu sẽ giữ theo quyết định backend.</p>}
+    <div className="m1-actions">
+      {transitions.filter(({ action }) => actions.includes(action)).map(({ action, path, label, body }) => (
+        <button key={action} disabled={busy || (['reject', 'hold', 'cancel'].includes(action) && !reason.trim()) || (action === 'complete' && (!report.problemDescription.trim() || !report.solution.trim() || !report.customerSummary.trim()))}
+          onClick={() => void perform(path, 'POST', action === 'cancel' || action === 'reject' || action === 'hold'
+            ? { ...(body as Record<string, unknown>), reason: reason.trim() }
+            : body)}>
+          {busy ? 'Đang xử lý…' : label}
+        </button>
+      ))}
+    </div>
   </Card>;
 }
 
@@ -1153,7 +1195,7 @@ export function WorkOrderPage() {
           </Card>
         )}
       </Result>
-      {state.value && id && <WorkOrderControls order={state.value} id={id} refresh={() => setRevision((value) => value + 1)} />}
+      {state.value && id && <WorkOrderControls key={id} order={state.value} id={id} refresh={() => setRevision((value) => value + 1)} />}
       <Result state={detail}>
         {detail.value && (
           <Source section={detail.value}>
@@ -1228,6 +1270,7 @@ export function WorkOrderPage() {
                             ["submittedAt", "Ngày nộp"],
                           ]}
                         />
+                        {id && <AttachmentsPanel kind="SERVICE_REPORT" workOrderId={id} />}
                       </>
                     )}
                   </Source>
@@ -1450,7 +1493,8 @@ export function MaintenanceHistoryPage({
   );
 }
 
-function MaintenancePlanForm({ plan, onSaved }: { plan?: Row; onSaved: () => void }) {
+function MaintenancePlanForm({ plan, onSaved, onRefresh }: { plan?: Row; onSaved: () => void; onRefresh: () => void }) {
+  const sessionGeneration = getSessionGeneration();
   const [equipmentId, setEquipmentId] = useState('');
   const [name, setName] = useState(String(plan?.name ?? ''));
   const [frequencyUnit, setFrequencyUnit] = useState(String(plan?.frequencyUnit ?? 'MONTH'));
@@ -1459,18 +1503,34 @@ function MaintenancePlanForm({ plan, onSaved }: { plan?: Row; onSaved: () => voi
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function save(event: React.FormEvent) {
-    event.preventDefault(); setError(''); setBusy(true);
+    event.preventDefault();
+    if (getSessionGeneration() !== sessionGeneration) return;
+    setError(''); setBusy(true);
     try {
       const body = plan ? { name, frequencyUnit, frequencyValue, nextDueDate } : { equipmentId, name, frequencyUnit, frequencyValue, nextDueDate };
       await api.maintenance(plan ? `/maintenance-plans/${plan.id}` : '/maintenance-plans', { method: plan ? 'PATCH' : 'POST', body });
+      if (getSessionGeneration() !== sessionGeneration) return;
       onSaved();
-    } catch (cause) { setError(cause instanceof ApiError ? `${cause.status} · ${cause.message}` : String(cause)); onSaved(); }
+    } catch (cause) {
+      if (getSessionGeneration() !== sessionGeneration) return;
+      setError(cause instanceof ApiError ? `${cause.status} · ${cause.message}` : String(cause));
+      onRefresh();
+    }
     finally { setBusy(false); }
   }
   async function status(value: string) {
+    if (getSessionGeneration() !== sessionGeneration) return;
     setError(''); setBusy(true);
-    try { await api.maintenance(`/maintenance-plans/${plan?.id}`, { method: 'PATCH', body: { status: value } }); onSaved(); }
-    catch (cause) { setError(cause instanceof ApiError ? `${cause.status} · ${cause.message}` : String(cause)); onSaved(); }
+    try {
+      await api.maintenance(`/maintenance-plans/${plan?.id}`, { method: 'PATCH', body: { status: value } });
+      if (getSessionGeneration() !== sessionGeneration) return;
+      onSaved();
+    }
+    catch (cause) {
+      if (getSessionGeneration() !== sessionGeneration) return;
+      setError(cause instanceof ApiError ? `${cause.status} · ${cause.message}` : String(cause));
+      onRefresh();
+    }
     finally { setBusy(false); }
   }
   return <Card title={plan ? 'Cập nhật kế hoạch' : 'Tạo kế hoạch bảo trì'}>
@@ -1515,7 +1575,7 @@ export function MaintenancePage() {
     <div className="m2-page">
       <h1>Bảo trì định kỳ</h1>
       {profile?.roles.includes('SERVICE_MANAGER') && <button className="m2-create-toggle" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Đóng biểu mẫu' : '+ Tạo kế hoạch bảo trì'}</button>}
-      {showCreate && <MaintenancePlanForm onSaved={() => { setRevision((value) => value + 1); setShowCreate(false); }} />}
+      {showCreate && <MaintenancePlanForm onSaved={() => { setRevision((value) => value + 1); setShowCreate(false); }} onRefresh={() => setRevision((value) => value + 1)} />}
       <Link
         to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/maintenance-history`}
       >
@@ -1731,7 +1791,7 @@ export function MaintenanceRecordPage() {
           </Card>
         )}
       </Result>
-      {kind === 'plan' && state.value && profile?.roles.includes('SERVICE_MANAGER') && <MaintenancePlanForm plan={state.value} onSaved={() => setRevision((value) => value + 1)} />}
+      {kind === 'plan' && state.value && profile?.roles.includes('SERVICE_MANAGER') && <MaintenancePlanForm key={String(state.value.id)} plan={state.value} onSaved={() => setRevision((value) => value + 1)} onRefresh={() => setRevision((value) => value + 1)} />}
       {journey && (
         <Card title="Hành trình công việc">
           <button type="button" onClick={() => setRevision((value) => value + 1)}>

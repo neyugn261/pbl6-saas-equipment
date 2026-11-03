@@ -22,6 +22,8 @@ export const bases = isMockMode
       requestsLive: `${gateway}/api`,
       workorders: `${gateway}/api/workorders`,
       maintenance: `${gateway}/api/maintenance`,
+      inventory: `${gateway}/api/inventory`,
+      notifications: `${gateway}/api/notifications`,
     }
   : {
       identity: identityBase,
@@ -33,4 +35,6 @@ export const bases = isMockMode
       requestsLive: `${gateway}/api`,
       workorders: `${gateway}/api/workorders`,
       maintenance: `${gateway}/api/maintenance`,
+      inventory: `${gateway}/api/inventory`,
+      notifications: `${gateway}/api/notifications`,
     }

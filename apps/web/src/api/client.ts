@@ -103,4 +103,8 @@ export const api = {
     request<T>('workorders', path, options),
   maintenance: <T>(path: string, options?: ApiOptions) =>
     request<T>('maintenance', path, options),
+  inventory: <T>(path: string, options?: ApiOptions) =>
+    request<T>('inventory', path, options),
+  notifications: <T>(path: string, options?: ApiOptions) =>
+    request<T>('notifications', path, options),
 }
