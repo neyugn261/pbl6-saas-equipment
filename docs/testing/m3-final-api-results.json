@@ -1,0 +1,275 @@
+{
+  "checkedAt": "2026-11-03",
+  "baseline": "3bcf42f",
+  "status": "NO_GO_NOTIFICATION_BOOTSTRAP_CONTRACT_MISMATCH",
+  "ci": {
+    "checks": "success",
+    "databases": "success",
+    "run": "https://github.com/neyugn261/pbl6-saas-equipment/actions/runs/41558887120"
+  },
+  "flow": {
+    "baseline": "3bcf42f",
+    "checks": [
+      {
+        "name": "Demo role login",
+        "status": "PASS",
+        "roles": [
+          "manager",
+          "dispatcher",
+          "technician",
+          "inventory",
+          "customer",
+          "admin",
+          "customerAdmin"
+        ]
+      },
+      {
+        "name": "Identity bootstrap → actual Notification consumer",
+        "status": "FAIL",
+        "runs": [
+          {
+            "expected_users": null,
+            "received_users": 8,
+            "marker_received": false,
+            "status": "RUNNING"
+          }
+        ]
+      },
+      {
+        "name": "Customer data scope",
+        "status": "PASS",
+        "crossCustomerAsset": 404,
+        "inventory": 403
+      },
+      {
+        "name": "Customer creates real SR",
+        "status": "PASS",
+        "requestNo": "SR-2026-0001"
+      },
+      {
+        "name": "SR accepted → real WO → assign/accept/travel/start",
+        "status": "PASS",
+        "workOrderNo": "WO-2026-0002"
+      },
+      {
+        "name": "Inventory ↔ WO reservation and same-key replay",
+        "status": "PASS",
+        "reservation": "SETTLED",
+        "usageId": "5d960181-e111-430f-b260-1a1228194073"
+      },
+      {
+        "name": "WO report → broker → customer-safe SR RESOLVED",
+        "status": "PASS"
+      },
+      {
+        "name": "Unused part return and report-linked actual-use confirmation",
+        "status": "PASS",
+        "returned": "1.00",
+        "used": "5.00"
+      },
+      {
+        "name": "SR → WO → Gateway → MinIO customer file",
+        "status": "PASS",
+        "publicFiles": 1,
+        "internalHidden": true,
+        "directWo": 403
+      },
+      {
+        "name": "Customer closes SR",
+        "status": "PASS"
+      },
+      {
+        "name": "A5 Work Order summary",
+        "status": "PASS",
+        "data": {
+          "from": "2026-11-01T17:00:00.000Z",
+          "to": "2026-11-04T17:00:00.000Z",
+          "timezone": "Asia/Ho_Chi_Minh",
+          "createdCount": 2,
+          "createdByStatus": {
+            "CREATED": 1,
+            "ASSIGNED": 0,
+            "ACCEPTED": 0,
+            "TRAVELLING": 0,
+            "IN_PROGRESS": 0,
+            "ON_HOLD": 0,
+            "COMPLETED": 1,
+            "CANCELLED": 0
+          },
+          "completedCount": 1
+        }
+      },
+      {
+        "name": "Notification customer fan-out",
+        "status": "FAIL",
+        "count": 0,
+        "pending": [
+          {
+            "reason": "WAITING_FOR_RECIPIENT_BOOTSTRAP",
+            "status": "MANUAL_REVIEW",
+            "count": 1
+          },
+          {
+            "reason": "WAITING_FOR_RECIPIENT_BOOTSTRAP",
+            "status": "RETRYING",
+            "count": 8
+          }
+        ]
+      },
+      {
+        "name": "Identity invite → SMTP Mailpit → activation",
+        "status": "PASS",
+        "tokenExcludedFromInvite": true,
+        "passwordPolicyEnforced": true
+      },
+      {
+        "name": "CUSTOMER cannot download an INTERNAL attachment through SR",
+        "status": "PASS",
+        "httpStatus": 404
+      }
+    ],
+    "ids": {
+      "serviceRequestId": "100c0b73-5698-49c4-a3cb-4cfa433ae9eb",
+      "workOrderId": "b08a009a-daea-4814-915c-1a06f5489b23",
+      "usageId": "5d960181-e111-430f-b260-1a1228194073",
+      "internalAttachmentId": "d570a82c-7d7d-4b6d-8b8d-9b2c4dd893f4",
+      "serviceReportId": "ce23525c-b50c-4e08-8f02-6cd1712ebe42",
+      "invitedUserId": "847afd06-f3fc-46ef-9177-556171c4e7c9"
+    },
+    "status": "BLOCKED_BY_NOTIFICATION_BOOTSTRAP"
+  },
+  "unit": [
+    {
+      "service": "identity-service",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 3 passed, 3 total",
+        "Tests:       16 passed, 16 total",
+        "Time:        0.976 s"
+      ]
+    },
+    {
+      "service": "organization-service",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 4 passed, 4 total",
+        "Tests:       15 passed, 15 total",
+        "Time:        0.874 s"
+      ]
+    },
+    {
+      "service": "asset-service",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 4 passed, 4 total",
+        "Tests:       18 passed, 18 total",
+        "Time:        1.347 s"
+      ]
+    },
+    {
+      "service": "service-request-service",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 7 passed, 7 total",
+        "Tests:       81 passed, 81 total",
+        "Time:        12.202 s"
+      ]
+    },
+    {
+      "service": "workorder-service",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 5 passed, 5 total",
+        "Tests:       44 passed, 44 total",
+        "Time:        1.299 s"
+      ]
+    },
+    {
+      "service": "maintenance-service",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 3 passed, 3 total",
+        "Tests:       19 passed, 19 total",
+        "Time:        0.849 s"
+      ]
+    },
+    {
+      "service": "inventory-service",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 3 passed, 3 total",
+        "Tests:       24 passed, 24 total",
+        "Time:        0.958 s"
+      ]
+    },
+    {
+      "service": "api-gateway",
+      "exitCode": 0,
+      "summary": [
+        "Test Suites: 1 passed, 1 total",
+        "Tests:       8 passed, 8 total",
+        "Time:        0.168 s"
+      ]
+    }
+  ],
+  "additionalTests": {
+    "notificationUnit": 43,
+    "notificationAppE2E": 6,
+    "notificationDatabaseAndBroker": 16,
+    "web": 27
+  },
+  "scopeLimits": [
+    "No browser DOM acceptance run",
+    "No Android run on this baseline",
+    "Notification marker/fan-out fails on unmodified develop"
+  ],
+  "databaseDrift": [
+    {
+      "service": "identity-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    },
+    {
+      "service": "organization-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    },
+    {
+      "service": "asset-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    },
+    {
+      "service": "service-request-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    },
+    {
+      "service": "workorder-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    },
+    {
+      "service": "maintenance-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    },
+    {
+      "service": "inventory-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    },
+    {
+      "service": "notification-service",
+      "secondMigrationExit": 0,
+      "databaseDriftExit": 0
+    }
+  ],
+  "cleanBuild": {
+    "service": "notification-service",
+    "freshBuildExit": 1,
+    "missingGeneratedPrisma": true,
+    "explicitGenerateExit": 0,
+    "buildAfterGenerateExit": 0
+  }
+}
