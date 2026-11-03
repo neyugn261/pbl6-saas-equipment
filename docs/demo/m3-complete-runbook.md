@@ -5,11 +5,13 @@ máy hiện tại, chạy backend và Vite ở host, hạ tầng trong `docker-c
 Dành 30–45 phút chuẩn bị và 35–45 phút trình diễn đầy đủ. Luồng chính cần khoảng
 20–25 phút; các nhánh mở rộng thực hiện sau để không làm đổi trạng thái luồng chính.
 
-**Trạng thái hiện tại: chưa chốt M3.** API liên dịch vụ, file CUSTOMER, Inventory
-reservation và activation email đã chạy thật trong lần rà soát. Tuy nhiên marker
-bootstrap của Identity bị Notification từ chối do sai `aggregateType/aggregateId`.
-Phải merge bản sửa của Huy và qua cổng kiểm tra ở mục 5 trước khi trình diễn
-Notification hoặc ghi nhận M3 hoàn tất. Xem [báo cáo và bằng chứng](../reports/2026-11-03-m3-final-readiness.md).
+**Cập nhật trên nhánh `fix/notification-bootstrap-prisma-build`:** hai lỗi marker
+bootstrap và build sạch Notification trong baseline đã được sửa. Bootstrap thật
+8/8 snapshot và Notification API qua Gateway đã kiểm tra đạt trên môi trường riêng;
+xem [kết quả fix](../reports/2026-11-03-notification-bootstrap-fix.md). Sau khi merge,
+cần triển khai bản mới và qua cổng kiểm tra ở mục 5 trên chính stack demo.
+Luồng API/file/Inventory/email có [bằng chứng baseline](../reports/2026-11-03-m3-final-readiness.md);
+nghiệm thu UI và các mục chốt M3 ở cuối runbook vẫn cần thực hiện.
 
 Chạy Android emulator, điện thoại thật qua Wi-Fi/USB và build APK:
 [hướng dẫn Mobile trên thiết bị thật](mobile-real-device.md).
@@ -203,8 +205,10 @@ M2 cố định; không chạy `test:demo` trước trình diễn vì có thể 
 
 ## 5. Cổng bắt buộc: recipient bootstrap và Notification
 
-**Chỉ qua mục này sau khi Huy sửa validation marker theo shared catalog.**
-`--new` trên code hiện tại vẫn phát marker bị từ chối, không chữa được lỗi.
+**Phải chạy bản đã có fix validation marker theo shared catalog.** Nếu chưa
+merge/deploy `fix/notification-bootstrap-prisma-build`, `--new` vẫn phát marker
+bị từ chối. Với bản đã sửa, restart Notification rồi dùng bootstrap run mới để
+khôi phục; không chỉ chạy lại CLI trên process cũ chưa cập nhật.
 
 Đảm bảo Notification đang chạy với `RABBITMQ_URL` đúng broker:
 
@@ -441,7 +445,7 @@ thao tác file/network/session trên thiết bị.
 
 Chỉ đề nghị `develop → main` và chuyển M4 sau khi:
 
-- [ ] Huy sửa marker và thêm regression từ contract/producer thật.
+- [ ] Merge/deploy fix marker/build; regression catalog/broker và bootstrap Identity thật đã có bằng chứng trên nhánh fix.
 - [ ] Bootstrap Notification COMPLETED, pending chờ bootstrap được reconcile.
 - [ ] Inbox requester/staff, assignment, LowStock, read/unread và deep link chạy thật.
 - [ ] Luồng chính tới CLOSED, file CUSTOMER tải được, INTERNAL không lộ.
@@ -471,8 +475,8 @@ cùng `SEED_DEMO_PASSWORD`; image backend cần được build lại từ commit
 Cổng mặc định của web Docker là 8080, không phải 5173; cập nhật activation URL,
 CORS/QR và MinIO origin theo `DEMO_PUBLIC_URL` trong runbook đó.
 
-Trước khi chọn Docker, xử lý thêm bước generate Prisma của Notification trong
-build image. Audit đã tái hiện build service thất bại khi không có generated
-client, và thành công sau generate; chưa chạy một full Docker image build mới.
-Nguyên/Huy cần xác nhận image build từ checkout sạch. Local runbook ở trên có
-bước generate riêng nên không phụ thuộc generated file từ máy cũ.
+Build script Notification đã tự generate Prisma trước Nest; Dockerfile hiện gọi
+script build này nên không cần generated file từ máy owner. Fix đã được kiểm tra
+bằng build service từ source sạch không có generated/dist; chưa build lại full
+Docker image trong lượt fix. Nguyên vẫn cần xác nhận image/Compose trên môi trường
+triển khai. Local runbook giữ bước generate riêng cho việc start watch.

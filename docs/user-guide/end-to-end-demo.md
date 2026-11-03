@@ -1,7 +1,7 @@
 # End-to-end demo: handover to customer confirmation
 
 For the full Vietnamese setup, demo accounts, exact routes, rehearsal cases and
-current Notification bootstrap blocker, use the
+Notification deployment/bootstrap readiness gate, use the
 [M3 complete runbook for Khương](../demo/m3-complete-runbook.md).
 This shorter walkthrough does not replace the readiness gate in that runbook.
 

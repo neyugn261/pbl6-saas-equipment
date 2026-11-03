@@ -34,14 +34,33 @@ They dispatch to the existing projection handlers, preserving transactional inbo
 deduplication, revision checks, bootstrap receipts, and tenant reconciliation.
 Handler failures propagate to the shared RabbitMQ retry/DLQ mechanism.
 
+Bootstrap marker metadata is validated against the shared catalog:
+`aggregateType=RecipientBootstrap`, `aggregateId=payload.bootstrapRunId`.
+Tenant scope remains in the envelope `tenantId`. A Tenant aggregate or a
+mismatched run ID is rejected before persistence. The build script generates
+the service's Prisma client before Nest compilation, including a clean source
+checkout used by the backend Dockerfile; no pre-generated client is required.
+
 Start Notification with `RABBITMQ_URL` configured and verify both durable queues
 and their bindings on `pbl6.events` **before** running Identity bootstrap:
 `pnpm --filter identity-service recipient:bootstrap <tenant-uuid>`.
 If an earlier completed bootstrap was published before these queues were bound,
 run it with `--new` to emit a fresh snapshot/marker set. Verify the local bootstrap
 run reaches completion and recipient snapshots exist before testing fan-out.
-Broker/bootstrap and browser acceptance still require a real stack run; unit
-dispatch checks do not constitute M3 acceptance evidence.
+If a previous marker was rejected by the former Tenant aggregate validation,
+deploy this fix, restart Notification, then recapture with `--new` (or replay
+the original marker through the owner's DLQ procedure). Identity's COMPLETED
+output only means its snapshots/marker were enqueued: verify Notification's
+`recipient_bootstrap_runs` has `marker_received=true`, equal expected/received
+counts and `status=COMPLETED`. Do not update that status manually in SQL.
+The valid marker reconciles pending tenant events, including WAITING_FOR_*
+events that exhausted retries into MANUAL_REVIEW. Check pending reasons and
+DLQs; a new bootstrap does not delete or silently rewrite an old rejected run.
+
+Broker/bootstrap and Gateway API evidence for this fix is in
+[the verification report](../../docs/reports/2026-11-03-notification-bootstrap-fix.md).
+Browser/Android acceptance remains separate; unit dispatch checks alone do not
+constitute M3 acceptance evidence.
 
 See the [implementation readiness and verification](M3-INDEPENDENT-READINESS.md),
 [Q3 contract review](M3-HUY-Q3-REVIEW.md), and

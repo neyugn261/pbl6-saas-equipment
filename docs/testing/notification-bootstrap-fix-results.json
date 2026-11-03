@@ -1,0 +1,61 @@
+{
+  "baseline": "de0786d",
+  "branch": "fix/notification-bootstrap-prisma-build",
+  "notificationUnit": {
+    "passed": 57
+  },
+  "notificationAppE2E": {
+    "passed": 6
+  },
+  "notificationDbBrokerE2E": {
+    "passed": 17,
+    "realBroker": true
+  },
+  "cleanBuild": {
+    "buildExitCode": 0,
+    "generatedPrisma": true,
+    "compiledEntry": true,
+    "compiledPrisma": true
+  },
+  "runtime": {
+    "baseline": "de0786d",
+    "status": "PASS",
+    "checks": [
+      {
+        "name": "Actual Identity CLI → outbox → runtime broker consumer",
+        "status": "PASS",
+        "expectedUsers": 8,
+        "receivedUsers": 8,
+        "markerReceived": true,
+        "bootstrapStatus": "COMPLETED",
+        "aggregateType": "RecipientBootstrap",
+        "aggregateIdMatchesRun": true
+      },
+      {
+        "name": "Catalog SR event fans out on real runtime",
+        "status": "PASS",
+        "notifications": 3,
+        "audience": [
+          "requester",
+          "SERVICE_MANAGER",
+          "DISPATCHER"
+        ]
+      },
+      {
+        "name": "Gateway Notification list/unread/read and replay",
+        "status": "PASS",
+        "unreadBefore": 1,
+        "unreadAfter": 0,
+        "markReadIdempotent": true,
+        "otherRecipientMarkRead": 404,
+        "replayedNotifications": 3,
+        "customerResource": "SERVICE_REQUEST"
+      }
+    ]
+  },
+  "limits": [
+    "Full Docker image not rebuilt",
+    "Browser and Android acceptance not rerun",
+    "No migrations or seed applied to existing demo databases"
+  ]
+}
