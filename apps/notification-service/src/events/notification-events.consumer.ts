@@ -5,9 +5,10 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { RabbitMqEventBus } from '@pbl6/event-contracts';
+import { Events, RabbitMqEventBus } from '@pbl6/event-contracts';
 import { runWithCorrelationId } from '@pbl6/service-kit';
 import type { AppEnv } from '../config/env.validation';
+import { RecipientProjectionService } from './recipient-projection.service';
 import {
   NOTIFICATION_BUSINESS_CONSUMER,
   NOTIFICATION_BUSINESS_EVENTS,
@@ -25,6 +26,7 @@ export class NotificationEventsConsumer
   constructor(
     private readonly config: ConfigService<AppEnv, true>,
     private readonly events: NotificationEventsService,
+    private readonly recipients: RecipientProjectionService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -37,18 +39,33 @@ export class NotificationEventsConsumer
         logger: new Logger('NotificationEventBus'),
       });
       this.bus.subscribe({
+        queue: 'notification-service.recipient-snapshots',
+        events: [Events.NotificationRecipientSnapshot],
+        handler: async (envelope) =>
+          runWithCorrelationId(envelope.correlationId ?? envelope.eventId, () =>
+            this.recipients.applySnapshot(envelope),
+          ),
+      });
+      this.bus.subscribe({
+        queue: 'notification-service.recipient-bootstrap',
+        events: [Events.NotificationRecipientBootstrapCompleted],
+        handler: async (envelope) =>
+          runWithCorrelationId(envelope.correlationId ?? envelope.eventId, () =>
+            this.recipients.applyBootstrapCompleted(envelope),
+          ),
+      });
+      this.bus.subscribe({
         queue: NOTIFICATION_BUSINESS_CONSUMER,
         events: NOTIFICATION_BUSINESS_EVENTS,
         handler: async (envelope) =>
-          runWithCorrelationId(
-            envelope.correlationId ?? envelope.eventId,
-            () => this.events.handle(envelope),
+          runWithCorrelationId(envelope.correlationId ?? envelope.eventId, () =>
+            this.events.handle(envelope),
           ),
       });
       await this.bus.start();
     } else {
       this.logger.warn(
-        'RABBITMQ_URL is not set: Notification business events are not consumed',
+        'RABBITMQ_URL is not set: Notification recipient and business events are not consumed',
       );
     }
 
