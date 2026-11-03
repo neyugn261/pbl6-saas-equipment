@@ -77,3 +77,26 @@ pnpm --filter web build
 ```
 
 Thiết kế, migration và kết quả API/browser: [equipment-registration.md](../../docs/testing/equipment-registration.md).
+
+## M3: thông báo và thử lại giao dịch kho
+
+Notification gọi trực tiếp gốc `/api/notifications` qua Gateway cho danh sách,
+`/unread-count` cho badge và `/:id/read` để đánh dấu đã đọc.
+
+Nhập, điều chỉnh, xuất và trả kho lưu cùng key, đường dẫn và nội dung vào
+`sessionStorage` trước khi gửi. Nếu mất phản hồi, form khóa và có nút **Thử lại
+giao dịch đã lưu**; tải lại hoặc rời rồi mở lại trang trong cùng tab vẫn khôi phục
+giao dịch đó. Giao dịch được tách theo tenant và user; đăng nhập lại cùng tài khoản
+có thể tiếp tục đối soát, tài khoản khác không thấy/gửi lại giao dịch đã lưu.
+Phiên cũ không được gửi lại hoặc xóa giao dịch của phiên mới.
+
+Lỗi nghiệp vụ được trả rõ ngay lần gửi đầu cho phép sửa form. Sau khi kết quả đã
+không rõ, lỗi quyền hoặc lookup thất bại không đủ để bỏ giao dịch đã lưu. Với xuất
+kho, bằng chứng `COMMITTED`/`ABORTED` hoặc khôi phục thành công cho cùng key giải
+quyết giao dịch đang chờ; phần đối soát reservation phía server vẫn hiển thị riêng.
+Đóng tab hoặc xóa dữ liệu trình duyệt sẽ mất bản lưu tại web: cần đối soát lịch sử
+kho trước khi tạo lại một giao dịch chưa rõ kết quả.
+
+`pnpm --filter web test` bao gồm kiểm thử hồi quy mất phản hồi, tải lại trang,
+đổi phiên, thao tác lặp và URL Notification từ component qua API client thật.
+Phạm vi và kết quả: [M3 acceptance matrix](../../docs/testing/m3-test-cases.md).

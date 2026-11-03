@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
 import { getSessionGeneration, useSession } from '../../auth/session'
 import type { Page } from '../../types/domain'
+import { StockMutation, type StockRequest } from './stock-mutation'
 
 type Part = {
   id: string
@@ -293,6 +294,9 @@ export function InventoryTransactionsPage() {
   const [type, setType] = useState('')
   const [formMode, setFormMode] = useState<'RECEIVE' | 'ADJUST' | 'ISSUE' | 'RETURN'>('RECEIVE')
   const sessionGeneration = getSessionGeneration()
+  const mutationScope = JSON.stringify([profile?.tenantId, profile?.id])
+  const mutation = useMemo(() => new StockMutation(mutationScope, sessionGeneration), [mutationScope, sessionGeneration])
+  const pending = mutation.pending
   const [options, setOptions] = useState<{ generation: number; parts: Part[]; warehouses: Warehouse[]; workOrders: WorkOrderOption[] }>({
     generation: -1, parts: [], warehouses: [], workOrders: [],
   })
@@ -309,6 +313,8 @@ export function InventoryTransactionsPage() {
   const [form, setForm] = useState({ warehouseId: '', partId: '', quantity: '', note: '', documentReference: '', direction: 'ADJUST_IN', reasonCode: 'COUNT_VARIANCE', relatedTransactionId: '', condition: 'GOOD' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState<{ generation: number; message: string } | null>(null)
+  const formLocked = busy || Boolean(pending) || Boolean(mutation.storageError)
   const correctionSourceKey = `${form.warehouseId}:${form.partId}:${form.direction}:session-${sessionGeneration}`
   const [correctionSource, setCorrectionSource] = useState<{ key: string; rows: LedgerRow[]; error: string }>({
     key: '', rows: [], error: '',
@@ -379,45 +385,53 @@ export function InventoryTransactionsPage() {
   }
 
   async function submit(event: FormEvent, returnUsageId?: string) {
-    const operationGeneration = getSessionGeneration()
-    event.preventDefault(); setBusy(true); setError('')
+    event.preventDefault(); setError('')
+    if (formLocked) return
     if (formMode === 'RECEIVE' && !form.documentReference.trim() && !form.note.trim()) {
       setError('Nhập số chứng từ hoặc ghi chú giải thích cho phiếu nhập.')
-      setBusy(false)
       return
     }
     if (formMode === 'ADJUST' && form.reasonCode === 'CORRECTION' && !form.relatedTransactionId.trim()) {
       setError('Chọn giao dịch gốc để đối chiếu điều chỉnh.')
-      setBusy(false)
       return
     }
-    const key = crypto.randomUUID()
+    let request: StockRequest
+    if (formMode === 'RECEIVE') {
+      request = { mode: formMode, path: '/stock-transactions/receive', body: {
+        warehouseId: form.warehouseId, partId: form.partId, quantity: form.quantity,
+        ...(form.documentReference.trim() ? { documentReference: form.documentReference.trim() } : {}),
+        ...(form.note.trim() ? { note: form.note.trim() } : {}),
+      } }
+    } else if (formMode === 'ADJUST') {
+      request = { mode: formMode, path: '/stock-transactions/adjust', body: {
+        warehouseId: form.warehouseId, partId: form.partId, quantity: form.quantity,
+        direction: form.direction, note: form.note.trim(), reasonCode: form.reasonCode,
+        ...(form.reasonCode === 'CORRECTION' ? { relatedTransactionId: form.relatedTransactionId } : {}),
+      } }
+    } else if (formMode === 'ISSUE') {
+      request = { mode: formMode, path: `/work-orders/${encodeURIComponent(workOrderId)}/parts`, body: {
+        warehouseId: form.warehouseId, partId: form.partId, quantity: form.quantity,
+        ...(form.note ? { note: form.note } : {}),
+      } }
+    } else {
+      request = { mode: formMode, path: `/work-order-parts/${encodeURIComponent(returnUsageId ?? '')}/return`, body: {
+        quantity: form.quantity, note: form.note.trim(), condition: form.condition,
+      } }
+    }
+    await sendStock(request)
+  }
+
+  async function sendStock(request?: StockRequest) {
+    const operationGeneration = getSessionGeneration()
+    const mode = request?.mode ?? mutation.pending?.mode
+    setBusy(true); setError(''); setNotice(null)
     try {
-      if (formMode === 'RECEIVE') {
-        await api.inventory('/stock-transactions/receive', { method: 'POST', headers: { 'Idempotency-Key': key }, body: {
-          warehouseId: form.warehouseId, partId: form.partId, quantity: form.quantity,
-          ...(form.documentReference.trim() ? { documentReference: form.documentReference.trim() } : {}),
-          ...(form.note.trim() ? { note: form.note.trim() } : {}),
-        } })
-      } else if (formMode === 'ADJUST') {
-        await api.inventory('/stock-transactions/adjust', { method: 'POST', headers: { 'Idempotency-Key': key }, body: {
-          warehouseId: form.warehouseId, partId: form.partId, quantity: form.quantity,
-          direction: form.direction, note: form.note.trim(), reasonCode: form.reasonCode,
-          ...(form.reasonCode === 'CORRECTION' ? { relatedTransactionId: form.relatedTransactionId } : {}),
-        } })
-      } else if (formMode === 'ISSUE') {
-        await api.inventory(`/work-orders/${encodeURIComponent(workOrderId)}/parts`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: {
-          warehouseId: form.warehouseId, partId: form.partId, quantity: form.quantity, ...(form.note ? { note: form.note } : {}),
-        } })
-      } else {
-        await api.inventory(`/work-order-parts/${encodeURIComponent(returnUsageId ?? '')}/return`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: {
-          quantity: form.quantity, note: form.note.trim(), condition: form.condition,
-        } })
-      }
+      await mutation.execute(request)
       if (getSessionGeneration() !== operationGeneration) return
+      setNotice({ generation: operationGeneration, message: 'Đã ghi nhận giao dịch kho.' })
       setForm((value) => ({ ...value, quantity: '', note: '', documentReference: '', relatedTransactionId: '' }))
       setRevision((value) => value + 1)
-      if (formMode === 'RETURN') await loadUsages()
+      if (mode === 'RETURN') await loadUsages()
     } catch (cause) {
       if (getSessionGeneration() !== operationGeneration) return
       setError(message(cause))
@@ -427,10 +441,16 @@ export function InventoryTransactionsPage() {
 
   async function recover(key: string, kind: 'retry' | 'abort') {
     const operationGeneration = getSessionGeneration()
-    setBusy(true); setError('')
+    const matchesPending = mutation.pending?.key === key
+    setBusy(true); setError(''); setNotice(null)
     try {
-      await api.inventory(`/inventory-operations/${encodeURIComponent(key)}/${kind}`, { method: 'POST' })
+      await mutation.recover(key, kind)
       if (getSessionGeneration() !== operationGeneration) return
+      setNotice({ generation: operationGeneration, message: kind === 'abort'
+        ? 'Đã hủy giao dịch chưa ghi tồn. Kiểm tra trạng thái đối soát bên dưới.'
+        : 'Đã xử lý giao dịch xuất kho. Kiểm tra lịch sử và trạng thái đối soát bên dưới.' })
+      if (matchesPending && kind === 'retry')
+        setForm((value) => ({ ...value, quantity: '', note: '', documentReference: '', relatedTransactionId: '' }))
       setRevision((value) => value + 1)
       if (workOrderId) await loadUsages()
     } catch (cause) {
@@ -444,57 +464,66 @@ export function InventoryTransactionsPage() {
     <h1>Giao dịch kho</h1>
     <p>Nhập, xuất, trả và điều chỉnh tồn đều được ghi nhận bởi Inventory Service. Nhập decimal string, không quy đổi qua số thực.</p>
     {error && <p role="alert" className="m1-error">{error}</p>}
-    {canManage && <label>Thao tác
-      <select value={formMode} onChange={(event) => { setFormMode(event.target.value as typeof formMode); setError('') }}>
-        <option value="RECEIVE">Nhập kho</option><option value="ADJUST">Điều chỉnh</option>
-        {canIssue && <><option value="ISSUE">Xuất cho Work Order</option><option value="RETURN">Trả từ Work Order</option></>}
-      </select>
-    </label>}
-    {canManage && formMode !== 'RETURN' && (formMode !== 'ISSUE' || canIssue) && <form className="m2-editor" onSubmit={(event) => void submit(event)}>
-      {(formMode === 'ISSUE') && <label>Work Order<select required value={workOrderId} onChange={(event) => setWorkOrderId(event.target.value)}><option value="">Chọn Work Order</option>{workOrders.filter((row) => !['COMPLETED', 'CANCELLED'].includes(row.status)).map((row) => <option key={row.id} value={row.id}>{row.workOrderNo} · {row.status}</option>)}</select></label>}
-      <label>Kho<select required value={form.warehouseId} onChange={(event) => setForm({ ...form, warehouseId: event.target.value })}><option value="">Chọn kho</option>{warehouses.map((row) => <option key={row.id} value={row.id}>{row.code} · {row.name}</option>)}</select></label>
-      <label>Phụ tùng<select required value={form.partId} onChange={(event) => setForm({ ...form, partId: event.target.value })}><option value="">Chọn phụ tùng</option>{parts.map((row) => <option key={row.id} value={row.id}>{row.sku} · {row.name} ({row.unit})</option>)}</select></label>
-      <label>Số lượng<input required inputMode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></label>
-      {formMode === 'RECEIVE' && <label>Số chứng từ<input maxLength={150} value={form.documentReference} onChange={(event) => setForm({ ...form, documentReference: event.target.value })} /></label>}
-      {formMode === 'ADJUST' && <>
-        <label>Hướng<select value={form.direction} onChange={(event) => setForm({ ...form, direction: event.target.value })}><option value="ADJUST_IN">Tăng tồn</option><option value="ADJUST_OUT">Giảm tồn</option></select></label>
-        <label>Lý do<select value={form.reasonCode} onChange={(event) => setForm({ ...form, reasonCode: event.target.value })}>{['COUNT_VARIANCE', 'DAMAGE', 'LOSS', 'CORRECTION', 'OTHER'].map((value) => <option key={value}>{value}</option>)}</select></label>
-        {form.reasonCode === 'CORRECTION' && <>
-          {correctionSourceLoading ? <p role="status">Đang tải giao dịch gốc…</p> : correctionSource.error
-            ? <p role="alert" className="m1-error">{correctionSource.error}</p>
-            : <label>Giao dịch gốc cần đối chiếu
-                <select required value={form.relatedTransactionId} onChange={(event) => setForm({ ...form, relatedTransactionId: event.target.value })}>
-                  <option value="">Chọn giao dịch gốc</option>
-                  {correctionSources.filter((row) => form.direction === 'ADJUST_IN'
-                    ? row.type === 'ADJUST_OUT' && row.reasonCode !== 'CORRECTION'
-                    : ['RECEIVE', 'ADJUST_IN'].includes(row.type) && row.reasonCode !== 'CORRECTION')
-                    .map((row) => <option key={row.id} value={row.id}>{date(row.createdAt)} · {row.type} · {row.quantity} · {row.id}</option>)}
-                </select>
-              </label>}
+    {notice?.generation === sessionGeneration && <p role="status">{notice.message}</p>}
+    {mutation.storageError && <p role="alert" className="m1-error">{mutation.storageError}</p>}
+    {canManage && pending && <section className="m1-card m1-section-card" aria-label="Giao dịch chưa xác nhận">
+      <p role="status">Giao dịch {pending.mode} chưa xác nhận kết quả. Thử lại giao dịch đã lưu trước khi tạo giao dịch khác.</p>
+      <p>Số lượng: {pending.body.quantity} · {pending.body.note || pending.body.documentReference}</p>
+      <button disabled={busy} onClick={() => void sendStock()}>Thử lại giao dịch đã lưu</button>
+    </section>}
+    <fieldset disabled={formLocked} className="inventory-mutation-fields">
+      {canManage && <label>Thao tác
+        <select value={formMode} onChange={(event) => { setFormMode(event.target.value as typeof formMode); setError('') }}>
+          <option value="RECEIVE">Nhập kho</option><option value="ADJUST">Điều chỉnh</option>
+          {canIssue && <><option value="ISSUE">Xuất cho Work Order</option><option value="RETURN">Trả từ Work Order</option></>}
+        </select>
+      </label>}
+      {canManage && formMode !== 'RETURN' && (formMode !== 'ISSUE' || canIssue) && <form className="m2-editor" onSubmit={(event) => void submit(event)}>
+        {(formMode === 'ISSUE') && <label>Work Order<select required value={workOrderId} onChange={(event) => setWorkOrderId(event.target.value)}><option value="">Chọn Work Order</option>{workOrders.filter((row) => !['COMPLETED', 'CANCELLED'].includes(row.status)).map((row) => <option key={row.id} value={row.id}>{row.workOrderNo} · {row.status}</option>)}</select></label>}
+        <label>Kho<select required value={form.warehouseId} onChange={(event) => setForm({ ...form, warehouseId: event.target.value })}><option value="">Chọn kho</option>{warehouses.map((row) => <option key={row.id} value={row.id}>{row.code} · {row.name}</option>)}</select></label>
+        <label>Phụ tùng<select required value={form.partId} onChange={(event) => setForm({ ...form, partId: event.target.value })}><option value="">Chọn phụ tùng</option>{parts.map((row) => <option key={row.id} value={row.id}>{row.sku} · {row.name} ({row.unit})</option>)}</select></label>
+        <label>Số lượng<input required inputMode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></label>
+        {formMode === 'RECEIVE' && <label>Số chứng từ<input maxLength={150} value={form.documentReference} onChange={(event) => setForm({ ...form, documentReference: event.target.value })} /></label>}
+        {formMode === 'ADJUST' && <>
+          <label>Hướng<select value={form.direction} onChange={(event) => setForm({ ...form, direction: event.target.value })}><option value="ADJUST_IN">Tăng tồn</option><option value="ADJUST_OUT">Giảm tồn</option></select></label>
+          <label>Lý do<select value={form.reasonCode} onChange={(event) => setForm({ ...form, reasonCode: event.target.value })}>{['COUNT_VARIANCE', 'DAMAGE', 'LOSS', 'CORRECTION', 'OTHER'].map((value) => <option key={value}>{value}</option>)}</select></label>
+          {form.reasonCode === 'CORRECTION' && <>
+            {correctionSourceLoading ? <p role="status">Đang tải giao dịch gốc…</p> : correctionSource.error
+              ? <p role="alert" className="m1-error">{correctionSource.error}</p>
+              : <label>Giao dịch gốc cần đối chiếu
+                  <select required value={form.relatedTransactionId} onChange={(event) => setForm({ ...form, relatedTransactionId: event.target.value })}>
+                    <option value="">Chọn giao dịch gốc</option>
+                    {correctionSources.filter((row) => form.direction === 'ADJUST_IN'
+                      ? row.type === 'ADJUST_OUT' && row.reasonCode !== 'CORRECTION'
+                      : ['RECEIVE', 'ADJUST_IN'].includes(row.type) && row.reasonCode !== 'CORRECTION')
+                      .map((row) => <option key={row.id} value={row.id}>{date(row.createdAt)} · {row.type} · {row.quantity} · {row.id}</option>)}
+                  </select>
+                </label>}
+          </>}
         </>}
-      </>}
-      <label>Ghi chú<input required={formMode === 'ADJUST' || (formMode === 'RECEIVE' && !form.documentReference.trim())} maxLength={2000} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
-      <button disabled={busy || (formMode === 'ISSUE' && (!workOrderId || unresolvedSelectedWorkOrder))}>{busy ? 'Đang ghi nhận…' : 'Ghi nhận giao dịch'}</button>
-      {unresolvedSelectedWorkOrder && <p role="status">Work Order có operation chưa đối soát hoặc chưa tải được trạng thái. Khôi phục operation trước khi xuất thêm.</p>}
-    </form>}
-    {formMode === 'RETURN' && canIssue && <section className="m1-card m1-section-card"><div className="m1-section-body">
-      <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); void loadUsages() }}>
-        <label>Work Order<select required value={workOrderId} onChange={(event) => setWorkOrderId(event.target.value)}><option value="">Chọn Work Order</option>{workOrders.map((row) => <option key={row.id} value={row.id}>{row.workOrderNo} · {row.status}</option>)}</select></label>
-        <button disabled={busy}>Tải phụ tùng đã xuất</button>
-      </form>
-      {usageState.error && usageState.workOrderId === workOrderId && usageState.generation === sessionGeneration && <p role="alert" className="m1-error">{usageState.error}</p>}
-      {usages.map((usage) => <div key={usage.id} className="m2-linked-list">
-        <div><strong>{usage.partSnapshot?.sku ?? usage.partId} · {usage.partSnapshot?.name ?? 'Phụ tùng'}</strong>
-          <p>Đã xuất {usage.quantityIssued} · Đã trả {usage.quantityReturned} · Còn đối soát {usage.quantityOutstanding} · Đã xác nhận dùng {usage.quantityConfirmedUsed}</p>
-          <form className="m2-editor" onSubmit={(event) => void submit(event, usage.id)}>
-            <label>Số lượng trả<input required inputMode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></label>
-            <label>Tình trạng<select value={form.condition} onChange={(event) => setForm({ ...form, condition: event.target.value })}><option value="GOOD">Tốt</option><option value="DAMAGED">Hỏng</option><option value="PENDING_INSPECTION">Chờ kiểm tra</option></select></label>
-            <label>Ghi chú<input required maxLength={2000} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
-            <button disabled={busy || isZero(usage.quantityOutstanding)}>Ghi nhận trả</button>
-          </form>
-        </div>
-      </div>)}
-    </div></section>}
+        <label>Ghi chú<input required={formMode === 'ADJUST' || (formMode === 'RECEIVE' && !form.documentReference.trim())} maxLength={2000} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+        <button disabled={busy || (formMode === 'ISSUE' && (!workOrderId || unresolvedSelectedWorkOrder))}>{busy ? 'Đang ghi nhận…' : 'Ghi nhận giao dịch'}</button>
+        {unresolvedSelectedWorkOrder && <p role="status">Work Order có operation chưa đối soát hoặc chưa tải được trạng thái. Khôi phục operation trước khi xuất thêm.</p>}
+      </form>}
+      {formMode === 'RETURN' && canIssue && <section className="m1-card m1-section-card"><div className="m1-section-body">
+        <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); void loadUsages() }}>
+          <label>Work Order<select required value={workOrderId} onChange={(event) => setWorkOrderId(event.target.value)}><option value="">Chọn Work Order</option>{workOrders.map((row) => <option key={row.id} value={row.id}>{row.workOrderNo} · {row.status}</option>)}</select></label>
+          <button disabled={busy}>Tải phụ tùng đã xuất</button>
+        </form>
+        {usageState.error && usageState.workOrderId === workOrderId && usageState.generation === sessionGeneration && <p role="alert" className="m1-error">{usageState.error}</p>}
+        {usages.map((usage) => <div key={usage.id} className="m2-linked-list">
+          <div><strong>{usage.partSnapshot?.sku ?? usage.partId} · {usage.partSnapshot?.name ?? 'Phụ tùng'}</strong>
+            <p>Đã xuất {usage.quantityIssued} · Đã trả {usage.quantityReturned} · Còn đối soát {usage.quantityOutstanding} · Đã xác nhận dùng {usage.quantityConfirmedUsed}</p>
+            <form className="m2-editor" onSubmit={(event) => void submit(event, usage.id)}>
+              <label>Số lượng trả<input required inputMode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></label>
+              <label>Tình trạng<select value={form.condition} onChange={(event) => setForm({ ...form, condition: event.target.value })}><option value="GOOD">Tốt</option><option value="DAMAGED">Hỏng</option><option value="PENDING_INSPECTION">Chờ kiểm tra</option></select></label>
+              <label>Ghi chú<input required maxLength={2000} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+              <button disabled={busy || isZero(usage.quantityOutstanding)}>Ghi nhận trả</button>
+            </form>
+          </div>
+        </div>)}
+      </div></section>}
+    </fieldset>
     <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Lịch sử thẻ kho</h2></div><div className="m1-section-body">
       <label>Loại giao dịch<select value={type} onChange={(event) => { setType(event.target.value); setPage(1) }}><option value="">Tất cả</option>{['RECEIVE', 'ISSUE', 'RETURN', 'ADJUST_IN', 'ADJUST_OUT', 'RELEASE', 'SCRAP'].map((value) => <option key={value}>{value}</option>)}</select></label>
       <PageStatus loading={ledger.loading} error={ledger.error}>
