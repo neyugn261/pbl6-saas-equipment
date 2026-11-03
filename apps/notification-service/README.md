@@ -26,11 +26,22 @@
 M3 status: authenticated list, unread-count, and mark-read APIs are implemented.
 Reads fail closed unless the verified principal matches the local Identity
 recipient snapshot. Migrations `0002` and `0003` have been applied and drift
-checked only on the isolated `notification_test_db`. The consumer binds only
-business event versions already present in the shared catalog; fan-out remains
-pending until recipient and Service Request projections exist. Snapshot and
-bootstrap handlers are implemented but have no broker binding because their
-shared event definitions and Identity producer are not in the catalog.
+checked only on the isolated `notification_test_db`. In addition to the seven
+business event versions, the consumer now binds `NotificationRecipientSnapshot.v1`
+to `notification-service.recipient-snapshots` and
+`NotificationRecipientBootstrapCompleted.v1` to `notification-service.recipient-bootstrap`.
+They dispatch to the existing projection handlers, preserving transactional inbox
+deduplication, revision checks, bootstrap receipts, and tenant reconciliation.
+Handler failures propagate to the shared RabbitMQ retry/DLQ mechanism.
+
+Start Notification with `RABBITMQ_URL` configured and verify both durable queues
+and their bindings on `pbl6.events` **before** running Identity bootstrap:
+`pnpm --filter identity-service recipient:bootstrap <tenant-uuid>`.
+If an earlier completed bootstrap was published before these queues were bound,
+run it with `--new` to emit a fresh snapshot/marker set. Verify the local bootstrap
+run reaches completion and recipient snapshots exist before testing fan-out.
+Broker/bootstrap and browser acceptance still require a real stack run; unit
+dispatch checks do not constitute M3 acceptance evidence.
 
 See the [implementation readiness and verification](M3-INDEPENDENT-READINESS.md),
 [Q3 contract review](M3-HUY-Q3-REVIEW.md), and
