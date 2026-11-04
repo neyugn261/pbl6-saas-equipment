@@ -115,3 +115,27 @@ Không tự merge hoặc tự tuyên bố release-ready chỉ dựa trên kết 
 Quy trình chạy lại và rollback: [runbook](../planning/model-service-policies-rollout.md).
 Hướng dẫn thao tác: [user guide](../user-guide/model-service-policies.md).
 Ảnh UAT: [artifact index](artifacts/model-service-policies/README.md).
+
+
+## Khắc phục database dev chưa migrate — 2026-11-04
+
+Sau khi khởi động code mới, DB dev còn thiếu 11 migration của Asset (3),
+Maintenance (3), Work Order (2), Service Request (3). Prisma client đã có trường
+mới nhưng DB chưa có `policy_preview`, `checklist`, `resolution_checklist`, làm
+các trang danh sách trả 500. Các kiểm thử trước đó dùng DB test riêng nên không
+thay đổi schema DB dev.
+
+Đã kiểm tra cấu hình thực tế: bốn DB nghiệp vụ dev ở localhost:5432, không có
+migration failed. Áp dụng các migration đã có bằng `prisma migrate deploy`,
+không reset/seed dữ liệu. Chạy lại `pnpm db:migrate` cho tám service không còn
+pending; drift live DB → Prisma schema của bốn service đều không có khác biệt.
+
+Đăng nhập Identity hiện có và gọi Gateway đang chạy: danh sách Service Request,
+Equipment Registration, Work Order và Maintenance Plan đều HTTP 200, có dữ liệu.
+Không khởi động thêm stack hoặc dừng các tiến trình của người dùng để kiểm tra.
+
+Root `dev:backend` nay chạy `db:migrate` trước `concurrently`; tám lệnh
+`dev:<service>` có DB cũng migrate service tương ứng trước `start:dev`.
+Migration lỗi sẽ dừng khởi động. Gateway/Web không có DB nên giữ lệnh khởi động
+hiện tại. Khi chạy trực tiếp `start:dev`/`start:prod`, vẫn áp dụng migration theo
+runbook trước khi mở API.
