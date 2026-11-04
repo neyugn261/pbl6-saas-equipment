@@ -44,6 +44,7 @@ export class WarrantyRepository {
     input: CreateWarrantyDto,
     roles: readonly string[] = [],
     transaction?: Prisma.TransactionClient,
+    policy?: { versionId: string; snapshot: Prisma.InputJsonValue },
   ): Promise<Warranty> {
     const write = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`SELECT id FROM equipments WHERE tenant_id = ${scope.tenantId}::uuid AND id = ${equipmentId}::uuid FOR UPDATE`;
@@ -79,6 +80,12 @@ export class WarrantyRepository {
           endDate: dbDate(input.endDate),
           warrantyType: input.warrantyType,
           terms: input.terms ?? null,
+          ...(policy
+            ? {
+                policyVersionId: policy.versionId,
+                policySnapshot: policy.snapshot,
+              }
+            : {}),
         },
       });
       await tx.equipmentHistory.create({
@@ -96,6 +103,12 @@ export class WarrantyRepository {
               endDate: input.endDate,
               warrantyType: input.warrantyType,
               terms: input.terms ?? null,
+              ...(policy
+                ? {
+                    policyVersionId: policy.versionId,
+                    policySnapshot: policy.snapshot,
+                  }
+                : {}),
               status: warranty.status,
             },
           ),

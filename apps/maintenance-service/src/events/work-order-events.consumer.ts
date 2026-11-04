@@ -1,3 +1,4 @@
+import type { Prisma } from '../generated/prisma/client.js';
 import { Injectable } from '@nestjs/common';
 import {
   Events,
@@ -141,6 +142,14 @@ export class WorkOrderEventsConsumer {
                 ? 'PENDING'
                 : 'WORK_ORDER_CREATED',
             completedAt: completed ? occurredAt : null,
+            ...(completed?.customerChecklist
+              ? {
+                  completionSummary: {
+                    summary: completed.customerSummary,
+                    checklist: completed.customerChecklist,
+                  } as unknown as Prisma.InputJsonValue,
+                }
+              : {}),
             lastError: cancelled
               ? 'WORK_ORDER_CANCELLED'
               : completed && !successful

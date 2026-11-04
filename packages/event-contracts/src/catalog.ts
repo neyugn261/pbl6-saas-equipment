@@ -1,3 +1,9 @@
+import {
+  validChecklist,
+  validCustomerChecklist,
+  type CustomerChecklistResult,
+  type ChecklistItem,
+} from './model-policies';
 import { type Check, is, shapeProblems } from './checks';
 
 /**
@@ -182,6 +188,7 @@ export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
  * included in the event.
  */
 export interface WorkOrderCompletedV2 extends WorkOrderCompletedV1 {
+  customerChecklist?: CustomerChecklistResult[];
   customerSummary: string;
 }
 
@@ -207,6 +214,15 @@ export interface MaintenanceTaskDueV1 {
   customerSiteId: string | null;
   scheduledDate: string;
   title: string;
+}
+
+export interface MaintenanceTaskDueV2 extends MaintenanceTaskDueV1 {
+  checklist: ChecklistItem[];
+  policyVersionId: string;
+}
+export interface MaintenanceWorkOrderReplacementRequestedV2 extends MaintenanceWorkOrderReplacementRequestedV1 {
+  checklist: ChecklistItem[];
+  policyVersionId: string;
 }
 
 export interface EquipmentMovedV1 {
@@ -444,6 +460,8 @@ export const Events = {
       result: is.oneOf(REPORT_RESULTS),
       completedAt: is.isoDateTime,
       customerSummary: is.string(2000),
+      customerChecklist: (value) =>
+        value === undefined || validCustomerChecklist(value),
     },
   }),
   WorkOrderCancelled: define<WorkOrderCancelledV1>({
@@ -492,6 +510,45 @@ export const Events = {
       title: is.string(200),
     },
   }),
+  MaintenanceTaskDueV2: define<MaintenanceTaskDueV2>({
+    type: 'MaintenanceTaskDue',
+    version: 2,
+    aggregateType: 'MaintenanceTask',
+    producer: 'maintenance-service',
+    fields: {
+      maintenanceTaskId: is.uuid,
+      maintenancePlanId: is.uuid,
+      equipmentId: is.uuid,
+      customerId: is.uuid,
+      customerSiteId: is.nullable(is.uuid),
+      scheduledDate: is.isoDate,
+      title: is.string(200),
+      checklist: (value) => validChecklist(value) && value.length > 0,
+      policyVersionId: is.uuid,
+    },
+  }),
+  MaintenanceWorkOrderReplacementRequestedV2:
+    define<MaintenanceWorkOrderReplacementRequestedV2>({
+      type: 'MaintenanceWorkOrderReplacementRequested',
+      version: 2,
+      aggregateType: 'MaintenanceTask',
+      producer: 'maintenance-service',
+      fields: {
+        requestId: is.uuid,
+        previousWorkOrderId: is.uuid,
+        replacementWorkOrderId: is.uuid,
+        requestedBy: is.uuid,
+        maintenanceTaskId: is.uuid,
+        maintenancePlanId: is.uuid,
+        equipmentId: is.uuid,
+        customerId: is.uuid,
+        customerSiteId: is.nullable(is.uuid),
+        scheduledDate: is.isoDate,
+        title: is.string(200),
+        checklist: (value) => validChecklist(value) && value.length > 0,
+        policyVersionId: is.uuid,
+      },
+    }),
   LowStockDetected: define<LowStockDetectedV1>({
     type: 'LowStockDetected',
     version: 1,

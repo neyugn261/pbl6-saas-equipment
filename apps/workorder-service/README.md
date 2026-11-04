@@ -301,3 +301,13 @@ cancel → request → WO thay thế → Task link → cancel/thay thế tiếp 
 Asset history, duplicate/replay Due/event WO cũ. Fault injection cố ý giữ Created
 của replacement cuối đến sau Completed. Không phải kiểm thử web/Android.
 Kết quả và hướng dẫn: [K6 replacement](../../docs/testing/m2-maintenance-replacement-test-cases.md).
+
+
+## Model service policies (ADR 0018)
+
+Additive implementation and legacy compatibility: [ADR 0018](../../docs/decisions/0018-model-service-policies.md).
+Public/internal endpoints and schemas: [OpenAPI supplement](../../docs/api/model-service-policies.yaml).
+[User guide](../../docs/user-guide/model-service-policies.md) ·
+[rollout / rollback](../../docs/planning/model-service-policies-rollout.md).
+Run the real multi-service suite from the root with `pnpm test:model-policies`,
+using dedicated `*_TEST_DATABASE_URL` databases and RabbitMQ.

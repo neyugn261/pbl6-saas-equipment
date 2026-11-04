@@ -56,7 +56,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   });
   beforeEach(async () => {
     await db.$executeRawUnsafe(
-      'TRUNCATE work_order_inventory_reservations, attachment_cleanup_jobs, attachment_idempotency, attachment_upload_intents, report_attachments, service_reports, work_order_attachments, work_logs, work_order_assignments, work_order_status_history, work_orders, technician_skills, skills, technicians, document_sequences, outbox_events, processed_events',
+      'TRUNCATE work_order_checklist_history, work_order_inventory_reservations, attachment_cleanup_jobs, attachment_idempotency, attachment_upload_intents, report_attachments, service_reports, work_order_attachments, work_logs, work_order_assignments, work_order_status_history, work_orders, technician_skills, skills, technicians, document_sequences, outbox_events, processed_events',
     );
     jest.resetAllMocks();
     for (const method of Object.values(refs))
@@ -429,9 +429,9 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
       signTestAccessToken({ role: 'CUSTOMER_ADMIN', tenantId, customerId }),
     ).expect(403);
   });
-  it('ignores events of another type or version without writes', async () => {
+  it('ignores events of another type or unsupported version without writes', async () => {
     const event = due();
-    event.eventVersion = 2;
+    event.eventVersion = 3;
     await consumer.handle(event);
     event.eventVersion = 1;
     event.eventType = 'WorkOrderCreated';

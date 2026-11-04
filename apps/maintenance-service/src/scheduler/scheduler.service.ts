@@ -102,6 +102,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
             const task = await tx.maintenanceTask.create({
               data: {
                 tenantId: plan.tenantId,
+                ...(plan.policyVersionId
+                  ? {
+                      policyVersionId: plan.policyVersionId,
+                      instructionTitle: plan.name,
+                      checklist: plan.checklist!,
+                    }
+                  : {}),
                 maintenancePlanId: id,
                 scheduledDate: window.scheduledDate,
                 customerId: plan.customerId,
@@ -109,19 +116,31 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
                 attemptCount: 1,
               },
             });
-            await enqueueEvent(tx, Events.MaintenanceTaskDue, {
-              tenantId: plan.tenantId,
-              aggregateId: task.id,
-              payload: {
-                maintenanceTaskId: task.id,
-                maintenancePlanId: id,
-                equipmentId: plan.equipmentId,
-                customerId: task.customerId,
-                customerSiteId: task.customerSiteId,
-                scheduledDate: dateText(task.scheduledDate),
-                title: plan.name,
+            await enqueueEvent(
+              tx,
+              plan.policyVersionId
+                ? Events.MaintenanceTaskDueV2
+                : Events.MaintenanceTaskDue,
+              {
+                tenantId: plan.tenantId,
+                aggregateId: task.id,
+                payload: {
+                  maintenanceTaskId: task.id,
+                  maintenancePlanId: id,
+                  equipmentId: plan.equipmentId,
+                  customerId: task.customerId,
+                  customerSiteId: task.customerSiteId,
+                  scheduledDate: dateText(task.scheduledDate),
+                  title: plan.name,
+                  ...(plan.policyVersionId
+                    ? {
+                        checklist: plan.checklist,
+                        policyVersionId: plan.policyVersionId,
+                      }
+                    : {}),
+                },
               },
-            });
+            );
             await recordHistory(
               tx,
               plan,

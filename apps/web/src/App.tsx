@@ -1,7 +1,12 @@
-import { useDirectory } from './routes/registration-data'
+import { ModelPolicyPage } from "./routes/ModelPolicyPage";
+import { WarrantyAssessmentPanel } from "./routes/ModelPolicyPanels";
+import { useDirectory } from "./routes/registration-data";
 import { CustomerDirectoryPage, CustomerCreatePage, CustomerWorkspacePage, EquipmentModelsPage } from './routes/EquipmentDirectories'
-import { EquipmentRegistrationPage, RegistrationListPage } from './routes/EquipmentRegistration'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  EquipmentRegistrationPage,
+  RegistrationListPage,
+} from "./routes/EquipmentRegistration";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   Link,
   Navigate,
@@ -38,20 +43,23 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { api, ApiError } from './api/client'
-import { creators, has, home, menu } from './auth/access'
-import { PriorityBadge, StatusBadge } from './components/Badges'
-import ActivatePage from './routes/ActivatePage'
-import DashboardPage from './routes/DashboardPage'
-import DemoPage from './routes/DemoPage'
+import { api, ApiError } from "./api/client";
+import { creators, has, home, menu } from "./auth/access";
+import { PriorityBadge, StatusBadge } from "./components/Badges";
+import ActivatePage from "./routes/ActivatePage";
+import DashboardPage from "./routes/DashboardPage";
+import DemoPage from "./routes/DemoPage";
 import { DossierPage, EquipmentFeedPage, HistoryFeedPage, ResourceHistoryPage, WorkOrderListPage, WorkOrderPage, MaintenancePage as LiveMaintenancePage, MaintenanceHistoryPage, MaintenanceRecordPage, RequestDossierExtras, TechniciansPage as LiveTechniciansPage, TechnicianPage } from './routes/M2Pages'
-import { rememberDemoRequest } from './routes/demo-request'
-import InvitePage from './routes/InvitePage'
-import QrPage from './routes/QrPage'
-import EstimatePanel from './routes/EstimatePanel'
-import { NotificationInbox, NotificationBell } from './features/notifications/NotificationInbox'
-import { AttachmentsPanel } from './features/attachments/AttachmentsPanel'
-import { WorkOrderReportsPage } from './features/reports/WorkOrderReports'
+import { rememberDemoRequest } from "./routes/demo-request";
+import InvitePage from "./routes/InvitePage";
+import QrPage from "./routes/QrPage";
+import EstimatePanel from "./routes/EstimatePanel";
+import {
+  NotificationInbox,
+  NotificationBell,
+} from "./features/notifications/NotificationInbox";
+import { AttachmentsPanel } from "./features/attachments/AttachmentsPanel";
+import { WorkOrderReportsPage } from "./features/reports/WorkOrderReports";
 import {
   InventoryPartPage,
   InventoryPartsPage,
@@ -76,10 +84,10 @@ import type {
   RequestRecord,
   RequestStatusChange,
 } from './types/domain'
-import './sample.css'
-import './App.css'
-import './restored.css'
-import './m2.css'
+import "./sample.css";
+import "./App.css";
+import "./restored.css";
+import "./m2.css";
 
 const actionLabels: Record<string, string> = {
   review: 'Xem xét và kiểm tra bảo hành',
@@ -119,10 +127,10 @@ function Problem({ error }: { error: unknown }) {
   )
 }
 function Loading() {
-  return <p role="status">Đang tải…</p>
+  return <p role="status">Đang tải…</p>;
 }
 function Empty() {
-  return <p>Chưa có dữ liệu.</p>
+  return <p>Chưa có dữ liệu.</p>;
 }
 function Gate({ roles, children }: { roles: string[]; children: ReactNode }) {
   const { profile } = useSession()
@@ -223,12 +231,12 @@ function LoginPage() {
   )
 }
 function Layout({ children }: { children: ReactNode }) {
-  const { profile, clear } = useSession()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  if (!profile) return null
+  const { profile, clear } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  if (!profile) return null;
   const icons: Record<string, LucideIcon> = {
     '/customers': Building2,
     '/equipment': Boxes,
@@ -267,14 +275,17 @@ function Layout({ children }: { children: ReactNode }) {
     ...workspaceItems.filter((item) => has(profile.roles, item.roles)),
     ...liveAdmin.map((item) => ({ path: item.path === '/tenants' ? '/admin/tenants' : item.path, label: item.label, icon: icons[item.path], group: 'Quản trị' })),
   ]
-  const navigationPath = location.pathname === '/tenants' ? '/admin/tenants' : location.pathname
+  const navigationPath =
+    location.pathname === "/tenants" ? "/admin/tenants" : location.pathname;
   const section = navigation.find((item) => navigationPath === item.path || navigationPath.startsWith(`${item.path}/`))
   const initials = profile.fullName.split(' ').slice(-2).map((part) => part[0]).join('').toUpperCase()
   const scope = profile.userType === 'PLATFORM_STAFF' ? 'Phạm vi nền tảng' : profile.userType === 'CUSTOMER' ? 'Cổng khách hàng' : 'Doanh nghiệp hiện tại'
   return (
-    <div className={`m1-layout ${collapsed ? 'm1-layout--collapsed' : ''}`}>
-      {mobileOpen && <button className="m1-mobile-overlay" aria-label="Đóng menu" onClick={() => setMobileOpen(false)} />}
-      <aside className={`m1-sidebar ${mobileOpen ? 'm1-sidebar--open' : ''}`}>
+    <div className={`m1-layout ${collapsed ? "m1-layout--collapsed" : ""}`}>
+      {mobileOpen && (
+        <button className="m1-mobile-overlay" aria-label="Đóng menu" onClick={() => setMobileOpen(false)} />
+      )}
+      <aside className={`m1-sidebar ${mobileOpen ? "m1-sidebar--open" : ""}`}>
         <div className="m1-brand">
           <Link to="/dashboard" onClick={() => setMobileOpen(false)}><span className="m1-brand__mark"><Wrench size={20} /></span><span className="m1-brand__name"><strong>Servio</strong><small>Field Service Cloud</small></span></Link>
           <button className="m1-mobile-close" aria-label="Đóng menu" onClick={() => setMobileOpen(false)}><X size={20} /></button>
@@ -282,11 +293,16 @@ function Layout({ children }: { children: ReactNode }) {
         <div className="m1-scope"><small>{scope}</small><strong>{profile.userType === 'PLATFORM_STAFF' ? 'PBL6 Service Cloud' : 'Không gian PBL6'}</strong><span>{profile.roles.map((role) => roleLabels[role] ?? role).join(', ')}</span></div>
         <nav className="m1-nav" aria-label="Điều hướng chính">
           {navigation.map((item, index) => {
-            const Icon = item.icon
-            return <div key={item.path}>
-              {(index === 0 || item.group !== navigation[index - 1]?.group) && <p className="m1-nav-group">{item.group}</p>}
-              <NavLink to={item.path} end={item.path === '/dashboard'} title={collapsed ? item.label : undefined} onClick={() => setMobileOpen(false)}><Icon size={19} /><span>{item.label}</span></NavLink>
-            </div>
+            const Icon = item.icon;
+            return (
+              <div key={item.path}>
+                {(index === 0 ||
+                  item.group !== navigation[index - 1]?.group) && (
+                  <p className="m1-nav-group">{item.group}</p>
+                )}
+                <NavLink to={item.path} end={item.path === '/dashboard'} title={collapsed ? item.label : undefined} onClick={() => setMobileOpen(false)}><Icon size={19} /><span>{item.label}</span></NavLink>
+              </div>
+            );
           })}
         </nav>
         <div className="m1-sidebar-footer">
@@ -308,15 +324,34 @@ function Layout({ children }: { children: ReactNode }) {
             <button className="m1-topbar-icon m1-desktop-collapse" aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'} onClick={() => setCollapsed((value) => !value)}><PanelLeftClose size={19} /></button>
             <Link className="m1-topbar-search" to={has(profile.roles, menu[1].roles) ? '/equipment' : '/tenants'}><Search size={17} /><span>{has(profile.roles, menu[1].roles) ? 'Tra cứu thiết bị' : 'Xem doanh nghiệp'}</span></Link>
           </div>
-          <div className="m1-topbar-user">{profile.userType !== 'PLATFORM_STAFF' && <NotificationBell href={profile.userType === 'CUSTOMER' ? '/portal/notifications' : '/app/notifications'} />}<span className="m1-avatar">{initials}</span><span><strong>{profile.fullName}</strong><small>{profile.roles.map((role) => roleLabels[role] ?? role).join(', ')}</small></span></div>
+          <div className="m1-topbar-user">
+            {profile.userType !== "PLATFORM_STAFF" && (
+              <NotificationBell href={profile.userType === 'CUSTOMER' ? '/portal/notifications' : '/app/notifications'} />
+            )}
+            <span className="m1-avatar">{initials}</span>
+            <span><strong>{profile.fullName}</strong><small>{profile.roles.map((role) => roleLabels[role] ?? role).join(', ')}</small></span>
+          </div>
         </header>
         <main className="m1-main">
-          <nav className="m1-breadcrumbs" aria-label="Đường dẫn"><Link to="/dashboard">Trang chủ</Link>{location.pathname !== '/dashboard' && <><ChevronRight size={14} /><Link to={section?.path ?? '/dashboard'}>{section?.label ?? 'Trang'}</Link>{section && location.pathname !== section.path && <><ChevronRight size={14} /><span>{location.pathname.endsWith('/new') ? 'Tạo mới' : 'Chi tiết'}</span></>}</>}</nav>
+          <nav className="m1-breadcrumbs" aria-label="Đường dẫn">
+            <Link to="/dashboard">Trang chủ</Link>
+            {location.pathname !== "/dashboard" && (
+              <>
+                <ChevronRight size={14} />
+                <Link to={section?.path ?? "/dashboard"}>
+                  {section?.label ?? "Trang"}
+                </Link>
+                {section && location.pathname !== section.path && (
+                  <><ChevronRight size={14} /><span>{location.pathname.endsWith('/new') ? 'Tạo mới' : 'Chi tiết'}</span></>
+                )}
+              </>
+            )}
+          </nav>
           {children}
         </main>
       </div>
     </div>
-  )
+  );
 }
 function useLoad<T>(load: () => Promise<T>, key: string) {
   const sessionGeneration = getSessionGeneration()
@@ -375,12 +410,12 @@ function formatDate(value: string | null | undefined) {
     : '—'
 }
 function DateText({ value }: { value: string }) {
-  return <>{formatDate(value)}</>
+  return <>{formatDate(value)}</>;
 }
 
 function CustomersPage() {
-  const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('')
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
   const data = useLoad<Page<CustomerRecord>>(
     () => api.organization('/customers?page=1&pageSize=100'),
     'customers',
@@ -397,8 +432,13 @@ function CustomersPage() {
             <label className="m1-table-search"><Search size={17} /><input aria-label="Tìm khách hàng" placeholder="Tìm theo tên hoặc mã..." value={query} onChange={(event) => setQuery(event.target.value)} /></label>
             <select aria-label="Lọc trạng thái" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Tất cả trạng thái</option><option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Ngừng hoạt động</option></select>
           </div>
-          {!data.value?.items.filter((item) => `${item.name} ${item.code}`.toLowerCase().includes(query.toLowerCase()) && (!status || item.status === status)).length ? <div className="m1-list-empty">Không tìm thấy khách hàng phù hợp.</div> : <>
-          <table>
+          {!data.value?.items.filter((item) => `${item.name} ${item.code}`.toLowerCase().includes(query.toLowerCase()) && (!status || item.status === status)).length ? (
+            <div className="m1-list-empty">
+              Không tìm thấy khách hàng phù hợp.
+            </div>
+          ) : (
+            <>
+              <table>
             <thead>
               <tr>
                 <th>Khách hàng</th>
@@ -416,12 +456,16 @@ function CustomersPage() {
               ))}
             </tbody>
           </table>
-          <div className="m1-table-pagination">Hiển thị {data.value?.items.length ?? 0} trong {data.value?.total ?? 0} khách hàng</div>
-          </>}
+              <div className="m1-table-pagination">
+                Hiển thị {data.value?.items.length ?? 0} trong{" "}
+                {data.value?.total ?? 0} khách hàng
+              </div>
+            </>
+          )}
         </div>
       )}
     </Frame>
-  )
+  );
 }
 
 function CustomerDetailPage() {
@@ -448,26 +492,52 @@ function CustomerDetailPage() {
   )
 }
 function EquipmentPage() {
-  const { profile } = useSession()
-  const canManage = profile?.roles.some(role => ['TENANT_ADMIN', 'SERVICE_MANAGER'].includes(role))
-  const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('')
+  const { profile } = useSession();
+  const canManage = profile?.roles.some((role) =>
+    ["TENANT_ADMIN", "SERVICE_MANAGER"].includes(role),
+  );
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
   const [search, setSearch] = useState(''), [page, setPage] = useState(1), [registrationStatus, setRegistrationStatus] = useState('')
   const data = useDirectory<Page<EquipmentRecord>>('assetM2', `/equipment?page=${page}&pageSize=20&q=${encodeURIComponent(search)}${status ? `&status=${status}` : ''}${canManage && registrationStatus ? `&registrationStatus=${registrationStatus}` : ''}`)
   return (
-    <Frame title="Thiết bị" description="Theo dõi thiết bị đã bàn giao, bảo hành và lịch sử dịch vụ." action={canManage ? <Link className="m1-button" to="/app/equipment-registrations/new">+ Ghi nhận bàn giao</Link> : null}>
+    <Frame
+      title="Thiết bị"
+      description="Theo dõi thiết bị đã bàn giao, bảo hành và lịch sử dịch vụ."
+      action={
+        canManage ? (
+          <Link className="m1-button" to="/app/equipment-registrations/new">
+            + Ghi nhận bàn giao
+          </Link>
+        ) : null
+      }
+    >
       {data.loading ? (
         <Loading />
       ) : data.error ? (
-        <p className="m1-error" role="alert">{data.error}</p>
+        <p className="m1-error" role="alert">
+          {data.error}
+        </p>
       ) : (
         <>
-        <div className="m1-summary-strip"><div><strong>{data.value?.total ?? 0}</strong><span>Tổng thiết bị</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'ACTIVE').length ?? 0}</strong><span>Hoạt động trong trang</span></div><div><strong>{data.value?.items.filter((item) => item.warranty?.result === 'IN_WARRANTY').length ?? 0}</strong><span>Còn bảo hành trong trang</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'OUT_OF_SERVICE').length ?? 0}</strong><span>Cần chú ý trong trang</span></div></div>
-        <div className="m1-card m1-table-card">
-          <form onSubmit={e => { e.preventDefault(); setSearch(query); setPage(1) }} className="m1-table-toolbar"><label className="m1-table-search"><Search size={17} /><input aria-label="Tìm thiết bị" placeholder="Tìm mã tài sản, model, serial..." value={query} onChange={(event) => setQuery(event.target.value)} /></label><select aria-label="Lọc trạng thái" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}><option value="">Tất cả trạng thái</option><option value="ACTIVE">Hoạt động</option><option value="IN_SERVICE">Đang sử dụng</option><option value="OUT_OF_SERVICE">Ngừng hoạt động</option><option value="RETIRED">Ngừng sử dụng</option></select>{canManage && <select aria-label="Lọc thiết lập dịch vụ" value={registrationStatus} onChange={e => { setRegistrationStatus(e.target.value); setPage(1) }}><option value="">Tất cả hồ sơ</option><option value="NOT_RECORDED">Chưa ghi nhận</option><option value="DRAFT">Chưa hoàn tất</option><option value="PENDING_MAINTENANCE">Chờ bảo trì</option><option value="COMPLETED">Đã hoàn tất</option></select>}<button>Tìm</button></form>
-          {!data.value?.items.length ? <div className="m1-list-empty">Không tìm thấy thiết bị phù hợp.</div> : <>
-          <table>
-            <thead>
+          <div className="m1-summary-strip"><div><strong>{data.value?.total ?? 0}</strong><span>Tổng thiết bị</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'ACTIVE').length ?? 0}</strong><span>Hoạt động trong trang</span></div><div><strong>{data.value?.items.filter((item) => item.warranty?.result === 'IN_WARRANTY').length ?? 0}</strong><span>Còn bảo hành trong trang</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'OUT_OF_SERVICE').length ?? 0}</strong><span>Cần chú ý trong trang</span></div></div>
+          <div className="m1-card m1-table-card">
+            <form onSubmit={e => { e.preventDefault(); setSearch(query); setPage(1) }} className="m1-table-toolbar">
+              <label className="m1-table-search"><Search size={17} /><input aria-label="Tìm thiết bị" placeholder="Tìm mã tài sản, model, serial..." value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+              <select aria-label="Lọc trạng thái" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}><option value="">Tất cả trạng thái</option><option value="ACTIVE">Hoạt động</option><option value="IN_SERVICE">Đang sử dụng</option><option value="OUT_OF_SERVICE">Ngừng hoạt động</option><option value="RETIRED">Ngừng sử dụng</option></select>
+              {canManage && (
+                <select aria-label="Lọc thiết lập dịch vụ" value={registrationStatus} onChange={e => { setRegistrationStatus(e.target.value); setPage(1) }}><option value="">Tất cả hồ sơ</option><option value="NOT_RECORDED">Chưa ghi nhận</option><option value="DRAFT">Chưa hoàn tất</option><option value="PENDING_MAINTENANCE">Chờ bảo trì</option><option value="COMPLETED">Đã hoàn tất</option></select>
+              )}
+              <button>Tìm</button>
+            </form>
+            {!data.value?.items.length ? (
+              <div className="m1-list-empty">
+                Không tìm thấy thiết bị phù hợp.
+              </div>
+            ) : (
+              <>
+                <table>
+                  <thead>
               <tr>
                 <th>Mã tài sản</th>
                 <th>Thiết bị / Model</th>
@@ -477,32 +547,60 @@ function EquipmentPage() {
                 {canManage && <th>Thiết lập dịch vụ</th>}
               </tr>
             </thead>
-            <tbody>
-              {data.value?.items.map((item) => (
-                <tr key={item.id}>
-                  <td><Link to={`/equipment/${item.id}`}>{item.assetCode}</Link></td>
-                  <td><strong>{item.displayName || item.model?.name || 'Thiết bị'}</strong></td>
-                  <td>{item.serialNumber}</td>
-                  <td>{item.warranty?.result ? <StatusBadge status={item.warranty.result} /> : '—'}</td>
-                  <td><StatusBadge status={item.status} /></td>
-                  {canManage && <td><Link to={item.registrationId ? `/app/equipment-registrations/${item.registrationId}` : `/app/equipment-registrations/new?equipmentId=${item.id}`}>{item.registrationStatus === 'COMPLETED' ? 'Đã hoàn tất' : item.registrationStatus === 'PENDING_MAINTENANCE' ? 'Chờ bảo trì' : item.registrationStatus === 'DRAFT' ? 'Tiếp tục hồ sơ' : 'Hoàn thiện bàn giao'}</Link></td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="m1-table-pagination">Trang {page} · {data.value?.total ?? 0} thiết bị <button disabled={page === 1} onClick={() => setPage(page - 1)}>Trước</button><button disabled={page * 20 >= (data.value?.total ?? 0)} onClick={() => setPage(page + 1)}>Sau</button></div>
-          </>}
-        </div>
+                  <tbody>
+                    {data.value?.items.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <Link to={`/equipment/${item.id}`}>
+                            {item.assetCode}
+                          </Link>
+                        </td>
+                        <td>
+                          <strong>
+                            {item.displayName || item.model?.name || "Thiết bị"}
+                          </strong>
+                        </td>
+                        <td>{item.serialNumber}</td>
+                        <td>
+                          {item.warranty?.result ? (
+                            <StatusBadge status={item.warranty.result} />
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>
+                          <StatusBadge status={item.status} />
+                        </td>
+                        {canManage && (
+                          <td><Link to={item.registrationId ? `/app/equipment-registrations/${item.registrationId}` : `/app/equipment-registrations/new?equipmentId=${item.id}`}>{item.registrationStatus === 'COMPLETED' ? 'Đã hoàn tất' : item.registrationStatus === 'PENDING_MAINTENANCE' ? 'Chờ bảo trì' : item.registrationStatus === 'DRAFT' ? 'Tiếp tục hồ sơ' : 'Hoàn thiện bàn giao'}</Link></td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="m1-table-pagination">
+                  Trang {page} · {data.value?.total ?? 0} thiết bị{" "}
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    Trước
+                  </button>
+                  <button disabled={page * 20 >= (data.value?.total ?? 0)} onClick={() => setPage(page + 1)}>Sau</button>
+                </div>
+              </>
+            )}
+          </div>
         </>
       )}
     </Frame>
-  )
+  );
 }
 function RequestsPage() {
-  const { profile } = useSession()
-  const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('')
-  const [priority, setPriority] = useState('')
+  const { profile } = useSession();
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const [priority, setPriority] = useState("");
   const data = useLoad<Page<RequestRecord>>(
     () => api.requestsLive('/service-requests?page=1&pageSize=100'),
     'requests',
@@ -525,11 +623,14 @@ function RequestsPage() {
         <Problem error={data.error} />
       ) : (
         <>
-        <div className="m1-summary-strip m1-summary-strip--requests"><div><strong>{data.value?.total ?? 0}</strong><span>Tất cả</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'NEW').length ?? 0}</strong><span>Mới</span></div><div><strong>{data.value?.items.filter((item) => ['REVIEWING', 'AWAITING_INFO', 'AWAITING_CUSTOMER_APPROVAL'].includes(item.status)).length ?? 0}</strong><span>Chờ xử lý</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'PROCESSING').length ?? 0}</strong><span>Đang xử lý</span></div><div><strong>{data.value?.items.filter((item) => ['RESOLVED', 'CLOSED'].includes(item.status)).length ?? 0}</strong><span>Hoàn thành</span></div></div>
-        <div className="m1-card m1-table-card">
-          <div className="m1-table-toolbar"><label className="m1-table-search"><Search size={17} /><input aria-label="Tìm yêu cầu" placeholder="Tìm mã yêu cầu, nội dung..." value={query} onChange={(event) => setQuery(event.target.value)} /></label><div><select aria-label="Lọc ưu tiên" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Tất cả ưu tiên</option><option value="URGENT">Khẩn cấp</option><option value="HIGH">Cao</option><option value="NORMAL">Trung bình</option><option value="LOW">Thấp</option></select><select aria-label="Lọc trạng thái" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Tất cả trạng thái</option><option value="NEW">Mới</option><option value="REVIEWING">Đang xem xét</option><option value="ACCEPTED">Đã tiếp nhận</option><option value="PROCESSING">Đang xử lý</option><option value="RESOLVED">Đã xử lý</option><option value="CLOSED">Đã đóng</option></select></div></div>
-          {!data.value?.items.filter((item) => `${item.requestNo} ${item.title}`.toLowerCase().includes(query.toLowerCase()) && (!status || item.status === status) && (!priority || item.priority === priority)).length ? <div className="m1-list-empty">Chưa có yêu cầu phù hợp.</div> : <>
-          <table>
+          <div className="m1-summary-strip m1-summary-strip--requests"><div><strong>{data.value?.total ?? 0}</strong><span>Tất cả</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'NEW').length ?? 0}</strong><span>Mới</span></div><div><strong>{data.value?.items.filter((item) => ['REVIEWING', 'AWAITING_INFO', 'AWAITING_CUSTOMER_APPROVAL'].includes(item.status)).length ?? 0}</strong><span>Chờ xử lý</span></div><div><strong>{data.value?.items.filter((item) => item.status === 'PROCESSING').length ?? 0}</strong><span>Đang xử lý</span></div><div><strong>{data.value?.items.filter((item) => ['RESOLVED', 'CLOSED'].includes(item.status)).length ?? 0}</strong><span>Hoàn thành</span></div></div>
+          <div className="m1-card m1-table-card">
+            <div className="m1-table-toolbar"><label className="m1-table-search"><Search size={17} /><input aria-label="Tìm yêu cầu" placeholder="Tìm mã yêu cầu, nội dung..." value={query} onChange={(event) => setQuery(event.target.value)} /></label><div><select aria-label="Lọc ưu tiên" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Tất cả ưu tiên</option><option value="URGENT">Khẩn cấp</option><option value="HIGH">Cao</option><option value="NORMAL">Trung bình</option><option value="LOW">Thấp</option></select><select aria-label="Lọc trạng thái" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">Tất cả trạng thái</option><option value="NEW">Mới</option><option value="REVIEWING">Đang xem xét</option><option value="ACCEPTED">Đã tiếp nhận</option><option value="PROCESSING">Đang xử lý</option><option value="RESOLVED">Đã xử lý</option><option value="CLOSED">Đã đóng</option></select></div></div>
+            {!data.value?.items.filter((item) => `${item.requestNo} ${item.title}`.toLowerCase().includes(query.toLowerCase()) && (!status || item.status === status) && (!priority || item.priority === priority)).length ? (
+              <div className="m1-list-empty">Chưa có yêu cầu phù hợp.</div>
+            ) : (
+              <>
+                <table>
             <thead>
               <tr>
                 <th>Mã</th>
@@ -555,13 +656,17 @@ function RequestsPage() {
               ))}
             </tbody>
           </table>
-          <div className="m1-table-pagination">Hiển thị {data.value?.items.length ?? 0} trong {data.value?.total ?? 0} yêu cầu</div>
-          </>}
-        </div>
+                <div className="m1-table-pagination">
+                  Hiển thị {data.value?.items.length ?? 0} trong{" "}
+                  {data.value?.total ?? 0} yêu cầu
+                </div>
+              </>
+            )}
+          </div>
         </>
       )}
     </Frame>
-  )
+  );
 }
 function RequestActivity({ id, version }: { id: string; version: number }) {
   const history = useLoad<RequestStatusChange[]>(
@@ -618,24 +723,29 @@ function RequestActivity({ id, version }: { id: string; version: number }) {
   )
 }
 function RequestDetailPage() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const { profile } = useSession()
-  const sessionGeneration = getSessionGeneration()
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { profile } = useSession();
+  const sessionGeneration = getSessionGeneration();
   const data = useLoad<RequestDetail>(
     () => api.requestsLive(`/service-requests/${id}`),
     id ?? '',
   )
-  const [override, setOverride] = useState<{ generation: number; value: RequestDetail } | null>(null)
-  const [error, setError] = useState<unknown>(null)
-  const [busy, setBusy] = useState(false)
-  const [version, setVersion] = useState(0)
-  const [comment, setComment] = useState('')
-  const [visibility, setVisibility] = useState<'CUSTOMER' | 'INTERNAL'>(
-    'CUSTOMER',
-  )
-  const currentOverride = override?.generation === sessionGeneration ? override.value : null
-  const current = currentOverride?.id === data.value?.id ? currentOverride : data.value
+  const [override, setOverride] = useState<{
+    generation: number;
+    value: RequestDetail;
+  } | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const [version, setVersion] = useState(0);
+  const [comment, setComment] = useState("");
+  const [visibility, setVisibility] = useState<"CUSTOMER" | "INTERNAL">(
+    "CUSTOMER",
+  );
+  const currentOverride =
+    override?.generation === sessionGeneration ? override.value : null;
+  const current =
+    currentOverride?.id === data.value?.id ? currentOverride : data.value;
   async function refreshRequest(conflict?: unknown) {
     if (!current || getSessionGeneration() !== sessionGeneration) return
     setBusy(true)
@@ -752,8 +862,18 @@ function RequestDetailPage() {
             <div className="m1-entity-status"><StatusBadge status={current.status} /><PriorityBadge priority={current.priority} /><span>{requestTypeLabels[current.type] ?? current.type}</span></div>
             {error ? <Problem error={error} /> : null}
             <div className="m1-actions">
-              <button disabled={busy} onClick={() => void refreshRequest()}>Làm mới trạng thái</button>
-              {current.status === 'ACCEPTED' && profile?.roles.includes('SERVICE_MANAGER') && <button disabled={busy} onClick={() => void createWorkOrder()}>Tạo lệnh công việc</button>}
+              <button disabled={busy} onClick={() => void refreshRequest()}>
+                Làm mới trạng thái
+              </button>
+              {current.status === "ACCEPTED" &&
+                profile?.roles.includes("SERVICE_MANAGER") && (
+                  <button
+                    disabled={busy}
+                    onClick={() => void createWorkOrder()}
+                  >
+                    Tạo lệnh công việc
+                  </button>
+                )}
               {current.allowedActions
                 ?.filter((action) => actions.includes(action))
                 .map((action) => (
@@ -766,37 +886,100 @@ function RequestDetailPage() {
                   </button>
                 ))}
             </div>
-            {current.status === 'PROCESSING' && <p role="status">Đang chờ kết quả từ Work Order. Kết quả có thể xuất hiện sau ít phút; dùng “Làm mới trạng thái” để kiểm tra.</p>}
-            {(current.resolutionSummary || current.resolutionResult) && <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Kết quả dịch vụ</h2></div><div className="m1-section-body"><p>{current.resolutionSummary ?? '—'}</p><dl><dt>Kết quả</dt><dd>{current.resolutionResult ?? '—'}</dd><dt>Lệnh công việc</dt><dd>{current.resolvedWorkOrderNo ?? '—'}</dd><dt>Hoàn thành lúc</dt><dd>{formatDate(current.resolutionCompletedAt)}</dd></dl></div></section>}
-            <AttachmentsPanel kind="SERVICE_REQUEST_RESULT" requestId={current.id} />
+            {current.status === "PROCESSING" && (
+              <p role="status">Đang chờ kết quả từ Work Order. Kết quả có thể xuất hiện sau ít phút; dùng “Làm mới trạng thái” để kiểm tra.</p>
+            )}
+            {(current.resolutionSummary || current.resolutionResult) && (
+              <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Kết quả dịch vụ</h2></div><div className="m1-section-body"><p>{current.resolutionSummary ?? '—'}</p><dl><dt>Kết quả</dt><dd>{current.resolutionResult ?? '—'}</dd><dt>Lệnh công việc</dt><dd>{current.resolvedWorkOrderNo ?? '—'}</dd><dt>Hoàn thành lúc</dt><dd>{formatDate(current.resolutionCompletedAt)}</dd></dl></div></section>
+            )}
+            <AttachmentsPanel
+              kind="SERVICE_REQUEST_RESULT"
+              requestId={current.id}
+            />
             <div className="m1-request-detail-grid">
               <div>
                 <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Mô tả sự cố</h2></div><div className="m1-section-body m1-prose">{current.description}</div></section>
                 <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Thiết bị & vị trí</h2></div><div className="m1-section-body"><Link className="m1-equipment-link" to={`/equipment/${current.equipmentId}`}><span className="m1-entity-avatar"><Boxes size={19} /></span><span><strong>Mở hồ sơ thiết bị</strong><small>{current.equipmentId}</small></span><ChevronRight size={18} /></Link></div></section>
-                <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Trao đổi</h2></div><div className="m1-section-body"><form className="m1-comment" onSubmit={addComment}>
-                  <textarea required maxLength={5000} rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Nhập bình luận..." />
-                  {profile?.userType !== 'CUSTOMER' && profile && has(profile.roles, ['SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN']) && <select value={visibility} onChange={(event) => setVisibility(event.target.value as 'CUSTOMER' | 'INTERNAL')}><option value="CUSTOMER">Khách hàng thấy</option><option value="INTERNAL">Nội bộ</option></select>}
-                  <button disabled={busy || !comment.trim()}>Gửi bình luận</button>
-                </form></div></section>
+                <section className="m1-card m1-section-card">
+                  <div className="m1-section-header">
+                    <h2>Trao đổi</h2>
+                  </div>
+                  <div className="m1-section-body">
+                    <form className="m1-comment" onSubmit={addComment}>
+                      <textarea required maxLength={5000} rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Nhập bình luận..." />
+                      {profile?.userType !== 'CUSTOMER' && profile && has(profile.roles, ['SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN']) && (
+                          <select value={visibility} onChange={(event) => setVisibility(event.target.value as 'CUSTOMER' | 'INTERNAL')}><option value="CUSTOMER">Khách hàng thấy</option><option value="INTERNAL">Nội bộ</option></select>
+                        )}
+                      <button disabled={busy || !comment.trim()}>
+                        Gửi bình luận
+                      </button>
+                    </form>
+                  </div>
+                </section>
               </div>
-              <aside><section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Thông tin yêu cầu</h2></div><div className="m1-section-body"><dl><dt>Trạng thái</dt><dd><StatusBadge status={current.status} /></dd><dt>Ưu tiên</dt><dd><PriorityBadge priority={current.priority} /></dd><dt>Bảo hành</dt><dd>{current.warrantyCheck?.result ? <StatusBadge status={current.warrantyCheck.result} /> : 'Chưa kiểm tra'}</dd><dt>Loại yêu cầu</dt><dd>{requestTypeLabels[current.type] ?? current.type}</dd></dl></div></section></aside>
+              <aside>
+                <section className="m1-card m1-section-card">
+                  <div className="m1-section-header">
+                    <h2>Thông tin yêu cầu</h2>
+                  </div>
+                  <div className="m1-section-body">
+                    <dl>
+                      <dt>Trạng thái</dt>
+                      <dd>
+                        <StatusBadge status={current.status} />
+                      </dd>
+                      <dt>Ưu tiên</dt>
+                      <dd>
+                        <PriorityBadge priority={current.priority} />
+                      </dd>
+                      <dt>Bảo hành</dt>
+                      <dd>
+                        {current.warrantyCheck?.result ? (
+                          <StatusBadge status={current.warrantyCheck.result} />
+                        ) : (
+                          "Chưa kiểm tra"
+                        )}
+                      </dd>
+                      <dt>Loại yêu cầu</dt>
+                      <dd>{requestTypeLabels[current.type] ?? current.type}</dd>
+                    </dl>
+                  </div>
+                </section>
+              </aside>
             </div>
             <RequestDossierExtras equipmentId={current.equipmentId} requestId={current.id} revision={version} />
+            {current.resolutionChecklist && (
+              <section className="m1-card">
+                <h2>Kết quả công việc đã công bố</h2>
+                <ul>
+                  {current.resolutionChecklist.map((item) => (
+                    <li key={item.itemId}>
+                      {item.title} · {item.status}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            <WarrantyAssessmentPanel
+              key={current.id}
+              request={current}
+              changed={() => void refreshRequest()}
+            />
             <EstimatePanel requestId={current.id} allowedActions={current.allowedActions ?? []} onChange={() => void refreshRequest()} />
             <RequestActivity id={current.id} version={version} />
           </>
         )
       )}
     </Frame>
-  )
+  );
 }
 function NewRequestPage() {
-  const { profile } = useSession()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const { profile } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
   const requestedEquipmentId = new URLSearchParams(location.search).get(
-    'equipmentId',
-  )
+    "equipmentId",
+  );
   const data = useLoad<Page<EquipmentRecord>>(
     () =>
       requestedEquipmentId
@@ -808,13 +991,13 @@ function NewRequestPage() {
         : api.assetM2('/equipment?page=1&pageSize=100'),
     `request-equipment-${requestedEquipmentId ?? 'list'}`,
   )
-  const [equipmentId, setEquipmentId] = useState(requestedEquipmentId ?? '')
-  const [type, setType] = useState('REPAIR')
-  const [priority, setPriority] = useState('NORMAL')
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [error, setError] = useState<unknown>(null)
-  const [busy, setBusy] = useState(false)
+  const [equipmentId, setEquipmentId] = useState(requestedEquipmentId ?? "");
+  const [type, setType] = useState("REPAIR");
+  const [priority, setPriority] = useState("NORMAL");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault()
     const selected = data.value?.items.find((item) => item.id === equipmentId)
@@ -846,7 +1029,9 @@ function NewRequestPage() {
       setBusy(false)
     }
   }
-  const selectedEquipment = data.value?.items.find((item) => item.id === equipmentId)
+  const selectedEquipment = data.value?.items.find(
+    (item) => item.id === equipmentId,
+  );
   return (
     <Frame title="Bạn cần hỗ trợ thiết bị nào?" eyebrow="YÊU CẦU MỚI" description="Cung cấp thông tin sự cố để bộ phận dịch vụ tiếp nhận và xử lý.">
       {data.loading ? (
@@ -856,23 +1041,54 @@ function NewRequestPage() {
       ) : (
         <form className="m1-form m1-request-form" onSubmit={submit}>
           {error ? <Problem error={error} /> : null}
-          <div className="m1-request-detail-grid"><div>
-          <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>1. Chọn thiết bị</h2></div><div className="m1-section-body"><label>
-            Thiết bị
-            <select
+          <div className="m1-request-detail-grid">
+            <div>
+              <section className="m1-card m1-section-card">
+                <div className="m1-section-header">
+                  <h2>1. Chọn thiết bị</h2>
+                </div>
+                <div className="m1-section-body">
+                  <label>
+                    Thiết bị
+                    <select
               required
               value={equipmentId}
               onChange={(event) => setEquipmentId(event.target.value)}
             >
-              <option value="">Chọn thiết bị</option>
-              {data.value?.items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.model?.name ?? item.assetCode} · {item.assetCode}
-                </option>
-              ))}
-            </select>
-          </label>{selectedEquipment && <div className="m1-selected-equipment"><span className="m1-entity-avatar"><Boxes size={19} /></span><span><strong>{selectedEquipment.model?.name ?? selectedEquipment.assetCode}</strong><small>{selectedEquipment.assetCode} · Serial {selectedEquipment.serialNumber}</small></span>{selectedEquipment.warranty?.result && <StatusBadge status={selectedEquipment.warranty.result} />}</div>}</div></section>
-          <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>2. Mô tả vấn đề</h2></div><div className="m1-section-body m1-form-fields"><label>
+                      <option value="">Chọn thiết bị</option>
+                      {data.value?.items.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.model?.name ?? item.assetCode} ·{" "}
+                          {item.assetCode}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedEquipment && (
+                    <div className="m1-selected-equipment">
+                      <span className="m1-entity-avatar">
+                        <Boxes size={19} />
+                      </span>
+                      <span>
+                        <strong>
+                          {selectedEquipment.model?.name ??
+                            selectedEquipment.assetCode}
+                        </strong>
+                        <small>
+                          {selectedEquipment.assetCode} · Serial{" "}
+                          {selectedEquipment.serialNumber}
+                        </small>
+                      </span>
+                      {selectedEquipment.warranty?.result && (
+                        <StatusBadge
+                          status={selectedEquipment.warranty.result}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+              <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>2. Mô tả vấn đề</h2></div><div className="m1-section-body m1-form-fields"><label>
             Loại
             <select
               value={type}
@@ -914,12 +1130,14 @@ function NewRequestPage() {
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
-          </label></div></section></div>
-          <aside><section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Xác nhận yêu cầu</h2></div><div className="m1-section-body m1-submit-panel"><p>Kiểm tra thông tin thiết bị và mô tả trước khi gửi yêu cầu.</p><button disabled={busy || !data.value?.items.length}>{busy ? 'Đang gửi…' : 'Gửi yêu cầu dịch vụ'}</button></div></section></aside></div>
+          </label></div></section>
+            </div>
+            <aside><section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Xác nhận yêu cầu</h2></div><div className="m1-section-body m1-submit-panel"><p>Kiểm tra thông tin thiết bị và mô tả trước khi gửi yêu cầu.</p><button disabled={busy || !data.value?.items.length}>{busy ? 'Đang gửi…' : 'Gửi yêu cầu dịch vụ'}</button></div></section></aside>
+          </div>
         </form>
       )}
     </Frame>
-  )
+  );
 }
 function Message({ code, title }: { code: string; title: string }) {
   return (
@@ -932,7 +1150,7 @@ function Message({ code, title }: { code: string; title: string }) {
   )
 }
 const tenantRoles = ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN', 'INVENTORY_STAFF']
-const customerRoles = ['CUSTOMER_ADMIN', 'CUSTOMER_USER']
+const customerRoles = ["CUSTOMER_ADMIN", "CUSTOMER_USER"];
 function HistoryFeedPageRoute() {
   const { id } = useParams()
   return <HistoryFeedPage equipmentId={id} />
@@ -941,76 +1159,194 @@ function EquipmentMaintenanceHistoryRoute() {
   const { id } = useParams()
   return <MaintenanceHistoryPage equipmentId={id} />
 }
-const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
-  { path: '/app/dashboard', element: <DashboardPage />, roles: tenantRoles },
-  { path: '/app/customers', element: <CustomerDirectoryPage />, roles: menu[0].roles },
-  { path: '/app/customers/new', element: <CustomerCreatePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/customers/:id', element: <CustomerWorkspacePage />, roles: menu[0].roles },
-  { path: '/app/equipment-models', element: <EquipmentModelsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/equipment-registrations', element: <RegistrationListPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/equipment-registrations/new', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/equipment-registrations/:id', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/equipment', element: <EquipmentPage />, roles: tenantRoles },
-  { path: '/app/equipment/:id', element: <DossierPage />, roles: tenantRoles },
-  { path: '/app/equipment/:id/timeline', element: <HistoryFeedPageRoute />, roles: tenantRoles },
-  { path: '/app/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: tenantRoles },
-  { path: '/app/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: tenantRoles },
-  { path: '/app/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: tenantRoles },
-  { path: '/app/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: tenantRoles },
-  { path: '/app/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/equipment-history', element: <HistoryFeedPage />, roles: tenantRoles },
-  { path: '/app/models/:id/history', element: <ResourceHistoryPage kind="model" />, roles: tenantRoles },
-  { path: '/app/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: tenantRoles },
-  { path: '/app/service-requests', element: <RequestsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
-  { path: '/app/service-requests/new', element: <NewRequestPage />, roles: ['SERVICE_MANAGER'] },
-  { path: '/app/service-requests/:id', element: <RequestDetailPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
-  { path: '/app/work-orders', element: <WorkOrderListPage />, roles: tenantRoles },
-  { path: '/app/work-orders/:id', element: <WorkOrderPage />, roles: tenantRoles },
-  { path: '/app/technicians', element: <LiveTechniciansPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
-  { path: '/app/technicians/:id', element: <TechnicianPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
-  { path: '/app/maintenance', element: <LiveMaintenancePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
-  { path: '/app/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
-  { path: '/app/inventory/parts', element: <InventoryPartsPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
-  { path: '/app/inventory/parts/:id', element: <InventoryPartPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
-  { path: '/app/inventory/warehouses', element: <InventoryWarehousesPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
-  { path: '/app/inventory/transactions', element: <InventoryTransactionsPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
-  { path: '/app/organization/branches', element: <BranchesPage />, roles: ['TENANT_ADMIN'] },
-  { path: '/app/organization/users', element: <UsersPage />, roles: ['TENANT_ADMIN'] },
-  { path: '/app/organization/roles', element: <RolesPage />, roles: ['TENANT_ADMIN'] },
-  { path: '/app/reports', element: <WorkOrderReportsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/notifications', element: <NotificationInbox />, roles: tenantRoles },
-  { path: '/app/settings', element: <UnavailablePage type="settings" />, roles: tenantRoles },
-  { path: '/admin', element: <DashboardPage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/tenants', element: <TenantListPage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/tenants/new', element: <TenantCreatePage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/tenants/:id', element: <TenantDetailPage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/audit-logs', element: <UnavailablePage type="audit" />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/settings', element: <UnavailablePage type="settings" />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/portal', element: <DashboardPage />, roles: customerRoles },
-  { path: '/portal/equipment', element: <EquipmentPage />, roles: customerRoles },
-  { path: '/portal/equipment/:id', element: <DossierPage />, roles: customerRoles },
-  { path: '/portal/equipment/:id/timeline', element: <HistoryFeedPageRoute />, roles: customerRoles },
-  { path: '/portal/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: customerRoles },
-  { path: '/portal/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: customerRoles },
-  { path: '/portal/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/equipment-history', element: <HistoryFeedPage />, roles: customerRoles },
-  { path: '/portal/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: customerRoles },
-  { path: '/portal/requests', element: <RequestsPage />, roles: customerRoles },
-  { path: '/portal/requests/new', element: <NewRequestPage />, roles: customerRoles },
-  { path: '/portal/requests/:id', element: <RequestDetailPage />, roles: customerRoles },
-  { path: '/portal/maintenance', element: <LiveMaintenancePage />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/locations', element: <PortalLocationsPage />, roles: customerRoles },
-  { path: '/portal/notifications', element: <NotificationInbox />, roles: customerRoles },
-  { path: '/portal/profile', element: <ProfilePage />, roles: customerRoles },
-]
+const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
+  [
+    { path: "/app/dashboard", element: <DashboardPage />, roles: tenantRoles },
+    {
+      path: "/app/customers",
+      element: <CustomerDirectoryPage />,
+      roles: menu[0].roles,
+    },
+    { path: '/app/customers/new', element: <CustomerCreatePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    {
+      path: "/app/customers/:id",
+      element: <CustomerWorkspacePage />,
+      roles: menu[0].roles,
+    },
+    {
+      path: "/app/equipment-models/:id",
+      element: <ModelPolicyPage />,
+      roles: ["TENANT_ADMIN", "SERVICE_MANAGER"],
+    },
+    { path: '/app/equipment-models', element: <EquipmentModelsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-registrations', element: <RegistrationListPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-registrations/new', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-registrations/:id', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: "/app/equipment", element: <EquipmentPage />, roles: tenantRoles },
+    {
+      path: "/app/equipment/:id",
+      element: <DossierPage />,
+      roles: tenantRoles,
+    },
+    {
+      path: "/app/equipment/:id/timeline",
+      element: <HistoryFeedPageRoute />,
+      roles: tenantRoles,
+    },
+    { path: '/app/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: tenantRoles },
+    { path: '/app/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: tenantRoles },
+    { path: '/app/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: tenantRoles },
+    { path: '/app/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: tenantRoles },
+    { path: '/app/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    {
+      path: "/app/equipment-history",
+      element: <HistoryFeedPage />,
+      roles: tenantRoles,
+    },
+    { path: '/app/models/:id/history', element: <ResourceHistoryPage kind="model" />, roles: tenantRoles },
+    { path: '/app/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: tenantRoles },
+    { path: '/app/service-requests', element: <RequestsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
+    {
+      path: "/app/service-requests/new",
+      element: <NewRequestPage />,
+      roles: ["SERVICE_MANAGER"],
+    },
+    { path: '/app/service-requests/:id', element: <RequestDetailPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
+    {
+      path: "/app/work-orders",
+      element: <WorkOrderListPage />,
+      roles: tenantRoles,
+    },
+    {
+      path: "/app/work-orders/:id",
+      element: <WorkOrderPage />,
+      roles: tenantRoles,
+    },
+    { path: '/app/technicians', element: <LiveTechniciansPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
+    { path: '/app/technicians/:id', element: <TechnicianPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
+    { path: '/app/maintenance', element: <LiveMaintenancePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
+    { path: '/app/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
+    { path: '/app/inventory/parts', element: <InventoryPartsPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
+    { path: '/app/inventory/parts/:id', element: <InventoryPartPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
+    { path: '/app/inventory/warehouses', element: <InventoryWarehousesPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
+    { path: '/app/inventory/transactions', element: <InventoryTransactionsPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
+    {
+      path: "/app/organization/branches",
+      element: <BranchesPage />,
+      roles: ["TENANT_ADMIN"],
+    },
+    {
+      path: "/app/organization/users",
+      element: <UsersPage />,
+      roles: ["TENANT_ADMIN"],
+    },
+    {
+      path: "/app/organization/roles",
+      element: <RolesPage />,
+      roles: ["TENANT_ADMIN"],
+    },
+    { path: '/app/reports', element: <WorkOrderReportsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    {
+      path: "/app/notifications",
+      element: <NotificationInbox />,
+      roles: tenantRoles,
+    },
+    {
+      path: "/app/settings",
+      element: <UnavailablePage type="settings" />,
+      roles: tenantRoles,
+    },
+    { path: "/admin", element: <DashboardPage />, roles: ["PLATFORM_ADMIN"] },
+    {
+      path: "/admin/tenants",
+      element: <TenantListPage />,
+      roles: ["PLATFORM_ADMIN"],
+    },
+    {
+      path: "/admin/tenants/new",
+      element: <TenantCreatePage />,
+      roles: ["PLATFORM_ADMIN"],
+    },
+    {
+      path: "/admin/tenants/:id",
+      element: <TenantDetailPage />,
+      roles: ["PLATFORM_ADMIN"],
+    },
+    {
+      path: "/admin/audit-logs",
+      element: <UnavailablePage type="audit" />,
+      roles: ["PLATFORM_ADMIN"],
+    },
+    { path: '/admin/settings', element: <UnavailablePage type="settings" />, roles: ['PLATFORM_ADMIN'] },
+    { path: "/portal", element: <DashboardPage />, roles: customerRoles },
+    {
+      path: "/portal/equipment",
+      element: <EquipmentPage />,
+      roles: customerRoles,
+    },
+    {
+      path: "/portal/equipment/:id",
+      element: <DossierPage />,
+      roles: customerRoles,
+    },
+    {
+      path: "/portal/equipment/:id/timeline",
+      element: <HistoryFeedPageRoute />,
+      roles: customerRoles,
+    },
+    { path: '/portal/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: customerRoles },
+    { path: '/portal/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: customerRoles },
+    { path: '/portal/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: ['CUSTOMER_ADMIN'] },
+    { path: '/portal/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: ['CUSTOMER_ADMIN'] },
+    { path: '/portal/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['CUSTOMER_ADMIN'] },
+    {
+      path: "/portal/equipment-history",
+      element: <HistoryFeedPage />,
+      roles: customerRoles,
+    },
+    { path: '/portal/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: customerRoles },
+    {
+      path: "/portal/requests",
+      element: <RequestsPage />,
+      roles: customerRoles,
+    },
+    {
+      path: "/portal/requests/new",
+      element: <NewRequestPage />,
+      roles: customerRoles,
+    },
+    {
+      path: "/portal/requests/:id",
+      element: <RequestDetailPage />,
+      roles: customerRoles,
+    },
+    {
+      path: "/portal/maintenance",
+      element: <LiveMaintenancePage />,
+      roles: ["CUSTOMER_ADMIN"],
+    },
+    { path: '/portal/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['CUSTOMER_ADMIN'] },
+    {
+      path: "/portal/maintenance/:id",
+      element: <MaintenanceRecordPage />,
+      roles: ["CUSTOMER_ADMIN"],
+    },
+    {
+      path: "/portal/locations",
+      element: <PortalLocationsPage />,
+      roles: customerRoles,
+    },
+    {
+      path: "/portal/notifications",
+      element: <NotificationInbox />,
+      roles: customerRoles,
+    },
+    { path: "/portal/profile", element: <ProfilePage />, roles: customerRoles },
+  ];
 function Authenticated() {
-  const { profile } = useSession()
-  const location = useLocation()
+  const { profile } = useSession();
+  const location = useLocation();
   if (!profile) {
     const target = location.pathname.startsWith('/portal/qr/')
       ? `/login?next=${encodeURIComponent(location.pathname)}`
@@ -1022,7 +1358,13 @@ function Authenticated() {
       <Routes>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/demo" element={<DemoPage />} />
-        {workspaceRoutes.map((item) => <Route key={item.path} path={item.path} element={<Gate roles={item.roles}>{item.element}</Gate>} />)}
+        {workspaceRoutes.map((item) => (
+          <Route
+            key={item.path}
+            path={item.path}
+            element={<Gate roles={item.roles}>{item.element}</Gate>}
+          />
+        ))}
         <Route
           path="/"
           element={<Navigate to={home(profile.roles)} replace />}
@@ -1117,7 +1459,7 @@ function Authenticated() {
         />
       </Routes>
     </Layout>
-  )
+  );
 }
 function Content() {
   const { setProfile } = useSession()

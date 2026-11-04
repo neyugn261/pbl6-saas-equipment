@@ -351,24 +351,36 @@ export class PlansRepository {
           requestedBy,
         },
       });
-      await enqueueEvent(tx, Events.MaintenanceWorkOrderReplacementRequested, {
-        tenantId: scope.tenantId,
-        aggregateId: id,
-        correlationId: getCorrelationId(),
-        payload: {
-          requestId,
-          previousWorkOrderId: row.previousWorkOrderId,
-          replacementWorkOrderId: row.replacementWorkOrderId,
-          requestedBy,
-          maintenanceTaskId: id,
-          maintenancePlanId: task.maintenancePlanId,
-          equipmentId: task.maintenancePlan.equipmentId,
-          customerId: task.customerId,
-          customerSiteId: task.customerSiteId,
-          scheduledDate: dateText(task.scheduledDate),
-          title: task.maintenancePlan.name,
+      await enqueueEvent(
+        tx,
+        task.policyVersionId
+          ? Events.MaintenanceWorkOrderReplacementRequestedV2
+          : Events.MaintenanceWorkOrderReplacementRequested,
+        {
+          tenantId: scope.tenantId,
+          aggregateId: id,
+          correlationId: getCorrelationId(),
+          payload: {
+            requestId,
+            previousWorkOrderId: row.previousWorkOrderId,
+            replacementWorkOrderId: row.replacementWorkOrderId,
+            requestedBy,
+            maintenanceTaskId: id,
+            maintenancePlanId: task.maintenancePlanId,
+            equipmentId: task.maintenancePlan.equipmentId,
+            customerId: task.customerId,
+            customerSiteId: task.customerSiteId,
+            scheduledDate: dateText(task.scheduledDate),
+            title: task.instructionTitle ?? task.maintenancePlan.name,
+            ...(task.policyVersionId
+              ? {
+                  policyVersionId: task.policyVersionId,
+                  checklist: task.checklist,
+                }
+              : {}),
+          },
         },
-      });
+      );
       await tx.maintenanceTask.update({
         where: { id },
         data: { attemptCount: { increment: 1 }, lastError: null },

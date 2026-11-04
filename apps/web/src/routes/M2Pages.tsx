@@ -1,3 +1,8 @@
+import {
+  MaintenancePolicyDetails,
+  WorkOrderChecklist,
+  AppliedPolicyPanel,
+} from "./ModelPolicyPanels";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
@@ -485,6 +490,7 @@ export function DossierPage() {
     );
   return (
     <div className="m2-page">
+      {id && <AppliedPolicyPanel key={id} equipmentId={id} />}
       <header>
         <Link to={`${base}/equipment`}>← Thiết bị</Link>
         <h1>
@@ -498,7 +504,9 @@ export function DossierPage() {
           Hồ sơ thiết bị và dữ liệu liên kết · cập nhật {date(dossier?.asOf)}
         </p>
         {notice && <p role="status">{notice}</p>}
-        {canManageEquipment && dossier && <p><Link to={dossier.equipment.registrationId ? `/app/equipment-registrations/${dossier.equipment.registrationId}` : `/app/equipment-registrations/new?equipmentId=${id}`}>{dossier.equipment.registrationStatus === 'COMPLETED' ? 'Xem biên nhận thiết lập dịch vụ' : 'Hoàn thiện hồ sơ bàn giao, bảo hành và bảo trì'}</Link></p>}
+        {canManageEquipment && dossier && (
+          <p><Link to={dossier.equipment.registrationId ? `/app/equipment-registrations/${dossier.equipment.registrationId}` : `/app/equipment-registrations/new?equipmentId=${id}`}>{dossier.equipment.registrationStatus === 'COMPLETED' ? 'Xem biên nhận thiết lập dịch vụ' : 'Hoàn thiện hồ sơ bàn giao, bảo hành và bảo trì'}</Link></p>
+        )}
       </header>
       <Result state={state}>
         {dossier && (
@@ -700,7 +708,9 @@ export function DossierPage() {
           </>
         )}
       </Result>
-      {state.value && id && <AttachmentsPanel kind="WORK_ORDER" workOrderId={id} />}
+      {state.value && id && (
+        <AttachmentsPanel kind="WORK_ORDER" workOrderId={id} />
+      )}
     </div>
   );
 }
@@ -1069,16 +1079,26 @@ export function WorkOrderListPage() {
   );
 }
 
-function WorkOrderControls({ order, id, refresh }: { order: Row; id: string; refresh: () => void }) {
+function WorkOrderControls({
+  order,
+  id,
+  refresh,
+}: {
+  order: Row;
+  id: string;
+  refresh: () => void;
+}) {
   const sessionGeneration = getSessionGeneration();
-  const actions = Array.isArray(order.allowedActions) ? order.allowedActions as string[] : [];
-  const [technicianId, setTechnicianId] = useState('');
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [reason, setReason] = useState('');
+  const actions = Array.isArray(order.allowedActions)
+    ? (order.allowedActions as string[])
+    : [];
+  const [technicianId, setTechnicianId] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [reason, setReason] = useState("");
   const [cancelRequest, setCancelRequest] = useState(false);
   const [report, setReport] = useState({ problemDescription: '', rootCause: '', solution: '', result: 'RESOLVED', customerSummary: '' });
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const technicians = useRemote<Page<Row>>(`wo-technicians:${actions.includes('assign')}`, () =>
     actions.includes('assign') ? api.workorders('/technicians?page=1&pageSize=100') : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 100 }),
@@ -1106,33 +1126,91 @@ function WorkOrderControls({ order, id, refresh }: { order: Row; id: string; ref
     { action: 'cancel', path: '/cancel', label: 'Hủy Work Order', body: { reason, cancelServiceRequest: cancelRequest } },
   ];
   if (!actions.some((action) => ['assign', 'update', 'cancel', 'accept', 'reject', 'start-travel', 'start', 'hold', 'resume', 'complete'].includes(action))) return null;
-  return <Card title="Thao tác Work Order">
-    {error && <p className="m1-error" role="alert">{error}</p>}
-    {actions.includes('assign') && <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); void perform('/assign', 'POST', { technicianId }); }}>
-      <label>Kỹ thuật viên <select required value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}><option value="">Chọn kỹ thuật viên</option>{technicians.value?.items.filter((row) => row.status === 'AVAILABLE' || row.status === 'BUSY').map((row) => <option key={String(row.id)} value={String(row.id)}>{asText(row.employeeCode ?? row.userId)} · {asText(row.status)}</option>)}</select></label>
-      {technicians.error && <p role="alert">{technicians.error}</p>}
-      <button disabled={busy || technicians.loading}>{order.currentTechnicianId ? 'Phân công lại' : 'Phân công'}</button>
-    </form>}
-    {actions.includes('update') && <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); if (!start && !end) { setError('Nhập ít nhất một mốc thời gian.'); return; } if (start && end && new Date(end) <= new Date(start)) { setError('Giờ kết thúc phải sau giờ bắt đầu.'); return; } void perform('', 'PATCH', { ...(start ? { scheduledStart: new Date(start).toISOString() } : {}), ...(end ? { scheduledEnd: new Date(end).toISOString() } : {}) }); }}>
-      <label>Bắt đầu dự kiến <input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} /></label>
-      <label>Kết thúc dự kiến <input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
-      <button disabled={busy}>Lưu lịch dự kiến</button>
-      <p>Để trống mốc không cần thay đổi.</p>
-    </form>}
-    {actions.some((action) => ['reject', 'hold', 'cancel'].includes(action)) && <label>Lý do thao tác
+  return (
+    <Card title="Thao tác Work Order">
+      {error && (
+        <p className="m1-error" role="alert">
+          {error}
+        </p>
+      )}
+      {actions.includes("assign") && (
+        <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); void perform('/assign', 'POST', { technicianId }); }}>
+          <label>
+            Kỹ thuật viên{" "}
+            <select
+              required
+              value={technicianId}
+              onChange={(event) => setTechnicianId(event.target.value)}
+            >
+              <option value="">Chọn kỹ thuật viên</option>
+              {technicians.value?.items
+                .filter(
+                  (row) => row.status === "AVAILABLE" || row.status === "BUSY",
+                )
+                .map((row) => (
+                  <option key={String(row.id)} value={String(row.id)}>
+                    {asText(row.employeeCode ?? row.userId)} ·{" "}
+                    {asText(row.status)}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {technicians.error && <p role="alert">{technicians.error}</p>}
+          <button disabled={busy || technicians.loading}>{order.currentTechnicianId ? 'Phân công lại' : 'Phân công'}</button>
+        </form>
+      )}
+      {actions.includes("update") && (
+        <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); if (!start && !end) { setError('Nhập ít nhất một mốc thời gian.'); return; } if (start && end && new Date(end) <= new Date(start)) { setError('Giờ kết thúc phải sau giờ bắt đầu.'); return; } void perform('', 'PATCH', { ...(start ? { scheduledStart: new Date(start).toISOString() } : {}), ...(end ? { scheduledEnd: new Date(end).toISOString() } : {}) }); }}>
+          <label>
+            Bắt đầu dự kiến{" "}
+            <input
+              type="datetime-local"
+              value={start}
+              onChange={(event) => setStart(event.target.value)}
+            />
+          </label>
+          <label>
+            Kết thúc dự kiến{" "}
+            <input
+              type="datetime-local"
+              value={end}
+              onChange={(event) => setEnd(event.target.value)}
+            />
+          </label>
+          <button disabled={busy}>Lưu lịch dự kiến</button>
+          <p>Để trống mốc không cần thay đổi.</p>
+        </form>
+      )}
+      {actions.some((action) =>
+        ["reject", "hold", "cancel"].includes(action),
+      ) && (
+        <label>Lý do thao tác
       <input maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} />
-    </label>}
-    {actions.includes('complete') && <fieldset className="m2-editor">
+    </label>
+      )}
+      {actions.includes("complete") && (
+        <fieldset className="m2-editor">
       <legend>Báo cáo dịch vụ bắt buộc khi hoàn tất</legend>
       <label>Mô tả sự cố<input required maxLength={5000} value={report.problemDescription} onChange={(event) => setReport({ ...report, problemDescription: event.target.value })} /></label>
       <label>Nguyên nhân<input maxLength={5000} value={report.rootCause} onChange={(event) => setReport({ ...report, rootCause: event.target.value })} /></label>
       <label>Giải pháp<input required maxLength={5000} value={report.solution} onChange={(event) => setReport({ ...report, solution: event.target.value })} /></label>
       <label>Kết quả<select value={report.result} onChange={(event) => setReport({ ...report, result: event.target.value })}><option value="RESOLVED">Đã xử lý</option><option value="PARTIALLY_RESOLVED">Xử lý một phần</option><option value="UNRESOLVED">Chưa xử lý được</option></select></label>
       <label>Tóm tắt hiển thị khách hàng<input required maxLength={2000} value={report.customerSummary} onChange={(event) => setReport({ ...report, customerSummary: event.target.value })} /></label>
-    </fieldset>}
-    {actions.includes('cancel') && Boolean(order.serviceRequestId) && <label><input type="checkbox" checked={cancelRequest} onChange={(event) => setCancelRequest(event.target.checked)} /> Đồng thời hủy Service Request</label>}
-    {actions.includes('cancel') && !cancelRequest && <p>Hủy Work Order không tự hủy Service Request; yêu cầu sẽ giữ theo quyết định backend.</p>}
-    <div className="m1-actions">
+    </fieldset>
+      )}
+      {actions.includes("cancel") && Boolean(order.serviceRequestId) && (
+        <label>
+          <input type="checkbox" checked={cancelRequest} onChange={(event) => setCancelRequest(event.target.checked)} />{" "}
+          Đồng thời hủy Service Request
+        </label>
+      )}
+      {actions.includes("cancel") && !cancelRequest && (
+        <p>
+          Hủy Work Order không tự hủy Service Request; yêu cầu sẽ giữ theo quyết
+          định backend.
+        </p>
+      )}
+      <div className="m1-actions">
       {transitions.filter(({ action }) => actions.includes(action)).map(({ action, path, label, body }) => (
         <button key={action} disabled={busy || (['reject', 'hold', 'cancel'].includes(action) && !reason.trim()) || (action === 'complete' && (!report.problemDescription.trim() || !report.solution.trim() || !report.customerSummary.trim()))}
           onClick={() => void perform(path, 'POST', action === 'cancel' || action === 'reject' || action === 'hold'
@@ -1142,7 +1220,8 @@ function WorkOrderControls({ order, id, refresh }: { order: Row; id: string; ref
         </button>
       ))}
     </div>
-  </Card>;
+    </Card>
+  );
 }
 
 export function WorkOrderPage() {
@@ -1195,7 +1274,16 @@ export function WorkOrderPage() {
           </Card>
         )}
       </Result>
-      {state.value && id && <WorkOrderControls key={id} order={state.value} id={id} refresh={() => setRevision((value) => value + 1)} />}
+      {state.value && id && (
+        <WorkOrderChecklist
+          key={id + ":checklist"}
+          id={id}
+          changed={() => setRevision((v) => v + 1)}
+        />
+      )}
+      {state.value && id && (
+        <WorkOrderControls key={id} order={state.value} id={id} refresh={() => setRevision((value) => value + 1)} />
+      )}
       <Result state={detail}>
         {detail.value && (
           <Source section={detail.value}>
@@ -1270,7 +1358,12 @@ export function WorkOrderPage() {
                             ["submittedAt", "Ngày nộp"],
                           ]}
                         />
-                        {id && <AttachmentsPanel kind="SERVICE_REPORT" workOrderId={id} />}
+                        {id && (
+                          <AttachmentsPanel
+                            kind="SERVICE_REPORT"
+                            workOrderId={id}
+                          />
+                        )}
                       </>
                     )}
                   </Source>
@@ -1493,14 +1586,28 @@ export function MaintenanceHistoryPage({
   );
 }
 
-function MaintenancePlanForm({ plan, onSaved, onRefresh }: { plan?: Row; onSaved: () => void; onRefresh: () => void }) {
+function MaintenancePlanForm({
+  plan,
+  onSaved,
+  onRefresh,
+}: {
+  plan?: Row;
+  onSaved: () => void;
+  onRefresh: () => void;
+}) {
   const sessionGeneration = getSessionGeneration();
-  const [equipmentId, setEquipmentId] = useState('');
-  const [name, setName] = useState(String(plan?.name ?? ''));
-  const [frequencyUnit, setFrequencyUnit] = useState(String(plan?.frequencyUnit ?? 'MONTH'));
-  const [frequencyValue, setFrequencyValue] = useState(Number(plan?.frequencyValue ?? 1));
-  const [nextDueDate, setNextDueDate] = useState(String(plan?.nextDueDate ?? '').slice(0, 10));
-  const [error, setError] = useState('');
+  const [equipmentId, setEquipmentId] = useState("");
+  const [name, setName] = useState(String(plan?.name ?? ""));
+  const [frequencyUnit, setFrequencyUnit] = useState(
+    String(plan?.frequencyUnit ?? "MONTH"),
+  );
+  const [frequencyValue, setFrequencyValue] = useState(
+    Number(plan?.frequencyValue ?? 1),
+  );
+  const [nextDueDate, setNextDueDate] = useState(
+    String(plan?.nextDueDate ?? "").slice(0, 10),
+  );
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -1533,21 +1640,70 @@ function MaintenancePlanForm({ plan, onSaved, onRefresh }: { plan?: Row; onSaved
     }
     finally { setBusy(false); }
   }
-  return <Card title={plan ? 'Cập nhật kế hoạch' : 'Tạo kế hoạch bảo trì'}>
-    {error && <p className="m1-error" role="alert">{error}</p>}
-    {plan && <p>Trạng thái hiện tại: {asText(plan.status)}. Ngày đến hạn do backend tính theo lịch đã chốt.</p>}
-    {plan?.status === 'ACTIVE' && <button disabled={busy} onClick={() => void status('PAUSED')}>Tạm dừng</button>}
-    {plan?.status === 'PAUSED' && <button disabled={busy} onClick={() => void status('ACTIVE')}>Tiếp tục</button>}
-    {plan && plan.status !== 'INACTIVE' && <button disabled={busy} onClick={() => { if (window.confirm('Ngừng kế hoạch này?')) void status('INACTIVE'); }}>Ngừng kế hoạch</button>}
-    {plan?.status !== 'INACTIVE' && <form className="m2-editor" onSubmit={save}>
-      {!plan && <label>ID thiết bị <input required value={equipmentId} onChange={(event) => setEquipmentId(event.target.value)} /></label>}
-      <label>Tên kế hoạch <input required maxLength={200} value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label>Chu kỳ <select value={frequencyUnit} onChange={(event) => setFrequencyUnit(event.target.value)}><option value="DAY">Ngày</option><option value="WEEK">Tuần</option><option value="MONTH">Tháng</option><option value="YEAR">Năm</option></select></label>
-      <label>Số chu kỳ <input required type="number" min={1} max={10000} value={frequencyValue} onChange={(event) => setFrequencyValue(Number(event.target.value))} /></label>
-      <label>Ngày đến hạn <input required type="date" value={nextDueDate} onChange={(event) => setNextDueDate(event.target.value)} /></label>
-      <button disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu kế hoạch'}</button>
-    </form>}
-  </Card>;
+  return (
+    <Card title={plan ? "Cập nhật kế hoạch" : "Tạo kế hoạch bảo trì"}>
+      {error && (
+        <p className="m1-error" role="alert">
+          {error}
+        </p>
+      )}
+      {plan && (
+        <p>
+          Trạng thái hiện tại: {asText(plan.status)}. Ngày đến hạn do backend
+          tính theo lịch đã chốt.
+        </p>
+      )}
+      {plan?.status === "ACTIVE" && (
+        <button disabled={busy} onClick={() => void status("PAUSED")}>
+          Tạm dừng
+        </button>
+      )}
+      {plan?.status === "PAUSED" && (
+        <button disabled={busy} onClick={() => void status("ACTIVE")}>
+          Tiếp tục
+        </button>
+      )}
+      {plan && plan.status !== "INACTIVE" && (
+        <button disabled={busy} onClick={() => { if (window.confirm('Ngừng kế hoạch này?')) void status('INACTIVE'); }}>Ngừng kế hoạch</button>
+      )}
+      {plan?.status !== "INACTIVE" && (
+        <form className="m2-editor" onSubmit={save}>
+          {!plan && (
+            <label>
+              ID thiết bị{" "}
+              <input
+                required
+                value={equipmentId}
+                onChange={(event) => setEquipmentId(event.target.value)}
+              />
+            </label>
+          )}
+          <label>
+            Tên kế hoạch{" "}
+            <input
+              required
+              maxLength={200}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label>
+            Chu kỳ{" "}
+            <select value={frequencyUnit} onChange={(event) => setFrequencyUnit(event.target.value)}><option value="DAY">Ngày</option><option value="WEEK">Tuần</option><option value="MONTH">Tháng</option><option value="YEAR">Năm</option></select>
+          </label>
+          <label>
+            Số chu kỳ{" "}
+            <input required type="number" min={1} max={10000} value={frequencyValue} onChange={(event) => setFrequencyValue(Number(event.target.value))} />
+          </label>
+          <label>
+            Ngày đến hạn{" "}
+            <input required type="date" value={nextDueDate} onChange={(event) => setNextDueDate(event.target.value)} />
+          </label>
+          <button disabled={busy}>{busy ? "Đang lưu…" : "Lưu kế hoạch"}</button>
+        </form>
+      )}
+    </Card>
+  );
 }
 
 export function MaintenancePage() {
@@ -1561,7 +1717,9 @@ export function MaintenancePage() {
     api.maintenance("/maintenance-summary"),
   );
   const path = `/${tab === "plans" ? "maintenance-plans" : "maintenance-tasks"}?page=${page}&pageSize=20${status ? `&status=${status}` : ""}`;
-  const state = useRemote<Page<Row>>(`${path}:${revision}`, () => api.maintenance(path));
+  const state = useRemote<Page<Row>>(`${path}:${revision}`, () =>
+    api.maintenance(path),
+  );
   if (
     profile?.userType === "CUSTOMER" &&
     !profile.roles.includes("CUSTOMER_ADMIN")
@@ -1574,8 +1732,12 @@ export function MaintenancePage() {
   return (
     <div className="m2-page">
       <h1>Bảo trì định kỳ</h1>
-      {profile?.roles.includes('SERVICE_MANAGER') && <button className="m2-create-toggle" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Đóng biểu mẫu' : '+ Tạo kế hoạch bảo trì'}</button>}
-      {showCreate && <MaintenancePlanForm onSaved={() => { setRevision((value) => value + 1); setShowCreate(false); }} onRefresh={() => setRevision((value) => value + 1)} />}
+      {profile?.roles.includes("SERVICE_MANAGER") && (
+        <button className="m2-create-toggle" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Đóng biểu mẫu' : '+ Tạo kế hoạch bảo trì'}</button>
+      )}
+      {showCreate && (
+        <MaintenancePlanForm onSaved={() => { setRevision((value) => value + 1); setShowCreate(false); }} onRefresh={() => setRevision((value) => value + 1)} />
+      )}
       <Link
         to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/maintenance-history`}
       >
@@ -1693,7 +1855,9 @@ export function MaintenanceRecordPage() {
   const kind =
     new URLSearchParams(search).get("kind") === "task" ? "task" : "plan";
   const path = `/${kind === "task" ? "maintenance-tasks" : "maintenance-plans"}/${id}`;
-  const state = useRemote<Row>(`${path}:${revision}`, () => api.maintenance(path));
+  const state = useRemote<Row>(`${path}:${revision}`, () =>
+    api.maintenance(path),
+  );
   const historyParams = new URLSearchParams({
     page: String(historyPageNo),
     pageSize: "20",
@@ -1791,7 +1955,12 @@ export function MaintenanceRecordPage() {
           </Card>
         )}
       </Result>
-      {kind === 'plan' && state.value && profile?.roles.includes('SERVICE_MANAGER') && <MaintenancePlanForm key={String(state.value.id)} plan={state.value} onSaved={() => setRevision((value) => value + 1)} onRefresh={() => setRevision((value) => value + 1)} />}
+      {state.value && <MaintenancePolicyDetails record={state.value} />}
+      {kind === "plan" &&
+        state.value &&
+        profile?.roles.includes("SERVICE_MANAGER") && (
+          <MaintenancePlanForm key={String(state.value.id)} plan={state.value} onSaved={() => setRevision((value) => value + 1)} onRefresh={() => setRevision((value) => value + 1)} />
+        )}
       {journey && (
         <Card title="Hành trình công việc">
           <button type="button" onClick={() => setRevision((value) => value + 1)}>

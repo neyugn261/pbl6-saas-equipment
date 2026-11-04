@@ -1,4 +1,4 @@
-// Maintenance Service — maintenance_db (MVP: plans and tasks, no checklist)
+// Maintenance Service — maintenance_db (plans, tasks and model maintenance policies; ADR 0018)
 //
 // Source of truth for the table structure is prisma/migrations/0001_init
 // (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
@@ -18,32 +18,38 @@ datasource db {
 /// frequency_unit: DAY | WEEK | MONTH | YEAR (frequency_value > 0).
 /// status: ACTIVE | PAUSED | INACTIVE.
 model MaintenancePlan {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String            @map("tenant_id") @db.Uuid
+  setupGroup      MaintenanceSetupGroup? @relation(fields: [tenantId, setupGroupId], references: [tenantId, registrationId], onDelete: Restrict, onUpdate: NoAction)
+  policyVersionId String?                @map("policy_version_id") @db.Uuid
+  checklist       Json?
+  setupGroupId    String?                @map("setup_group_id") @db.Uuid
+  setupItemId     String?                @map("setup_item_id") @db.Uuid
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
   /// Logical reference to asset_db.equipments.id
-  equipmentId     String            @map("equipment_id") @db.Uuid
+  equipmentId     String                 @map("equipment_id") @db.Uuid
   /// Asset-owned customer snapshot; updated after EquipmentMoved is consumed.
-  customerId      String            @map("customer_id") @db.Uuid
-  customerSiteId  String?           @map("customer_site_id") @db.Uuid
-  snapshotVersion Int              @default(0) @map("snapshot_version")
-  anchorDate      DateTime         @map("anchor_date") @db.Date
-  name            String            @db.VarChar(200)
+  customerId      String                 @map("customer_id") @db.Uuid
+  customerSiteId  String?                @map("customer_site_id") @db.Uuid
+  snapshotVersion Int                    @default(0) @map("snapshot_version")
+  anchorDate      DateTime               @map("anchor_date") @db.Date
+  name            String                 @db.VarChar(200)
   description     String?
-  frequencyUnit   String            @map("frequency_unit") @db.VarChar(20)
-  frequencyValue  Int               @map("frequency_value")
-  lastCompletedAt DateTime?         @map("last_completed_at") @db.Timestamptz(6)
-  nextDueDate     DateTime          @map("next_due_date") @db.Date
-  status          String            @default("ACTIVE") @db.VarChar(30)
-  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  frequencyUnit   String                 @map("frequency_unit") @db.VarChar(20)
+  frequencyValue  Int                    @map("frequency_value")
+  lastCompletedAt DateTime?              @map("last_completed_at") @db.Timestamptz(6)
+  nextDueDate     DateTime               @map("next_due_date") @db.Date
+  status          String                 @default("ACTIVE") @db.VarChar(30)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   tasks           MaintenanceTask[]
   history         MaintenanceHistory[]
 
-  setupRegistrationId String?              @map("setup_registration_id") @db.Uuid
-  setupInputHash      String?              @map("setup_input_hash") @db.Char(64)
-  setupLinkedAt       DateTime?            @map("setup_linked_at") @db.Timestamptz(6)
+  setupRegistrationId String?   @map("setup_registration_id") @db.Uuid
+  setupInputHash      String?   @map("setup_input_hash") @db.Char(64)
+  setupLinkedAt       DateTime? @map("setup_linked_at") @db.Timestamptz(6)
 
   @@unique([tenantId, setupRegistrationId])
+  @@unique([tenantId, setupGroupId, setupItemId])
   @@unique([tenantId, id])
   @@index([tenantId, nextDueDate, status], map: "idx_maintenance_plans_due")
   @@index([tenantId, equipmentId], map: "idx_maintenance_plans_equipment")
@@ -55,22 +61,26 @@ model MaintenancePlan {
 /// events and is unique when present (partial unique index in SQL).
 /// status: PENDING | WORK_ORDER_CREATED | COMPLETED | FAILED | CANCELLED.
 model MaintenanceTask {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String          @map("tenant_id") @db.Uuid
-  maintenancePlanId String          @map("maintenance_plan_id") @db.Uuid
-  scheduledDate     DateTime        @map("scheduled_date") @db.Date
-  customerId        String          @map("customer_id") @db.Uuid
-  customerSiteId    String?         @map("customer_site_id") @db.Uuid
+  instructionTitle    String?                         @map("instruction_title") @db.VarChar(200)
+  completionSummary   Json?                           @map("completion_summary")
+  policyVersionId     String?                         @map("policy_version_id") @db.Uuid
+  checklist           Json?
+  id                  String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                          @map("tenant_id") @db.Uuid
+  maintenancePlanId   String                          @map("maintenance_plan_id") @db.Uuid
+  scheduledDate       DateTime                        @map("scheduled_date") @db.Date
+  customerId          String                          @map("customer_id") @db.Uuid
+  customerSiteId      String?                         @map("customer_site_id") @db.Uuid
   /// Logical reference to workorder_db.work_orders.id
-  workOrderId       String?         @map("work_order_id") @db.Uuid
-  status            String          @default("PENDING") @db.VarChar(30)
-  attemptCount      Int             @default(0) @map("attempt_count")
-  lastError         String?         @map("last_error")
-  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  completedAt       DateTime?       @map("completed_at") @db.Timestamptz(6)
-  maintenancePlan   MaintenancePlan @relation(fields: [tenantId, maintenancePlanId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  workOrderLinks MaintenanceWorkOrderLink[]
+  workOrderId         String?                         @map("work_order_id") @db.Uuid
+  status              String                          @default("PENDING") @db.VarChar(30)
+  attemptCount        Int                             @default(0) @map("attempt_count")
+  lastError           String?                         @map("last_error")
+  createdAt           DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  completedAt         DateTime?                       @map("completed_at") @db.Timestamptz(6)
+  maintenancePlan     MaintenancePlan                 @relation(fields: [tenantId, maintenancePlanId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  workOrderLinks      MaintenanceWorkOrderLink[]
   replacementRequests MaintenanceReplacementRequest[]
 
   @@unique([maintenancePlanId, scheduledDate])
@@ -80,31 +90,31 @@ model MaintenanceTask {
 }
 
 model EquipmentSnapshot {
-  tenantId       String   @map("tenant_id") @db.Uuid
-  equipmentId    String   @map("equipment_id") @db.Uuid
-  customerId     String   @map("customer_id") @db.Uuid
-  customerSiteId String?  @map("customer_site_id") @db.Uuid
-  snapshotVersion Int    @map("snapshot_version")
-  changedAt      DateTime @map("changed_at") @db.Timestamptz(6)
+  tenantId        String   @map("tenant_id") @db.Uuid
+  equipmentId     String   @map("equipment_id") @db.Uuid
+  customerId      String   @map("customer_id") @db.Uuid
+  customerSiteId  String?  @map("customer_site_id") @db.Uuid
+  snapshotVersion Int      @map("snapshot_version")
+  changedAt       DateTime @map("changed_at") @db.Timestamptz(6)
 
   @@id([tenantId, equipmentId])
   @@map("equipment_snapshots")
 }
 
 model MaintenanceHistory {
-  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId String @map("tenant_id") @db.Uuid
-  planId String @map("plan_id") @db.Uuid
-  taskId String? @map("task_id") @db.Uuid
-  eventType String @map("event_type") @db.VarChar(60)
-  actorId String? @map("actor_id") @db.Uuid
-  actorRoles String[] @default([]) @map("actor_roles")
-  sourceEventId String? @map("source_event_id") @db.Uuid
-  changes Json
-  context Json
-  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
-  plan MaintenancePlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "maintenance_history_plan_fkey")
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  planId        String          @map("plan_id") @db.Uuid
+  taskId        String?         @map("task_id") @db.Uuid
+  eventType     String          @map("event_type") @db.VarChar(60)
+  actorId       String?         @map("actor_id") @db.Uuid
+  actorRoles    String[]        @default([]) @map("actor_roles")
+  sourceEventId String?         @map("source_event_id") @db.Uuid
+  changes       Json
+  context       Json
+  occurredAt    DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  recordedAt    DateTime        @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  plan          MaintenancePlan @relation(fields: [tenantId, planId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "maintenance_history_plan_fkey")
 
   @@index([tenantId, planId, occurredAt(sort: Desc)])
   @@index([tenantId, taskId, occurredAt(sort: Desc)])
@@ -112,27 +122,27 @@ model MaintenanceHistory {
 }
 
 model MaintenanceWorkOrderLink {
-  workOrderId String @id @map("work_order_id") @db.Uuid
-  tenantId    String @map("tenant_id") @db.Uuid
-  taskId      String @map("task_id") @db.Uuid
-  state       String @db.VarChar(20)
-  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
-  task MaintenanceTask @relation(fields: [tenantId, taskId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  workOrderId String          @id @map("work_order_id") @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  taskId      String          @map("task_id") @db.Uuid
+  state       String          @db.VarChar(20)
+  occurredAt  DateTime        @map("occurred_at") @db.Timestamptz(6)
+  task        MaintenanceTask @relation(fields: [tenantId, taskId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([tenantId, taskId])
   @@map("maintenance_work_order_links")
 }
 
 model MaintenanceReplacementRequest {
-  requestId              String @id @map("request_id") @db.Uuid
-  tenantId               String @map("tenant_id") @db.Uuid
-  taskId                 String @map("task_id") @db.Uuid
-  previousWorkOrderId    String @map("previous_work_order_id") @db.Uuid
-  replacementWorkOrderId String @unique @map("replacement_work_order_id") @db.Uuid
-  requestedBy            String @map("requested_by") @db.Uuid
-  status                 String @default("PENDING") @db.VarChar(20)
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  task MaintenanceTask @relation(fields: [tenantId, taskId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  requestId              String          @id @map("request_id") @db.Uuid
+  tenantId               String          @map("tenant_id") @db.Uuid
+  taskId                 String          @map("task_id") @db.Uuid
+  previousWorkOrderId    String          @map("previous_work_order_id") @db.Uuid
+  replacementWorkOrderId String          @unique @map("replacement_work_order_id") @db.Uuid
+  requestedBy            String          @map("requested_by") @db.Uuid
+  status                 String          @default("PENDING") @db.VarChar(20)
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  task                   MaintenanceTask @relation(fields: [tenantId, taskId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([tenantId, taskId])
   @@map("maintenance_replacement_requests")
@@ -167,4 +177,49 @@ model ProcessedEvent {
 
   @@id([eventId, consumer])
   @@map("processed_events")
+}
+
+model ModelMaintenanceRevision {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  modelId   String   @map("model_id") @db.Uuid
+  revision  Int
+  version   Int      @default(1)
+  status    String   @default("DRAFT") @db.VarChar(20)
+  isDefault Boolean  @default(false) @map("is_default")
+  body      Json
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, modelId, revision])
+  @@unique([tenantId, id])
+  @@map("model_maintenance_revisions")
+}
+
+model MaintenanceSetupGroup {
+  plans          MaintenancePlan[]
+  tenantId       String            @map("tenant_id") @db.Uuid
+  registrationId String            @map("registration_id") @db.Uuid
+  equipmentId    String            @map("equipment_id") @db.Uuid
+  inputHash      String            @map("input_hash") @db.Char(64)
+  receipt        Json
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([tenantId, registrationId])
+  @@map("maintenance_setup_groups")
+}
+
+model ModelPolicyAudit {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  modelId    String   @map("model_id") @db.Uuid
+  revisionId String   @map("revision_id") @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(20)
+  payload    Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, modelId, createdAt])
+  @@map("model_policy_audit")
 }

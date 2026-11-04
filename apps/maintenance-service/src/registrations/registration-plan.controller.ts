@@ -1,3 +1,4 @@
+import { RegistrationGroupService } from './registration-group.service';
 import {
   Body,
   Controller,
@@ -19,7 +20,19 @@ class EmptySetupDto {}
 @AllowUserTypes('TENANT_STAFF')
 @RequirePermissions('maintenance:manage')
 export class RegistrationPlanController {
-  constructor(private readonly service: RegistrationPlanService) {}
+  constructor(
+    private readonly service: RegistrationPlanService,
+    private readonly group: RegistrationGroupService,
+  ) {}
+  @Put(':id/maintenance-group')
+  groupEnsure(
+    @CurrentUser() p: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: EmptySetupDto,
+  ) {
+    void body;
+    return this.group.ensure(p, id);
+  }
   @Get(':id/maintenance-plan')
   lookup(@CurrentUser() p: Principal, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.lookup(p, id);

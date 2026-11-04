@@ -1,3 +1,7 @@
+import { requiredChecklist, validateResults } from './checklist';
+import { Prisma } from '../generated/prisma/client.js';
+import type { ChecklistResult } from '@pbl6/event-contracts';
+import type { ChecklistInputDto } from './workflow.dto';
 import {
   ConflictException,
   ForbiddenException,
@@ -71,6 +75,12 @@ export class WorkOrderWorkflowService {
         );
         return workOrderView(await this.repo.view(tx, id), p);
       }
+      if (action === 'complete' && order.checklist)
+        validateResults(
+          requiredChecklist(order.checklist),
+          (order.checklistResults ?? []) as unknown as ChecklistResult[],
+          true,
+        );
       if (action === 'complete')
         await assertNoInventoryHold(tx, order.tenantId, id);
       const technicianIds = [
@@ -199,6 +209,22 @@ export class WorkOrderWorkflowService {
               serviceReportId: report.id,
               result: reportInput.result,
               customerSummary: reportInput.customerSummary,
+              ...(order.checklist
+                ? {
+                    customerChecklist: requiredChecklist(order.checklist).map(
+                      (item) => ({
+                        itemId: item.id,
+                        title: item.title,
+                        status:
+                          (
+                            (order.checklistResults ??
+                              []) as unknown as ChecklistResult[]
+                          ).find((r) => r.itemId === item.id)?.status ??
+                          'NOT_DONE',
+                      }),
+                    ),
+                  }
+                : {}),
               completedAt: now.toISOString(),
             },
           });
@@ -263,6 +289,70 @@ export class WorkOrderWorkflowService {
         eventType: row.eventType,
         note: row.note,
         createdAt: row.createdAt,
+      };
+    });
+  }
+  checklist(p: Principal, id: string) {
+    return this.repo.change(p, id, async ({ order }) => ({
+      items: order.checklist ?? [],
+      results: order.checklistResults ?? [],
+      version: order.checklistVersion,
+      canEdit:
+        !TERMINAL.includes(order.status) &&
+        isCurrentTechnician(p, order.assignments[0]?.technician.userId) &&
+        order.assignments[0]?.status === 'ACCEPTED',
+    }));
+  }
+  checklistHistory(p: Principal, id: string) {
+    return this.repo.change(p, id, async ({ tx, order }) => ({
+      items: await tx.workOrderChecklistHistory.findMany({
+        where: { tenantId: order.tenantId, workOrderId: id },
+        orderBy: { version: 'desc' },
+        take: 100,
+      }),
+    }));
+  }
+  saveChecklist(p: Principal, id: string, input: ChecklistInputDto) {
+    return this.repo.change(p, id, async ({ tx, order }) => {
+      const assignment = order.assignments[0];
+      if (
+        !isCurrentTechnician(p, assignment?.technician.userId) ||
+        assignment?.status !== 'ACCEPTED' ||
+        TERMINAL.includes(order.status)
+      )
+        throw new ForbiddenException({
+          code: 'NOT_ASSIGNED_TECHNICIAN',
+          message:
+            'Only the current assigned technician may edit this checklist',
+        });
+      if (order.checklistVersion !== input.expectedVersion)
+        throw new ConflictException({
+          code: 'CHECKLIST_VERSION_CONFLICT',
+          message: 'Reload checklist before saving',
+        });
+      validateResults(requiredChecklist(order.checklist), input.results);
+      const updated = await tx.workOrder.update({
+        where: { id },
+        data: {
+          checklistResults: input.results as unknown as Prisma.InputJsonValue,
+          checklistVersion: { increment: 1 },
+        },
+      });
+      await tx.workOrderChecklistHistory.create({
+        data: {
+          tenantId: order.tenantId,
+          workOrderId: id,
+          actorId: p.userId,
+          assignmentId: assignment.id,
+          version: updated.checklistVersion,
+          results: input.results as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        items: updated.checklist,
+        results: updated.checklistResults,
+        version: updated.checklistVersion,
+        canEdit: true,
       };
     });
   }

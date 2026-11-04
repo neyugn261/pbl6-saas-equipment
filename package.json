@@ -33,7 +33,8 @@
     "typecheck": "pnpm build:packages && pnpm -r --if-present typecheck",
     "test": "pnpm build:packages && pnpm -r --if-present test",
     "test:e2e": "pnpm build:packages && pnpm -r --if-present test:e2e",
-    "lint": "pnpm -r --if-present lint"
+    "lint": "pnpm -r --if-present lint",
+    "test:model-policies": "pnpm build:packages && pnpm --filter identity-service --filter organization-service --filter asset-service --filter maintenance-service --filter workorder-service --filter service-request-service --filter api-gateway build && node scripts/test-model-policies.cjs"
   },
   "packageManager": "pnpm@11.26.0",
   "engines": {

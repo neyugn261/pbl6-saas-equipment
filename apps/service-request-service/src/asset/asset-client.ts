@@ -17,6 +17,8 @@ export interface EquipmentReference {
 export interface WarrantyStatus {
   equipmentId: string;
   date: string;
+  policyVersionId?: string | null;
+  policySnapshot?: unknown;
   result: 'IN_WARRANTY' | 'OUT_OF_WARRANTY' | 'NO_WARRANTY';
   warrantyId: string | null;
   endDate: string | null;

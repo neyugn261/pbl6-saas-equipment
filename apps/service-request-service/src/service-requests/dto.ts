@@ -1,3 +1,4 @@
+import { IsInt, Min } from 'class-validator';
 import { PaginationQueryDto } from '@pbl6/service-kit';
 import {
   ArrayMinSize,
@@ -176,4 +177,18 @@ export class CostEstimateInputDto {
   @ValidateNested({ each: true })
   @Type(() => CostEstimateItemDto)
   items!: CostEstimateItemDto[];
+}
+
+export class WarrantyAssessmentDto {
+  @IsInt() @Min(0) expectedVersion: number;
+  @IsIn([
+    'MANUFACTURING_DEFECT',
+    'ACCIDENTAL_DAMAGE',
+    'LIQUID_INGRESS',
+    'MISUSE',
+    'WEAR_AND_TEAR',
+  ])
+  cause: string;
+  @IsIn(['COVERED', 'NOT_COVERED']) decision: 'COVERED' | 'NOT_COVERED';
+  @IsString() @MinLength(1) @MaxLength(2000) reason: string;
 }

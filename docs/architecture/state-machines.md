@@ -168,3 +168,31 @@ placeholder user is used (ADR 0008 D5).
 
 An assignment counts as active while it is ACCEPTED (ASSIGNED is not yet
 accepted). No working calendar, leave or dispatch optimisation in the MVP.
+
+
+## ADR 0018 — Model policies, setup and incident coverage
+
+Policy revisions: DRAFT → PUBLISHED → RETIRED. Only drafts can change content.
+Publishing switches the default under a model/tenant lock. Retirement blocks new
+applications; submitted setup, existing Plans, Tasks and WOs retain their snapshots.
+
+Model setup uses DRAFT → PENDING_MAINTENANCE → COMPLETED (or DRAFT → COMPLETED
+for explicit maintenance NONE). Each rule maps to one Plan. Asset commits its
+Warranty and frozen source locally, then ensures a durable all-or-nothing group in
+Maintenance. Timeout returns HTTP 202 with the same registration identity; resume
+reconciles the receipt. No network operation runs under Asset write locks. Legacy
+single-Plan commands and hashes remain supported alongside this codec.
+
+Policy-backed Service Requests retain temporal warranty status and add incident
+assessment. REVIEWING/COST_REJECTED permits an evidence-based assessment only when
+no live DRAFT/SENT/APPROVED estimate exists. COVERED requires an in-term covered
+cause; NOT_COVERED permits the existing estimate flow, including in-term exclusions.
+Unknown/unassessed incidents cannot silently accept free service. Reopening a
+policy-backed rejected request returns to REVIEWING, clears assessment and
+supersedes previous live estimates; legacy reopen behavior is unchanged.
+An exclusion does not change the equipment Warranty status.
+
+WO checklist results belong to the current accepted assignment. Each save checks
+expectedVersion and records actor/assignment/history. A terminal WO cannot change
+results. Required items must be DONE or allowed NOT_APPLICABLE with reason before
+the report/status/outbox transaction can commit. Replacement never inherits results.

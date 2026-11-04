@@ -1,3 +1,4 @@
+import { ModelPoliciesModule } from './model-policies/model-policies.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
@@ -21,6 +22,7 @@ import { HistoryConsumer } from './events/history.consumer';
       validate: validateEnv,
     }),
     PrismaModule,
+    ModelPoliciesModule,
     OrganizationModule,
     EquipmentModelModule,
     EquipmentModule,

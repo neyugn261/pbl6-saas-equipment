@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { dataScope, type Principal } from '@pbl6/auth';
 import { toPage, type Page } from '@pbl6/service-kit';
 import type { EquipmentModel } from '../generated/prisma/client.js';
@@ -37,6 +41,15 @@ function toResponse(row: EquipmentModel): EquipmentModelResponse {
 export class EquipmentModelService {
   constructor(private readonly repository: EquipmentModelRepository) {}
 
+  async detail(p: Principal, id: string) {
+    const row = await this.repository.findScoped(dataScope(p).tenantId, id);
+    if (!row)
+      throw new NotFoundException({
+        code: 'MODEL_NOT_FOUND',
+        message: 'Model not found',
+      });
+    return toResponse(row);
+  }
   async list(
     principal: Principal,
     query: ListEquipmentModelsQueryDto,
@@ -51,7 +64,14 @@ export class EquipmentModelService {
     input: CreateEquipmentModelDto,
   ): Promise<EquipmentModelResponse> {
     const { tenantId } = dataScope(principal);
-    return toResponse(await this.repository.create(tenantId, input, principal.userId, principal.roles));
+    return toResponse(
+      await this.repository.create(
+        tenantId,
+        input,
+        principal.userId,
+        principal.roles,
+      ),
+    );
   }
 
   async update(
@@ -67,8 +87,19 @@ export class EquipmentModelService {
       });
     }
     if (!(await this.repository.findScoped(tenantId, id))) {
-      throw new NotFoundException({ code: 'MODEL_NOT_FOUND', message: 'Model not found' });
+      throw new NotFoundException({
+        code: 'MODEL_NOT_FOUND',
+        message: 'Model not found',
+      });
     }
-    return toResponse(await this.repository.update(tenantId, id, input, principal.userId, principal.roles));
+    return toResponse(
+      await this.repository.update(
+        tenantId,
+        id,
+        input,
+        principal.userId,
+        principal.roles,
+      ),
+    );
   }
 }

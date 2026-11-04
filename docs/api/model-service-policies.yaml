@@ -1,0 +1,1268 @@
+openapi: 3.0.3
+info:
+  title: PBL6 model service policies — ADR 0018
+  version: 1.0.0
+  description: Additive contract. Existing registration submit/resume endpoints also return policyPreview
+    and maintenancePlanIds; maintenancePlanId is populated only for exactly one Plan. Legacy pending commands
+    retain their codec/hash and singular setup endpoint. NONE must include a nonblank reason; APPLY maintenance
+    requires at least one rule. Aggregate profile JSON <=60000 characters, checklist <=40000. All versions
+    and identifiers are tenant scoped.
+servers:
+- url: http://localhost:3000
+security:
+- bearerAuth: []
+paths:
+  /api/assets/equipment-models/{modelId}/warranty-policies:
+    get:
+      summary: List up to 100 most recent revisions; staff only
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: &id001
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    maxItems: 100
+                    items:
+                      $ref: '#/components/schemas/WarrantyRevision'
+                required:
+                - items
+        default: &id002
+          description: Validation, authorization, missing reference, stale version, or dependency failure.
+            See ADR 0018 for semantic codes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a validated draft revision
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WarrantyDraft'
+  /api/assets/equipment-models/{modelId}/warranty-policies/default:
+    get:
+      summary: Read exact published default independently of history pagination
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+  /api/assets/equipment-models/{modelId}/warranty-policies/{id}:
+    get:
+      summary: Read immutable or draft revision in this model/tenant
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+    put:
+      summary: Update draft with optimistic version
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WarrantyEdit'
+  /api/assets/equipment-models/{modelId}/warranty-policies/{id}/publish:
+    post:
+      summary: Publish revision; published content remains immutable
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCommand'
+  /api/assets/equipment-models/{modelId}/warranty-policies/{id}/retire:
+    post:
+      summary: Retire revision; published content remains immutable
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCommand'
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles:
+    get:
+      summary: List up to 100 most recent revisions; staff only
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    maxItems: 100
+                    items:
+                      $ref: '#/components/schemas/MaintenanceRevision'
+                required:
+                - items
+        default: *id002
+    post:
+      summary: Create a validated draft revision
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceDraft'
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles/default:
+    get:
+      summary: Read exact published default independently of history pagination
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles/{id}:
+    get:
+      summary: Read immutable or draft revision in this model/tenant
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+    put:
+      summary: Update draft with optimistic version
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceEdit'
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles/{id}/publish:
+    post:
+      summary: Publish revision; published content remains immutable
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCommand'
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles/{id}/retire:
+    post:
+      summary: Retire revision; published content remains immutable
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCommand'
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles/{id}/preview:
+    post:
+      summary: Preview server calendar and validated schedule overrides
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: &id003
+                type: object
+                additionalProperties: false
+                properties:
+                  body:
+                    $ref: '#/components/schemas/MaintenanceProfile'
+                  dates:
+                    type: array
+                    maxItems: 8
+                    items:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        itemId: *id001
+                        date:
+                          type: string
+                          format: date
+                      required:
+                      - itemId
+                      - date
+                required:
+                - body
+                - dates
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalendarCommand'
+    get:
+      summary: Preview saved schedule at handover date
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      - name: handoverDate
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: *id003
+        default: *id002
+  /api/assets/equipment-models/{modelId}:
+    get:
+      summary: Read scoped Model detail
+      description: ''
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - id
+                - name
+                - status
+                properties:
+                  id: *id001
+                  name:
+                    type: string
+                    maxLength: 200
+                  status:
+                    type: string
+                    maxLength: 30
+        default: *id002
+  /api/assets/equipment-registrations/{id}/model-policies:
+    post:
+      summary: Resolve, preview and pin exact model-policy versions into draft
+      description: Existing DRAFT only. Requires equipment:manage, warranty:manage and maintenance:manage.
+        Overrides need a reason. Policy absence is MODEL_POLICIES_MISSING/POLICY_NOT_CONFIGURED, never
+        NONE. Commit creates no Warranty or Plan yet.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  id: *id001
+                  version:
+                    type: integer
+                    minimum: 1
+                    maximum: 2147483647
+                  policyPreview:
+                    $ref: '#/components/schemas/ModelSetupSnapshot'
+                required:
+                - id
+                - version
+                - policyPreview
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewCommand'
+  /api/assets/equipment/{id}/applied-policies:
+    get:
+      summary: Read customer-safe applied policies and legacy warranty terms
+      description: equipment:read plus tenant/customer scope. Never uses model latest in place of applied
+        content.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - legacy
+                - snapshot
+                - warranties
+                properties:
+                  legacy:
+                    type: boolean
+                  state:
+                    type: string
+                    enum:
+                    - SETUP_PENDING
+                    - APPLIED
+                  snapshot:
+                    type: object
+                    nullable: true
+                    description: Applied warranty/maintenance versions and bodies/dates only. No hash,
+                      override reason, authoring draft or command identity.
+                  warranties:
+                    type: array
+                    items:
+                      type: object
+        default: *id002
+  /api/workorders/work-orders/{id}/checklist:
+    get:
+      summary: Read WO instruction snapshot and current results
+      description: ''
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checklist'
+        default: *id002
+    post:
+      summary: Save versioned results as current assigned technician
+      description: Requires work_order:execute; current accepted assignment; nonterminal WO. Required/N/A
+        rules validated. Completion uses the same WO transaction as report, inventory-hold guard and event.
+        No inventory mutation.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Checklist'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChecklistCommand'
+  /api/service-requests/{id}/warranty-assessment:
+    post:
+      summary: Assess incident coverage independently of temporal warranty
+      description: Service Manager, REVIEWING/COST_REJECTED, no live estimate. Source is the applied snapshot
+        captured at warranty review. Covered cause must match policy and time; in-term exclusion must
+        match applied policy. Unknown stays under review. Does not VOID Warranty.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  coverageAssessment:
+                    type: object
+                  assessmentVersion:
+                    type: integer
+                    minimum: 0
+                    maximum: 2147483647
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentCommand'
+  /internal/equipment-registrations/{id}/model-policy-input:
+    get:
+      summary: Asset-only frozen group source
+      description: Direct authenticated service call. Requires equipment:manage and maintenance:manage.
+        DRAFT is rejected. No stored bearer token.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registrationId: *id001
+                  equipmentId: *id001
+                  tenantId: *id001
+                  inputHash:
+                    type: string
+                    maxLength: 64
+                  snapshot:
+                    $ref: '#/components/schemas/ModelSetupSnapshot'
+        default: *id002
+      servers:
+      - url: http://asset-service:3002
+  /internal/equipment-registrations/{id}/maintenance-group:
+    put:
+      summary: Maintenance atomic idempotent group ensure
+      description: Authenticated direct call; not exposed by Gateway. Fetches authoritative frozen Asset
+        source, checks fingerprint, and atomically creates all rule plans. Replay returns the same mapping
+        after a Plan later changes. No HTTP while holding DB write locks.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupReceipt'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+              required: []
+      servers:
+      - url: http://maintenance-service:3003
+  /api/workorders/work-orders/{id}/checklist/history:
+    get:
+      summary: Staff-only checklist audit, newest 100 saved revisions; WO assignment/tenant scope applies
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Actor, assignmentId, version, results and createdAt for each saved revision
+        '403':
+          description: Insufficient permission
+        '404':
+          description: WO outside caller scope
+  /api/service-requests/{id}/warranty-assessments:
+    get:
+      summary: Service Manager assessment audit, newest 100 versions; tenant scope applies
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Assessment, version, actor and timestamp for each saved assessment
+        '403':
+          description: Customer/role not allowed
+        '404':
+          description: Request outside scope
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          maxLength: 200
+        message:
+          type: string
+          maxLength: 10000
+        details:
+          type: object
+      required:
+      - code
+      - message
+    Cause:
+      type: string
+      enum:
+      - MANUFACTURING_DEFECT
+      - ACCIDENTAL_DAMAGE
+      - LIQUID_INGRESS
+      - MISUSE
+      - WEAR_AND_TEAR
+    ChecklistItem:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id001
+        title:
+          type: string
+          maxLength: 200
+        action:
+          type: string
+          enum:
+          - INSPECT
+          - CLEAN
+          - LUBRICATE
+          - ADJUST
+          - REPLACE
+        instructions:
+          type: string
+          maxLength: 2000
+        required:
+          type: boolean
+        allowNotApplicable:
+          type: boolean
+      required:
+      - id
+      - title
+      - action
+      - instructions
+      - required
+      - allowNotApplicable
+    ChecklistResult:
+      type: object
+      additionalProperties: false
+      properties:
+        itemId: *id001
+        status:
+          type: string
+          enum:
+          - NOT_DONE
+          - DONE
+          - NOT_APPLICABLE
+        note:
+          type: string
+          maxLength: 2000
+      required:
+      - itemId
+      - status
+      - note
+    CustomerChecklistResult:
+      type: object
+      additionalProperties: false
+      properties:
+        itemId: *id001
+        title:
+          type: string
+          maxLength: 200
+        status:
+          type: string
+          enum:
+          - NOT_DONE
+          - DONE
+          - NOT_APPLICABLE
+      required:
+      - itemId
+      - title
+      - status
+    ScheduleRule:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id001
+        name:
+          type: string
+          maxLength: 200
+        frequencyUnit:
+          type: string
+          enum:
+          - DAY
+          - WEEK
+          - MONTH
+          - YEAR
+        frequencyValue:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        firstOccurrence:
+          type: integer
+          minimum: 1
+          maximum: 100
+        checklist:
+          type: array
+          maxItems: 60
+          items:
+            $ref: '#/components/schemas/ChecklistItem'
+      required:
+      - id
+      - name
+      - frequencyUnit
+      - frequencyValue
+      - firstOccurrence
+      - checklist
+    ScheduleOverride:
+      type: object
+      additionalProperties: false
+      properties:
+        itemId: *id001
+        frequencyValue:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        firstOccurrence:
+          type: integer
+          minimum: 1
+          maximum: 100
+      required:
+      - itemId
+      - frequencyValue
+      - firstOccurrence
+    WarrantyPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum:
+          - APPLY
+          - NONE
+        name:
+          type: string
+          maxLength: 200
+        terms:
+          type: string
+          maxLength: 10000
+        reason:
+          type: string
+          maxLength: 2000
+        durationMonths:
+          type: integer
+          minimum: 1
+          maximum: 1200
+        coveredCauses:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/Cause'
+        exclusions:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              code:
+                $ref: '#/components/schemas/Cause'
+              text:
+                type: string
+                maxLength: 2000
+            required:
+            - code
+            - text
+      required:
+      - mode
+      - name
+      - terms
+      - reason
+      - durationMonths
+      - coveredCauses
+      - exclusions
+    MaintenanceProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum:
+          - APPLY
+          - NONE
+        name:
+          type: string
+          maxLength: 200
+        terms:
+          type: string
+          maxLength: 10000
+        reason:
+          type: string
+          maxLength: 2000
+        rules:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ScheduleRule'
+      required:
+      - mode
+      - name
+      - terms
+      - reason
+      - rules
+    VersionCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      required:
+      - expectedVersion
+    PreviewCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        warrantyRevisionId: *id001
+        maintenanceRevisionId: *id001
+        durationMonths:
+          type: integer
+          minimum: 1
+          maximum: 1200
+        maintenanceOverrides:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ScheduleOverride'
+        reason:
+          type: string
+          maxLength: 2000
+      required:
+      - expectedVersion
+    CalendarCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        handoverDate:
+          type: string
+          format: date
+        overrides:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ScheduleOverride'
+      required:
+      - handoverDate
+    Checklist:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          maxItems: 60
+          items:
+            $ref: '#/components/schemas/ChecklistItem'
+        results:
+          type: array
+          maxItems: 60
+          items:
+            $ref: '#/components/schemas/ChecklistResult'
+        version:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        canEdit:
+          type: boolean
+      required:
+      - items
+      - results
+      - version
+      - canEdit
+    ChecklistCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        results:
+          type: array
+          maxItems: 60
+          items:
+            $ref: '#/components/schemas/ChecklistResult'
+      required:
+      - expectedVersion
+      - results
+    AssessmentCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        cause:
+          $ref: '#/components/schemas/Cause'
+        decision:
+          type: string
+          enum:
+          - COVERED
+          - NOT_COVERED
+        reason:
+          type: string
+          maxLength: 2000
+          minLength: 1
+      required:
+      - expectedVersion
+      - cause
+      - decision
+      - reason
+    GroupReceipt:
+      type: object
+      additionalProperties: false
+      properties:
+        registrationId: *id001
+        equipmentId: *id001
+        inputHash:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        plans:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              itemId: *id001
+              planId: *id001
+            required:
+            - itemId
+            - planId
+      required:
+      - registrationId
+      - equipmentId
+      - inputHash
+      - plans
+    WarrantyDraft:
+      type: object
+      additionalProperties: false
+      properties:
+        body:
+          $ref: '#/components/schemas/WarrantyPolicy'
+      required:
+      - body
+    WarrantyEdit:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        body:
+          $ref: '#/components/schemas/WarrantyPolicy'
+      required:
+      - expectedVersion
+      - body
+    WarrantyRevision:
+      type: object
+      properties:
+        id: *id001
+        tenantId: *id001
+        modelId: *id001
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        version:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        isDefault:
+          type: boolean
+        body:
+          $ref: '#/components/schemas/WarrantyPolicy'
+        createdBy: *id001
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - modelId
+      - revision
+      - version
+      - status
+      - isDefault
+      - body
+    MaintenanceDraft:
+      type: object
+      additionalProperties: false
+      properties:
+        body:
+          $ref: '#/components/schemas/MaintenanceProfile'
+      required:
+      - body
+    MaintenanceEdit:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        body:
+          $ref: '#/components/schemas/MaintenanceProfile'
+      required:
+      - expectedVersion
+      - body
+    MaintenanceRevision:
+      type: object
+      properties:
+        id: *id001
+        tenantId: *id001
+        modelId: *id001
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        version:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        isDefault:
+          type: boolean
+        body:
+          $ref: '#/components/schemas/MaintenanceProfile'
+        createdBy: *id001
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - modelId
+      - revision
+      - version
+      - status
+      - isDefault
+      - body
+    ModelSetupSnapshot:
+      type: object
+      additionalProperties: false
+      properties:
+        schema:
+          type: string
+          enum:
+          - model-setup.v1
+        modelId: *id001
+        handoverDate:
+          type: string
+          format: date
+        warranty:
+          type: object
+          additionalProperties: false
+          properties:
+            revisionId: *id001
+            revision:
+              type: integer
+              minimum: 1
+              maximum: 2147483647
+            body:
+              $ref: '#/components/schemas/WarrantyPolicy'
+            startDate:
+              type: string
+              format: date
+            endDate:
+              type: string
+              format: date
+          required:
+          - revisionId
+          - revision
+          - body
+          - startDate
+          - endDate
+        maintenance:
+          type: object
+          additionalProperties: false
+          properties:
+            revisionId: *id001
+            revision:
+              type: integer
+              minimum: 1
+              maximum: 2147483647
+            body:
+              $ref: '#/components/schemas/MaintenanceProfile'
+            sourceHash:
+              type: string
+              maxLength: 64
+            firstDueDates:
+              type: array
+              maxItems: 8
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  itemId: *id001
+                  date:
+                    type: string
+                    format: date
+                required:
+                - itemId
+                - date
+          required:
+          - revisionId
+          - revision
+          - body
+          - sourceHash
+          - firstDueDates
+        overrideReason:
+          type: string
+          maxLength: 2000
+        hash:
+          type: string
+          maxLength: 64
+      required:
+      - schema
+      - modelId
+      - handoverDate
+      - warranty
+      - maintenance
+      - overrideReason
+      - hash

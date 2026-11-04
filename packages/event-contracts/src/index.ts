@@ -7,3 +7,5 @@ export * from './rabbitmq';
 export * from './relay';
 export * from './retry';
 export * from './sql';
+
+export * from './model-policies';

@@ -1784,3 +1784,222 @@ CREATE TABLE "work_order_inventory_reservations" (
 CREATE UNIQUE INDEX "uq_wo_inventory_reservation_usage" ON "work_order_inventory_reservations"("tenant_id", "inventory_usage_id");
 CREATE UNIQUE INDEX "uq_wo_inventory_reservation_transaction" ON "work_order_inventory_reservations"("tenant_id", "stock_transaction_id");
 CREATE INDEX "idx_wo_inventory_reservation_held" ON "work_order_inventory_reservations"("tenant_id", "work_order_id", "state");
+
+
+-- ADR 0018: model-based service policies (additive; legacy sources remain NULL).
+\connect asset_db
+
+-- asset-service / 20261104090000_model_policies
+-- AlterTable
+ALTER TABLE "equipment_registrations" ADD COLUMN     "maintenance_plan_ids" UUID[] DEFAULT ARRAY[]::UUID[],
+ADD COLUMN     "policy_preview" JSONB;
+
+-- AlterTable
+ALTER TABLE "warranties" ADD COLUMN     "policy_snapshot" JSONB,
+ADD COLUMN     "policy_version_id" UUID;
+
+-- CreateTable
+CREATE TABLE "model_warranty_revisions" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "tenant_id" UUID NOT NULL,
+    "model_id" UUID NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "status" VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    "is_default" BOOLEAN NOT NULL DEFAULT false,
+    "body" JSONB NOT NULL,
+    "created_by" UUID NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "model_warranty_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_warranty_revisions_tenant_id_model_id_revision_key" ON "model_warranty_revisions"("tenant_id", "model_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_warranty_revisions_tenant_id_id_key" ON "model_warranty_revisions"("tenant_id", "id");
+
+
+CREATE UNIQUE INDEX uq_model_warranty_revisions_default ON model_warranty_revisions(tenant_id,model_id) WHERE is_default;
+ALTER TABLE model_warranty_revisions ADD CHECK (status IN ('DRAFT','PUBLISHED','RETIRED')), ADD CHECK (NOT is_default OR status='PUBLISHED'), ADD CHECK (revision>0 AND version>0);
+
+
+-- asset-service / 20261104091000_model_setup_phases
+-- Preserve the legacy codec's exact phase invariant and add a separate model-policy codec.
+ALTER TABLE equipment_registrations DROP CONSTRAINT equipment_registrations_phase_check;
+ALTER TABLE equipment_registrations ADD CONSTRAINT equipment_registrations_phase_check CHECK (
+ (policy_preview IS NULL AND ((CASE status
+   WHEN 'DRAFT' THEN submitted_by IS NULL AND submitted_at IS NULL AND completed_by IS NULL AND completed_at IS NULL AND warranty_id IS NULL AND maintenance_plan_id IS NULL AND maintenance_input_hash IS NULL
+   WHEN 'PENDING_MAINTENANCE' THEN submitted_by IS NOT NULL AND submitted_at IS NOT NULL AND completed_by IS NULL AND completed_at IS NULL AND maintenance_plan_id IS NULL AND maintenance_decision IN ('CREATE','KEEP') AND maintenance_input_hash IS NOT NULL AND maintenance_input_hash ~ '^[0-9a-f]{64}$' AND ((warranty_decision IN ('CREATE','KEEP') AND warranty_id IS NOT NULL) OR (warranty_decision = 'NONE' AND warranty_id IS NULL))
+   WHEN 'COMPLETED' THEN submitted_by IS NOT NULL AND submitted_at IS NOT NULL AND completed_by IS NOT NULL AND completed_at IS NOT NULL AND ((warranty_decision IN ('CREATE','KEEP') AND warranty_id IS NOT NULL) OR (warranty_decision = 'NONE' AND warranty_id IS NULL)) AND ((maintenance_decision IN ('CREATE','KEEP') AND maintenance_plan_id IS NOT NULL AND maintenance_input_hash IS NOT NULL AND maintenance_input_hash ~ '^[0-9a-f]{64}$') OR (maintenance_decision = 'NONE' AND maintenance_plan_id IS NULL AND maintenance_input_hash IS NULL))
+   ELSE false END) IS TRUE)) OR (policy_preview IS NOT NULL AND (jsonb_typeof(policy_preview)='object' AND policy_preview->>'schema'='model-setup.v1' AND (CASE status
+ WHEN 'DRAFT' THEN submitted_by IS NULL AND submitted_at IS NULL AND completed_by IS NULL AND completed_at IS NULL AND warranty_id IS NULL AND maintenance_plan_id IS NULL AND maintenance_input_hash IS NULL AND cardinality(maintenance_plan_ids)=0
+ WHEN 'PENDING_MAINTENANCE' THEN submitted_by IS NOT NULL AND submitted_at IS NOT NULL AND maintenance_input_hash ~ '^[0-9a-f]{64}$' AND ((policy_preview #>> '{warranty,body,mode}' = 'APPLY' AND warranty_id IS NOT NULL) OR (policy_preview #>> '{warranty,body,mode}' = 'NONE' AND warranty_id IS NULL)) AND completed_by IS NULL AND completed_at IS NULL AND maintenance_plan_id IS NULL AND cardinality(maintenance_plan_ids)=0 AND policy_preview #>> '{maintenance,body,mode}'='APPLY'
+ WHEN 'COMPLETED' THEN submitted_by IS NOT NULL AND submitted_at IS NOT NULL AND maintenance_input_hash ~ '^[0-9a-f]{64}$' AND ((policy_preview #>> '{warranty,body,mode}' = 'APPLY' AND warranty_id IS NOT NULL) OR (policy_preview #>> '{warranty,body,mode}' = 'NONE' AND warranty_id IS NULL)) AND completed_by IS NOT NULL AND completed_at IS NOT NULL AND
+ ((policy_preview #>> '{maintenance,body,mode}'='NONE' AND maintenance_plan_id IS NULL AND cardinality(maintenance_plan_ids)=0)
+ OR (policy_preview #>> '{maintenance,body,mode}'='APPLY' AND cardinality(maintenance_plan_ids)>0 AND cardinality(maintenance_plan_ids)=jsonb_array_length(policy_preview #> '{maintenance,body,rules}') AND
+ ((cardinality(maintenance_plan_ids)=1 AND maintenance_plan_id=maintenance_plan_ids[1]) OR (cardinality(maintenance_plan_ids)>1 AND maintenance_plan_id IS NULL))))
+ ELSE false END) IS TRUE))
+);
+
+
+-- asset-service / 20261104093000_policy_local_references
+-- AddForeignKey
+ALTER TABLE "warranties" ADD CONSTRAINT "warranties_tenant_id_policy_version_id_fkey" FOREIGN KEY ("tenant_id", "policy_version_id") REFERENCES "model_warranty_revisions"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE "model_warranty_revisions" ADD CONSTRAINT "model_warranty_revisions_tenant_id_model_id_fkey" FOREIGN KEY ("tenant_id", "model_id") REFERENCES "equipment_models"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+
+
+\connect maintenance_db
+
+-- maintenance-service / 20261104090000_model_policies
+-- AlterTable
+ALTER TABLE "maintenance_plans" ADD COLUMN     "checklist" JSONB,
+ADD COLUMN     "policy_version_id" UUID,
+ADD COLUMN     "setup_group_id" UUID,
+ADD COLUMN     "setup_item_id" UUID;
+
+-- AlterTable
+ALTER TABLE "maintenance_tasks" ADD COLUMN     "checklist" JSONB,
+ADD COLUMN     "policy_version_id" UUID;
+
+-- CreateTable
+CREATE TABLE "model_maintenance_revisions" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "tenant_id" UUID NOT NULL,
+    "model_id" UUID NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "status" VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    "is_default" BOOLEAN NOT NULL DEFAULT false,
+    "body" JSONB NOT NULL,
+    "created_by" UUID NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "model_maintenance_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "maintenance_setup_groups" (
+    "tenant_id" UUID NOT NULL,
+    "registration_id" UUID NOT NULL,
+    "equipment_id" UUID NOT NULL,
+    "input_hash" CHAR(64) NOT NULL,
+    "receipt" JSONB NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "maintenance_setup_groups_pkey" PRIMARY KEY ("tenant_id","registration_id")
+);
+
+-- CreateTable
+CREATE TABLE "model_policy_audit" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "tenant_id" UUID NOT NULL,
+    "model_id" UUID NOT NULL,
+    "revision_id" UUID NOT NULL,
+    "actor_id" UUID NOT NULL,
+    "action" VARCHAR(20) NOT NULL,
+    "payload" JSONB NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "model_policy_audit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_maintenance_revisions_tenant_id_model_id_revision_key" ON "model_maintenance_revisions"("tenant_id", "model_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_maintenance_revisions_tenant_id_id_key" ON "model_maintenance_revisions"("tenant_id", "id");
+
+-- CreateIndex
+CREATE INDEX "model_policy_audit_tenant_id_model_id_created_at_idx" ON "model_policy_audit"("tenant_id", "model_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "maintenance_plans_tenant_id_setup_group_id_setup_item_id_key" ON "maintenance_plans"("tenant_id", "setup_group_id", "setup_item_id");
+
+
+CREATE UNIQUE INDEX uq_model_maintenance_revisions_default ON model_maintenance_revisions(tenant_id,model_id) WHERE is_default;
+ALTER TABLE model_maintenance_revisions ADD CHECK (status IN ('DRAFT','PUBLISHED','RETIRED')), ADD CHECK (NOT is_default OR status='PUBLISHED'), ADD CHECK (revision>0 AND version>0);
+
+
+-- maintenance-service / 20261104092000_task_customer_summary
+ALTER TABLE maintenance_tasks ADD COLUMN instruction_title VARCHAR(200), ADD COLUMN completion_summary JSONB;
+
+
+-- maintenance-service / 20261104093000_policy_local_references
+-- AddForeignKey
+ALTER TABLE "maintenance_plans" ADD CONSTRAINT "maintenance_plans_tenant_id_setup_group_id_fkey" FOREIGN KEY ("tenant_id", "setup_group_id") REFERENCES "maintenance_setup_groups"("tenant_id", "registration_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+
+
+\connect workorder_db
+
+-- workorder-service / 0007_model_policy_checklist
+-- AlterTable
+ALTER TABLE "work_orders" ADD COLUMN     "checklist" JSONB,
+ADD COLUMN     "checklist_results" JSONB,
+ADD COLUMN     "checklist_version" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "policy_version_id" UUID;
+
+-- CreateTable
+CREATE TABLE "work_order_checklist_history" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "tenant_id" UUID NOT NULL,
+    "work_order_id" UUID NOT NULL,
+    "actor_id" UUID NOT NULL,
+    "assignment_id" UUID NOT NULL,
+    "version" INTEGER NOT NULL,
+    "results" JSONB NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "work_order_checklist_history_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "work_order_checklist_history_tenant_id_work_order_id_versio_key" ON "work_order_checklist_history"("tenant_id", "work_order_id", "version");
+
+
+
+-- workorder-service / 0008_checklist_history_reference
+-- AddForeignKey
+ALTER TABLE "work_order_checklist_history" ADD CONSTRAINT "work_order_checklist_history_tenant_id_work_order_id_fkey" FOREIGN KEY ("tenant_id", "work_order_id") REFERENCES "work_orders"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+
+
+\connect service_request_db
+
+-- service-request-service / 0006_warranty_assessment
+-- AlterTable
+ALTER TABLE "service_requests" ADD COLUMN     "assessment_required" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "assessment_version" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "coverage_assessment" JSONB;
+
+-- CreateTable
+CREATE TABLE "warranty_assessment_history" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "tenant_id" UUID NOT NULL,
+    "request_id" UUID NOT NULL,
+    "actor_id" UUID NOT NULL,
+    "version" INTEGER NOT NULL,
+    "assessment" JSONB NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "warranty_assessment_history_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "warranty_assessment_history_tenant_id_request_id_version_key" ON "warranty_assessment_history"("tenant_id", "request_id", "version");
+
+
+ALTER TABLE service_requests ADD COLUMN warranty_policy_snapshot JSONB, ADD COLUMN warranty_policy_version_id UUID;
+
+
+-- service-request-service / 0007_customer_checklist_summary
+ALTER TABLE service_requests ADD COLUMN resolution_checklist JSONB;
+
+
+-- service-request-service / 0008_assessment_history_reference
+-- AddForeignKey
+ALTER TABLE "warranty_assessment_history" ADD CONSTRAINT "warranty_assessment_history_tenant_id_request_id_fkey" FOREIGN KEY ("tenant_id", "request_id") REFERENCES "service_requests"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE NO ACTION;

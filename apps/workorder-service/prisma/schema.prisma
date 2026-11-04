@@ -88,50 +88,55 @@ model TechnicianSkill {
 /// type: REPAIR | WARRANTY | MAINTENANCE | INSPECTION. priority: LOW | NORMAL | HIGH | URGENT.
 /// status: CREATED | ASSIGNED | ACCEPTED | TRAVELLING | IN_PROGRESS | ON_HOLD | COMPLETED | CANCELLED.
 model WorkOrder {
-  id                String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String                   @map("tenant_id") @db.Uuid
-  workOrderNo       String                   @map("work_order_no") @db.VarChar(50)
+  checklistHistory                WorkOrderChecklistHistory[]
+  checklist                       Json?
+  checklistResults                Json?                           @map("checklist_results")
+  checklistVersion                Int                             @default(0) @map("checklist_version")
+  policyVersionId                 String?                         @map("policy_version_id") @db.Uuid
+  id                              String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                        String                          @map("tenant_id") @db.Uuid
+  workOrderNo                     String                          @map("work_order_no") @db.VarChar(50)
   /// Logical reference to service_request_db.service_requests.id
-  serviceRequestId  String?                  @map("service_request_id") @db.Uuid
+  serviceRequestId                String?                         @map("service_request_id") @db.Uuid
   /// Logical reference to maintenance_db.maintenance_tasks.id
-  maintenanceTaskId String?                  @map("maintenance_task_id") @db.Uuid
+  maintenanceTaskId               String?                         @map("maintenance_task_id") @db.Uuid
   /// Stable request from Maintenance; retained after cancellation for business deduplication.
-  maintenanceReplacementRequestId String? @unique(map: "uq_work_orders_maintenance_replacement_request") @map("maintenance_replacement_request_id") @db.Uuid
+  maintenanceReplacementRequestId String?                         @unique(map: "uq_work_orders_maintenance_replacement_request") @map("maintenance_replacement_request_id") @db.Uuid
   /// Previous WO in this database; source/tenant validated by the consumer. A WO has at most one successor.
-  replacesWorkOrderId String? @unique(map: "uq_work_orders_replaces_work_order") @map("replaces_work_order_id") @db.Uuid
+  replacesWorkOrderId             String?                         @unique(map: "uq_work_orders_replaces_work_order") @map("replaces_work_order_id") @db.Uuid
   /// Logical reference to asset_db.equipments.id
-  equipmentId       String                   @map("equipment_id") @db.Uuid
+  equipmentId                     String                          @map("equipment_id") @db.Uuid
   /// Logical reference to organization_db.customers.id
-  customerId        String                   @map("customer_id") @db.Uuid
+  customerId                      String                          @map("customer_id") @db.Uuid
   /// Logical reference to organization_db.customer_sites.id
-  customerSiteId    String?                  @map("customer_site_id") @db.Uuid
+  customerSiteId                  String?                         @map("customer_site_id") @db.Uuid
   /// Logical reference to organization_db.locations.id
-  locationId        String?                  @map("location_id") @db.Uuid
-  type              String                   @db.VarChar(30)
-  title             String                   @db.VarChar(200)
-  description       String?
-  priority          String                   @default("NORMAL") @db.VarChar(20)
-  scheduledStart    DateTime?                @map("scheduled_start") @db.Timestamptz(6)
-  scheduledEnd      DateTime?                @map("scheduled_end") @db.Timestamptz(6)
-  status            String                   @default("CREATED") @db.VarChar(30)
+  locationId                      String?                         @map("location_id") @db.Uuid
+  type                            String                          @db.VarChar(30)
+  title                           String                          @db.VarChar(200)
+  description                     String?
+  priority                        String                          @default("NORMAL") @db.VarChar(20)
+  scheduledStart                  DateTime?                       @map("scheduled_start") @db.Timestamptz(6)
+  scheduledEnd                    DateTime?                       @map("scheduled_end") @db.Timestamptz(6)
+  status                          String                          @default("CREATED") @db.VarChar(30)
   /// Logical reference to identity_db.users.id. NULL = created by the system
   /// from an event (ADR 0008, D5).
-  createdBy         String?                  @map("created_by") @db.Uuid
-  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  startedAt         DateTime?                @map("started_at") @db.Timestamptz(6)
-  completedAt       DateTime?                @map("completed_at") @db.Timestamptz(6)
-  cancelledAt       DateTime?                @map("cancelled_at") @db.Timestamptz(6)
-  statusHistory     WorkOrderStatusHistory[]
-  assignments       WorkOrderAssignment[]
-  workLogs          WorkLog[]
-  attachments       WorkOrderAttachment[]
-  attachmentUploads AttachmentUploadIntent[]
-  inventoryReservations WorkOrderInventoryReservation[]
+  createdBy                       String?                         @map("created_by") @db.Uuid
+  createdAt                       DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                       DateTime                        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  startedAt                       DateTime?                       @map("started_at") @db.Timestamptz(6)
+  completedAt                     DateTime?                       @map("completed_at") @db.Timestamptz(6)
+  cancelledAt                     DateTime?                       @map("cancelled_at") @db.Timestamptz(6)
+  statusHistory                   WorkOrderStatusHistory[]
+  assignments                     WorkOrderAssignment[]
+  workLogs                        WorkLog[]
+  attachments                     WorkOrderAttachment[]
+  attachmentUploads               AttachmentUploadIntent[]
+  inventoryReservations           WorkOrderInventoryReservation[]
   /// At most one row: service_reports.work_order_id is UNIQUE in SQL. Modelled
   /// as a list because the composite FK (tenant_id, work_order_id) is not itself
   /// unique, which Prisma requires for a 1:1 relation.
-  serviceReports    ServiceReport[]
+  serviceReports                  ServiceReport[]
 
   @@unique([tenantId, workOrderNo])
   @@unique([tenantId, id])
@@ -201,27 +206,27 @@ model WorkLog {
 }
 
 model WorkOrderAttachment {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  workOrderId String    @map("work_order_id") @db.Uuid
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                   @map("tenant_id") @db.Uuid
+  workOrderId         String                   @map("work_order_id") @db.Uuid
   /// Logical reference to identity_db.users.id
-  uploadedBy  String    @map("uploaded_by") @db.Uuid
-  storageKey  String    @map("storage_key") @db.VarChar(500)
-  fileName    String    @map("file_name") @db.VarChar(255)
-  mimeType    String    @map("mime_type") @db.VarChar(100)
+  uploadedBy          String                   @map("uploaded_by") @db.Uuid
+  storageKey          String                   @map("storage_key") @db.VarChar(500)
+  fileName            String                   @map("file_name") @db.VarChar(255)
+  mimeType            String                   @map("mime_type") @db.VarChar(100)
   /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
-  visibility  String    @default("INTERNAL") @db.VarChar(20)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  visibility          String                   @default("INTERNAL") @db.VarChar(20)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   /// NULL together for pre-M3 rows; only verified rows may be served by M3 APIs.
-  sizeBytes   Int?      @map("size_bytes")
-  checksumSha256 String? @map("checksum_sha256") @db.Char(64)
-  verifiedAt  DateTime? @map("verified_at") @db.Timestamptz(6)
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  deletedBy   String?   @map("deleted_by") @db.Uuid
-  visibilityChangedAt DateTime? @map("visibility_changed_at") @db.Timestamptz(6)
-  visibilityChangedBy String? @map("visibility_changed_by") @db.Uuid
-  workOrder   WorkOrder @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  uploadResults AttachmentUploadIntent[] @relation("WorkOrderUploadResult")
+  sizeBytes           Int?                     @map("size_bytes")
+  checksumSha256      String?                  @map("checksum_sha256") @db.Char(64)
+  verifiedAt          DateTime?                @map("verified_at") @db.Timestamptz(6)
+  deletedAt           DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  deletedBy           String?                  @map("deleted_by") @db.Uuid
+  visibilityChangedAt DateTime?                @map("visibility_changed_at") @db.Timestamptz(6)
+  visibilityChangedBy String?                  @map("visibility_changed_by") @db.Uuid
+  workOrder           WorkOrder                @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  uploadResults       AttachmentUploadIntent[] @relation("WorkOrderUploadResult")
 
   @@unique([tenantId, workOrderId, id], map: "uq_wo_attachment_parent_id")
   @@index([workOrderId], map: "idx_work_order_attachments_order")
@@ -230,18 +235,18 @@ model WorkOrderAttachment {
 
 /// result: RESOLVED | PARTIALLY_RESOLVED | UNRESOLVED.
 model ServiceReport {
-  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String             @map("tenant_id") @db.Uuid
-  workOrderId        String             @unique @map("work_order_id") @db.Uuid
-  technicianId       String             @map("technician_id") @db.Uuid
-  problemDescription String             @map("problem_description")
-  rootCause          String?            @map("root_cause")
+  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String                   @map("tenant_id") @db.Uuid
+  workOrderId        String                   @unique @map("work_order_id") @db.Uuid
+  technicianId       String                   @map("technician_id") @db.Uuid
+  problemDescription String                   @map("problem_description")
+  rootCause          String?                  @map("root_cause")
   solution           String
-  result             String             @db.VarChar(30)
-  customerNote       String?            @map("customer_note")
-  submittedAt        DateTime           @default(now()) @map("submitted_at") @db.Timestamptz(6)
-  workOrder          WorkOrder          @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  technician         Technician         @relation(fields: [tenantId, technicianId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  result             String                   @db.VarChar(30)
+  customerNote       String?                  @map("customer_note")
+  submittedAt        DateTime                 @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  workOrder          WorkOrder                @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  technician         Technician               @relation(fields: [tenantId, technicianId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   attachments        ReportAttachment[]
   attachmentUploads  AttachmentUploadIntent[]
 
@@ -252,27 +257,27 @@ model ServiceReport {
 }
 
 model ReportAttachment {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String        @map("tenant_id") @db.Uuid
-  serviceReportId String        @map("service_report_id") @db.Uuid
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                   @map("tenant_id") @db.Uuid
+  serviceReportId     String                   @map("service_report_id") @db.Uuid
   /// Logical reference to identity_db.users.id
-  uploadedBy      String        @map("uploaded_by") @db.Uuid
-  storageKey      String        @map("storage_key") @db.VarChar(500)
-  fileName        String        @map("file_name") @db.VarChar(255)
-  mimeType        String        @map("mime_type") @db.VarChar(100)
+  uploadedBy          String                   @map("uploaded_by") @db.Uuid
+  storageKey          String                   @map("storage_key") @db.VarChar(500)
+  fileName            String                   @map("file_name") @db.VarChar(255)
+  mimeType            String                   @map("mime_type") @db.VarChar(100)
   /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
-  visibility      String        @default("INTERNAL") @db.VarChar(20)
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  visibility          String                   @default("INTERNAL") @db.VarChar(20)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   /// NULL together for pre-M3 rows; never invent metadata during migration.
-  sizeBytes       Int?          @map("size_bytes")
-  checksumSha256  String?       @map("checksum_sha256") @db.Char(64)
-  verifiedAt      DateTime?     @map("verified_at") @db.Timestamptz(6)
-  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz(6)
-  deletedBy       String?       @map("deleted_by") @db.Uuid
-  visibilityChangedAt DateTime? @map("visibility_changed_at") @db.Timestamptz(6)
-  visibilityChangedBy String?   @map("visibility_changed_by") @db.Uuid
-  serviceReport   ServiceReport @relation(fields: [tenantId, serviceReportId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  uploadResults   AttachmentUploadIntent[] @relation("ReportUploadResult")
+  sizeBytes           Int?                     @map("size_bytes")
+  checksumSha256      String?                  @map("checksum_sha256") @db.Char(64)
+  verifiedAt          DateTime?                @map("verified_at") @db.Timestamptz(6)
+  deletedAt           DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  deletedBy           String?                  @map("deleted_by") @db.Uuid
+  visibilityChangedAt DateTime?                @map("visibility_changed_at") @db.Timestamptz(6)
+  visibilityChangedBy String?                  @map("visibility_changed_by") @db.Uuid
+  serviceReport       ServiceReport            @relation(fields: [tenantId, serviceReportId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  uploadResults       AttachmentUploadIntent[] @relation("ReportUploadResult")
 
   @@unique([tenantId, serviceReportId, id], map: "uq_report_attachment_parent_id")
   @@index([serviceReportId], map: "idx_report_attachments_report")
@@ -283,35 +288,35 @@ model ReportAttachment {
 /// State: INITIATED | ATTACHED | EXPIRED | ABORTED. Target: WORK_ORDER | REPORT.
 /// All targets have a WO; REPORT also has a tenant-and-WO-safe report FK.
 model AttachmentUploadIntent {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  uploadedBy    String   @map("uploaded_by") @db.Uuid
-  targetType    String   @map("target_type") @db.VarChar(20)
-  workOrderId   String   @map("work_order_id") @db.Uuid
-  serviceReportId String? @map("service_report_id") @db.Uuid
-  fileName      String   @map("file_name") @db.VarChar(255)
-  mimeType      String   @map("mime_type") @db.VarChar(100)
-  sizeBytes     Int      @map("size_bytes")
-  checksumSha256 String  @map("checksum_sha256") @db.Char(64)
-  visibility    String   @default("INTERNAL") @db.VarChar(20)
-  stagingKey    String   @unique(map: "uq_attachment_upload_staging_key") @map("staging_key") @db.VarChar(500)
-  status        String   @default("INITIATED") @db.VarChar(20)
-  expiresAt     DateTime @map("expires_at") @db.Timestamptz(6)
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String                  @map("tenant_id") @db.Uuid
+  uploadedBy            String                  @map("uploaded_by") @db.Uuid
+  targetType            String                  @map("target_type") @db.VarChar(20)
+  workOrderId           String                  @map("work_order_id") @db.Uuid
+  serviceReportId       String?                 @map("service_report_id") @db.Uuid
+  fileName              String                  @map("file_name") @db.VarChar(255)
+  mimeType              String                  @map("mime_type") @db.VarChar(100)
+  sizeBytes             Int                     @map("size_bytes")
+  checksumSha256        String                  @map("checksum_sha256") @db.Char(64)
+  visibility            String                  @default("INTERNAL") @db.VarChar(20)
+  stagingKey            String                  @unique(map: "uq_attachment_upload_staging_key") @map("staging_key") @db.VarChar(500)
+  status                String                  @default("INITIATED") @db.VarChar(20)
+  expiresAt             DateTime                @map("expires_at") @db.Timestamptz(6)
   /// A fenced attempt; lease expiry cannot authorize a stale finalizer to commit.
-  attemptId     String?  @map("attempt_id") @db.Uuid
-  attemptFinalKey String? @map("attempt_final_key") @db.VarChar(500)
-  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
-  workOrderAttachmentId String? @unique(map: "uq_attachment_upload_wo_result") @map("work_order_attachment_id") @db.Uuid
-  reportAttachmentId String? @unique(map: "uq_attachment_upload_report_result") @map("report_attachment_id") @db.Uuid
-  attachedAt    DateTime? @map("attached_at") @db.Timestamptz(6)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  workOrder     WorkOrder @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  serviceReport ServiceReport? @relation(fields: [tenantId, workOrderId, serviceReportId], references: [tenantId, workOrderId, id], onDelete: Restrict, onUpdate: NoAction)
-  workOrderAttachment WorkOrderAttachment? @relation("WorkOrderUploadResult", fields: [tenantId, workOrderId, workOrderAttachmentId], references: [tenantId, workOrderId, id], onDelete: Restrict, onUpdate: NoAction)
-  reportAttachment ReportAttachment? @relation("ReportUploadResult", fields: [tenantId, serviceReportId, reportAttachmentId], references: [tenantId, serviceReportId, id], onDelete: Restrict, onUpdate: NoAction)
-  idempotencyRecords AttachmentIdempotency[]
-  cleanupJobs   AttachmentCleanupJob[]
+  attemptId             String?                 @map("attempt_id") @db.Uuid
+  attemptFinalKey       String?                 @map("attempt_final_key") @db.VarChar(500)
+  leaseExpiresAt        DateTime?               @map("lease_expires_at") @db.Timestamptz(6)
+  workOrderAttachmentId String?                 @unique(map: "uq_attachment_upload_wo_result") @map("work_order_attachment_id") @db.Uuid
+  reportAttachmentId    String?                 @unique(map: "uq_attachment_upload_report_result") @map("report_attachment_id") @db.Uuid
+  attachedAt            DateTime?               @map("attached_at") @db.Timestamptz(6)
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  workOrder             WorkOrder               @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  serviceReport         ServiceReport?          @relation(fields: [tenantId, workOrderId, serviceReportId], references: [tenantId, workOrderId, id], onDelete: Restrict, onUpdate: NoAction)
+  workOrderAttachment   WorkOrderAttachment?    @relation("WorkOrderUploadResult", fields: [tenantId, workOrderId, workOrderAttachmentId], references: [tenantId, workOrderId, id], onDelete: Restrict, onUpdate: NoAction)
+  reportAttachment      ReportAttachment?       @relation("ReportUploadResult", fields: [tenantId, serviceReportId, reportAttachmentId], references: [tenantId, serviceReportId, id], onDelete: Restrict, onUpdate: NoAction)
+  idempotencyRecords    AttachmentIdempotency[]
+  cleanupJobs           AttachmentCleanupJob[]
 
   @@unique([tenantId, id], map: "uq_attachment_upload_tenant_id")
   @@unique([tenantId, uploadedBy, id], map: "uq_attachment_upload_actor_id")
@@ -323,14 +328,14 @@ model AttachmentUploadIntent {
 /// PREPARE spans both target types; changing parent with the same key conflicts.
 /// Store references/fingerprints, never signed URLs or raw response bodies.
 model AttachmentIdempotency {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  operation   String   @db.VarChar(20)
-  key         String   @db.Uuid
-  fingerprint String   @db.Char(64)
-  uploadId    String   @map("upload_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String                 @map("tenant_id") @db.Uuid
+  userId      String                 @map("user_id") @db.Uuid
+  operation   String                 @db.VarChar(20)
+  key         String                 @db.Uuid
+  fingerprint String                 @db.Char(64)
+  uploadId    String                 @map("upload_id") @db.Uuid
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   upload      AttachmentUploadIntent @relation(fields: [tenantId, userId, uploadId], references: [tenantId, uploadedBy, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, userId, operation, key], map: "uq_attachment_idempotency_scope")
@@ -341,22 +346,22 @@ model AttachmentIdempotency {
 /// One durable record per object, registered before storage writes. A DONE job
 /// may be requeued by deletion/reconciliation; DONE is not a purge instruction.
 model AttachmentCleanupJob {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  uploadId    String   @map("upload_id") @db.Uuid
-  kind        String   @db.VarChar(20)
-  objectKey   String   @unique(map: "uq_attachment_cleanup_object") @map("object_key") @db.VarChar(500)
-  attemptId   String?  @map("attempt_id") @db.Uuid
-  status      String   @default("PENDING") @db.VarChar(20)
-  notBefore   DateTime @map("not_before") @db.Timestamptz(6)
-  attemptCount Int     @default(0) @map("attempt_count")
-  claimId     String?  @map("claim_id") @db.Uuid
-  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
-  lastErrorCode String? @map("last_error_code") @db.VarChar(80)
-  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  upload      AttachmentUploadIntent @relation(fields: [tenantId, uploadId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String                 @map("tenant_id") @db.Uuid
+  uploadId       String                 @map("upload_id") @db.Uuid
+  kind           String                 @db.VarChar(20)
+  objectKey      String                 @unique(map: "uq_attachment_cleanup_object") @map("object_key") @db.VarChar(500)
+  attemptId      String?                @map("attempt_id") @db.Uuid
+  status         String                 @default("PENDING") @db.VarChar(20)
+  notBefore      DateTime               @map("not_before") @db.Timestamptz(6)
+  attemptCount   Int                    @default(0) @map("attempt_count")
+  claimId        String?                @map("claim_id") @db.Uuid
+  leaseExpiresAt DateTime?              @map("lease_expires_at") @db.Timestamptz(6)
+  lastErrorCode  String?                @map("last_error_code") @db.VarChar(80)
+  completedAt    DateTime?              @map("completed_at") @db.Timestamptz(6)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  upload         AttachmentUploadIntent @relation(fields: [tenantId, uploadId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([status, notBefore, leaseExpiresAt], map: "idx_attachment_cleanup_ready")
   @@index([tenantId, uploadId], map: "idx_attachment_cleanup_upload")
@@ -415,4 +420,19 @@ model WorkOrderInventoryReservation {
   @@unique([tenantId, stockTransactionId], map: "uq_wo_inventory_reservation_transaction")
   @@index([tenantId, workOrderId, state], map: "idx_wo_inventory_reservation_held")
   @@map("work_order_inventory_reservations")
+}
+
+model WorkOrderChecklistHistory {
+  workOrder    WorkOrder @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  workOrderId  String    @map("work_order_id") @db.Uuid
+  actorId      String    @map("actor_id") @db.Uuid
+  assignmentId String    @map("assignment_id") @db.Uuid
+  version      Int
+  results      Json
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, workOrderId, version])
+  @@map("work_order_checklist_history")
 }

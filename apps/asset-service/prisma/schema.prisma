@@ -20,19 +20,20 @@ datasource db {
 
 /// status: ACTIVE | INACTIVE.
 model EquipmentModel {
-  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// Logical reference to organization_db.tenants.id
-  tenantId     String      @map("tenant_id") @db.Uuid
-  manufacturer String      @db.VarChar(150)
-  modelCode    String      @map("model_code") @db.VarChar(100)
-  name         String      @db.VarChar(200)
-  category     String?     @db.VarChar(100)
-  description  String?
-  status       String      @default("ACTIVE") @db.VarChar(30)
-  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  equipments   Equipment[]
-  auditHistory EquipmentModelHistory[]
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  manufacturer     String                  @db.VarChar(150)
+  modelCode        String                  @map("model_code") @db.VarChar(100)
+  name             String                  @db.VarChar(200)
+  category         String?                 @db.VarChar(100)
+  description      String?
+  status           String                  @default("ACTIVE") @db.VarChar(30)
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  equipments       Equipment[]
+  auditHistory     EquipmentModelHistory[]
+  warrantyPolicies ModelWarrantyRevision[]
 
   @@unique([tenantId, manufacturer, modelCode])
   @@unique([tenantId, id])
@@ -42,35 +43,35 @@ model EquipmentModel {
 /// Retired through status, never hard-deleted (referenced by other services).
 /// status: ACTIVE | IN_SERVICE | OUT_OF_SERVICE | RETIRED.
 model Equipment {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId         String             @map("tenant_id") @db.Uuid
-  modelId          String             @map("model_id") @db.Uuid
+  id                         String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                   String                 @map("tenant_id") @db.Uuid
+  modelId                    String                 @map("model_id") @db.Uuid
   /// Logical reference to organization_db.customers.id
-  customerId       String             @map("customer_id") @db.Uuid
+  customerId                 String                 @map("customer_id") @db.Uuid
   /// Logical reference to organization_db.customer_sites.id
-  customerSiteId   String             @map("customer_site_id") @db.Uuid
+  customerSiteId             String                 @map("customer_site_id") @db.Uuid
   /// Logical reference to organization_db.locations.id
-  locationId       String?            @map("location_id") @db.Uuid
-  assetCode        String             @map("asset_code") @db.VarChar(100)
-  serialNumber     String             @map("serial_number") @db.VarChar(150)
-  installationDate DateTime?          @map("installation_date") @db.Date
-  handoverDate     DateTime?          @map("handover_date") @db.Date
-  status           String             @default("ACTIVE") @db.VarChar(30)
-  snapshotVersion  Int                @default(0) @map("snapshot_version")
-  displayName String? @map("display_name") @db.VarChar(200)
-  description String?
-  commissionedDate DateTime? @map("commissioned_date") @db.Date
-  technicalSpecifications Json? @map("technical_specifications")
-  operationalStatus String @default("UNKNOWN") @map("operational_status") @db.VarChar(30)
-  operationalStatusUpdatedAt DateTime? @map("operational_status_updated_at") @db.Timestamptz(6)
-  operationalStatusUpdatedBy String? @map("operational_status_updated_by") @db.Uuid
-  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  model            EquipmentModel     @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  warranties       Warranty[]
-  qrCodes          EquipmentQrCode[]
-  history          EquipmentHistory[]
-  registration     EquipmentRegistration?
+  locationId                 String?                @map("location_id") @db.Uuid
+  assetCode                  String                 @map("asset_code") @db.VarChar(100)
+  serialNumber               String                 @map("serial_number") @db.VarChar(150)
+  installationDate           DateTime?              @map("installation_date") @db.Date
+  handoverDate               DateTime?              @map("handover_date") @db.Date
+  status                     String                 @default("ACTIVE") @db.VarChar(30)
+  snapshotVersion            Int                    @default(0) @map("snapshot_version")
+  displayName                String?                @map("display_name") @db.VarChar(200)
+  description                String?
+  commissionedDate           DateTime?              @map("commissioned_date") @db.Date
+  technicalSpecifications    Json?                  @map("technical_specifications")
+  operationalStatus          String                 @default("UNKNOWN") @map("operational_status") @db.VarChar(30)
+  operationalStatusUpdatedAt DateTime?              @map("operational_status_updated_at") @db.Timestamptz(6)
+  operationalStatusUpdatedBy String?                @map("operational_status_updated_by") @db.Uuid
+  createdAt                  DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  model                      EquipmentModel         @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  warranties                 Warranty[]
+  qrCodes                    EquipmentQrCode[]
+  history                    EquipmentHistory[]
+  registration               EquipmentRegistration?
 
   @@unique([tenantId, assetCode])
   @@unique([tenantId, modelId, serialNumber])
@@ -84,17 +85,20 @@ model Equipment {
 /// EXPIRED is derived from end_date at query time, never stored.
 /// status: ACTIVE | VOID. end_date >= start_date is CHECKed in SQL.
 model Warranty {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String    @map("tenant_id") @db.Uuid
-  equipmentId  String    @map("equipment_id") @db.Uuid
-  startDate    DateTime  @map("start_date") @db.Date
-  endDate      DateTime  @map("end_date") @db.Date
-  warrantyType String    @map("warranty_type") @db.VarChar(50)
-  terms        String?
-  status       String    @default("ACTIVE") @db.VarChar(30)
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  equipment    Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  sourcePolicy    ModelWarrantyRevision? @relation(fields: [tenantId, policyVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  policyVersionId String?                @map("policy_version_id") @db.Uuid
+  policySnapshot  Json?                  @map("policy_snapshot")
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
+  equipmentId     String                 @map("equipment_id") @db.Uuid
+  startDate       DateTime               @map("start_date") @db.Date
+  endDate         DateTime               @map("end_date") @db.Date
+  warrantyType    String                 @map("warranty_type") @db.VarChar(50)
+  terms           String?
+  status          String                 @default("ACTIVE") @db.VarChar(30)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  equipment       Equipment              @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   registrations EquipmentRegistration[]
 
@@ -121,26 +125,26 @@ model EquipmentQrCode {
 /// source_event_id is unique (partial index in SQL) so an event consumer
 /// writes each history entry at most once.
 model EquipmentHistory {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  equipmentId   String    @map("equipment_id") @db.Uuid
-  eventType     String    @map("event_type") @db.VarChar(50)
-  referenceType String?   @map("reference_type") @db.VarChar(50)
-  referenceId   String?   @map("reference_id") @db.Uuid
-  description   String?
-  metadata      Json?
-  sourceEventId String?   @map("source_event_id") @db.Uuid
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  equipmentId    String    @map("equipment_id") @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(50)
+  referenceType  String?   @map("reference_type") @db.VarChar(50)
+  referenceId    String?   @map("reference_id") @db.Uuid
+  description    String?
+  metadata       Json?
+  sourceEventId  String?   @map("source_event_id") @db.Uuid
   /// Logical reference to identity_db.users.id
-  createdBy     String?   @map("created_by") @db.Uuid
-  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  actorType String @default("UNKNOWN") @map("actor_type") @db.VarChar(20)
-  actorRoles String[] @default([]) @map("actor_roles")
-  changes Json?
-  context Json?
-  reasonInternal String? @map("reason_internal")
-  customerNote String? @map("customer_note")
-  equipment     Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  createdBy      String?   @map("created_by") @db.Uuid
+  occurredAt     DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  actorType      String    @default("UNKNOWN") @map("actor_type") @db.VarChar(20)
+  actorRoles     String[]  @default([]) @map("actor_roles")
+  changes        Json?
+  context        Json?
+  reasonInternal String?   @map("reason_internal")
+  customerNote   String?   @map("customer_note")
+  equipment      Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([tenantId, equipmentId, occurredAt(sort: Desc)], map: "idx_equipment_history_equipment_time")
   @@index([tenantId, occurredAt(sort: Desc), id], map: "idx_equipment_history_tenant_time")
@@ -159,15 +163,15 @@ model ProcessedEvent {
 }
 
 model EquipmentModelHistory {
-  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId String @map("tenant_id") @db.Uuid
-  modelId String @map("model_id") @db.Uuid
-  eventType String @map("event_type") @db.VarChar(50)
-  actorId String? @map("actor_id") @db.Uuid
-  actorRoles String[] @default([]) @map("actor_roles")
-  changes Json
-  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
-  model EquipmentModel @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  modelId    String         @map("model_id") @db.Uuid
+  eventType  String         @map("event_type") @db.VarChar(50)
+  actorId    String?        @map("actor_id") @db.Uuid
+  actorRoles String[]       @default([]) @map("actor_roles")
+  changes    Json
+  occurredAt DateTime       @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  model      EquipmentModel @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([tenantId, modelId, occurredAt])
   @@map("equipment_model_history")
@@ -193,6 +197,8 @@ model OutboxEvent {
 
 /// Asset-owned initial service setup, separate from Equipment lifecycle status.
 model EquipmentRegistration {
+  policyPreview        Json?     @map("policy_preview")
+  maintenancePlanIds   String[]  @default([]) @map("maintenance_plan_ids") @db.Uuid
   id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId             String    @map("tenant_id") @db.Uuid
   equipmentId          String    @map("equipment_id") @db.Uuid
@@ -226,4 +232,24 @@ model EquipmentRegistration {
   @@unique([tenantId, createActorId, createKey])
   @@index([tenantId, status, updatedAt])
   @@map("equipment_registrations")
+}
+
+model ModelWarrantyRevision {
+  model             EquipmentModel @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  appliedWarranties Warranty[]
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String         @map("tenant_id") @db.Uuid
+  modelId           String         @map("model_id") @db.Uuid
+  revision          Int
+  version           Int            @default(1)
+  status            String         @default("DRAFT") @db.VarChar(20)
+  isDefault         Boolean        @default(false) @map("is_default")
+  body              Json
+  createdBy         String         @map("created_by") @db.Uuid
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, modelId, revision])
+  @@unique([tenantId, id])
+  @@map("model_warranty_revisions")
 }

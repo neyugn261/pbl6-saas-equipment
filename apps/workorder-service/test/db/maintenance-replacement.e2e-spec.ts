@@ -52,7 +52,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
   });
   beforeEach(async () => {
     await db.$executeRawUnsafe(
-      'TRUNCATE work_order_inventory_reservations, attachment_cleanup_jobs, attachment_idempotency, attachment_upload_intents, report_attachments, service_reports, work_order_attachments, work_logs, work_order_assignments, work_order_status_history, work_orders, technician_skills, skills, technicians, document_sequences, outbox_events, processed_events',
+      'TRUNCATE work_order_checklist_history, work_order_inventory_reservations, attachment_cleanup_jobs, attachment_idempotency, attachment_upload_intents, report_attachments, service_reports, work_order_attachments, work_logs, work_order_assignments, work_order_status_history, work_orders, technician_skills, skills, technicians, document_sequences, outbox_events, processed_events',
     );
     jest.resetAllMocks();
     for (const method of Object.values(refs))
@@ -447,7 +447,12 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
     const row = await db.workOrder.findUniqueOrThrow({
       where: { id: event.payload.replacementWorkOrderId },
     });
-    const { id: _id, ...data } = row;
+    const {
+      id: _id,
+      checklist: _checklist,
+      checklistResults: _results,
+      ...data
+    } = row;
     await expect(
       db.workOrder.create({
         data: {

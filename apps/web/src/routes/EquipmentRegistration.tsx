@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { api, ApiError } from '../api/client'
-import { getSessionGeneration, useSession } from '../auth/session'
-import type { Page } from '../types/domain'
+import { HandoverPolicyPanel } from "./ModelPolicyPanels";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { api, ApiError } from "../api/client";
+import { getSessionGeneration, useSession } from "../auth/session";
+import type { Page } from "../types/domain";
 import {
   DirectoryPicker,
   LoadState,
@@ -10,9 +11,13 @@ import {
   type QuickKind,
   SetupPage,
 } from './registration-shared'
-import { type DirectoryRow, errorText, useDirectory } from './registration-data'
-import QRCode from 'qrcode'
-import './equipment-registration.css'
+import {
+  type DirectoryRow,
+  errorText,
+  useDirectory,
+} from "./registration-data";
+import QRCode from "qrcode";
+import "./equipment-registration.css";
 
 type Choice = {
   mode: 'UNCONFIRMED' | 'CREATE' | 'KEEP' | 'NONE'
@@ -30,18 +35,20 @@ type Choice = {
   nextDueDate?: string
 }
 type Registration = {
-  id: string
-  equipmentId: string
-  status: 'DRAFT' | 'PENDING_MAINTENANCE' | 'COMPLETED'
-  version: number
-  warranty: Choice
-  maintenance: Choice
-  warrantyId: string | null
-  maintenancePlanId: string | null
-  allowedActions: string[]
-  lastErrorCode: string | null
-  completedAt: string | null
-}
+  policyPreview?: Parameters<typeof HandoverPolicyPanel>[0]["snapshot"];
+  maintenancePlanIds?: string[];
+  id: string;
+  equipmentId: string;
+  status: "DRAFT" | "PENDING_MAINTENANCE" | "COMPLETED";
+  version: number;
+  warranty: Choice;
+  maintenance: Choice;
+  warrantyId: string | null;
+  maintenancePlanId: string | null;
+  allowedActions: string[];
+  lastErrorCode: string | null;
+  completedAt: string | null;
+};
 type Equipment = {
   id: string
   customerId: string
@@ -84,7 +91,7 @@ type FormState = {
   warranty: Choice
   maintenance: Choice
 }
-const unknownChoice = (): Choice => ({ mode: 'UNCONFIRMED' })
+const unknownChoice = (): Choice => ({ mode: "UNCONFIRMED" });
 const statusNames = {
   NOT_RECORDED: 'Chưa ghi nhận thiết lập',
   DRAFT: 'Hồ sơ chưa hoàn tất',
@@ -206,7 +213,7 @@ export function EquipmentRegistrationPage() {
     navigate = useNavigate(),
     location = useLocation(),
     { profile } = useSession()
-  const query = new URLSearchParams(location.search)
+  const query = new URLSearchParams(location.search);
   const [form, setForm] = useState<FormState>(() => ({
     customerId: query.get('customerId') || '',
     siteId: query.get('siteId') || '',
@@ -238,8 +245,8 @@ export function EquipmentRegistrationPage() {
     [needsReload, setNeedsReload] = useState(false)
   const pending = useRef<{ key: string; body: unknown } | null>(null),
     selectedSequence = useRef(0)
-  const markerKey = `pbl6.registration.${window.location.origin}.${profile?.tenantId}.${profile?.id}`
-  const canMaintain = profile?.roles.includes('SERVICE_MANAGER') === true
+  const markerKey = `pbl6.registration.${window.location.origin}.${profile?.tenantId}.${profile?.id}`;
+  const canMaintain = profile?.roles.includes("SERVICE_MANAGER") === true;
   const frozen =
     record?.status === 'PENDING_MAINTENANCE' ||
     record?.status === 'COMPLETED' ||
@@ -406,7 +413,8 @@ export function EquipmentRegistrationPage() {
       )
         return 'Ngày thực tế của thiết bị không được ở tương lai.'
     }
-    const choice = part === 2 ? form.warranty : form.maintenance
+    if (record?.policyPreview && part >= 2) return "";
+    const choice = part === 2 ? form.warranty : form.maintenance;
     if (part >= 2 && part <= 3) {
       if (final && choice.mode === 'UNCONFIRMED')
         return 'Xác nhận bảo hành và bảo trì trước khi hoàn tất.'
@@ -436,7 +444,7 @@ export function EquipmentRegistrationPage() {
       )
         return 'Nhập tên kế hoạch, chu kỳ và kỳ đầu hợp lệ.'
     }
-    return ''
+    return "";
   }
   async function recover() {
     setBusy(true)
@@ -477,8 +485,8 @@ export function EquipmentRegistrationPage() {
     }
   }
   async function persist(complete: boolean, retry = false) {
-    if (busy && !retry) return
-    const operationGeneration = getSessionGeneration()
+    if (busy && !retry) return;
+    const operationGeneration = getSessionGeneration();
     if (!retry)
       for (let part = 0; part < 4; part++) {
         const issue = validation(part, complete)
@@ -488,9 +496,9 @@ export function EquipmentRegistrationPage() {
           return
         }
       }
-    setBusy(true)
-    setError('')
-    let saved = record
+    setBusy(true);
+    setError("");
+    let saved = record;
     try {
       if (!saved) {
         if (!pending.current) {
@@ -544,7 +552,7 @@ export function EquipmentRegistrationPage() {
           JSON.stringify({ key: pending.current.key, id: saved.id }),
         )
         pending.current = null
-      } else if (saved.status === 'DRAFT')
+      } else if (saved.status === "DRAFT" && !saved.policyPreview)
         saved = await api.assetM2<Registration>(
           `/equipment-registrations/${saved.id}`,
           {
@@ -556,20 +564,20 @@ export function EquipmentRegistrationPage() {
             },
           },
         )
-      if (getSessionGeneration() !== operationGeneration) return
-      setRecord(saved)
-      setUncertain(false)
+      if (getSessionGeneration() !== operationGeneration) return;
+      setRecord(saved);
+      setUncertain(false);
       if (complete && saved.status === 'DRAFT')
         saved = await api.assetM2<Registration>(
           `/equipment-registrations/${saved.id}/submit`,
           { method: 'POST', body: { expectedVersion: saved.version } },
         )
-      if (getSessionGeneration() !== operationGeneration) return
-      setRecord(saved)
-      setStep(4)
-      setRevision((v) => v + 1)
-      sessionStorage.removeItem(markerKey)
-      navigate(`/app/equipment-registrations/${saved.id}`, { replace: true })
+      if (getSessionGeneration() !== operationGeneration) return;
+      setRecord(saved);
+      setStep(4);
+      setRevision((v) => v + 1);
+      sessionStorage.removeItem(markerKey);
+      navigate(`/app/equipment-registrations/${saved.id}`, { replace: true });
     } catch (e) {
       if (getSessionGeneration() !== operationGeneration) return
       setError(errorText(e))
@@ -610,7 +618,7 @@ export function EquipmentRegistrationPage() {
           setNeedsReload(true)
       }
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
   async function reloadStored() {
@@ -821,6 +829,37 @@ export function EquipmentRegistrationPage() {
                 Kiểm tra / thử lại cùng yêu cầu
               </button>
             </section>
+          )}
+          {!record && !uncertain && (
+            <section className="m1-card">
+              <h2>Lấy chính sách từ Model</h2>
+              <p>
+                Điền thông tin thiết bị và ngày bàn giao, lưu nháp rồi lấy chính
+                sách Model để không phải nhập lại bảo hành, bảo trì.
+              </p>
+              <button disabled={busy} onClick={() => void persist(false)}>
+                Lưu nháp để áp dụng chính sách Model
+              </button>
+            </section>
+          )}
+          {record && (
+            <HandoverPolicyPanel
+              key={record.id}
+              id={record.id}
+              version={record.version}
+              status={record.status}
+              snapshot={record.policyPreview}
+              changed={() => {
+                void api
+                  .assetM2<Registration>(
+                    `/equipment-registrations/${record.id}`,
+                  )
+                  .then((row) => {
+                    setRecord(row);
+                    setRevision((v) => v + 1);
+                  });
+              }}
+            />
           )}
           {record && (
             <section
@@ -1259,7 +1298,8 @@ export function EquipmentRegistrationPage() {
                   )}
                 </>
               )}
-              {step === 2 && (
+              {(step === 2 || step === 3) && record?.policyPreview && <p>Điều khoản và lịch bảo trì theo Model đã hiển thị phía trên. Kiểm tra các phiên bản đã chọn rồi xác nhận áp dụng cho thiết bị.</p>}
+              {step === 2 && !record?.policyPreview && (
                 <>
                   <h2>Điều khoản bảo hành của máy</h2>
                   {choiceSelect('warranty')}
@@ -1349,7 +1389,7 @@ export function EquipmentRegistrationPage() {
                   </p>
                 </>
               )}
-              {step === 3 && (
+              {step === 3 && !record?.policyPreview && (
                 <>
                   <h2>Bảo trì định kỳ</h2>
                   {!canMaintain && (
@@ -1538,7 +1578,9 @@ export function EquipmentRegistrationPage() {
                     <dd>{form.handoverDate || 'Chưa xác nhận'}</dd>
                     <dt>Bảo hành</dt>
                     <dd>
-                      {form.warranty.mode === 'CREATE'
+                      {record?.policyPreview
+                        ? record.policyPreview.warranty.body.mode === 'NONE' ? `Không áp dụng: ${record.policyPreview.warranty.body.reason}` : `Model v${record.policyPreview.warranty.revision} · ${record.policyPreview.warranty.startDate} → ${record.policyPreview.warranty.endDate}`
+                        : form.warranty.mode === 'CREATE'
                         ? `${form.warranty.warrantyType} · ${form.warranty.startDate} → ${form.warranty.endDate}`
                         : form.warranty.mode === 'KEEP'
                           ? 'Giữ bản ghi bảo hành đã chọn'
@@ -1548,7 +1590,9 @@ export function EquipmentRegistrationPage() {
                     </dd>
                     <dt>Bảo trì</dt>
                     <dd>
-                      {form.maintenance.mode === 'CREATE'
+                      {record?.policyPreview
+                        ? record.policyPreview.maintenance.body.mode === 'NONE' ? `Không lập định kỳ: ${record.policyPreview.maintenance.body.reason}` : `Model v${record.policyPreview.maintenance.revision} · ${record.policyPreview.maintenance.body.rules.length} lịch bảo trì`
+                        : form.maintenance.mode === 'CREATE'
                         ? `${form.maintenance.name} · mỗi ${form.maintenance.frequencyValue} ${{ DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng', YEAR: 'năm' }[form.maintenance.frequencyUnit || 'MONTH']} · kỳ đầu ${form.maintenance.nextDueDate}`
                         : form.maintenance.mode === 'KEEP'
                           ? 'Giữ kế hoạch và trạng thái đã chọn'
@@ -1604,5 +1648,5 @@ export function EquipmentRegistrationPage() {
         </>
       )}
     </SetupPage>
-  )
+  );
 }

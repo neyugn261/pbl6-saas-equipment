@@ -8,7 +8,10 @@ import {
   processOnce,
   type EventEnvelope,
   type MaintenanceWorkOrderReplacementRequestedV1,
+  type MaintenanceTaskDueV1,
+  type ChecklistItem,
 } from '@pbl6/event-contracts';
+import { Prisma } from '../generated/prisma/client.js';
 import type { WorkOrder } from '../generated/prisma/client.js';
 import { lockMaintenanceTask } from '../common/maintenance-source';
 import { sameUuid } from '../common/uuid';
@@ -26,13 +29,18 @@ export class MaintenanceEventsConsumer {
   async handle(envelope: EventEnvelope) {
     if (
       !isEvent(envelope, Events.MaintenanceTaskDue) &&
-      !isEvent(envelope, Events.MaintenanceWorkOrderReplacementRequested)
+      !isEvent(envelope, Events.MaintenanceTaskDueV2) &&
+      !isEvent(envelope, Events.MaintenanceWorkOrderReplacementRequested) &&
+      !isEvent(envelope, Events.MaintenanceWorkOrderReplacementRequestedV2)
     )
       return;
     // Transport validates the catalog too; keep direct handler calls equally strict.
     parseEnvelope(JSON.stringify(envelope));
     const tenantId = envelope.tenantId;
-    const payload = envelope.payload;
+    const payload = envelope.payload as MaintenanceTaskDueV1 & {
+      checklist?: ChecklistItem[];
+      policyVersionId?: string;
+    };
     if (
       !tenantId ||
       envelope.producer !== 'maintenance-service' ||
@@ -60,21 +68,19 @@ export class MaintenanceEventsConsumer {
       {
         eventId: envelope.eventId,
         eventType: envelope.eventType,
-        consumer: isEvent(
-          envelope,
-          Events.MaintenanceWorkOrderReplacementRequested,
-        )
-          ? MAINTENANCE_REPLACEMENT_CONSUMER
-          : MAINTENANCE_CONSUMER,
+        consumer:
+          isEvent(envelope, Events.MaintenanceWorkOrderReplacementRequested) ||
+          isEvent(envelope, Events.MaintenanceWorkOrderReplacementRequestedV2)
+            ? MAINTENANCE_REPLACEMENT_CONSUMER
+            : MAINTENANCE_CONSUMER,
       },
       async (tx) => {
         await lockMaintenanceTask(tx, payload.maintenanceTaskId);
-        const replacement = isEvent(
-          envelope,
-          Events.MaintenanceWorkOrderReplacementRequested,
-        )
-          ? envelope.payload
-          : null;
+        const replacement =
+          isEvent(envelope, Events.MaintenanceWorkOrderReplacementRequested) ||
+          isEvent(envelope, Events.MaintenanceWorkOrderReplacementRequestedV2)
+            ? envelope.payload
+            : null;
         if (replacement) {
           if (
             sameUuid(
@@ -136,6 +142,16 @@ export class MaintenanceEventsConsumer {
           if (previous) {
             if (!sameUuid(previous.tenantId, tenantId))
               throw new InvalidEventError(['Maintenance Task tenant mismatch']);
+            if (
+              payload.policyVersionId &&
+              payload.checklist &&
+              (previous.policyVersionId !== payload.policyVersionId ||
+                JSON.stringify(previous.checklist) !==
+                  JSON.stringify(payload.checklist))
+            )
+              throw new InvalidEventError([
+                'Conflicting maintenance instructions',
+              ]);
             // Replaying Due never expresses a manager's replacement intent.
             return;
           }
@@ -150,6 +166,13 @@ export class MaintenanceEventsConsumer {
                 }
               : {}),
             tenantId,
+            ...(payload.policyVersionId && payload.checklist
+              ? {
+                  checklist:
+                    payload.checklist as unknown as Prisma.InputJsonValue,
+                  policyVersionId: payload.policyVersionId,
+                }
+              : {}),
             workOrderNo: await nextWorkOrderNumber(tx, tenantId),
             maintenanceTaskId: payload.maintenanceTaskId,
             equipmentId: payload.equipmentId,

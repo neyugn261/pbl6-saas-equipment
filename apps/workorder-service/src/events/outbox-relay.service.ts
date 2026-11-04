@@ -62,5 +62,7 @@ export const REQUEST_CONSUMER_QUEUE = 'workorder-service.service-requests';
 export const MAINTENANCE_CONSUMER_QUEUE = 'workorder-service.maintenance-tasks';
 export const MAINTENANCE_EVENTS = [
   Events.MaintenanceTaskDue,
+  Events.MaintenanceTaskDueV2,
   Events.MaintenanceWorkOrderReplacementRequested,
+  Events.MaintenanceWorkOrderReplacementRequestedV2,
 ] as const;

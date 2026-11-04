@@ -3,6 +3,7 @@ import { EnvReader, type NodeEnv } from '@pbl6/service-kit';
 
 export interface AppEnv extends JwtEnv {
   NODE_ENV: NodeEnv;
+  MODEL_POLICIES_ENABLED: 'true' | 'false';
   PORT: number;
   ASSET_DATABASE_URL: string;
   ORGANIZATION_SERVICE_URL: string;
@@ -25,6 +26,11 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
   const env = new EnvReader(raw);
   return env.done({
     NODE_ENV: env.nodeEnv(),
+    MODEL_POLICIES_ENABLED: env.oneOf(
+      'MODEL_POLICIES_ENABLED',
+      ['true', 'false'] as const,
+      'true',
+    ),
     PORT: env.port(PORT_VARIABLE, DEFAULT_PORT),
     ASSET_DATABASE_URL: env.postgresUrl('ASSET_DATABASE_URL'),
     ORGANIZATION_SERVICE_URL: env.url('ORGANIZATION_SERVICE_URL', [

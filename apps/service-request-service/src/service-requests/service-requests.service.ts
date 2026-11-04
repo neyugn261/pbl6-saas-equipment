@@ -1,3 +1,9 @@
+import { coveredIncident, estimateAllowed } from './warranty-coverage';
+import {
+  validWarrantyPolicy,
+  type WarrantyPolicyBody,
+} from '@pbl6/event-contracts';
+import type { WarrantyAssessmentDto } from './dto';
 import {
   BadGatewayException,
   BadRequestException,
@@ -84,6 +90,7 @@ function publicRequest(request: ServiceRequest) {
     description: request.description,
     status: request.status,
     resolutionResult: request.resolutionResult,
+    resolutionChecklist: request.resolutionChecklist,
     resolutionSummary: request.resolutionSummary,
     resolvedWorkOrderNo: request.resolvedWorkOrderNo,
     resolutionCompletedAt: request.resolutionCompletedAt,
@@ -152,15 +159,18 @@ function allowedActions(
   if (canReview && status === 'NEW') actions.push('review');
   if (canReview && status === 'REVIEWING') {
     actions.push('request-info', 'warranty-check');
-    if (request.warrantyCheckResult === 'IN_WARRANTY') actions.push('accept');
+    if (coveredIncident(request)) actions.push('accept');
+    if (estimateStatus === null) actions.push('assess-warranty');
   }
+  if (canReview && status === 'COST_REJECTED' && estimateStatus === null)
+    actions.push('assess-warranty');
   if (canReview && REJECT_STATUSES.includes(status)) actions.push('reject');
   if (
     canManageEstimate &&
     ['REVIEWING', 'COST_REJECTED'].includes(status) &&
     estimateStatus === null &&
     request.warrantyCheckResult !== null &&
-    request.warrantyCheckResult !== 'IN_WARRANTY'
+    estimateAllowed(request)
   ) {
     actions.push('create-estimate');
   }
@@ -439,6 +449,10 @@ export class ServiceRequestsService {
     });
     return {
       ...publicRequest(request),
+      coverageAssessment: request.coverageAssessment,
+      assessmentVersion: request.assessmentVersion,
+      assessmentRequired: request.assessmentRequired,
+      appliedWarrantyPolicy: request.warrantyPolicySnapshot,
       warrantyCheck: request.warrantyCheckResult
         ? {
             result: request.warrantyCheckResult,
@@ -500,7 +514,7 @@ export class ServiceRequestsService {
           message: 'Record a warranty decision before creating an estimate',
         });
       }
-      if (request.warrantyCheckResult === 'IN_WARRANTY') {
+      if (!estimateAllowed(request)) {
         throw new UnprocessableEntityException({
           code: 'ESTIMATE_NOT_REQUIRED',
           message: 'An estimate is not required for in-warranty requests',
@@ -608,7 +622,7 @@ export class ServiceRequestsService {
           message: 'Record a warranty decision before sending an estimate',
         });
       }
-      if (request.warrantyCheckResult === 'IN_WARRANTY') {
+      if (!estimateAllowed(request)) {
         throw new UnprocessableEntityException({
           code: 'ESTIMATE_NOT_REQUIRED',
           message: 'An estimate is not required for in-warranty requests',
@@ -725,7 +739,7 @@ export class ServiceRequestsService {
       });
       if (
         request.status !== 'AWAITING_CUSTOMER_APPROVAL' ||
-        request.warrantyCheckResult === 'IN_WARRANTY'
+        !estimateAllowed(request)
       ) {
         throw invalidTransition(request.status, 'approve-estimate');
       }
@@ -1187,6 +1201,11 @@ export class ServiceRequestsService {
           status: 'REVIEWING',
           reviewStartedAt: checkedAt,
           warrantyCheckResult: warranty.result,
+          assessmentRequired: !!warranty.policyVersionId,
+          warrantyPolicyVersionId: warranty.policyVersionId ?? null,
+          warrantyPolicySnapshot: warranty.policySnapshot
+            ? (warranty.policySnapshot as Prisma.InputJsonValue)
+            : Prisma.DbNull,
           warrantyId: warranty.warrantyId,
           warrantyEndDate: warranty.endDate
             ? new Date(`${warranty.endDate}T00:00:00.000Z`)
@@ -1276,16 +1295,36 @@ export class ServiceRequestsService {
       if (locked.status !== 'REVIEWING') {
         throw invalidTransition(locked.status, 'warranty-check');
       }
+      if (
+        await tx.costEstimate.count({
+          where: {
+            tenantId: locked.tenantId,
+            requestId: locked.id,
+            status: { in: ['DRAFT', 'SENT', 'APPROVED'] },
+          },
+        })
+      )
+        throw new ConflictException({
+          code: 'LIVE_ESTIMATE_EXISTS',
+          message: 'Resolve the live estimate before rechecking warranty',
+        });
       return tx.serviceRequest.update({
         where: { id: locked.id },
         data: {
           warrantyCheckResult: warranty.result,
+          assessmentRequired: !!warranty.policyVersionId,
+          warrantyPolicyVersionId: warranty.policyVersionId ?? null,
+          warrantyPolicySnapshot: warranty.policySnapshot
+            ? (warranty.policySnapshot as Prisma.InputJsonValue)
+            : Prisma.DbNull,
           warrantyId: warranty.warrantyId,
           warrantyEndDate: warranty.endDate
             ? new Date(`${warranty.endDate}T00:00:00.000Z`)
             : null,
           warrantyCheckedBy: principal.userId,
           warrantyCheckedAt: new Date(),
+          coverageAssessment: Prisma.DbNull,
+          assessmentVersion: { increment: 1 },
         },
       });
     });
@@ -1303,6 +1342,112 @@ export class ServiceRequestsService {
     };
   }
 
+  async assessmentHistory(principal: Principal, requestId: string) {
+    const request = await this.findRequest(principal, requestId);
+    return {
+      items: await this.prisma.warrantyAssessmentHistory.findMany({
+        where: { tenantId: request.tenantId, requestId },
+        orderBy: { version: 'desc' },
+        take: 100,
+      }),
+    };
+  }
+  async assessWarranty(
+    principal: Principal,
+    requestId: string,
+    input: WarrantyAssessmentDto,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await this.lockRequest(tx, dataScope(principal), requestId);
+      if (!['REVIEWING', 'COST_REJECTED'].includes(row.status))
+        throw invalidTransition(row.status, 'assess-warranty');
+      if (row.assessmentVersion !== input.expectedVersion)
+        throw new ConflictException({
+          code: 'ASSESSMENT_VERSION_CONFLICT',
+          message: 'Reload the request before assessing',
+        });
+      if (!row.warrantyCheckResult)
+        throw new UnprocessableEntityException({
+          code: 'WARRANTY_CHECK_REQUIRED',
+          message: 'Check warranty before assessing',
+        });
+      if (
+        await tx.costEstimate.count({
+          where: {
+            tenantId: row.tenantId,
+            requestId,
+            status: { in: ['DRAFT', 'SENT', 'APPROVED'] },
+          },
+        })
+      )
+        throw new ConflictException({
+          code: 'LIVE_ESTIMATE_EXISTS',
+          message: 'Resolve the live estimate before changing coverage',
+        });
+      const source: unknown = row.warrantyPolicySnapshot;
+      const policy = (source ?? null) as WarrantyPolicyBody | null;
+      if (policy && !validWarrantyPolicy(policy))
+        throw new ConflictException({
+          code: 'POLICY_SNAPSHOT_INVALID',
+          message: 'Warranty source needs reconciliation',
+        });
+      if (
+        input.decision === 'COVERED' &&
+        (row.warrantyCheckResult !== 'IN_WARRANTY' ||
+          (policy && !policy.coveredCauses.includes(input.cause as never)))
+      )
+        throw new UnprocessableEntityException({
+          code: 'COVERAGE_NOT_SUPPORTED',
+          message: 'The applied warranty does not cover this cause',
+        });
+      if (
+        input.decision === 'NOT_COVERED' &&
+        row.warrantyCheckResult === 'IN_WARRANTY' &&
+        policy &&
+        !policy.exclusions.some((e) => e.code === input.cause)
+      )
+        throw new UnprocessableEntityException({
+          code: 'EXCLUSION_NOT_SUPPORTED',
+          message: 'Select an exclusion in the applied warranty',
+        });
+      const assessment = {
+        decision: input.decision,
+        cause: input.cause,
+        reason: input.reason.trim(),
+        policyVersionId: row.warrantyPolicyVersionId,
+        policySnapshot: policy,
+        temporalResult: row.warrantyCheckResult,
+        assessedBy: principal.userId,
+        assessedAt: new Date().toISOString(),
+      };
+      if (!assessment.reason)
+        throw new UnprocessableEntityException({
+          code: 'REASON_REQUIRED',
+          message: 'Assessment requires a reason',
+        });
+      const updated = await tx.serviceRequest.update({
+        where: { id: requestId },
+        data: {
+          assessmentRequired: true,
+          coverageAssessment: assessment as Prisma.InputJsonValue,
+          assessmentVersion: { increment: 1 },
+        },
+      });
+      await tx.warrantyAssessmentHistory.create({
+        data: {
+          tenantId: row.tenantId,
+          requestId,
+          actorId: principal.userId,
+          version: updated.assessmentVersion,
+          assessment: assessment as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        coverageAssessment: updated.coverageAssessment,
+        assessmentVersion: updated.assessmentVersion,
+      };
+    });
+  }
   async accept(principal: Principal, requestId: string) {
     return this.transition(
       principal,
@@ -1319,7 +1464,7 @@ export class ServiceRequestsService {
             message: 'Record a warranty check before accepting the request',
           });
         }
-        if (request.warrantyCheckResult !== 'IN_WARRANTY') {
+        if (!coveredIncident(request)) {
           throw new UnprocessableEntityException({
             code: 'ESTIMATE_REQUIRED',
             message:
@@ -1384,6 +1529,20 @@ export class ServiceRequestsService {
 
   async reopen(principal: Principal, requestId: string, reason: string) {
     this.assertRequesterOrReviewer(principal);
+    const prior = await this.findRequest(principal, requestId);
+    if (prior.assessmentRequired)
+      return this.transition(
+        principal,
+        requestId,
+        'reopen',
+        ['RESOLVED'],
+        'REVIEWING',
+        {
+          coverageAssessment: Prisma.DbNull,
+          assessmentVersion: { increment: 1 },
+        },
+        reason,
+      );
     return this.transition(
       principal,
       requestId,
@@ -1509,6 +1668,15 @@ export class ServiceRequestsService {
         throw invalidTransition(current.status, action);
       }
       validate?.(current);
+      if (action === 'reopen' && toStatus === 'REVIEWING')
+        await tx.costEstimate.updateMany({
+          where: {
+            tenantId: current.tenantId,
+            requestId: current.id,
+            status: { in: ['DRAFT', 'SENT', 'APPROVED'] },
+          },
+          data: { status: 'SUPERSEDED' },
+        });
 
       const updated = await tx.serviceRequest.update({
         where: { id: current.id },
