@@ -437,3 +437,14 @@ pnpm --filter asset-service --filter maintenance-service db:migrate
 Trên web mở `/app/equipment-registrations/new` bằng Service Manager để hoàn tất;
 Tenant Admin có thể lưu draft. Xem [thiết kế và kiểm thử thực tế](docs/testing/equipment-registration.md)
 để biết contract, migration, ca retry và các giới hạn của đợt triển khai.
+
+
+## Chính sách dịch vụ theo Model
+
+Model hỗ trợ các phiên bản bảo hành/bảo trì; bàn giao giữ snapshot và tạo nhiều
+Plan theo các lịch. WO nhận checklist; Service Manager đánh giá phạm vi bảo hành
+theo nguyên nhân của từng sự cố. Xem [hướng dẫn thao tác](docs/user-guide/model-service-policies.md),
+[API contract](docs/api/model-service-policies.yaml),
+[runbook](docs/planning/model-service-policies-rollout.md) và
+[kết quả nghiệm thu local](docs/testing/model-service-policies-acceptance.md).
+Luồng tích hợp thật chạy bằng `pnpm test:model-policies` với DB test riêng và RabbitMQ.

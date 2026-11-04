@@ -1,7 +1,9 @@
 # Gói công việc giao AI Agent — Chính sách dịch vụ theo Model
 
-Ngày: 2026-11-04. Đây là backlog có dependency/acceptance, không phải kết quả
-đã triển khai. Baseline local `ae0f4ee`; cập nhật base thực tế trước khi bắt đầu.
+Ngày: 2026-11-04. Đây là backlog thiết kế ban đầu có dependency/acceptance.
+Các task đã được triển khai trên `feature/model-service-policies`, base `b19ce17`.
+Kết quả thực chạy và gate review/deploy còn lại: [báo cáo nghiệm thu](../testing/model-service-policies-acceptance.md).
+Baseline khảo sát ban đầu: local `ae0f4ee`.
 Nguồn thiết kế: [master plan](../plans/model-service-policies-plan.md).
 
 ## Cách giao việc

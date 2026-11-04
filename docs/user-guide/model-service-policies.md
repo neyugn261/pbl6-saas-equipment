@@ -31,7 +31,9 @@ phần, kể cả phiên bản Không áp dụng có lý do.
 Nếu hồ sơ đang **PENDING_MAINTENANCE**, chọn **Đối soát và tiếp tục cùng hồ sơ**.
 Không tạo máy/hồ sơ mới. Khi có nhiều lịch, hệ thống tạo đủ các Plan rồi mới báo
 hoàn tất. Hồ sơ thiết bị hiển thị chính sách và phiên bản thực tế đã nhận.
-Hồ sơ thủ công cũ vẫn đọc và tiếp tục theo quy trình trước đây.
+Hồ sơ thủ công cũ vẫn đọc và tiếp tục theo quy trình trước đây. Nếu hệ thống ngừng
+hoặc dữ liệu được ghi nhận muộn, scheduler giữ lịch gốc và xử lý kỳ gần nhất đã
+đến hạn, theo quy tắc hiện hành; không tạo dồn mọi kỳ đã bỏ lỡ.
 
 ## Tiếp nhận sự cố bảo hành
 
