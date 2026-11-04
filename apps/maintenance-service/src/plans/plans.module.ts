@@ -1,3 +1,4 @@
+import { RegistrationGroupService } from '../registrations/registration-group.service';
 import { RegistrationPlanController } from '../registrations/registration-plan.controller';
 import { RegistrationPlanService } from '../registrations/registration-plan.service';
 import { Module } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { JourneyController } from './journey.controller';
   providers: [
     PlansRepository,
     RegistrationPlanService,
+    RegistrationGroupService,
     PlansService,
     JourneyService,
     {

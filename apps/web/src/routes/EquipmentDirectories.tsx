@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api/client'
-import { useSession } from '../auth/session'
-import type { Page } from '../types/domain'
-import { LoadState, QuickForm, SetupPage } from './registration-shared'
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { api } from "../api/client";
+import { useSession } from "../auth/session";
+import type { Page } from "../types/domain";
+import { LoadState, QuickForm, SetupPage } from "./registration-shared";
 import {
   type DirectoryRow,
   errorText,
@@ -308,7 +308,7 @@ export function EquipmentModelsPage() {
       setBusy(false)
     }
   }
-  const edit = form
+  const edit = form;
   return (
     <SetupPage
       title="Danh mục model thiết bị"
@@ -366,16 +366,21 @@ export function EquipmentModelsPage() {
                 {state.value.items.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <strong>{row.name}</strong>
+                      <Link to={`/app/equipment-models/${row.id}`}>
+                        <strong>{row.name}</strong>
+                      </Link>
                       <small>{row.modelCode}</small>
                     </td>
                     <td>{row.manufacturer}</td>
-                    <td>{row.category || 'Chưa phân nhóm'}</td>
+                    <td>{row.category || "Chưa phân nhóm"}</td>
                     <td>
                       {row.status === 'ACTIVE' ? 'Đang dùng' : 'Ngừng dùng'}
                     </td>
                     <td>
                       <div className="registration-actions">
+                        <Link to={`/app/equipment-models/${row.id}`}>
+                          Chính sách dịch vụ
+                        </Link>
                         <button disabled={busy} onClick={() => setForm(row)}>
                           Sửa
                         </button>
@@ -413,5 +418,5 @@ export function EquipmentModelsPage() {
         )}
       </section>
     </SetupPage>
-  )
+  );
 }

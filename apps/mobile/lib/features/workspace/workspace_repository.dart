@@ -259,6 +259,7 @@ class WorkspaceRepository extends ChangeNotifier {
       'resume',
       'complete',
       'logs',
+      'checklist',
     ].contains(action)) {
       throw const ApiException('INVALID_COMMAND');
     }

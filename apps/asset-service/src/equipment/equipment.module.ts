@@ -1,3 +1,5 @@
+import { AppliedPoliciesController } from '../model-policies/applied-policies.controller';
+import { ModelSetupService } from '../model-policies/model-setup.service';
 import { RegistrationService } from '../registrations/registration.service';
 import {
   RegistrationController,
@@ -30,6 +32,7 @@ import { DossierService } from '../dossier/dossier.service';
   imports: [EquipmentModelModule, OrganizationModule],
   controllers: [
     EquipmentController,
+    AppliedPoliciesController,
     RegistrationController,
     RegistrationProjectionController,
     InternalEquipmentController,
@@ -43,6 +46,7 @@ import { DossierService } from '../dossier/dossier.service';
   providers: [
     EquipmentRepository,
     RegistrationService,
+    ModelSetupService,
     EquipmentService,
     WarrantyRepository,
     WarrantyService,

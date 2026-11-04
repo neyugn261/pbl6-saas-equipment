@@ -1,3 +1,5 @@
+import 'checklist_panel.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -84,7 +86,7 @@ class _JobReadScreenState extends State<JobReadScreen>
                   onPressed: _refresh,
                   child: const Text('Thử lại'),
                 ),
-              )
+              ),
           ],
         ),
       ),
@@ -103,9 +105,22 @@ class _JobReadScreenState extends State<JobReadScreen>
           Pill(label(text(w.data, 'priority')), color: AppColors.muted),
         ],
       ),
+      if (w.data['policyVersionId'] != null && _tab != 5)
+        OutlinedButton.icon(
+          onPressed: () => setState(() => _tab = 5),
+          icon: const Icon(Icons.checklist),
+          label: const Text('Thực hiện checklist'),
+        ),
       const SizedBox(height: 20),
       ChoicePills(
-        labels: const ['Tổng quan', 'Hoạt động', 'Báo cáo', 'Tệp', 'Phụ tùng'],
+        labels: const [
+          'Tổng quan',
+          'Hoạt động',
+          'Báo cáo',
+          'Tệp',
+          'Phụ tùng',
+          'Checklist',
+        ],
         selected: _tab,
         onSelected: (i) => setState(() => _tab = i),
       ),
@@ -128,6 +143,13 @@ class _JobReadScreenState extends State<JobReadScreen>
           revision: _revision,
           canUploadWorkOrder: !w.terminal && w.currentFor(repo.user.id),
           reportCompleted: w.status == 'COMPLETED',
+        ),
+      if (_tab == 5)
+        ChecklistPanel(
+          key: ValueKey(w.id),
+          repo: repo,
+          orderId: w.id,
+          onSaved: () => unawaited(workflow.load()),
         ),
       if (_tab == 4)
         const Notice(

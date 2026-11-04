@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-04",
+  "branch": "feature/model-service-policies",
+  "baseCommit": "b19ce17",
+  "implementationCommit": "cff656f",
+  "backend": {
+    "status": "PASS",
+    "tenantId": "dd333f49-826b-4780-a169-33a37de690df",
+    "references": {
+      "modelId": "8d29db5c-5159-45b8-acf1-d61fa5dda007",
+      "equipmentId": "6c6079b1-9fee-40c8-a168-992cd4a1e492",
+      "registrationId": "370ae12a-10bf-4e9e-bbb3-eaee34d64d9f",
+      "planIds": [
+        "8e19b002-c3a1-4946-8c67-a3aa2dea6f76",
+        "dd1651f1-659b-4941-82fd-2079d2ae7f64"
+      ],
+      "warrantyRevisionId": "46fbfe2e-b077-4825-95bc-96944371c44a",
+      "maintenanceRevisionId": "cc70de05-1b35-4551-8f82-7ac917e4a3a0",
+      "workOrderId": "619fdad7-0be3-496a-9b39-67411de6b1fc",
+      "serviceRequestId": "a305f6ae-773a-48a4-afdf-a6bb3130d7e1"
+    },
+    "evidence": [
+      {
+        "case": "policy versions, frozen handover, multiple plans, replay, customer scope",
+        "status": "PASS"
+      },
+      {
+        "case": "real broker, task snapshot, required checklist, report completion",
+        "status": "PASS"
+      },
+      {
+        "case": "real Identity login, in-term exclusion, estimate/customer approval; warranty remains active",
+        "status": "PASS"
+      },
+      {
+        "case": "lost remote response after commit + four parallel resumes: one Warranty and exactly two Plans",
+        "status": "PASS"
+      },
+      {
+        "case": "second-rule failure rolls back the whole Maintenance group; retry recovers without a second Warranty",
+        "status": "PASS"
+      },
+      {
+        "case": "reasoned overrides; forged source rejected; staff cannot execute technician checklist; customer summary excludes notes; retired preview cannot submit",
+        "status": "PASS"
+      },
+      {
+        "case": "forged receipt cannot complete; covered cause needs no estimate; UNKNOWN rejected; same-tenant customer isolation and draft privacy",
+        "status": "PASS"
+      },
+      {
+        "case": "independent anniversary Tasks; assignment removal blocks old technician, preserves audit; replacement replay keeps frozen checklist with fresh results; NONE differs from missing configuration",
+        "status": "PASS"
+      }
+    ],
+    "limits": [
+      "No production database used",
+      "Optional Browser/Android UAT runs only when the corresponding environment flag is true"
+    ]
+  },
+  "browserAndroidRun": {
+    "tenantId": "920a4084-2371-489b-8dc8-55b84a4ddf03",
+    "browser": "PASS",
+    "androidEmulatorApi36": "PASS",
+    "source": "real Identity/Gateway/owning test databases/scoped RabbitMQ"
+  },
+  "checks": {
+    "workspaceUnit": {
+      "pass": 426,
+      "fail": 0,
+      "skip": 0
+    },
+    "database": {
+      "asset": 34,
+      "maintenance": 18,
+      "workorder": 231,
+      "serviceRequest": 69,
+      "inventory": 33,
+      "notification": 17
+    },
+    "flutter": {
+      "pass": 109,
+      "fail": 0,
+      "skip": 2
+    },
+    "workspaceBuild": "PASS",
+    "workspaceLint": "PASS",
+    "workspaceTypecheck": "PASS",
+    "migrationsTwice": "PASS",
+    "identityPermissionSeedTwice": "PASS",
+    "migrationSchemaDrift": "PASS",
+    "liveTestDbSchemaDrift": "PASS",
+    "flutterAnalyze": "PASS",
+    "rootIntegrationCommand": "pnpm test:model-policies: PASS"
+  },
+  "externalGatesPending": [
+    "Remote CI run",
+    "Code Owner review and outside-author approval",
+    "Staging image deployment and second-person runbook acceptance",
+    "Physical-device/iOS testing",
+    "Shared broker container restart / OS crash injection"
+  ],
+  "verifiedSourceCommit": "3f1229e",
+  "scopeAssessmentRegression": "PASS: covered manufacturing fault, explicit liquid exclusion, accidental damage outside coveredCauses, UNKNOWN rejection"
+}

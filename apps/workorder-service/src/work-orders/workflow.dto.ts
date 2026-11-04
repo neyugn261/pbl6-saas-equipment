@@ -1,3 +1,11 @@
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  ArrayMaxSize,
+  ValidateNested,
+  IsInt,
+  Min,
+} from 'class-validator';
 import {
   IsBoolean,
   IsIn,
@@ -38,3 +46,18 @@ export class ServiceReportDto {
 }
 /** Global whitelist rejects fields for actions with no request body. */
 export class EmptyActionDto {}
+
+export class ChecklistResultDto {
+  @IsUUID() itemId: string;
+  @IsIn(['NOT_DONE', 'DONE', 'NOT_APPLICABLE']) status:
+    'NOT_DONE' | 'DONE' | 'NOT_APPLICABLE';
+  @IsString() @MaxLength(2000) note: string;
+}
+export class ChecklistInputDto {
+  @IsInt() @Min(0) expectedVersion: number;
+  @IsArray()
+  @ArrayMaxSize(60)
+  @ValidateNested({ each: true })
+  @Type(() => ChecklistResultDto)
+  results: ChecklistResultDto[];
+}

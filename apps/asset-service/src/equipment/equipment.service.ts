@@ -230,6 +230,8 @@ export class EquipmentService {
       result,
       warrantyId: warranty?.id ?? null,
       endDate: warranty ? dateString(warranty.endDate) : null,
+      policyVersionId: warranty?.policyVersionId ?? null,
+      policySnapshot: warranty?.policySnapshot ?? null,
     };
   }
 

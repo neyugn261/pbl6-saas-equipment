@@ -100,6 +100,10 @@ export function workOrderView(row: WorkOrderRow, p: Principal) {
         }
       : null,
     serviceReportId: row.serviceReports[0]?.id ?? null,
+    checklist: row.checklist,
+    checklistResults: row.checklistResults,
+    checklistVersion: row.checklistVersion,
+    policyVersionId: row.policyVersionId,
     allowedActions,
   };
 }

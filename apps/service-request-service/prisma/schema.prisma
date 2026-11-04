@@ -37,45 +37,52 @@ model DocumentSequence {
 /// The warranty_* columns are the decision snapshot frozen at review time;
 /// warranty_check_result: IN_WARRANTY | OUT_OF_WARRANTY | NO_WARRANTY.
 model ServiceRequest {
-  id                    String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId              String                 @map("tenant_id") @db.Uuid
-  requestNo             String                 @map("request_no") @db.VarChar(50)
+  assessmentHistory       WarrantyAssessmentHistory[]
+  resolutionChecklist     Json?                        @map("resolution_checklist")
+  warrantyPolicySnapshot  Json?                        @map("warranty_policy_snapshot")
+  warrantyPolicyVersionId String?                      @map("warranty_policy_version_id") @db.Uuid
+  coverageAssessment      Json?                        @map("coverage_assessment")
+  assessmentVersion       Int                          @default(0) @map("assessment_version")
+  assessmentRequired      Boolean                      @default(false) @map("assessment_required")
+  id                      String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                String                       @map("tenant_id") @db.Uuid
+  requestNo               String                       @map("request_no") @db.VarChar(50)
   /// Logical reference to organization_db.customers.id
-  customerId            String                 @map("customer_id") @db.Uuid
+  customerId              String                       @map("customer_id") @db.Uuid
   /// Logical reference to asset_db.equipments.id
-  equipmentId           String                 @map("equipment_id") @db.Uuid
+  equipmentId             String                       @map("equipment_id") @db.Uuid
   /// Logical reference to identity_db.users.id
-  requesterId           String                 @map("requester_id") @db.Uuid
-  type                  String                 @db.VarChar(30)
-  priority              String                 @default("NORMAL") @db.VarChar(20)
-  title                 String                 @db.VarChar(200)
-  description           String
-  status                String                 @default("NEW") @db.VarChar(40)
-  warrantyCheckResult   String?                @map("warranty_check_result") @db.VarChar(30)
+  requesterId             String                       @map("requester_id") @db.Uuid
+  type                    String                       @db.VarChar(30)
+  priority                String                       @default("NORMAL") @db.VarChar(20)
+  title                   String                       @db.VarChar(200)
+  description             String
+  status                  String                       @default("NEW") @db.VarChar(40)
+  warrantyCheckResult     String?                      @map("warranty_check_result") @db.VarChar(30)
   /// Logical reference to asset_db.warranties.id
-  warrantyId            String?                @map("warranty_id") @db.Uuid
-  warrantyEndDate       DateTime?              @map("warranty_end_date") @db.Date
-  warrantyCheckedBy     String?                @map("warranty_checked_by") @db.Uuid
-  warrantyCheckedAt     DateTime?              @map("warranty_checked_at") @db.Timestamptz(6)
-  reviewStartedAt       DateTime?              @map("review_started_at") @db.Timestamptz(6)
-  resolvedAt            DateTime?              @map("resolved_at") @db.Timestamptz(6)
-  resolutionResult      String?                @map("resolution_result") @db.VarChar(30)
-  resolutionSummary     String?                @map("resolution_summary")
-  resolvedWorkOrderNo   String?                @map("resolved_work_order_no") @db.VarChar(50)
-  resolutionCompletedAt DateTime?              @map("resolution_completed_at") @db.Timestamptz(6)
+  warrantyId              String?                      @map("warranty_id") @db.Uuid
+  warrantyEndDate         DateTime?                    @map("warranty_end_date") @db.Date
+  warrantyCheckedBy       String?                      @map("warranty_checked_by") @db.Uuid
+  warrantyCheckedAt       DateTime?                    @map("warranty_checked_at") @db.Timestamptz(6)
+  reviewStartedAt         DateTime?                    @map("review_started_at") @db.Timestamptz(6)
+  resolvedAt              DateTime?                    @map("resolved_at") @db.Timestamptz(6)
+  resolutionResult        String?                      @map("resolution_result") @db.VarChar(30)
+  resolutionSummary       String?                      @map("resolution_summary")
+  resolvedWorkOrderNo     String?                      @map("resolved_work_order_no") @db.VarChar(50)
+  resolutionCompletedAt   DateTime?                    @map("resolution_completed_at") @db.Timestamptz(6)
   /// Logical reference to workorder_db.work_orders.id for stale-event protection.
-  activeWorkOrderId     String?                @map("active_work_order_id") @db.Uuid
-  confirmedBy           String?                @map("confirmed_by") @db.Uuid
-  confirmedAt           DateTime?              @map("confirmed_at") @db.Timestamptz(6)
-  closedAt              DateTime?              @map("closed_at") @db.Timestamptz(6)
-  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  attachments           RequestAttachment[]
-  comments              RequestComment[]
-  statusHistory         RequestStatusHistory[]
-  costEstimates         CostEstimate[]
-  workOrderLifecycles   WorkOrderLifecycle[]
-  workOrderConflicts    WorkOrderLifecycleConflict[]
+  activeWorkOrderId       String?                      @map("active_work_order_id") @db.Uuid
+  confirmedBy             String?                      @map("confirmed_by") @db.Uuid
+  confirmedAt             DateTime?                    @map("confirmed_at") @db.Timestamptz(6)
+  closedAt                DateTime?                    @map("closed_at") @db.Timestamptz(6)
+  createdAt               DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attachments             RequestAttachment[]
+  comments                RequestComment[]
+  statusHistory           RequestStatusHistory[]
+  costEstimates           CostEstimate[]
+  workOrderLifecycles     WorkOrderLifecycle[]
+  workOrderConflicts      WorkOrderLifecycleConflict[]
 
   @@unique([tenantId, requestNo])
   @@unique([tenantId, id])
@@ -87,19 +94,19 @@ model ServiceRequest {
 }
 
 model RequestAttachment {
-  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String         @map("tenant_id") @db.Uuid
-  requestId   String         @map("request_id") @db.Uuid
-  storageKey  String         @map("storage_key") @db.VarChar(500)
-  fileName    String         @map("file_name") @db.VarChar(255)
-  mimeType    String         @map("mime_type") @db.VarChar(100)
-  sizeBytes   BigInt?        @map("size_bytes")
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  requestId  String         @map("request_id") @db.Uuid
+  storageKey String         @map("storage_key") @db.VarChar(500)
+  fileName   String         @map("file_name") @db.VarChar(255)
+  mimeType   String         @map("mime_type") @db.VarChar(100)
+  sizeBytes  BigInt?        @map("size_bytes")
   /// Logical reference to identity_db.users.id
-  uploadedBy  String         @map("uploaded_by") @db.Uuid
+  uploadedBy String         @map("uploaded_by") @db.Uuid
   /// INTERNAL | CUSTOMER (ADR 0006); customer accounts only see CUSTOMER.
-  visibility  String         @default("INTERNAL") @db.VarChar(20)
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  request     ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  visibility String         @default("INTERNAL") @db.VarChar(20)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  request    ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([requestId], map: "idx_request_attachments_request")
   @@map("request_attachments")
@@ -217,26 +224,26 @@ model ProcessedEvent {
 
 /// Private durable Work Order receipt and application state. No cross-service FK.
 model WorkOrderLifecycle {
-  tenantId        String   @map("tenant_id") @db.Uuid
-  workOrderId     String   @map("work_order_id") @db.Uuid
-  requestId       String   @map("request_id") @db.Uuid
-  equipmentId     String   @map("equipment_id") @db.Uuid
-  customerId      String?  @map("customer_id") @db.Uuid
-  createdPayload  Json?    @map("created_payload")
-  terminalPayload Json?    @map("terminal_payload")
-  terminalPhase   String?  @map("terminal_phase") @db.VarChar(20)
-  appliedPhase    String?  @map("applied_phase") @db.VarChar(20)
-  createdEventId  String?  @map("created_event_id") @db.Uuid
-  terminalEventId String?  @map("terminal_event_id") @db.Uuid
-  createdVersion  Int?     @map("created_version") @db.SmallInt
-  terminalVersion Int?     @map("terminal_version") @db.SmallInt
-  createdOccurredAt DateTime? @map("created_occurred_at") @db.Timestamptz(6)
-  terminalOccurredAt DateTime? @map("terminal_occurred_at") @db.Timestamptz(6)
-  createdCorrelationId String? @map("created_correlation_id") @db.VarChar(100)
-  terminalCorrelationId String? @map("terminal_correlation_id") @db.VarChar(100)
-  receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  request         ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "work_order_lifecycles_request_fkey")
+  tenantId              String         @map("tenant_id") @db.Uuid
+  workOrderId           String         @map("work_order_id") @db.Uuid
+  requestId             String         @map("request_id") @db.Uuid
+  equipmentId           String         @map("equipment_id") @db.Uuid
+  customerId            String?        @map("customer_id") @db.Uuid
+  createdPayload        Json?          @map("created_payload")
+  terminalPayload       Json?          @map("terminal_payload")
+  terminalPhase         String?        @map("terminal_phase") @db.VarChar(20)
+  appliedPhase          String?        @map("applied_phase") @db.VarChar(20)
+  createdEventId        String?        @map("created_event_id") @db.Uuid
+  terminalEventId       String?        @map("terminal_event_id") @db.Uuid
+  createdVersion        Int?           @map("created_version") @db.SmallInt
+  terminalVersion       Int?           @map("terminal_version") @db.SmallInt
+  createdOccurredAt     DateTime?      @map("created_occurred_at") @db.Timestamptz(6)
+  terminalOccurredAt    DateTime?      @map("terminal_occurred_at") @db.Timestamptz(6)
+  createdCorrelationId  String?        @map("created_correlation_id") @db.VarChar(100)
+  terminalCorrelationId String?        @map("terminal_correlation_id") @db.VarChar(100)
+  receivedAt            DateTime       @default(now()) @map("received_at") @db.Timestamptz(6)
+  updatedAt             DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  request               ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "work_order_lifecycles_request_fkey")
 
   @@id([tenantId, workOrderId])
   @@index([tenantId, requestId, appliedPhase])
@@ -247,20 +254,34 @@ model WorkOrderLifecycle {
 
 /// Quarantined contradictory receipts; never exposed by the customer API.
 model WorkOrderLifecycleConflict {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  requestId   String   @map("request_id") @db.Uuid
-  workOrderId String   @map("work_order_id") @db.Uuid
-  eventId     String   @map("event_id") @db.Uuid
-  eventType   String   @map("event_type") @db.VarChar(100)
-  eventVersion Int     @map("event_version") @db.SmallInt
-  reason      String   @db.VarChar(100)
-  payload     Json
-  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
-  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
-  request     ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "work_order_lifecycle_conflicts_request_fkey")
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String         @map("tenant_id") @db.Uuid
+  requestId    String         @map("request_id") @db.Uuid
+  workOrderId  String         @map("work_order_id") @db.Uuid
+  eventId      String         @map("event_id") @db.Uuid
+  eventType    String         @map("event_type") @db.VarChar(100)
+  eventVersion Int            @map("event_version") @db.SmallInt
+  reason       String         @db.VarChar(100)
+  payload      Json
+  occurredAt   DateTime       @map("occurred_at") @db.Timestamptz(6)
+  receivedAt   DateTime       @default(now()) @map("received_at") @db.Timestamptz(6)
+  request      ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "work_order_lifecycle_conflicts_request_fkey")
 
-  @@index([tenantId, requestId, receivedAt], map: "work_order_lifecycle_conflicts_tenant_id_request_id_received_at")
   @@unique([tenantId, eventId, reason])
+  @@index([tenantId, requestId, receivedAt], map: "work_order_lifecycle_conflicts_tenant_id_request_id_received_at")
   @@map("work_order_lifecycle_conflicts")
+}
+
+model WarrantyAssessmentHistory {
+  request    ServiceRequest @relation(fields: [tenantId, requestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String         @map("tenant_id") @db.Uuid
+  requestId  String         @map("request_id") @db.Uuid
+  actorId    String         @map("actor_id") @db.Uuid
+  version    Int
+  assessment Json
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, requestId, version])
+  @@map("warranty_assessment_history")
 }

@@ -1,3 +1,4 @@
+import { ModelPoliciesModule } from './model-policies/model-policies.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
@@ -21,6 +22,7 @@ import { EventsService } from './events/events.service';
       validate: validateEnv,
     }),
     PrismaModule,
+    ModelPoliciesModule,
     PlansModule,
     AuthModule.forRootAsync({
       inject: [ConfigService],
@@ -31,6 +33,11 @@ import { EventsService } from './events/events.service';
       useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
   ],
-  providers: [SchedulerService, EquipmentEventsConsumer, WorkOrderEventsConsumer, EventsService],
+  providers: [
+    SchedulerService,
+    EquipmentEventsConsumer,
+    WorkOrderEventsConsumer,
+    EventsService,
+  ],
 })
 export class AppModule {}

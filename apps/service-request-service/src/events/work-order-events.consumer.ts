@@ -54,6 +54,9 @@ function canonical(phase: Phase, payload: Payload): Record<string, unknown> {
       result: p.result,
       completedAt: new Date(p.completedAt).toISOString(),
       customerSummary: 'customerSummary' in p ? p.customerSummary : null,
+      ...('customerChecklist' in p
+        ? { customerChecklist: p.customerChecklist }
+        : {}),
     };
   }
   const p = payload as WorkOrderCancelledV1;
@@ -331,6 +334,7 @@ export class WorkOrderEventsConsumer {
         status: 'PROCESSING',
         activeWorkOrderId: row.workOrderId,
         resolutionResult: null,
+        resolutionChecklist: Prisma.DbNull,
         resolutionSummary: null,
         resolvedWorkOrderNo: null,
         resolutionCompletedAt: null,
@@ -392,6 +396,12 @@ export class WorkOrderEventsConsumer {
         ...(row.terminalPhase === 'COMPLETED'
           ? {
               resolutionResult: p.result as string,
+              ...(p.customerChecklist
+                ? {
+                    resolutionChecklist:
+                      p.customerChecklist as Prisma.InputJsonValue,
+                  }
+                : {}),
               resolutionSummary: p.customerSummary as string | null,
               resolvedWorkOrderNo: p.workOrderNo as string,
               resolutionCompletedAt: new Date(p.completedAt as string),
@@ -478,7 +488,13 @@ export class WorkOrderEventsConsumer {
     payload: Record<string, unknown>,
   ): Promise<void> {
     await tx.workOrderLifecycleConflict.upsert({
-      where: { tenantId_eventId_reason: { tenantId: request.tenantId, eventId: event.eventId, reason } },
+      where: {
+        tenantId_eventId_reason: {
+          tenantId: request.tenantId,
+          eventId: event.eventId,
+          reason,
+        },
+      },
       update: {},
       create: {
         tenantId: request.tenantId,

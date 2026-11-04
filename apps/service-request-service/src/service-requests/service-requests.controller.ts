@@ -1,3 +1,4 @@
+import { WarrantyAssessmentDto } from './dto';
 import {
   Body,
   Controller,
@@ -111,6 +112,26 @@ export class ServiceRequestsController {
     return this.requests.warrantyCheck(principal, requestId);
   }
 
+  @Get(':requestId/warranty-assessments')
+  @AllowUserTypes('TENANT_STAFF')
+  @RequirePermissions('service_request:review')
+  assessmentHistory(
+    @CurrentUser() p: Principal,
+    @Param('requestId', ParseUUIDPipe) id: string,
+  ) {
+    return this.requests.assessmentHistory(p, id);
+  }
+  @Post(':requestId/warranty-assessment')
+  @HttpCode(HttpStatus.OK)
+  @AllowUserTypes('TENANT_STAFF')
+  @RequirePermissions('service_request:review')
+  assess(
+    @CurrentUser() p: Principal,
+    @Param('requestId', ParseUUIDPipe) id: string,
+    @Body() input: WarrantyAssessmentDto,
+  ) {
+    return this.requests.assessWarranty(p, id, input);
+  }
   @Post(':requestId/accept')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('service_request:review')

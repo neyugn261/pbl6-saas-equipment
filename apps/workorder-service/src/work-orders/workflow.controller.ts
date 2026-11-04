@@ -1,3 +1,4 @@
+import { ChecklistInputDto } from './workflow.dto';
 import {
   Body,
   Controller,
@@ -27,6 +28,32 @@ import {
 @AllowUserTypes('TENANT_STAFF')
 export class WorkOrderWorkflowController {
   constructor(private readonly service: WorkOrderWorkflowService) {}
+  @Get('checklist')
+  @RequirePermissions('work_order:read')
+  checklist(
+    @CurrentUser() p: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.checklist(p, id);
+  }
+  @Get('checklist/history')
+  @RequirePermissions('work_order:read')
+  checklistHistory(
+    @CurrentUser() p: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.checklistHistory(p, id);
+  }
+  @Post('checklist')
+  @HttpCode(200)
+  @RequirePermissions('work_order:execute')
+  saveChecklist(
+    @CurrentUser() p: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: ChecklistInputDto,
+  ) {
+    return this.service.saveChecklist(p, id, input);
+  }
   @Post('assign')
   @HttpCode(200)
   @RequirePermissions('work_order:assign')

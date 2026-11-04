@@ -164,3 +164,13 @@ resume checks the original operation rather than starting another setup.
 Service Manager can complete the workflow. Tenant Admin can save a draft but
 has no maintenance:manage permission. Raw setup data is staff-only. Existing
 equipment remains NOT_RECORDED until explicitly reviewed; there is no backfill.
+
+
+## Model service policies (ADR 0018)
+
+Additive implementation and legacy compatibility: [ADR 0018](../../docs/decisions/0018-model-service-policies.md).
+Public/internal endpoints and schemas: [OpenAPI supplement](../../docs/api/model-service-policies.yaml).
+[User guide](../../docs/user-guide/model-service-policies.md) ·
+[rollout / rollback](../../docs/planning/model-service-policies-rollout.md).
+Run the real multi-service suite from the root with `pnpm test:model-policies`,
+using dedicated `*_TEST_DATABASE_URL` databases and RabbitMQ.

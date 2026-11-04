@@ -243,6 +243,12 @@ API, cơ chế token và lỗi trả về: [apps/identity-service/README.md](app
 
 ## 6. Chạy các thành phần khác
 
+Chạy toàn bộ backend bằng `pnpm dev:backend`. Lệnh này build package dùng chung,
+áp dụng migration bằng `prisma migrate deploy` cho các service rồi mới khởi động
+watch mode. Các lệnh `pnpm dev:<service>` của tám service có database cũng migrate
+database của service đó trước khi chạy. Nếu migration lỗi, lệnh dừng để sửa DB trước khi mở API. Không chạy reset
+hoặc seed tự động. Các lệnh này dùng `*_DATABASE_URL` theo cấu hình `.env` hiện tại.
+
 ```bash
 pnpm dev:web                # Web prototype: http://localhost:5173
 pnpm dev:gateway            # :3000
@@ -316,6 +322,23 @@ Các lệnh database riêng của Identity (chạy trong `apps/identity-service`
 | `pnpm prisma:generate` | Sinh lại Prisma client |
 
 ## 8. Xử lý sự cố
+
+### Prisma báo `The column ... does not exist` sau khi đổi nhánh/pull code
+
+Database đang dùng chưa nhận migration của code mới; `prisma generate` chỉ sinh
+client, không cập nhật cấu trúc database. Ví dụ `policy_preview`, `checklist` hoặc
+`resolution_checklist` được thêm bởi các migration chính sách Model. Chạy:
+
+```bash
+pnpm db:migrate
+```
+
+Sau khi migrate thành công, tải lại trang. `pnpm dev:backend` và các lệnh
+`pnpm dev:<service>` của service có database đã thực hiện bước này tự động. Khi chạy trực tiếp
+`pnpm --filter <service> start:dev` hoặc `start:prod`, phải tự chạy migration trước.
+DB test (`*_TEST_DATABASE_URL`) và DB dev (`*_DATABASE_URL`) độc lập; test xanh
+không có nghĩa database dev đã được migrate. Không dùng reset hoặc `prisma db push`
+để xử lý lỗi thiếu cột.
 
 ### `permission denied while trying to connect to the docker API` (Ubuntu)
 
@@ -437,3 +460,14 @@ pnpm --filter asset-service --filter maintenance-service db:migrate
 Trên web mở `/app/equipment-registrations/new` bằng Service Manager để hoàn tất;
 Tenant Admin có thể lưu draft. Xem [thiết kế và kiểm thử thực tế](docs/testing/equipment-registration.md)
 để biết contract, migration, ca retry và các giới hạn của đợt triển khai.
+
+
+## Chính sách dịch vụ theo Model
+
+Model hỗ trợ các phiên bản bảo hành/bảo trì; bàn giao giữ snapshot và tạo nhiều
+Plan theo các lịch. WO nhận checklist; Service Manager đánh giá phạm vi bảo hành
+theo nguyên nhân của từng sự cố. Xem [hướng dẫn thao tác](docs/user-guide/model-service-policies.md),
+[API contract](docs/api/model-service-policies.yaml),
+[runbook](docs/planning/model-service-policies-rollout.md) và
+[kết quả nghiệm thu local](docs/testing/model-service-policies-acceptance.md).
+Luồng tích hợp thật chạy bằng `pnpm test:model-policies` với DB test riêng và RabbitMQ.

@@ -99,3 +99,20 @@ event using the supplied WO ID; durable request/predecessor references and
 deployment ordering are recorded in [ADR 0011](../decisions/0011-workorder-maintenance-replacement.md).
 No replacement is implied by a Due replay. Deploy the replacement binding before
 enabling UI requests; replay previously unbound outbox deliveries with original IDs.
+
+
+## ADR 0018 — Policy checklist events
+
+`MaintenanceTaskDue` v2 and `MaintenanceWorkOrderReplacementRequested` v2
+have the original references plus `policyVersionId` and validated `checklist`.
+See `Events.MaintenanceTaskDueV2` / `MaintenanceWorkOrderReplacementRequestedV2`
+in the executable catalog. Producers publish one version per source: policy Plans
+use v2; legacy Plans use v1. Work Order subscribes to both versions before rollout.
+Task content, including replacement title, is frozen; replacement starts empty results.
+Duplicate delivery retains one WO; conflicting source instructions are rejected.
+
+`WorkOrderCompleted` v2 accepts optional `customerChecklist` containing only
+itemId, title and result status. Existing v2 payloads remain valid. Item notes and
+N/A reasons are excluded. Maintenance stores the approved completion projection;
+Service Request can expose it in its public resolution. No event implies an
+Inventory ISSUE. Existing inventory-hold/report/outbox transaction remains in force.

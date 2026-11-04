@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { api, ApiError } from '../api/client'
-import { getSessionGeneration } from '../auth/session'
+import { useEffect, useState } from "react";
+import { api, ApiError } from "../api/client";
+import { getSessionGeneration } from "../auth/session";
 
 export type DirectoryRow = {
   id: string
@@ -18,7 +18,7 @@ export type DirectoryRow = {
   assetCode?: string
   serialNumber?: string
 }
-export const setupRoles = ['TENANT_ADMIN', 'SERVICE_MANAGER']
+export const setupRoles = ["TENANT_ADMIN", "SERVICE_MANAGER"];
 export const errorText = (error: unknown) =>
   error instanceof ApiError
     ? `${error.status} · ${error.message}`
@@ -26,7 +26,13 @@ export const errorText = (error: unknown) =>
       ? error.message
       : 'Không thể tải dữ liệu.'
 export function useDirectory<T>(
-  area: 'organization' | 'assetM2' | 'maintenance' | 'identity',
+  area:
+    | "organization"
+    | "assetM2"
+    | "maintenance"
+    | "identity"
+    | "workorders"
+    | "requestsLive",
   path: string | null,
   revision = 0,
 ) {

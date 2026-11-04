@@ -142,3 +142,13 @@ Bằng chứng kiểm thử, các lỗi C4 đã sửa và giới hạn DB/integr
 
 Lượt tiếp tục: [M3-HUY-CONTINUATION.md](M3-HUY-CONTINUATION.md) — C4 DB E2E,
 timeout HTTP thật, expiry validation và regression PostgreSQL/P0/drift.
+
+
+## Model service policies (ADR 0018)
+
+Additive implementation and legacy compatibility: [ADR 0018](../../docs/decisions/0018-model-service-policies.md).
+Public/internal endpoints and schemas: [OpenAPI supplement](../../docs/api/model-service-policies.yaml).
+[User guide](../../docs/user-guide/model-service-policies.md) ·
+[rollout / rollback](../../docs/planning/model-service-policies-rollout.md).
+Run the real multi-service suite from the root with `pnpm test:model-policies`,
+using dedicated `*_TEST_DATABASE_URL` databases and RabbitMQ.

@@ -8,7 +8,7 @@ export type Role =
   | 'CUSTOMER_ADMIN'
   | 'CUSTOMER_USER'
 export type EquipmentStatus =
-  'ACTIVE' | 'IN_SERVICE' | 'OUT_OF_SERVICE' | 'RETIRED'
+  "ACTIVE" | "IN_SERVICE" | "OUT_OF_SERVICE" | "RETIRED";
 export type RequestStatus =
   | 'NEW'
   | 'REVIEWING'
@@ -21,14 +21,14 @@ export type RequestStatus =
   | 'REJECTED'
   | 'COST_REJECTED'
   | 'CANCELLED'
-export type Priority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
+export type Priority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 
 // Wire types from the M1 OpenAPI contracts.
 export interface Page<T> {
-  items: T[]
-  page: number
-  pageSize: number
-  total: number
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 export interface CustomerRecord {
   id: string
@@ -73,14 +73,28 @@ export interface RequestRecord {
   createdAt: string
 }
 export interface RequestDetail extends RequestRecord {
-  resolutionResult?: 'RESOLVED' | 'PARTIALLY_RESOLVED' | 'UNRESOLVED' | null
-  resolutionSummary?: string | null
-  resolvedWorkOrderNo?: string | null
-  resolutionCompletedAt?: string | null
+  resolutionChecklist?:
+    { itemId: string; title: string; status: string }[] | null;
+  assessmentRequired?: boolean;
+  assessmentVersion?: number;
+  coverageAssessment?: {
+    decision: string;
+    cause: string;
+    reason: string;
+  } | null;
+  appliedWarrantyPolicy?: {
+    terms: string;
+    coveredCauses: string[];
+    exclusions: { code: string; text: string }[];
+  } | null;
+  resolutionResult?: "RESOLVED" | "PARTIALLY_RESOLVED" | "UNRESOLVED" | null;
+  resolutionSummary?: string | null;
+  resolvedWorkOrderNo?: string | null;
+  resolutionCompletedAt?: string | null;
   warrantyCheck: {
-    result: 'IN_WARRANTY' | 'OUT_OF_WARRANTY' | 'NO_WARRANTY'
-  } | null
-  allowedActions: string[]
+    result: "IN_WARRANTY" | "OUT_OF_WARRANTY" | "NO_WARRANTY";
+  } | null;
+  allowedActions: string[];
 }
 export interface RequestStatusChange {
   id: string

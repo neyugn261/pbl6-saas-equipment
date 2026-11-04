@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { ModelSetupService } from '../model-policies/model-setup.service';
 import {
   BadGatewayException,
   ConflictException,
@@ -43,22 +43,8 @@ import {
 } from './registration.dto';
 
 type Tx = Prisma.TransactionClient;
-export function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, v]) => [key, canonical(v)]),
-    );
-  if (typeof value === 'string')
-    return isUUID(value) ? value.toLowerCase() : value.trim();
-  return value;
-}
-export const inputHash = (value: unknown) =>
-  createHash('sha256')
-    .update(JSON.stringify(canonical(value)))
-    .digest('hex');
+export { canonical, inputHash } from '../model-policies/policy-hash';
+import { canonical, inputHash } from '../model-policies/policy-hash';
 const conflict = (code: string, message: string) =>
   new ConflictException({ code, message });
 const missing = () =>
@@ -87,6 +73,7 @@ const permitted = (
 export class RegistrationService {
   constructor(
     private readonly db: PrismaService,
+    private readonly modelSetup: ModelSetupService,
     private readonly equipment: EquipmentService,
     private readonly equipmentRepo: EquipmentRepository,
     private readonly warrantyRepo: WarrantyRepository,
@@ -156,6 +143,8 @@ export class RegistrationService {
       maintenance: this.storedMaintenance(row),
       warrantyId: row.warrantyId,
       maintenancePlanId: row.maintenancePlanId,
+      maintenancePlanIds: row.maintenancePlanIds ?? [],
+      policyPreview: row.policyPreview ?? null,
       lastErrorCode: row.lastErrorCode,
       lastAttemptAt: row.lastAttemptAt,
       submittedAt: row.submittedAt,
@@ -364,6 +353,7 @@ export class RegistrationService {
         where: { id },
         data: {
           ...this.choiceData(warranty, maintenance),
+          policyPreview: Prisma.DbNull,
           version: { increment: 1 },
           updatedBy: p.userId,
         },
@@ -395,6 +385,11 @@ export class RegistrationService {
       site.siteStatus !== 'ACTIVE'
     )
       throw referenceError('CUSTOMER_SITE_INACTIVE');
+    if (preflight.policyPreview)
+      return this.view(
+        await this.modelSetup.submit(p, id, expectedVersion, eq),
+        p,
+      );
     if (preflight.maintenanceDecision === 'NONE') {
       const client = this.client();
       for (const status of ['ACTIVE', 'PAUSED']) {
@@ -535,6 +530,8 @@ export class RegistrationService {
     permitted(p, 'warranty:manage');
     permitted(p, 'maintenance:manage');
     const source = await this.load(p, id);
+    if (source.policyPreview)
+      return this.view(await this.modelSetup.resume(p, id), p);
     if (source.status === 'COMPLETED') return this.view(source, p);
     if (source.status !== 'PENDING_MAINTENANCE')
       throw conflict('REGISTRATION_NOT_SUBMITTED', 'Submit the draft first');

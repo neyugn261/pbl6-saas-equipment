@@ -207,6 +207,10 @@ jobs:
         run: |
           pnpm --filter asset-service --filter maintenance-service --filter workorder-service --filter api-gateway build
           pnpm --filter maintenance-service test:integration
+      - name: Model policies real Identity, Gateway, database and broker integration
+        env:
+          RABBITMQ_TEST_URL: amqp://pbl6:pbl6_dev_password@127.0.0.1:5672
+        run: pnpm test:model-policies
       - name: M1 regression and M2 workflows through API Gateway
         env:
           NODE_ENV: development
@@ -264,3 +268,20 @@ jobs:
       - name: Stop Compose infrastructure
         if: always()
         run: docker compose down --volumes
+
+  mobile:
+    name: Android client analysis and widget tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: apps/mobile
+      - run: flutter analyze
+        working-directory: apps/mobile
+      - run: flutter test
+        working-directory: apps/mobile

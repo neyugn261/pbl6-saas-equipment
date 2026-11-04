@@ -13,6 +13,8 @@ export function warrantyResponse(row: Warranty, today = todayInVietnam()) {
     endDate: dateString(row.endDate),
     warrantyType: row.warrantyType,
     terms: row.terms,
+    policyVersionId: row.policyVersionId,
+    policySnapshot: row.policySnapshot,
     status: row.status,
     expired: dateString(row.endDate)! < today,
   };

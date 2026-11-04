@@ -12,10 +12,21 @@ describe('validateEnv', () => {
     expect(validateEnv(valid)).toEqual({
       ...valid,
       NODE_ENV: 'development',
+      MODEL_POLICIES_ENABLED: 'true',
       PORT: 3002,
       JWT_ISSUER: 'pbl6-identity',
       JWT_AUDIENCE: 'pbl6',
     });
+  });
+
+  it('validates the rollback switch', () => {
+    expect(
+      validateEnv({ ...valid, MODEL_POLICIES_ENABLED: 'false' })
+        .MODEL_POLICIES_ENABLED,
+    ).toBe('false');
+    expect(() =>
+      validateEnv({ ...valid, MODEL_POLICIES_ENABLED: 'invalid' }),
+    ).toThrow('MODEL_POLICIES_ENABLED');
   });
 
   it('reads the service-specific port variable', () => {
@@ -29,24 +40,32 @@ describe('validateEnv', () => {
   });
 
   it('rejects a non-HTTP Organization URL', () => {
-    expect(() => validateEnv({ ...valid, ORGANIZATION_SERVICE_URL: 'file:///tmp/org' })).toThrow(
-      'ORGANIZATION_SERVICE_URL',
-    );
+    expect(() =>
+      validateEnv({ ...valid, ORGANIZATION_SERVICE_URL: 'file:///tmp/org' }),
+    ).toThrow('ORGANIZATION_SERVICE_URL');
   });
 
   it('requires a valid portal base URL for QR deep links', () => {
-    expect(() => validateEnv({ ...valid, ASSET_QR_PORTAL_BASE_URL: undefined })).toThrow('ASSET_QR_PORTAL_BASE_URL');
-    expect(() => validateEnv({ ...valid, ASSET_QR_PORTAL_BASE_URL: 'file:///tmp/portal' })).toThrow('ASSET_QR_PORTAL_BASE_URL');
+    expect(() =>
+      validateEnv({ ...valid, ASSET_QR_PORTAL_BASE_URL: undefined }),
+    ).toThrow('ASSET_QR_PORTAL_BASE_URL');
+    expect(() =>
+      validateEnv({ ...valid, ASSET_QR_PORTAL_BASE_URL: 'file:///tmp/portal' }),
+    ).toThrow('ASSET_QR_PORTAL_BASE_URL');
   });
 
   it('rejects a placeholder JWT secret', () => {
-    expect(() => validateEnv({ ...valid, JWT_ACCESS_SECRET: 'CHANGE_ME' })).toThrow(
-      'JWT_ACCESS_SECRET',
-    );
+    expect(() =>
+      validateEnv({ ...valid, JWT_ACCESS_SECRET: 'CHANGE_ME' }),
+    ).toThrow('JWT_ACCESS_SECRET');
   });
 
   it('rejects an invalid port and an unknown NODE_ENV', () => {
-    expect(() => validateEnv({ ...valid, [PORT_VARIABLE]: 'abc' })).toThrow(PORT_VARIABLE);
-    expect(() => validateEnv({ ...valid, NODE_ENV: 'staging' })).toThrow('NODE_ENV');
+    expect(() => validateEnv({ ...valid, [PORT_VARIABLE]: 'abc' })).toThrow(
+      PORT_VARIABLE,
+    );
+    expect(() => validateEnv({ ...valid, NODE_ENV: 'staging' })).toThrow(
+      'NODE_ENV',
+    );
   });
 });

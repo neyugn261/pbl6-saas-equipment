@@ -1,3 +1,29 @@
+import { Type } from 'class-transformer';
+import { IsArray, ArrayMaxSize, ValidateNested } from 'class-validator';
+import { ScheduleOverrideDto } from '../model-policies/schedule-override.dto';
+import {
+  IsInt,
+  Min,
+  Max,
+  IsOptional,
+  IsUUID,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import { ModelSetupService } from '../model-policies/model-setup.service';
+class ModelPolicyPreviewDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleOverrideDto)
+  maintenanceOverrides?: ScheduleOverrideDto[];
+  @IsInt() @Min(1) expectedVersion: number;
+  @IsOptional() @IsUUID() warrantyRevisionId?: string;
+  @IsOptional() @IsUUID() maintenanceRevisionId?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(1200) durationMonths?: number;
+  @IsOptional() @IsString() @MaxLength(2000) reason?: string;
+}
 import {
   Body,
   Controller,
@@ -31,7 +57,10 @@ import { RegistrationService } from './registration.service';
 @AllowUserTypes('TENANT_STAFF')
 @RequirePermissions('equipment:manage')
 export class RegistrationController {
-  constructor(private readonly service: RegistrationService) {}
+  constructor(
+    private readonly service: RegistrationService,
+    private readonly modelSetup: ModelSetupService,
+  ) {}
   @Post()
   create(
     @CurrentUser() p: Principal,
@@ -55,6 +84,15 @@ export class RegistrationController {
     @Body() input: PatchRegistrationDto,
   ) {
     return this.service.patch(p, id, input);
+  }
+  @Post(':id/model-policies')
+  @RequirePermissions('warranty:manage', 'maintenance:manage')
+  preview(
+    @CurrentUser() p: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: ModelPolicyPreviewDto,
+  ) {
+    return this.modelSetup.preview(p, id, input);
   }
   @Post(':id/submit')
   @HttpCode(200)
@@ -88,7 +126,17 @@ export class RegistrationController {
 @AllowUserTypes('TENANT_STAFF')
 @RequirePermissions('equipment:manage', 'maintenance:manage')
 export class RegistrationProjectionController {
-  constructor(private readonly service: RegistrationService) {}
+  constructor(
+    private readonly service: RegistrationService,
+    private readonly modelSetup: ModelSetupService,
+  ) {}
+  @Get(':id/model-policy-input')
+  modelProjection(
+    @CurrentUser() p: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.modelSetup.projection(p, id);
+  }
   @Get(':id/maintenance-input')
   projection(
     @CurrentUser() p: Principal,

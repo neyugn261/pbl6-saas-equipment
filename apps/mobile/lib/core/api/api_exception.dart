@@ -4,6 +4,12 @@ class ApiException implements Exception {
   final int? status;
 
   String get userMessage => switch (code) {
+    'CHECKLIST_INCOMPLETE' =>
+      'Hoàn tất và lưu các mục checklist bắt buộc trước khi gửi báo cáo.',
+    'CHECKLIST_VERSION_CONFLICT' =>
+      'Checklist đã thay đổi. Tải lại kết quả để đối soát.',
+    'CHECKLIST_REASON_REQUIRED' =>
+      'Mục không áp dụng cần được cho phép và có lý do.',
     'INVALID_CREDENTIALS' => 'Email, mật khẩu hoặc mã doanh nghiệp chưa đúng.',
     'ACCOUNT_NOT_ACTIVE' => 'Tài khoản chưa được kích hoạt hoặc đã bị khóa.',
     'TENANT_NOT_ACTIVE' => 'Doanh nghiệp hiện không hoạt động.',

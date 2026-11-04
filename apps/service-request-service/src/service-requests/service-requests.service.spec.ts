@@ -31,6 +31,12 @@ function serviceRequest(
   overrides: Partial<ServiceRequest> = {},
 ): ServiceRequest {
   return {
+    resolutionChecklist: null,
+    coverageAssessment: null,
+    assessmentVersion: 0,
+    assessmentRequired: false,
+    warrantyPolicySnapshot: null,
+    warrantyPolicyVersionId: null,
     id: REQUEST_ID,
     tenantId: TENANT_ID,
     requestNo: 'SR-2026-0001',
