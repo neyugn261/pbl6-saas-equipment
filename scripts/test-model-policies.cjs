@@ -406,6 +406,20 @@ async function main() {
   assert.equal(done.maintenancePlanIds.length, 2);
   assert.equal(done.maintenancePlanId, null);
   assert.equal(done.policyPreview.warranty.revisionId, w.id);
+  await call(
+    "GET",
+    A + `/internal/equipment-registrations/${draft.id}/model-policy-input`,
+    manager,
+    undefined,
+    404,
+  );
+  await call(
+    "PUT",
+    M + `/internal/equipment-registrations/${draft.id}/maintenance-group`,
+    manager,
+    undefined,
+    404,
+  );
   const again = await call(
     "POST",
     A + `/equipment-registrations/${draft.id}/resume`,
@@ -666,6 +680,38 @@ async function main() {
     manager,
     {},
   );
+  const assessmentAudit = await call(
+    "GET",
+    S + `/service-requests/${sr.id}/warranty-assessments`,
+    manager,
+  );
+  assert.equal(assessmentAudit.items.length, 1);
+  await call(
+    "GET",
+    S + `/service-requests/${sr.id}/warranty-assessments`,
+    customerToken,
+    undefined,
+    403,
+  );
+  await call(
+    "GET",
+    S + `/service-requests/${sr.id}/warranty-assessments`,
+    other,
+    undefined,
+    404,
+  );
+  await call(
+    "POST",
+    S + `/service-requests/${sr.id}/warranty-assessment`,
+    manager,
+    {
+      expectedVersion: detail.assessmentVersion,
+      cause: "MANUFACTURING_DEFECT",
+      decision: "COVERED",
+      reason: "Cannot replace a pending customer decision",
+    },
+    409,
+  );
   await call(
     "POST",
     S + `/service-requests/estimates/${estimate.id}/approve`,
@@ -763,6 +809,16 @@ async function main() {
     ),
   );
   assert.ok(resumes.every((r) => r.status === "COMPLETED"));
+  assert.equal(
+    await dbs.asset.equipmentHistory.count({
+      where: {
+        tenantId,
+        referenceId: lost.id,
+        eventType: "SERVICE_SETUP_COMPLETED",
+      },
+    }),
+    1,
+  );
   assert.ok(
     resumes.every(
       (r) =>
@@ -1067,6 +1123,55 @@ async function main() {
     }),
     0,
   );
+  const accident = await call(
+    "POST",
+    S + "/service-requests",
+    customerToken,
+    {
+      equipmentId: draft.equipmentId,
+      type: "REPAIR",
+      priority: "NORMAL",
+      title: "Accidental damage",
+      description: "Cause is outside the configured manufacturing-defect scope",
+    },
+    201,
+  );
+  await call(
+    "POST",
+    S + `/service-requests/${accident.id}/review`,
+    manager,
+    {},
+  );
+  const ad = await call("GET", S + `/service-requests/${accident.id}`, manager);
+  await call(
+    "POST",
+    S + `/service-requests/${accident.id}/warranty-assessment`,
+    manager,
+    {
+      expectedVersion: ad.assessmentVersion,
+      cause: "ACCIDENTAL_DAMAGE",
+      decision: "COVERED",
+      reason: "Must not cover a cause outside the policy",
+    },
+    422,
+  );
+  await call(
+    "POST",
+    S + `/service-requests/${accident.id}/warranty-assessment`,
+    manager,
+    {
+      expectedVersion: ad.assessmentVersion,
+      cause: "ACCIDENTAL_DAMAGE",
+      decision: "NOT_COVERED",
+      reason:
+        "Verified accidental damage is outside the agreed manufacturing-defect scope",
+    },
+  );
+  assert.ok(
+    (
+      await call("GET", S + `/service-requests/${accident.id}`, manager)
+    ).allowedActions.includes("create-estimate"),
+  );
   const secondCustomer = await call(
     "POST",
     "/api/organization/customers",
@@ -1100,6 +1205,7 @@ async function main() {
       tenantCode: tenantCodeA,
       password,
       modelId: model.id,
+      registrationId: draft.id,
       orderId: order.id,
       equipmentId: draft.equipmentId,
       requestId: sr.id,
@@ -1343,6 +1449,16 @@ async function main() {
       {
         status: "PASS",
         tenantId,
+        references: {
+          modelId: model.id,
+          equipmentId: draft.equipmentId,
+          registrationId: draft.id,
+          planIds: done.maintenancePlanIds,
+          warrantyRevisionId: w.id,
+          maintenanceRevisionId: m.id,
+          workOrderId: order.id,
+          serviceRequestId: sr.id,
+        },
         evidence,
         limits: [
           "No production database used",

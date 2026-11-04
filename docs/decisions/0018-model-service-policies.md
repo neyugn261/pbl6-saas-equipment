@@ -41,7 +41,10 @@ under review/request-info. No diagnostic-WO loop is introduced. Still-in-term bu
 excluded claims use the existing estimate approval flow. An assessment cannot be
 changed while a live estimate exists, or after acceptance; start a new review cycle
 on reopen. Legacy SRs retain existing temporal behavior until explicitly assessed.
-Rejecting a claim does not VOID the device Warranty.
+Rejecting a claim does not VOID the device Warranty. `coveredCauses` is the
+explicit covered scope: a verified cause outside it may be assessed NOT_COVERED
+with evidence, even if no additional exclusion prose was configured for that cause.
+Explicit exclusions add customer-facing terms and cannot contradict coveredCauses.
 
 Customer projections expose applied terms and approved summaries only. Drafts,
 internal notes, hashes and setup keys remain private. Additive migrations retain

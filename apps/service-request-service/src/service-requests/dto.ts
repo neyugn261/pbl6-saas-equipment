@@ -1,10 +1,12 @@
-import { IsInt, Min } from 'class-validator';
+import type { PolicyCause } from '@pbl6/event-contracts';
 import { PaginationQueryDto } from '@pbl6/service-kit';
 import {
   ArrayMinSize,
   IsArray,
   IsDateString,
   IsIn,
+  IsInt,
+  Min,
   IsNumberString,
   IsOptional,
   IsString,
@@ -188,7 +190,7 @@ export class WarrantyAssessmentDto {
     'MISUSE',
     'WEAR_AND_TEAR',
   ])
-  cause: string;
+  cause: Exclude<PolicyCause, 'UNKNOWN'>;
   @IsIn(['COVERED', 'NOT_COVERED']) decision: 'COVERED' | 'NOT_COVERED';
   @IsString() @MinLength(1) @MaxLength(2000) reason: string;
 }

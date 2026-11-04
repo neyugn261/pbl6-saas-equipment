@@ -9,12 +9,17 @@ module.exports = async function ({
   tenantCode,
   password,
   modelId,
+  registrationId,
   orderId,
   equipmentId,
   requestId,
 }) {
   const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
-  const socket=require('node:net').createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const webPort=socket.address().port;await new Promise(r=>socket.close(r));const base=`http://127.0.0.1:${webPort}`;
+  const socket = require("node:net").createServer();
+  await new Promise((r) => socket.listen(0, "127.0.0.1", r));
+  const webPort = socket.address().port;
+  await new Promise((r) => socket.close(r));
+  const base = `http://127.0.0.1:${webPort}`;
   const server = spawn(
     "pnpm",
     [
@@ -57,7 +62,7 @@ module.exports = async function ({
           viewport: { width: 1440, height: 1000 },
         }),
         page = await context.newPage();
-      await page.goto(base+"/login");
+      await page.goto(base + "/login");
       await page.getByLabel("Mã doanh nghiệp").fill(tenantCode);
       await page.getByLabel("Email", { exact: true }).fill(email);
       await page.getByLabel("Mật khẩu", { exact: true }).fill(password);
@@ -101,6 +106,20 @@ module.exports = async function ({
       path: artifacts + "/web-model-policies.png",
       fullPage: true,
     });
+    await manager.goto(`${base}/app/equipment-registrations/${registrationId}`);
+    await manager
+      .getByRole("heading", { name: "Áp dụng chính sách theo Model" })
+      .waitFor();
+    await manager.getByText("Bảo hành · v1", { exact: true }).waitFor();
+    assert.ok(
+      !(await manager.locator(".registration-summary").innerText()).includes(
+        "Chưa xác định",
+      ),
+    );
+    await manager.screenshot({
+      path: artifacts + "/web-handover-applied.png",
+      fullPage: true,
+    });
     const tech = await login("technician@policy.test");
     await tech.goto(`${base}/app/work-orders/${orderId}`);
     await tech
@@ -132,9 +151,7 @@ module.exports = async function ({
       fullPage: true,
     });
     const customer = await login("customer@policy.test");
-    await customer.goto(
-      `${base}/portal/equipment/${equipmentId}`,
-    );
+    await customer.goto(`${base}/portal/equipment/${equipmentId}`);
     await customer
       .getByRole("heading", { name: "Chính sách dịch vụ đã áp dụng" })
       .waitFor();
@@ -165,6 +182,8 @@ module.exports = async function ({
     );
   } finally {
     if (browser) await browser.close();
-    try{process.kill(-server.pid,"SIGTERM");}catch{}
+    try {
+      process.kill(-server.pid, "SIGTERM");
+    } catch {}
   }
 };

@@ -1394,7 +1394,7 @@ export class ServiceRequestsService {
       if (
         input.decision === 'COVERED' &&
         (row.warrantyCheckResult !== 'IN_WARRANTY' ||
-          (policy && !policy.coveredCauses.includes(input.cause as never)))
+          (policy && !policy.coveredCauses.includes(input.cause)))
       )
         throw new UnprocessableEntityException({
           code: 'COVERAGE_NOT_SUPPORTED',
@@ -1404,11 +1404,12 @@ export class ServiceRequestsService {
         input.decision === 'NOT_COVERED' &&
         row.warrantyCheckResult === 'IN_WARRANTY' &&
         policy &&
-        !policy.exclusions.some((e) => e.code === input.cause)
+        policy.coveredCauses.includes(input.cause)
       )
         throw new UnprocessableEntityException({
           code: 'EXCLUSION_NOT_SUPPORTED',
-          message: 'Select an exclusion in the applied warranty',
+          message:
+            'The applied warranty covers this cause; use the verified incident cause',
         });
       const assessment = {
         decision: input.decision,
