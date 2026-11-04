@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
+import { getSessionGeneration } from '../auth/session'
 
 export type DirectoryRow = {
   id: string
@@ -25,11 +26,12 @@ export const errorText = (error: unknown) =>
       ? error.message
       : 'Không thể tải dữ liệu.'
 export function useDirectory<T>(
-  area: 'organization' | 'assetM2' | 'maintenance',
+  area: 'organization' | 'assetM2' | 'maintenance' | 'identity',
   path: string | null,
   revision = 0,
 ) {
-  const key = `${area}:${path}:${revision}`
+  const generation = getSessionGeneration()
+  const key = `${area}:${path}:${revision}:${generation}`
   const [state, setState] = useState<{
     key: string
     value: T | null
@@ -40,19 +42,19 @@ export function useDirectory<T>(
     if (path)
       api[area]<T>(path).then(
         (value) => {
-          if (active) setState({ key, value, error: '' })
+          if (active && generation === getSessionGeneration()) setState({ key, value, error: '' })
         },
         (error) => {
-          if (active) setState({ key, value: null, error: errorText(error) })
+          if (active && generation === getSessionGeneration()) setState({ key, value: null, error: errorText(error) })
         },
       )
     return () => {
       active = false
     }
-  }, [area, path, key])
+  }, [area, path, key, generation])
   return path === null
     ? { value: null, error: '', loading: false }
     : state.key === key
-      ? { ...state, loading: false }
+      ? { value: state.value, error: state.error, loading: false }
       : { value: null, error: '', loading: true }
 }

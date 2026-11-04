@@ -29,7 +29,6 @@ import {
   PanelLeftClose,
   Plus,
   Search,
-  Settings,
   ShieldCheck,
   SlidersHorizontal,
   UserCog,
@@ -39,7 +38,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { api, ApiError, isMockMode } from './api/client'
+import { api, ApiError } from './api/client'
 import { creators, has, home, menu } from './auth/access'
 import { PriorityBadge, StatusBadge } from './components/Badges'
 import ActivatePage from './routes/ActivatePage'
@@ -59,11 +58,7 @@ import {
   InventoryTransactionsPage,
   InventoryWarehousesPage,
 } from './features/inventory/InventoryPages'
-import { AppStoreProvider } from './sample/state/AppStore'
-import { DashboardPage as SampleDashboardPage } from './sample/pages/DashboardPage'
-import { OrganizationPage, PlatformAuxPage, PlatformDashboardPage, TenantDetailPage as SampleTenantDetailPage, TenantsPage as SampleTenantsPage } from './sample/pages/ManagementPage'
-import { PortalDashboardPage, PortalSimplePage } from './sample/pages/PortalPage'
-import { TenantFormPage } from './sample/pages/TenantFormPage'
+import { TenantListPage, TenantCreatePage, TenantDetailPage, BranchesPage, UsersPage, RolesPage, ProfilePage, PortalLocationsPage, UnavailablePage } from './routes/LiveAdministration'
 import {
   login,
   logout,
@@ -80,7 +75,6 @@ import type {
   RequestDetail,
   RequestRecord,
   RequestStatusChange,
-  TenantRecord,
 } from './types/domain'
 import './sample.css'
 import './App.css'
@@ -242,7 +236,7 @@ function Layout({ children }: { children: ReactNode }) {
     '/tenants': ShieldCheck,
     '/users/invite': UserPlus,
   }
-  const sampleItems: { path: string; label: string; icon: LucideIcon; group: string; roles: string[] }[] = [
+  const workspaceItems: { path: string; label: string; icon: LucideIcon; group: string; roles: string[] }[] = [
     { path: '/app/equipment-registrations', label: 'Hồ sơ bàn giao', icon: ClipboardList, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/equipment-models', label: 'Model thiết bị', icon: Boxes, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/work-orders', label: 'Lệnh công việc', icon: Wrench, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
@@ -261,9 +255,6 @@ function Layout({ children }: { children: ReactNode }) {
     { path: '/app/organization/roles', label: 'Vai trò & quyền', icon: ShieldCheck, group: 'Tổ chức', roles: ['TENANT_ADMIN'] },
     { path: '/app/reports', label: 'Báo cáo', icon: Gauge, group: 'Hệ thống', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/notifications', label: 'Thông báo', icon: Bell, group: 'Hệ thống', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'INVENTORY_STAFF', 'TECHNICIAN'] },
-    { path: '/app/settings', label: 'Cài đặt', icon: Settings, group: 'Hệ thống', roles: ['TENANT_ADMIN'] },
-    { path: '/admin/audit-logs', label: 'Nhật ký kiểm toán', icon: History, group: 'Nền tảng', roles: ['PLATFORM_ADMIN'] },
-    { path: '/admin/settings', label: 'Cài đặt nền tảng', icon: Settings, group: 'Nền tảng', roles: ['PLATFORM_ADMIN'] },
     { path: '/portal/locations', label: 'Địa điểm', icon: MapPin, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN', 'CUSTOMER_USER'] },
     { path: '/portal/notifications', label: 'Thông báo', icon: Bell, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN', 'CUSTOMER_USER'] },
     { path: '/portal/profile', label: 'Hồ sơ cá nhân', icon: UserCog, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN', 'CUSTOMER_USER'] },
@@ -273,14 +264,13 @@ function Layout({ children }: { children: ReactNode }) {
   const navigation = [
     { path: '/dashboard', label: 'Tổng quan', icon: LayoutDashboard, group: 'Không gian làm việc' },
     ...liveOperations.map((item) => ({ path: item.path === '/customers' ? '/app/customers' : item.path, label: item.label, icon: icons[item.path], group: 'Vận hành dịch vụ' })),
-    ...sampleItems.filter((item) => has(profile.roles, item.roles)),
-    ...liveAdmin.map((item) => ({ path: item.path, label: item.label, icon: icons[item.path], group: 'Quản trị' })),
+    ...workspaceItems.filter((item) => has(profile.roles, item.roles)),
+    ...liveAdmin.map((item) => ({ path: item.path === '/tenants' ? '/admin/tenants' : item.path, label: item.label, icon: icons[item.path], group: 'Quản trị' })),
   ]
-  const section = navigation.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`))
+  const navigationPath = location.pathname === '/tenants' ? '/admin/tenants' : location.pathname
+  const section = navigation.find((item) => navigationPath === item.path || navigationPath.startsWith(`${item.path}/`))
   const initials = profile.fullName.split(' ').slice(-2).map((part) => part[0]).join('').toUpperCase()
   const scope = profile.userType === 'PLATFORM_STAFF' ? 'Phạm vi nền tảng' : profile.userType === 'CUSTOMER' ? 'Cổng khách hàng' : 'Doanh nghiệp hiện tại'
-  const liveM2Page = /^\/(app|portal)\/(equipment(?:\/|$)|equipment-history$|equipment-models(?:\/|$)|equipment-registrations(?:\/|$)|customers(?:\/|$)|warranties\/|models\/|service-requests(?:\/|$)|requests(?:\/|$)|work-orders(?:\/|$)|technicians(?:\/|$)|maintenance(?:\/|$)|maintenance-history$|inventory(?:\/|$)|reports$|notifications$)/.test(location.pathname)
-  const samplePage = !liveM2Page && (location.pathname.startsWith('/app/') || location.pathname === '/admin' || location.pathname.startsWith('/admin/') || location.pathname === '/portal' || (location.pathname.startsWith('/portal/') && !location.pathname.startsWith('/portal/qr/')))
   return (
     <div className={`m1-layout ${collapsed ? 'm1-layout--collapsed' : ''}`}>
       {mobileOpen && <button className="m1-mobile-overlay" aria-label="Đóng menu" onClick={() => setMobileOpen(false)} />}
@@ -322,8 +312,6 @@ function Layout({ children }: { children: ReactNode }) {
         </header>
         <main className="m1-main">
           <nav className="m1-breadcrumbs" aria-label="Đường dẫn"><Link to="/dashboard">Trang chủ</Link>{location.pathname !== '/dashboard' && <><ChevronRight size={14} /><Link to={section?.path ?? '/dashboard'}>{section?.label ?? 'Trang'}</Link>{section && location.pathname !== section.path && <><ChevronRight size={14} /><span>{location.pathname.endsWith('/new') ? 'Tạo mới' : 'Chi tiết'}</span></>}</>}</nav>
-          {samplePage && <div className="m1-sample-notice" role="note">Dữ liệu mẫu giao diện Servio · Các thao tác trên trang này không gọi service thật.</div>}
-          {isMockMode && samplePage && <p className="m1-mock-notice">Đang xem dữ liệu mẫu từ OpenAPI. Các thay đổi trên mock server không được lưu.</p>}
           {children}
         </main>
       </div>
@@ -435,47 +423,7 @@ function CustomersPage() {
     </Frame>
   )
 }
-function TenantsPage() {
-  const data = useLoad<Page<TenantRecord>>(
-    () => api.organization('/tenants?page=1&pageSize=100'),
-    'tenants',
-  )
-  return (
-    <Frame title="Doanh nghiệp">
-      {data.loading ? (
-        <Loading />
-      ) : data.error ? (
-        <Problem error={data.error} />
-      ) : !data.value?.items.length ? (
-        <Empty />
-      ) : (
-        <div className="m1-card">
-          <table>
-            <thead>
-              <tr>
-                <th>Mã</th>
-                <th>Tên</th>
-                <th>Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.value.items.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.code}</td>
-                  <td>{item.name}</td>
-                  <td><StatusBadge status={item.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <small>
-            {Math.max(data.value.total, data.value.items.length)} doanh nghiệp
-          </small>
-        </div>
-      )}
-    </Frame>
-  )
-}
+
 function CustomerDetailPage() {
   const { id } = useParams()
   const data = useLoad<CustomerRecord>(
@@ -983,8 +931,8 @@ function Message({ code, title }: { code: string; title: string }) {
     </div>
   )
 }
-const sampleTenantRoles = ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN', 'INVENTORY_STAFF']
-const sampleCustomerRoles = ['CUSTOMER_ADMIN', 'CUSTOMER_USER']
+const tenantRoles = ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN', 'INVENTORY_STAFF']
+const customerRoles = ['CUSTOMER_ADMIN', 'CUSTOMER_USER']
 function HistoryFeedPageRoute() {
   const { id } = useParams()
   return <HistoryFeedPage equipmentId={id} />
@@ -993,8 +941,8 @@ function EquipmentMaintenanceHistoryRoute() {
   const { id } = useParams()
   return <MaintenanceHistoryPage equipmentId={id} />
 }
-const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
-  { path: '/app/dashboard', element: <SampleDashboardPage />, roles: sampleTenantRoles },
+const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
+  { path: '/app/dashboard', element: <DashboardPage />, roles: tenantRoles },
   { path: '/app/customers', element: <CustomerDirectoryPage />, roles: menu[0].roles },
   { path: '/app/customers/new', element: <CustomerCreatePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
   { path: '/app/customers/:id', element: <CustomerWorkspacePage />, roles: menu[0].roles },
@@ -1002,22 +950,22 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/equipment-registrations', element: <RegistrationListPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
   { path: '/app/equipment-registrations/new', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
   { path: '/app/equipment-registrations/:id', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/equipment', element: <EquipmentPage />, roles: sampleTenantRoles },
-  { path: '/app/equipment/:id', element: <DossierPage />, roles: sampleTenantRoles },
-  { path: '/app/equipment/:id/timeline', element: <HistoryFeedPageRoute />, roles: sampleTenantRoles },
-  { path: '/app/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: sampleTenantRoles },
-  { path: '/app/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: sampleTenantRoles },
-  { path: '/app/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: sampleTenantRoles },
-  { path: '/app/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: sampleTenantRoles },
+  { path: '/app/equipment', element: <EquipmentPage />, roles: tenantRoles },
+  { path: '/app/equipment/:id', element: <DossierPage />, roles: tenantRoles },
+  { path: '/app/equipment/:id/timeline', element: <HistoryFeedPageRoute />, roles: tenantRoles },
+  { path: '/app/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: tenantRoles },
+  { path: '/app/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: tenantRoles },
+  { path: '/app/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: tenantRoles },
+  { path: '/app/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: tenantRoles },
   { path: '/app/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/equipment-history', element: <HistoryFeedPage />, roles: sampleTenantRoles },
-  { path: '/app/models/:id/history', element: <ResourceHistoryPage kind="model" />, roles: sampleTenantRoles },
-  { path: '/app/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: sampleTenantRoles },
+  { path: '/app/equipment-history', element: <HistoryFeedPage />, roles: tenantRoles },
+  { path: '/app/models/:id/history', element: <ResourceHistoryPage kind="model" />, roles: tenantRoles },
+  { path: '/app/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: tenantRoles },
   { path: '/app/service-requests', element: <RequestsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
   { path: '/app/service-requests/new', element: <NewRequestPage />, roles: ['SERVICE_MANAGER'] },
   { path: '/app/service-requests/:id', element: <RequestDetailPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
-  { path: '/app/work-orders', element: <WorkOrderListPage />, roles: sampleTenantRoles },
-  { path: '/app/work-orders/:id', element: <WorkOrderPage />, roles: sampleTenantRoles },
+  { path: '/app/work-orders', element: <WorkOrderListPage />, roles: tenantRoles },
+  { path: '/app/work-orders/:id', element: <WorkOrderPage />, roles: tenantRoles },
   { path: '/app/technicians', element: <LiveTechniciansPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
   { path: '/app/technicians/:id', element: <TechnicianPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
   { path: '/app/maintenance', element: <LiveMaintenancePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER'] },
@@ -1027,38 +975,38 @@ const sampleRoutes: { path: string; element: ReactNode; roles: string[] }[] = [
   { path: '/app/inventory/parts/:id', element: <InventoryPartPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
   { path: '/app/inventory/warehouses', element: <InventoryWarehousesPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
   { path: '/app/inventory/transactions', element: <InventoryTransactionsPage />, roles: ['TENANT_ADMIN', 'INVENTORY_STAFF'] },
-  { path: '/app/organization/branches', element: <OrganizationPage type="branches" />, roles: sampleTenantRoles },
-  { path: '/app/organization/users', element: <OrganizationPage type="users" />, roles: sampleTenantRoles },
-  { path: '/app/organization/roles', element: <OrganizationPage type="roles" />, roles: sampleTenantRoles },
+  { path: '/app/organization/branches', element: <BranchesPage />, roles: ['TENANT_ADMIN'] },
+  { path: '/app/organization/users', element: <UsersPage />, roles: ['TENANT_ADMIN'] },
+  { path: '/app/organization/roles', element: <RolesPage />, roles: ['TENANT_ADMIN'] },
   { path: '/app/reports', element: <WorkOrderReportsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
-  { path: '/app/notifications', element: <NotificationInbox />, roles: sampleTenantRoles },
-  { path: '/app/settings', element: <OrganizationPage type="settings" />, roles: sampleTenantRoles },
-  { path: '/admin', element: <PlatformDashboardPage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/tenants', element: <SampleTenantsPage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/tenants/new', element: <TenantFormPage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/tenants/:id', element: <SampleTenantDetailPage />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/audit-logs', element: <PlatformAuxPage type="audit" />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/admin/settings', element: <PlatformAuxPage type="settings" />, roles: ['PLATFORM_ADMIN'] },
-  { path: '/portal', element: <PortalDashboardPage />, roles: sampleCustomerRoles },
-  { path: '/portal/equipment', element: <EquipmentPage />, roles: sampleCustomerRoles },
-  { path: '/portal/equipment/:id', element: <DossierPage />, roles: sampleCustomerRoles },
-  { path: '/portal/equipment/:id/timeline', element: <HistoryFeedPageRoute />, roles: sampleCustomerRoles },
-  { path: '/portal/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: sampleCustomerRoles },
-  { path: '/portal/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: sampleCustomerRoles },
+  { path: '/app/notifications', element: <NotificationInbox />, roles: tenantRoles },
+  { path: '/app/settings', element: <UnavailablePage type="settings" />, roles: tenantRoles },
+  { path: '/admin', element: <DashboardPage />, roles: ['PLATFORM_ADMIN'] },
+  { path: '/admin/tenants', element: <TenantListPage />, roles: ['PLATFORM_ADMIN'] },
+  { path: '/admin/tenants/new', element: <TenantCreatePage />, roles: ['PLATFORM_ADMIN'] },
+  { path: '/admin/tenants/:id', element: <TenantDetailPage />, roles: ['PLATFORM_ADMIN'] },
+  { path: '/admin/audit-logs', element: <UnavailablePage type="audit" />, roles: ['PLATFORM_ADMIN'] },
+  { path: '/admin/settings', element: <UnavailablePage type="settings" />, roles: ['PLATFORM_ADMIN'] },
+  { path: '/portal', element: <DashboardPage />, roles: customerRoles },
+  { path: '/portal/equipment', element: <EquipmentPage />, roles: customerRoles },
+  { path: '/portal/equipment/:id', element: <DossierPage />, roles: customerRoles },
+  { path: '/portal/equipment/:id/timeline', element: <HistoryFeedPageRoute />, roles: customerRoles },
+  { path: '/portal/equipment/:id/service-requests', element: <EquipmentFeedPage kind="service-requests" />, roles: customerRoles },
+  { path: '/portal/equipment/:id/work-orders', element: <EquipmentFeedPage kind="work-orders" />, roles: customerRoles },
   { path: '/portal/equipment/:id/maintenance-plans', element: <EquipmentFeedPage kind="maintenance-plans" />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/equipment/:id/maintenance-tasks', element: <EquipmentFeedPage kind="maintenance-tasks" />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/equipment/:id/maintenance-history', element: <EquipmentMaintenanceHistoryRoute />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/equipment-history', element: <HistoryFeedPage />, roles: sampleCustomerRoles },
-  { path: '/portal/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: sampleCustomerRoles },
-  { path: '/portal/requests', element: <RequestsPage />, roles: sampleCustomerRoles },
-  { path: '/portal/requests/new', element: <NewRequestPage />, roles: sampleCustomerRoles },
-  { path: '/portal/requests/:id', element: <RequestDetailPage />, roles: sampleCustomerRoles },
+  { path: '/portal/equipment-history', element: <HistoryFeedPage />, roles: customerRoles },
+  { path: '/portal/warranties/:id/history', element: <ResourceHistoryPage kind="warranty" />, roles: customerRoles },
+  { path: '/portal/requests', element: <RequestsPage />, roles: customerRoles },
+  { path: '/portal/requests/new', element: <NewRequestPage />, roles: customerRoles },
+  { path: '/portal/requests/:id', element: <RequestDetailPage />, roles: customerRoles },
   { path: '/portal/maintenance', element: <LiveMaintenancePage />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/maintenance-history', element: <MaintenanceHistoryPage />, roles: ['CUSTOMER_ADMIN'] },
   { path: '/portal/maintenance/:id', element: <MaintenanceRecordPage />, roles: ['CUSTOMER_ADMIN'] },
-  { path: '/portal/locations', element: <PortalSimplePage type="locations" />, roles: sampleCustomerRoles },
-  { path: '/portal/notifications', element: <NotificationInbox />, roles: sampleCustomerRoles },
-  { path: '/portal/profile', element: <PortalSimplePage type="profile" />, roles: sampleCustomerRoles },
+  { path: '/portal/locations', element: <PortalLocationsPage />, roles: customerRoles },
+  { path: '/portal/notifications', element: <NotificationInbox />, roles: customerRoles },
+  { path: '/portal/profile', element: <ProfilePage />, roles: customerRoles },
 ]
 function Authenticated() {
   const { profile } = useSession()
@@ -1070,11 +1018,11 @@ function Authenticated() {
     return <Navigate to={target} replace />
   }
   return (
-    <Layout>
+    <Layout key={getSessionGeneration()}>
       <Routes>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/demo" element={<DemoPage />} />
-        {sampleRoutes.map((item) => <Route key={item.path} path={item.path} element={<Gate roles={item.roles}>{item.element}</Gate>} />)}
+        {workspaceRoutes.map((item) => <Route key={item.path} path={item.path} element={<Gate roles={item.roles}>{item.element}</Gate>} />)}
         <Route
           path="/"
           element={<Navigate to={home(profile.roles)} replace />}
@@ -1083,7 +1031,7 @@ function Authenticated() {
           path="/tenants"
           element={
             <Gate roles={menu[3].roles}>
-              <TenantsPage />
+              <TenantListPage />
             </Gate>
           }
         />
@@ -1202,7 +1150,7 @@ function Content() {
 export default function App() {
   return (
     <SessionProvider>
-      <AppStoreProvider><Content /></AppStoreProvider>
+      <Content />
     </SessionProvider>
   )
 }
