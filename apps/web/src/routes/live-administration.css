@@ -1,0 +1,148 @@
+.live-admin {
+  display: grid;
+  gap: 20px;
+}
+.live-admin .m1-header {
+  margin-bottom: 0;
+}
+.live-admin .m1-card {
+  padding: 24px;
+  min-width: 0;
+}
+.live-admin h2 {
+  font-size: 18px;
+  margin: 0 0 16px;
+}
+.live-admin p {
+  line-height: 1.6;
+}
+.live-admin button,
+.live-admin .m1-button {
+  min-height: 36px;
+}
+.live-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.live-form {
+  margin-top: 20px;
+  max-width: 640px;
+  display: grid;
+  gap: 16px;
+}
+.live-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.live-form label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+.live-form input,
+.live-form select,
+.live-toolbar input,
+.live-toolbar select {
+  border: 1px solid #dce2eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: white;
+  color: #24334b;
+  min-width: 0;
+  max-width: 100%;
+}
+.live-form .live-check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.live-form .live-check input {
+  width: auto;
+}
+.live-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.live-table {
+  overflow-x: auto;
+}
+.live-table table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.live-table th,
+.live-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #edf0f5;
+  vertical-align: middle;
+}
+.live-table th {
+  font-size: 12px;
+  color: #66758c;
+  background: #f7f9fc;
+}
+.live-table small {
+  display: block;
+  margin-top: 4px;
+  color: #66758c;
+}
+.live-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+}
+.live-pagination span {
+  margin-right: auto;
+  color: #66758c;
+}
+.live-success {
+  padding: 14px;
+  background: #eaf8ef;
+  color: #21603b;
+  border-radius: 8px;
+}
+.live-details {
+  display: grid;
+  grid-template-columns: minmax(90px, 160px) 1fr;
+  gap: 16px;
+}
+.live-details dt {
+  color: #66758c;
+}
+.live-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.live-location {
+  border-top: 1px solid #edf0f5;
+  padding: 16px 0;
+  display: grid;
+  gap: 6px;
+}
+@media (max-width: 640px) {
+  .live-admin .m1-card {
+    padding: 16px;
+  }
+  .live-admin .m1-header {
+    align-items: start;
+    gap: 12px;
+    flex-direction: column;
+  }
+}
+.live-admin button { border: 1px solid #dce2eb; border-radius: 8px; padding: 8px 14px; background: white; color: #334155; cursor: pointer; font-weight: 500; }
+.live-admin button:hover:not(:disabled) { background: #eef1ff; border-color: #b7c0fa; }
+.live-admin button:disabled { cursor: not-allowed; opacity: .5; }
+.live-admin button[type=submit], .live-admin .live-form fieldset > button, .live-admin .live-form fieldset > .live-toolbar > button:first-child, .live-admin .m1-header > button { background: var(--servio-primary, #5565ee); border-color: transparent; color: white; }
+.live-admin .live-table a { color: #4050d7; font-weight: 600; }

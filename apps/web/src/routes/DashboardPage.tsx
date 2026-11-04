@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const canRequests = has(roles, menu[2].roles)
   const canTenants = has(roles, menu[3].roles)
   const canWorkOrderReport = has(roles, ['TENANT_ADMIN', 'SERVICE_MANAGER'])
+  const [revision, refresh] = useState(0)
   const [state, setState] = useState<{ summary: Summary; loading: boolean; partialError: boolean; generation: number }>({
     summary: initialSummary,
     loading: true,
@@ -54,7 +55,7 @@ export default function DashboardPage() {
       if (active) setState({ summary, loading: false, partialError: results.some((result) => result.status === 'rejected'), generation: sessionGeneration })
     })
     return () => { active = false }
-  }, [canCustomers, canEquipment, canRequests, canTenants, sessionGeneration])
+  }, [canCustomers, canEquipment, canRequests, canTenants, sessionGeneration, revision])
 
   if (!profile) return null
   const today = new Date()
@@ -62,12 +63,16 @@ export default function DashboardPage() {
   const currentSession = state.generation === sessionGeneration
   const summary = currentSession ? state.summary : initialSummary
   const loading = !currentSession || state.loading
+  const customer = profile.userType === 'CUSTOMER'
+  const requestsPath = customer ? '/portal/requests' : '/requests'
+  const equipmentPath = customer ? '/portal/equipment' : '/equipment'
   const metrics = [
     { label: 'Khách hàng', value: summary.customers, path: '/customers', icon: Building2, tone: 'blue', visible: canCustomers },
-    { label: 'Tổng thiết bị', value: summary.equipment, path: '/equipment', icon: Boxes, tone: 'violet', visible: canEquipment },
-    { label: 'Yêu cầu dịch vụ', value: summary.requests, path: '/requests', icon: ClipboardList, tone: 'amber', visible: canRequests },
+    { label: 'Tổng thiết bị', value: summary.equipment, path: equipmentPath, icon: Boxes, tone: 'violet', visible: canEquipment },
+    { label: 'Yêu cầu dịch vụ', value: summary.requests, path: requestsPath, icon: ClipboardList, tone: 'amber', visible: canRequests },
     { label: 'Doanh nghiệp', value: summary.tenants, path: '/tenants', icon: ShieldCheck, tone: 'green', visible: canTenants },
   ].filter((metric) => metric.visible)
+  const requestsReady = !loading && summary.requests !== undefined
   const recent = summary.recentRequests
   const monthly = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(today.getFullYear(), today.getMonth() - 5 + index, 1)
@@ -84,9 +89,9 @@ export default function DashboardPage() {
           <h1>Chào mừng, {profile.fullName}</h1>
           <p>Đây là tình hình vận hành dịch vụ trong phạm vi tài khoản của bạn.</p>
         </div>
-        {canRequests && <Link className="m1-button" to="/requests">Xem yêu cầu dịch vụ</Link>}
+        {canRequests && <Link className="m1-button" to={requestsPath}>Xem yêu cầu dịch vụ</Link>}
       </header>
-      {currentSession && state.partialError && <p className="m1-error" role="alert">Một số số liệu chưa tải được. Bạn vẫn có thể mở từng mục trong menu.</p>}
+      {currentSession && state.partialError && <p className="m1-error" role="alert">Một số số liệu chưa tải được. <button onClick={() => refresh(revision + 1)}>Thử lại</button></p>}
       {canWorkOrderReport && <WorkOrderSummaryPanel />}
       <div className="metrics-grid">
         {metrics.map(({ label, value, path, icon: Icon, tone }) => (
@@ -100,7 +105,8 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-      {canRequests && <div className="dashboard-grid">
+      {canRequests && !requestsReady && <p className="dashboard-empty" role="status">{loading ? 'Đang tải thống kê yêu cầu…' : 'Không tải được thống kê yêu cầu.'}</p>}
+      {canRequests && requestsReady && <div className="dashboard-grid">
         <section className="m1-card dashboard-section">
           <div className="dashboard-section__header"><div><h2>Yêu cầu dịch vụ</h2><p>Xu hướng 6 tháng gần nhất · tối đa 100 yêu cầu gần đây</p></div></div>
           <div className="dashboard-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={monthly} margin={{ left: -24, right: 8, top: 8 }}><CartesianGrid vertical={false} stroke="#e8edf3" /><XAxis dataKey="month" axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: '#f5f7fa' }} /><Bar dataKey="value" fill="#5967ef" radius={[5, 5, 0, 0]} maxBarSize={34} /></BarChart></ResponsiveContainer></div>
@@ -113,11 +119,11 @@ export default function DashboardPage() {
       <div className="dashboard-grid">
         {canRequests && (
           <section className="m1-card dashboard-section">
-            <div className="dashboard-section__header"><div><h2>Yêu cầu cần chú ý</h2><p>Ưu tiên cao hoặc đang chờ xử lý</p></div><Link to="/requests">Xem tất cả <ArrowRight size={14} /></Link></div>
-            {loading ? <p className="dashboard-empty">Đang tải…</p> : highlighted.length ? (
+            <div className="dashboard-section__header"><div><h2>Yêu cầu cần chú ý</h2><p>Ưu tiên cao hoặc đang chờ xử lý</p></div><Link to={requestsPath}>Xem tất cả <ArrowRight size={14} /></Link></div>
+            {loading ? <p className="dashboard-empty">Đang tải…</p> : !requestsReady ? <p className="m1-error" role="alert">Không tải được yêu cầu cần chú ý.</p> : highlighted.length ? (
               <div className="dashboard-request-list">
                 {highlighted.map((request) => (
-                  <Link to={`/requests/${request.id}`} key={request.id}>
+                  <Link to={`${requestsPath}/${request.id}`} key={request.id}>
                     <span className="dashboard-request-icon"><AlertTriangle size={18} /></span>
                     <span className="dashboard-request-main"><strong>{request.title}</strong><small>{request.requestNo}</small></span>
                     <PriorityBadge priority={request.priority} />
@@ -130,9 +136,9 @@ export default function DashboardPage() {
         )}
         <section className="m1-card dashboard-section dashboard-quicklinks">
           <div className="dashboard-section__header"><div><h2>Truy cập nhanh</h2><p>Tiếp tục công việc của bạn</p></div></div>
-          {canEquipment && <Link to="/equipment"><Boxes size={18} /><span>Tra cứu thiết bị</span><ArrowRight size={15} /></Link>}
-          {canRequests && <Link to="/requests"><ClipboardList size={18} /><span>Theo dõi yêu cầu</span><ArrowRight size={15} /></Link>}
-          {has(roles, ['CUSTOMER_USER', 'CUSTOMER_ADMIN', 'SERVICE_MANAGER']) && <Link to="/requests/new"><ClipboardList size={18} /><span>Tạo yêu cầu mới</span><ArrowRight size={15} /></Link>}
+          {canEquipment && <Link to={equipmentPath}><Boxes size={18} /><span>Tra cứu thiết bị</span><ArrowRight size={15} /></Link>}
+          {canRequests && <Link to={requestsPath}><ClipboardList size={18} /><span>Theo dõi yêu cầu</span><ArrowRight size={15} /></Link>}
+          {has(roles, ['CUSTOMER_USER', 'CUSTOMER_ADMIN', 'SERVICE_MANAGER']) && <Link to={`${requestsPath}/new`}><ClipboardList size={18} /><span>Tạo yêu cầu mới</span><ArrowRight size={15} /></Link>}
           {canTenants && <Link to="/tenants"><Building2 size={18} /><span>Quản lý doanh nghiệp</span><ArrowRight size={15} /></Link>}
         </section>
       </div>

@@ -16,7 +16,7 @@ export function webTab(fetch, env = {}, storage = new Map()) {
     refresh: async () => { token += '-renewed'; return token },
     useSession: () => ({ profile: { id: 'staff', tenantId: 'tenant', roles: ['INVENTORY_STAFF'], userType: 'TENANT_STAFF' } }),
   }
-  function load(path, imports = {}) {
+  function load(path, imports = {}, globals = {}) {
     const source = readFileSync(new URL(`../../src/${path}`, import.meta.url), 'utf8')
       .replaceAll('import.meta.env', '__env')
     const code = ts.transpileModule(source, {
@@ -27,6 +27,7 @@ export function webTab(fetch, env = {}, storage = new Map()) {
     vm.runInNewContext(code, {
       exports, fetch, sessionStorage, window, Event, AbortSignal, crypto, URLSearchParams,
       __env: env,
+      ...globals,
       require: (name) => {
         if (!(name in imports)) throw new Error(`Unexpected import ${name}`)
         return imports[name]
@@ -48,6 +49,11 @@ export function hooks() {
   let cursor = 0, effects = []
   const slots = []
   const react = {
+    useRef(initial) {
+      const index = cursor++
+      if (!(index in slots)) slots[index] = { current: initial }
+      return slots[index]
+    },
     useState(initial) {
       const index = cursor++
       if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial

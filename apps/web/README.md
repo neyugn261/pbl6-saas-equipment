@@ -42,7 +42,7 @@ pnpm smoke:m1
 
 ## M2: thiết bị, yêu cầu, Work Order và bảo trì
 
-Các trang `/app` và `/portal` của M2 gọi API thật qua Gateway, kể cả khi cấu hình M1 đang ở chế độ mock. Khởi động các service Identity, Organization, Asset, Service Request, Work Order và Maintenance, chạy migration và seed DEMO theo README ở root trước khi mở web. Customer User chỉ có thể xem Service Request và phần tóm tắt đã công bố; Customer Admin được xem Maintenance theo phạm vi khách hàng của mình.
+Các trang `/app` và `/portal` gọi API thật qua Gateway. Khởi động các service Identity, Organization, Asset, Service Request, Work Order và Maintenance, chạy migration và seed DEMO theo README ở root trước khi mở web. Customer User chỉ có thể xem Service Request và phần tóm tắt đã công bố; Customer Admin được xem Maintenance theo phạm vi khách hàng của mình.
 
 Web hiện có thao tác tạo Work Order từ Service Request `ACCEPTED`, phân công kỹ thuật viên, đổi lịch và hủy theo `allowedActions`; tạo/sửa/trạng thái Maintenance Plan; lập, gửi, sửa revision Cost Estimate và Customer Admin phản hồi; kết quả Service Request có thể làm mới để chờ event từ Work Order. Tổng tiền báo giá lấy từ response của backend. Xem ma trận quyền và các ca còn cần chạy trong [M2 web test cases](../../docs/testing/m2-test-cases.md). Bản build và kiểm tra tĩnh không thay thế nghiệm thu thao tác trên trình duyệt và Android.
 
@@ -52,9 +52,32 @@ Kiểm tra API thật bằng `node --env-file=.env apps/web/scripts/verify-m2-is
 
 Thêm `--exercise-equipment-update` để kiểm tra PATCH hồ sơ, xác nhận tình trạng với lý do và quyền sửa. Chế độ này ghi lịch sử xác nhận trên thiết bị DEMO rồi phục hồi các trường hồ sơ ban đầu.
 
-## Mock contract tùy chọn
+## Các route dùng dữ liệu thật
 
-Chỉ dùng để kiểm tra giao diện khi service chưa chạy. Đặt `VITE_M1_API_MODE=mock` và `VITE_IDENTITY_API_URL=/identity` trong `.env.local`, rồi chạy ba Prism server trên cổng 4010–4012 theo `docs/api/{organization,asset,service-request}.yaml`. Sau đó có thể chạy `apps/web/scripts/smoke-mocks.ps1`. Prism không lưu thay đổi sau POST và không thay thế smoke test qua gateway.
+Tất cả route ứng dụng gọi API thật. `VITE_M1_API_MODE=mock` và các biến URL
+Prism cũ không còn chuyển nguồn dữ liệu của route. `VITE_GATEWAY_API_URL`
+định nghĩa gốc Gateway; `VITE_IDENTITY_API_URL` vẫn cho phép dùng Identity
+riêng khi phát triển.
+
+- `/dashboard`, `/app/dashboard`, `/admin`, `/portal`: dashboard trong phạm vi
+  tài khoản; lỗi API không được hiển thị như biểu đồ hoặc danh sách rỗng.
+- `/tenants`, `/admin/tenants`: danh sách có tìm kiếm, lọc và phân trang server.
+  Tạo, sửa, thay đổi trạng thái tại `/admin/tenants/new` và `/admin/tenants/:id`.
+  Mời Tenant Admin là bước riêng sau khi tạo Tenant; có thể thử lại khi Identity
+  chưa đồng bộ mà không tạo thêm Tenant.
+- `/app/organization/branches`: đọc, tạo và sửa chi nhánh.
+- `/app/organization/users`: đọc, tìm kiếm, phân trang, tạm khóa/kích hoạt và
+  gán vai trò. UI không cho tự thay đổi quyền hoặc quản lý Tenant Admin bằng
+  tài khoản Tenant Admin; backend vẫn là nơi kiểm tra quyền cuối cùng.
+- `/app/organization/roles`: danh mục vai trò thật từ Identity; không có số
+  người dùng hoặc mô tả quyền tự tạo từ fixture.
+- `/portal/locations`: địa điểm và vị trí từ customer hiện tại.
+- `/portal/profile`: hồ sơ thật từ `/auth/me`, chỉ đọc vì chưa có API tự sửa.
+
+Các trang settings/audit cũ thông báo chưa hỗ trợ và không còn nằm trong menu.
+Không dựng số liệu, log hoặc nút lưu giả cho các chức năng chưa có API.
+Các file bản mẫu được giữ làm tài liệu giao diện, không được import vào route
+hay provider của ứng dụng. CSS bản mẫu vẫn được dùng lại để giữ thiết kế.
 
 ## Ghi nhận thiết bị sau bàn giao (ADR 0012)
 
