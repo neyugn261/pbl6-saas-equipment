@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: Equipment Handover API
+  version: 1.0.0
+  description: Additive contract proposed for owner review (ADR 0018). All operations require JWT. Internal membership validation is not routed by Gateway.
+servers:
+  - url: /api/assets
+security:
+  - bearerAuth: []
+paths:
+  /equipment-handovers:
+    get:
+      summary: List tenant handovers (TENANT_STAFF + equipment:manage)
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/Status'}}
+        - {name: equipmentId, in: query, schema: {type: string, format: uuid}}
+        - {name: q, in: query, schema: {type: string, maxLength: 100}}
+      responses:
+        '200': {description: 'Paged items, total, page, pageSize; scoped to tenant'}
+    post:
+      summary: Create immutable draft snapshot for equipment's existing customer/site
+      description: Staff only. Existing open occurrence is a 409. Cancel it first. Terminal occurrences may be replaced. expiresAt must be future and within 90 days. Retired/in-service equipment cannot be handed over.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [equipmentId, expiresAt, deliveryAt, condition]
+              properties:
+                equipmentId: {type: string, format: uuid}
+                expiresAt: {type: string, format: date-time}
+                deliveryAt: {type: string, format: date-time}
+                condition: {type: string, minLength: 1, maxLength: 2000}
+                notes: {type: string, maxLength: 4000, description: Public customer-facing plain text only}
+      responses:
+        '201': {description: Persisted draft with safe snapshot}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '404': {$ref: '#/components/responses/Missing'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /equipment-handovers/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Staff detail including actor/correlation audit
+      responses:
+        '200': {description: Handover detail with equipmentStatus, isCurrent and audit}
+        '404': {$ref: '#/components/responses/Missing'}
+  /equipment-handovers/{id}/submit:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      summary: Submit draft and persist notification event atomically
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {description: PENDING_CUSTOMER_CONFIRMATION; repeated submit does not enqueue duplicate}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /equipment-handovers/{id}/cancel:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      summary: Cancel draft/pending; repeated cancellation is idempotent
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {description: CANCELLED; existing ACTIVE equipment is not deactivated}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /my/equipment-handovers:
+    get:
+      summary: Customer list with same pagination/filter query as staff; drafts excluded
+      description: CUSTOMER + equipment:read. Live account and membership validation. Token customerId is authoritative scope; request customerId is forbidden.
+      responses:
+        '200': {description: Paged customer-scoped handovers; no staff actor IDs}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /my/equipment-handovers/{id}:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    get:
+      summary: Customer-safe snapshot, actual equipment lifecycle and audit action/timestamp
+      responses:
+        '200': {description: Detail; GET never accepts or activates}
+        '404': {$ref: '#/components/responses/Missing'}
+  /my/equipment-handovers/{id}/accept:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      summary: Explicit customer-admin acceptance and atomic Asset activation
+      description: Requires equipment_handover:respond, live Identity session/roles and Organization membership, unexpired current occurrence and unchanged destination. Acceptance, audit, ACTIVE and outbox commit together. A committed retry returns current detail; no second acceptance. Failure before commit changes neither acceptance nor Asset. Broker delivery is asynchronous.
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {description: ACTIVATED only after Asset commit; includes equipmentStatus and activatedAt}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/Missing'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /my/equipment-handovers/{id}/reject:
+    parameters: [{$ref: '#/components/parameters/Id'}]
+    post:
+      summary: Customer-admin rejection without activation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 2000, pattern: '\S', description: Plain text}
+      responses:
+        '200': {description: REJECTED; replay preserves original reason and audit}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  schemas:
+    HandoverDisplayFields:
+      type: object
+      description: Optional additive fields on list/detail reads, outside the immutable snapshot. Null if source unavailable or forbidden. All original IDs remain unchanged.
+      properties:
+        createdByName: {type: [string, 'null'], description: Current Identity name; staff responses only}
+        customerSiteName: {type: [string, 'null'], description: Current Organization site name within caller customer scope; not a historical snapshot}
+        customerSiteCode: {type: [string, 'null']}
+    Status:
+      type: string
+      enum: [DRAFT, PENDING_CUSTOMER_CONFIRMATION, REJECTED, EXPIRED, CANCELLED, ACTIVATED]
+  parameters:
+    Id: {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+  requestBodies:
+    Empty:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false}
+  responses:
+    Invalid: {description: '400 VALIDATION_FAILED; unknown fields rejected'}
+    Forbidden: {description: '403 FORBIDDEN; missing permission or live account/membership rejected'}
+    Missing: {description: '404 HANDOVER_NOT_FOUND; absent, other tenant/customer or customer-visible draft'}
+    Conflict: {description: '409 HANDOVER_CONFLICT; terminal, expired, superseded, stale destination or open occurrence conflict'}
+    Unavailable: {description: '503 live authority unavailable; no acceptance recorded'}
