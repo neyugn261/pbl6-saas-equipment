@@ -1251,8 +1251,7 @@ export function EquipmentRegistrationPage() {
                         ·{' '}
                         <Link
                           to={`/app/equipment-models/${form.modelId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          state={{ registrationId: record?.id }}
                         >
                           Xem / cấu hình chính sách Model
                         </Link>

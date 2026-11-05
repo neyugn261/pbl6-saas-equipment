@@ -32,8 +32,11 @@ ngoại lệ đã lưu ở phần còn lại. Muốn chọn default mới, dùng
 hiện hành từ Model**. Quay lại/xem tiếp các bước không tự đổi phiên bản đã chọn.
 Khi đổi ngày bàn giao, phải lấy lại preview để tính đúng lịch trước khi xác nhận.
 
-Model chưa đủ cấu hình sẽ chặn hoàn tất. Mở **Xem / cấu hình chính sách Model**,
-công bố cả bảo hành và bảo trì, kể cả phiên bản Không áp dụng có lý do, rồi tải
+Model chưa đủ cấu hình sẽ chặn hoàn tất. **Xem / cấu hình chính sách Model** mở
+trình chỉnh sửa trong cùng tab. Hồ sơ bàn giao đã được lưu; dùng **Quay lại hồ sơ
+bàn giao** để trở về đúng bước Chính sách Model. Việc xem hoặc chỉnh Model không
+tự thay preview đã chọn; dùng nút lấy lại chính sách để chủ động cập nhật.
+Công bố cả bảo hành và bảo trì, kể cả phiên bản Không áp dụng có lý do, rồi tải
 lại. Tenant Admin có thể lưu nháp để Service Manager tiếp tục; không có cách nhập
 tay để vượt quyền bảo trì.
 

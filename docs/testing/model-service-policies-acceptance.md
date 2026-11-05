@@ -172,3 +172,17 @@ UI này. Các fixture và mutation acceptance chỉ đi vào DB test riêng. And
 native không thay đổi và không chạy lại trong đợt UI này.
 Ảnh mới: [bước chính sách](artifacts/model-service-policies/web-handover-model-step.png)
 và [màn hình mobile](artifacts/model-service-policies/web-handover-model-mobile.png).
+
+
+## Liên kết cấu hình Model từ bàn giao — 2026-11-05
+
+Tái hiện trước sửa: link dùng `target="_blank"` và `rel="noopener noreferrer"`;
+Chromium mở tab mới đúng URL Model nhưng không có session refresh, chuyển về
+`/login`. Sau sửa, link dùng điều hướng React Router trong cùng tab; trang Model
+có liên kết quay về registration ID hợp lệ và bước Chính sách Model.
+
+`pnpm --filter web build`, `lint`, `test`: PASS; 40 test Web đạt. Browser thật
+với Identity/Gateway/services/PostgreSQL/RabbitMQ test xác nhận không tạo tab mới,
+trình chỉnh sửa đúng Model, quay về đúng hồ sơ/bước, không gửi lại preview và
+không đổi phiên bản đã chọn. Toàn bộ luồng bàn giao/legacy/checklist/portal trong
+harness hiện hành vẫn PASS. Không thay cơ chế token hoặc dùng chung token giữa tab.

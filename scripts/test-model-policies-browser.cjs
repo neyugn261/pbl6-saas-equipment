@@ -219,6 +219,59 @@ module.exports = async function ({
       fullPage: true,
       animations: "disabled",
     });
+    // Model configuration stays in the authenticated tab and returns to the pinned draft.
+    const pagesBefore = manager.context().pages().length;
+    let previewWrites = 0;
+    const countPreview = (req) => {
+      if (
+        req.method() === "POST" &&
+        req
+          .url()
+          .endsWith(`/equipment-registrations/${uiDraft.id}/model-policies`)
+      )
+        previewWrites++;
+    };
+    manager.on("request", countPreview);
+    const configure = manager.getByRole("link", {
+      name: "Xem / cấu hình chính sách Model",
+      exact: true,
+    });
+    assert.equal(await configure.getAttribute("target"), null);
+    await configure.click();
+    await manager.waitForURL(
+      (url) => url.pathname === `/app/equipment-models/${modelId}`,
+    );
+    await manager
+      .getByRole("heading", { name: "Chính sách bảo hành", exact: true })
+      .waitFor();
+    assert.equal(manager.context().pages().length, pagesBefore);
+    await manager
+      .getByRole("link", { name: "← Quay lại hồ sơ bàn giao", exact: true })
+      .click();
+    await manager.waitForURL(
+      (url) => url.pathname === `/app/equipment-registrations/${uiDraft.id}`,
+    );
+    await manager
+      .getByRole("heading", {
+        name: "Áp dụng chính sách theo Model",
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(
+      await manager
+        .locator(".registration-steps [aria-current=step]")
+        .innerText(),
+      "3. Chính sách Model",
+    );
+    assert.equal(
+      previewWrites,
+      0,
+      "Returning from configuration must keep the pinned policy preview",
+    );
+    manager.off("request", countPreview);
+    console.log(
+      "PASS Model configuration link: same tab, authenticated Model editor, return to original saved draft/policy step without replaying preview.",
+    );
     // Response lost after the preview is committed: reconcile via GET, never create another equipment.
     let reapplyCount = 0;
     const previewPattern = `**/equipment-registrations/${uiDraft.id}/model-policies`;
