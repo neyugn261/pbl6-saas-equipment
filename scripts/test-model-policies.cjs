@@ -1198,7 +1198,110 @@ async function main() {
     case: "forged receipt cannot complete; covered cause needs no estimate; UNKNOWN rejected; same-tenant customer isolation and draft privacy",
     status: "PASS",
   });
-  if (process.env.MODEL_POLICY_BROWSER === "true")
+  if (process.env.MODEL_POLICY_BROWSER === "true") {
+    const missingUiModel = await call(
+      "POST",
+      A + "/equipment-models",
+      manager,
+      {
+        manufacturer: "UI fixture",
+        modelCode: "UI-MISSING",
+        name: "Model chưa cấu hình",
+      },
+      201,
+    );
+    const noneUiModel = await call(
+      "POST",
+      A + "/equipment-models",
+      manager,
+      {
+        manufacturer: "UI fixture",
+        modelCode: "UI-NONE",
+        name: "Model không áp dụng dịch vụ",
+      },
+      201,
+    );
+    const nwPath = `${A}/equipment-models/${noneUiModel.id}/warranty-policies`,
+      nmPath = `${M}/equipment-models/${noneUiModel.id}/maintenance-profiles`;
+    const nw = await call(
+      "POST",
+      nwPath,
+      manager,
+      {
+        body: {
+          ...warranty,
+          mode: "NONE",
+          reason: "Không bảo hành theo thỏa thuận",
+        },
+      },
+      201,
+    );
+    await call(
+      "POST",
+      nwPath + `/${nw.id}/publish`,
+      manager,
+      { expectedVersion: nw.version },
+      201,
+    );
+    const nm = await call(
+      "POST",
+      nmPath,
+      manager,
+      {
+        body: {
+          ...profile,
+          mode: "NONE",
+          reason: "Không bảo trì định kỳ theo thỏa thuận",
+          rules: [],
+        },
+      },
+      201,
+    );
+    await call(
+      "POST",
+      nmPath + `/${nm.id}/publish`,
+      manager,
+      { expectedVersion: nm.version },
+      201,
+    );
+    const legacyUiDraft = await call(
+      "POST",
+      A + "/equipment-registrations",
+      manager,
+      {
+        equipment: {
+          mode: "NEW",
+          data: {
+            modelId: model.id,
+            customerId: customer.id,
+            customerSiteId: site.id,
+            assetCode: "UI-LEGACY",
+            serialNumber: "UI-LEGACY",
+            handoverDate: "2026-01-31",
+          },
+        },
+        warranty: {
+          mode: "CREATE",
+          startDate: "2026-01-31",
+          endDate: "2027-01-30",
+          warrantyType: "STANDARD",
+          terms: "Legacy agreed warranty terms",
+        },
+        maintenance: {
+          mode: "NONE",
+          reason: "Legacy handover without maintenance",
+        },
+      },
+      201,
+      { "Idempotency-Key": randomUUID() },
+    );
+    const legacyUi = await call(
+      "POST",
+      A + `/equipment-registrations/${legacyUiDraft.id}/submit`,
+      manager,
+      { expectedVersion: legacyUiDraft.version },
+    );
+    assert.equal(legacyUi.status, "COMPLETED");
     await require("./test-model-policies-browser.cjs")({
       root,
       ports,
@@ -1206,10 +1309,16 @@ async function main() {
       password,
       modelId: model.id,
       registrationId: draft.id,
+      customerId: customer.id,
+      siteId: site.id,
+      missingModelId: missingUiModel.id,
+      noneModelId: noneUiModel.id,
+      legacyRegistrationId: legacyUi.id,
       orderId: order.id,
       equipmentId: draft.equipmentId,
       requestId: sr.id,
     });
+  }
   if (process.env.MODEL_POLICY_ANDROID === "true") {
     await scheduler.tick("2026-07-31", tenantId);
     await drain(

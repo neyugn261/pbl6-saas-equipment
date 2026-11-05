@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../auth/session";
 import { useDirectory, errorText } from "./registration-data";
@@ -73,6 +73,14 @@ const newItem = (): PolicyItem => ({
   allowNotApplicable: false,
 });
 export function ModelPolicyPage() {
+  const location = useLocation();
+  const origin = (location.state as { registrationId?: unknown } | null)
+    ?.registrationId;
+  const registrationId =
+    typeof origin === "string" &&
+    /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(origin)
+      ? origin
+      : null;
   const { id } = useParams(),
     model = useDirectory<{
       name: string;
@@ -89,7 +97,17 @@ export function ModelPolicyPage() {
             nguyên phiên bản đã nhận.
           </p>
         </div>
-        <Link to="/app/equipment-models">Danh sách Model</Link>
+        <div className="live-toolbar">
+          {registrationId && (
+            <Link
+              to={`/app/equipment-registrations/${registrationId}`}
+              state={{ registrationStep: 2 }}
+            >
+              ← Quay lại hồ sơ bàn giao
+            </Link>
+          )}
+          <Link to="/app/equipment-models">Danh sách Model</Link>
+        </div>
       </header>
       <LoadState {...model} />
       {model.value && id && (

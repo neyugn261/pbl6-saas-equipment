@@ -19,21 +19,36 @@ bảo trì; Tenant Admin có thể quản lý phần bảo hành theo quyền hi
 
 ## Bàn giao thiết bị
 
-Nhập Model, khách hàng, địa điểm và ngày bàn giao thực tế; lưu nháp. Trong mục
-**Áp dụng chính sách theo Model**, lấy và xem trước chương trình. Hệ thống tự tính
-ngày hết bảo hành, ngày đầu của từng lịch và hiển thị các hạng mục.
+Luồng bàn giao gồm bốn bước: **Khách hàng → Thiết bị → Chính sách Model → Xác nhận**.
+Chọn khách hàng/địa điểm, nhập Model, mã máy, serial và ngày bàn giao thực tế.
+Khi chuyển sang Chính sách Model, Service Manager được hệ thống lưu nháp và lấy
+các phiên bản đã công bố, tự tính ngày hết bảo hành và kỳ đầu của từng lịch.
+Không còn bước nhập lại bảo hành hoặc tự tạo Plan bằng tay trong màn hình này.
 
-Service Manager có thể thay thời hạn, chu kỳ hoặc kỳ đầu riêng cho máy này, kèm
-lý do. Ngoại lệ không sửa bản Model. Kiểm tra lại preview rồi xác nhận bàn giao.
-Chưa cấu hình chính sách không được hiểu là không áp dụng: hãy công bố đủ hai
-phần, kể cả phiên bản Không áp dụng có lý do.
+Kiểm tra điều khoản, phiên bản, các lịch và checklist đã hiển thị. Nếu cần thay
+đổi riêng cho máy, mở **Điều chỉnh ngoại lệ cho thiết bị này**, nhập lý do rồi tính
+lại. Ngoại lệ giữ phiên bản đã chọn, không sửa chính sách nguồn và không làm mất
+ngoại lệ đã lưu ở phần còn lại. Muốn chọn default mới, dùng **Lấy lại chính sách
+hiện hành từ Model**. Quay lại/xem tiếp các bước không tự đổi phiên bản đã chọn.
+Khi đổi ngày bàn giao, phải lấy lại preview để tính đúng lịch trước khi xác nhận.
 
-Nếu hồ sơ đang **PENDING_MAINTENANCE**, chọn **Đối soát và tiếp tục cùng hồ sơ**.
-Không tạo máy/hồ sơ mới. Khi có nhiều lịch, hệ thống tạo đủ các Plan rồi mới báo
-hoàn tất. Hồ sơ thiết bị hiển thị chính sách và phiên bản thực tế đã nhận.
-Hồ sơ thủ công cũ vẫn đọc và tiếp tục theo quy trình trước đây. Nếu hệ thống ngừng
-hoặc dữ liệu được ghi nhận muộn, scheduler giữ lịch gốc và xử lý kỳ gần nhất đã
-đến hạn, theo quy tắc hiện hành; không tạo dồn mọi kỳ đã bỏ lỡ.
+Model chưa đủ cấu hình sẽ chặn hoàn tất. **Xem / cấu hình chính sách Model** mở
+trình chỉnh sửa trong cùng tab. Hồ sơ bàn giao đã được lưu; dùng **Quay lại hồ sơ
+bàn giao** để trở về đúng bước Chính sách Model. Việc xem hoặc chỉnh Model không
+tự thay preview đã chọn; dùng nút lấy lại chính sách để chủ động cập nhật.
+Công bố cả bảo hành và bảo trì, kể cả phiên bản Không áp dụng có lý do, rồi tải
+lại. Tenant Admin có thể lưu nháp để Service Manager tiếp tục; không có cách nhập
+tay để vượt quyền bảo trì.
+
+Ở bước Xác nhận, chọn **Hoàn tất ghi nhận**. Nếu kết quả lưu chưa rõ, dùng
+**Tải lại kết quả đã lưu** để đối soát trước khi gửi tiếp, không tạo máy khác.
+Nếu hồ sơ **PENDING_MAINTENANCE**, chọn **Kiểm tra và tiếp tục** trên thông báo
+trạng thái. Chỉ khi nhận đủ Plan, hệ thống mới báo hoàn tất.
+
+Hồ sơ đã hoàn tất hoặc đang chờ từ luồng cũ giữ nguyên điều khoản và cách đối
+soát cũ; chúng hiển thị để xem, không được tự đổi sang chính sách Model mới.
+Nếu hệ thống ngừng hoặc dữ liệu được ghi nhận muộn, scheduler giữ lịch gốc và
+xử lý kỳ gần nhất đã đến hạn, không tạo dồn mọi kỳ đã bỏ lỡ.
 
 ## Tiếp nhận sự cố bảo hành
 

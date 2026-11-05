@@ -1,43 +1,46 @@
-import { useState } from "react";
-import { api } from "../api/client";
-import { useSession } from "../auth/session";
-import { useDirectory, errorText } from "./registration-data";
-import { LoadState } from "./registration-shared";
-import type { PolicyItem } from "./ModelPolicyPage";
+import { useRef, useState } from 'react'
+import { api } from '../api/client'
+import { useSession } from '../auth/session'
+import { useDirectory, errorText, modelSetupError } from './registration-data'
+import { LoadState } from './registration-shared'
+import type { PolicyItem } from './ModelPolicyPage'
 type Snapshot = {
+  handoverDate?: string
   warranty: {
-    revision: number;
+    revisionId?: string
+    revision: number
     body: {
-      mode: string;
-      name: string;
-      terms: string;
-      reason: string;
-      durationMonths: number;
-      coveredCauses: string[];
-      exclusions: { code: string; text: string }[];
-    };
-    startDate: string;
-    endDate: string;
-  };
+      mode: string
+      name: string
+      terms: string
+      reason: string
+      durationMonths: number
+      coveredCauses: string[]
+      exclusions: { code: string; text: string }[]
+    }
+    startDate: string
+    endDate: string
+  }
   maintenance: {
-    revision: number;
+    revisionId?: string
+    revision: number
     body: {
-      mode: string;
-      name: string;
-      terms: string;
-      reason: string;
+      mode: string
+      name: string
+      terms: string
+      reason: string
       rules: {
-        id: string;
-        name: string;
-        frequencyValue: number;
-        frequencyUnit: string;
-        firstOccurrence: number;
-        checklist: PolicyItem[];
-      }[];
-    };
-    firstDueDates: { itemId: string; date: string }[];
-  };
-};
+        id: string
+        name: string
+        frequencyValue: number
+        frequencyUnit: string
+        firstOccurrence: number
+        checklist: PolicyItem[]
+      }[]
+    }
+    firstDueDates: { itemId: string; date: string }[]
+  }
+}
 export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
   return (
     <div className="live-columns">
@@ -45,7 +48,7 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
         <h3>Bảo hành · v{snapshot.warranty.revision}</h3>
         <p>{snapshot.warranty.body.name}</p>
         <p>
-          {snapshot.warranty.body.mode === "NONE"
+          {snapshot.warranty.body.mode === 'NONE'
             ? snapshot.warranty.body.reason
             : `${snapshot.warranty.body.durationMonths} tháng · ${snapshot.warranty.startDate} → ${snapshot.warranty.endDate}`}
         </p>
@@ -57,16 +60,19 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
       <section>
         <h3>Bảo trì · v{snapshot.maintenance.revision}</h3>
         <p>{snapshot.maintenance.body.terms}</p>
-        {snapshot.maintenance.body.mode === "NONE" ? (
+        {snapshot.maintenance.body.mode === 'NONE' ? (
           <p>{snapshot.maintenance.body.reason}</p>
         ) : (
           snapshot.maintenance.body.rules.map((r) => (
             <div key={r.id}>
               <h4>
-                {r.name} · mỗi {r.frequencyValue} {r.frequencyUnit}
+                {r.name} · mỗi {r.frequencyValue}{' '}
+                {{ DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng', YEAR: 'năm' }[
+                  r.frequencyUnit
+                ] ?? r.frequencyUnit}
               </h4>
               <p>
-                Kỳ đầu:{" "}
+                Kỳ đầu:{' '}
                 {
                   snapshot.maintenance.firstDueDates.find(
                     (d) => d.itemId === r.id,
@@ -86,7 +92,7 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
         )}
       </section>
     </div>
-  );
+  )
 }
 export function HandoverPolicyPanel({
   id,
@@ -94,43 +100,57 @@ export function HandoverPolicyPanel({
   status,
   snapshot,
   changed,
+  onBusyChange,
+  showCompleteButton = true,
+  readOnly = false,
 }: {
-  id: string;
-  version: number;
-  status: string;
-  snapshot?: Snapshot | null;
-  changed: () => void;
+  id: string
+  version: number
+  status: string
+  snapshot?: Snapshot | null
+  changed: () => void | Promise<void>
+  onBusyChange?: (busy: boolean) => void
+  showCompleteButton?: boolean
+  readOnly?: boolean
 }) {
-  const { profile } = useSession(),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [months, setMonths] = useState(""),
-    [reason, setReason] = useState(""),
-    [scheduleOverrides, setScheduleOverrides] = useState<
-      Record<
-        string,
-        { itemId: string; frequencyValue: number; firstOccurrence: number }
-      >
-    >({});
-  const canManage = profile?.roles.includes("SERVICE_MANAGER");
-  async function run(path: string, body: unknown) {
-    if (busy) return;
-    setBusy(true);
-    setError("");
+  const { profile } = useSession()
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(''),
+    [months, setMonths] = useState(''),
+    [reason, setReason] = useState('')
+  const [scheduleOverrides, setScheduleOverrides] = useState<
+    Record<
+      string,
+      { itemId: string; frequencyValue: number; firstOccurrence: number }
+    >
+  >({})
+  const pending = useRef(false)
+  const canManage = profile?.roles.includes('SERVICE_MANAGER')
+  async function run(path?: string, body?: unknown) {
+    if (pending.current) return false
+    pending.current = true
+    setBusy(true)
+    onBusyChange?.(true)
+    setError('')
     try {
-      await api.assetM2(`/equipment-registrations/${id}/${path}`, {
-        method: "POST",
-        body,
-      });
-      changed();
+      if (path)
+        await api.assetM2(`/equipment-registrations/${id}/${path}`, {
+          method: 'POST',
+          body,
+        })
+      await changed()
+      return true
     } catch (e) {
-      setError(errorText(e));
+      setError(modelSetupError(e))
+      return false
     } finally {
-      setBusy(false);
+      pending.current = false
+      setBusy(false)
+      onBusyChange?.(false)
     }
   }
   return (
-    <section className="m1-card live-admin">
+    <section className="m1-card live-admin registration-model-policies">
       <h2>Áp dụng chính sách theo Model</h2>
       {error && (
         <p role="alert" className="m1-error">
@@ -141,131 +161,196 @@ export function HandoverPolicyPanel({
         <ModelPolicySummary snapshot={snapshot} />
       ) : (
         <p>
-          Hệ thống lấy các phiên bản đã công bố và tự tính ngày theo ngày bàn
-          giao của thiết bị.
+          Hệ thống lấy chính sách đã công bố của Model và tự tính ngày bảo hành,
+          lịch cùng hạng mục bảo trì theo ngày bàn giao.
         </p>
       )}
-      {!canManage && (
-        <p>Service Manager xác nhận và áp dụng chương trình bảo trì.</p>
+      {!canManage && status === 'DRAFT' && (
+        <p>
+          Service Manager áp dụng chính sách và xác nhận bàn giao. Bạn có thể
+          lưu hồ sơ để tiếp tục sau.
+        </p>
       )}
-      {status === "DRAFT" && canManage && (
+      {!readOnly && status === 'DRAFT' && (
+        <button type="button" disabled={busy} onClick={() => void run()}>
+          Tải lại kết quả đã lưu
+        </button>
+      )}
+      {!readOnly && status === 'DRAFT' && canManage && (
         <>
-          <form
-            className="live-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run("model-policies", {
-                expectedVersion: version,
-                ...(months ? { durationMonths: Number(months) } : {}),
-                ...(Object.keys(scheduleOverrides).length
-                  ? { maintenanceOverrides: Object.values(scheduleOverrides) }
-                  : {}),
-                reason,
-              });
+          <p>
+            Chính sách được chọn sẽ áp dụng cho thiết bị khi xác nhận hoàn tất
+            bàn giao.
+          </p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (await run('model-policies', { expectedVersion: version })) {
+                setMonths('')
+                setReason('')
+                setScheduleOverrides({})
+              }
             }}
           >
-            <label>
-              Thay đổi thời hạn bảo hành riêng cho máy này (tùy chọn)
-              <input
-                type="number"
-                min={1}
-                max={1200}
-                value={months}
-                onChange={(e) => setMonths(e.target.value)}
-                disabled={busy}
-              />
-            </label>
-            {snapshot?.maintenance.body.rules.map((rule) => (
-              <div key={rule.id}>
-                <label>
-                  Chu kỳ riêng cho {rule.name}
-                  <input
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={
-                      scheduleOverrides[rule.id]?.frequencyValue ??
-                      rule.frequencyValue
+            {busy
+              ? 'Đang lấy chính sách…'
+              : snapshot
+                ? 'Lấy lại chính sách hiện hành từ Model'
+                : 'Áp dụng chính sách Model'}
+          </button>
+          {snapshot &&
+            (snapshot.warranty.body.mode === 'APPLY' ||
+              snapshot.maintenance.body.mode === 'APPLY') && (
+              <details className="registration-policy-overrides">
+                <summary>
+                  Điều chỉnh ngoại lệ cho thiết bị này (tùy chọn)
+                </summary>
+                <p>
+                  Giữ nguyên phiên bản đã chọn. Mọi thay đổi cần có lý do và
+                  không sửa chính sách nguồn của Model.
+                </p>
+                <form
+                  className="live-form"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    if (!months && !Object.keys(scheduleOverrides).length) {
+                      setError(
+                        'Chọn thời hạn hoặc lịch cần điều chỉnh trước khi lưu ngoại lệ.',
+                      )
+                      return
                     }
-                    onChange={(e) =>
-                      setScheduleOverrides({
-                        ...scheduleOverrides,
-                        [rule.id]: {
-                          itemId: rule.id,
-                          frequencyValue: Number(e.target.value),
-                          firstOccurrence:
-                            scheduleOverrides[rule.id]?.firstOccurrence ??
-                            rule.firstOccurrence,
-                        },
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  Kỳ đầu sau bao nhiêu chu kỳ?
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    disabled={busy}
-                    value={
-                      scheduleOverrides[rule.id]?.firstOccurrence ??
-                      rule.firstOccurrence
-                    }
-                    onChange={(e) =>
-                      setScheduleOverrides({
-                        ...scheduleOverrides,
-                        [rule.id]: {
-                          itemId: rule.id,
-                          frequencyValue:
-                            scheduleOverrides[rule.id]?.frequencyValue ??
-                            rule.frequencyValue,
-                          firstOccurrence: Number(e.target.value),
-                        },
-                      })
-                    }
-                  />
-                </label>
-              </div>
-            ))}
-            {(months || Object.keys(scheduleOverrides).length > 0) && (
-              <label>
-                Lý do ngoại lệ
-                <input
-                  required
-                  maxLength={2000}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  disabled={busy}
-                />
-              </label>
+                    void run('model-policies', {
+                      expectedVersion: version,
+                      warrantyRevisionId: snapshot.warranty.revisionId,
+                      maintenanceRevisionId: snapshot.maintenance.revisionId,
+                      ...(snapshot.warranty.body.mode === 'APPLY'
+                        ? {
+                            durationMonths: months
+                              ? Number(months)
+                              : snapshot.warranty.body.durationMonths,
+                          }
+                        : {}),
+                      maintenanceOverrides: snapshot.maintenance.body.rules.map(
+                        (rule) =>
+                          scheduleOverrides[rule.id] ?? {
+                            itemId: rule.id,
+                            frequencyValue: rule.frequencyValue,
+                            firstOccurrence: rule.firstOccurrence,
+                          },
+                      ),
+                      reason,
+                    })
+                  }}
+                >
+                  <fieldset disabled={busy}>
+                    {snapshot.warranty.body.mode === 'APPLY' && (
+                      <label>
+                        Thời hạn bảo hành riêng (tháng)
+                        <input
+                          type="number"
+                          min={1}
+                          max={1200}
+                          value={months}
+                          placeholder={String(
+                            snapshot.warranty.body.durationMonths,
+                          )}
+                          onChange={(e) => setMonths(e.target.value)}
+                        />
+                      </label>
+                    )}
+                    {snapshot.maintenance.body.rules.map((rule) => (
+                      <div key={rule.id}>
+                        <label>
+                          Chu kỳ riêng cho {rule.name}
+                          <input
+                            type="number"
+                            min={1}
+                            max={1000}
+                            value={
+                              scheduleOverrides[rule.id]?.frequencyValue ??
+                              rule.frequencyValue
+                            }
+                            onChange={(e) =>
+                              setScheduleOverrides({
+                                ...scheduleOverrides,
+                                [rule.id]: {
+                                  itemId: rule.id,
+                                  frequencyValue: Number(e.target.value),
+                                  firstOccurrence:
+                                    scheduleOverrides[rule.id]
+                                      ?.firstOccurrence ?? rule.firstOccurrence,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Kỳ đầu sau bao nhiêu chu kỳ?
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={
+                              scheduleOverrides[rule.id]?.firstOccurrence ??
+                              rule.firstOccurrence
+                            }
+                            onChange={(e) =>
+                              setScheduleOverrides({
+                                ...scheduleOverrides,
+                                [rule.id]: {
+                                  itemId: rule.id,
+                                  frequencyValue:
+                                    scheduleOverrides[rule.id]
+                                      ?.frequencyValue ?? rule.frequencyValue,
+                                  firstOccurrence: Number(e.target.value),
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    ))}
+                    <label>
+                      Lý do ngoại lệ
+                      <textarea
+                        required
+                        maxLength={2000}
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                      />
+                    </label>
+                    <button disabled={busy}>
+                      Tính lại chính sách với ngoại lệ
+                    </button>
+                  </fieldset>
+                </form>
+              </details>
             )}
-            <button disabled={busy}>
-              {busy
-                ? "Đang kiểm tra…"
-                : snapshot
-                  ? "Xem lại chính sách Model hiện hành"
-                  : "Lấy và xem trước chính sách Model"}
-            </button>
-          </form>
-          {snapshot && (
+          {snapshot && showCompleteButton && (
             <button
+              type="button"
               disabled={busy}
-              onClick={() => void run("submit", { expectedVersion: version })}
+              onClick={() => void run('submit', { expectedVersion: version })}
             >
               Xác nhận chính sách và hoàn tất bàn giao
             </button>
           )}
         </>
       )}
-      {status === "PENDING_MAINTENANCE" && canManage && (
-        <button disabled={busy} onClick={() => void run("resume", {})}>
+      {!readOnly && status === 'PENDING_MAINTENANCE' && canManage && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void run('resume', {})}
+        >
           Đối soát và tiếp tục cùng hồ sơ
         </button>
       )}
     </section>
-  );
+  )
 }
+
 export function AppliedPolicyPanel({ equipmentId }: { equipmentId: string }) {
   const data = useDirectory<{
     snapshot: Snapshot | null;

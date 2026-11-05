@@ -1,9 +1,9 @@
-import { HandoverPolicyPanel } from "./ModelPolicyPanels";
-import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError } from "../api/client";
-import { getSessionGeneration, useSession } from "../auth/session";
-import type { Page } from "../types/domain";
+import { HandoverPolicyPanel } from './ModelPolicyPanels'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { api, ApiError } from '../api/client'
+import { getSessionGeneration, useSession } from '../auth/session'
+import type { Page } from '../types/domain'
 import {
   DirectoryPicker,
   LoadState,
@@ -14,10 +14,11 @@ import {
 import {
   type DirectoryRow,
   errorText,
+  modelSetupError,
   useDirectory,
-} from "./registration-data";
-import QRCode from "qrcode";
-import "./equipment-registration.css";
+} from './registration-data'
+import QRCode from 'qrcode'
+import './equipment-registration.css'
 
 type Choice = {
   mode: 'UNCONFIRMED' | 'CREATE' | 'KEEP' | 'NONE'
@@ -35,20 +36,20 @@ type Choice = {
   nextDueDate?: string
 }
 type Registration = {
-  policyPreview?: Parameters<typeof HandoverPolicyPanel>[0]["snapshot"];
-  maintenancePlanIds?: string[];
-  id: string;
-  equipmentId: string;
-  status: "DRAFT" | "PENDING_MAINTENANCE" | "COMPLETED";
-  version: number;
-  warranty: Choice;
-  maintenance: Choice;
-  warrantyId: string | null;
-  maintenancePlanId: string | null;
-  allowedActions: string[];
-  lastErrorCode: string | null;
-  completedAt: string | null;
-};
+  policyPreview?: Parameters<typeof HandoverPolicyPanel>[0]['snapshot']
+  maintenancePlanIds?: string[]
+  id: string
+  equipmentId: string
+  status: 'DRAFT' | 'PENDING_MAINTENANCE' | 'COMPLETED'
+  version: number
+  warranty: Choice
+  maintenance: Choice
+  warrantyId: string | null
+  maintenancePlanId: string | null
+  allowedActions: string[]
+  lastErrorCode: string | null
+  completedAt: string | null
+}
 type Equipment = {
   id: string
   customerId: string
@@ -64,16 +65,6 @@ type Equipment = {
   registrationId?: string | null
   registrationStatus?: string
   status: string
-}
-type PolicyRow = {
-  id: string
-  name?: string
-  startDate?: string
-  endDate?: string
-  status: string
-  nextDueDate?: string
-  frequencyUnit?: string
-  frequencyValue?: number
 }
 type FormState = {
   customerId: string
@@ -91,7 +82,7 @@ type FormState = {
   warranty: Choice
   maintenance: Choice
 }
-const unknownChoice = (): Choice => ({ mode: "UNCONFIRMED" });
+const unknownChoice = (): Choice => ({ mode: 'UNCONFIRMED' })
 const statusNames = {
   NOT_RECORDED: 'Chưa ghi nhận thiết lập',
   DRAFT: 'Hồ sơ chưa hoàn tất',
@@ -113,6 +104,16 @@ function formEquipment(eq: Equipment) {
     installationDate: eq.installationDate || '',
     commissionedDate: eq.commissionedDate || '',
   }
+}
+function currentPolicyPreview(
+  row: Registration,
+  equipment: Equipment,
+): Registration {
+  return row.status === 'DRAFT' &&
+    row.policyPreview &&
+    row.policyPreview.handoverDate !== equipment.handoverDate
+    ? { ...row, policyPreview: null }
+    : row
 }
 const today = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(
@@ -213,7 +214,7 @@ export function EquipmentRegistrationPage() {
     navigate = useNavigate(),
     location = useLocation(),
     { profile } = useSession()
-  const query = new URLSearchParams(location.search);
+  const query = new URLSearchParams(location.search)
   const [form, setForm] = useState<FormState>(() => ({
     customerId: query.get('customerId') || '',
     siteId: query.get('siteId') || '',
@@ -241,12 +242,11 @@ export function EquipmentRegistrationPage() {
     [qr, setQr] = useState<{ url: string } | null>(null),
     [datesDirty, setDatesDirty] = useState(false),
     [qrImage, setQrImage] = useState(''),
-    [planPage, setPlanPage] = useState(1),
     [needsReload, setNeedsReload] = useState(false)
   const pending = useRef<{ key: string; body: unknown } | null>(null),
     selectedSequence = useRef(0)
-  const markerKey = `pbl6.registration.${window.location.origin}.${profile?.tenantId}.${profile?.id}`;
-  const canMaintain = profile?.roles.includes("SERVICE_MANAGER") === true;
+  const markerKey = `pbl6.registration.${window.location.origin}.${profile?.tenantId}.${profile?.id}`
+  const canMaintain = profile?.roles.includes('SERVICE_MANAGER') === true
   const frozen =
     record?.status === 'PENDING_MAINTENANCE' ||
     record?.status === 'COMPLETED' ||
@@ -274,22 +274,13 @@ export function EquipmentRegistrationPage() {
   )
   const currentEquipmentId =
     record?.equipmentId || (form.source === 'EXISTING' ? form.equipmentId : '')
-  const warranties = useDirectory<PolicyRow[]>(
+  const model = useDirectory<DirectoryRow>(
     'assetM2',
-    currentEquipmentId ? `/equipment/${currentEquipmentId}/warranties` : null,
-    revision,
-  )
-  const plans = useDirectory<Page<PolicyRow>>(
-    'maintenance',
-    currentEquipmentId
-      ? `/maintenance-plans?equipmentId=${currentEquipmentId}&pageSize=20&page=${planPage}`
-      : null,
+    form.modelId ? `/equipment-models/${form.modelId}` : null,
     revision,
   )
   const field = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
-  const policy = (kind: 'warranty' | 'maintenance', patch: Partial<Choice>) =>
-    setForm((prev) => ({ ...prev, [kind]: { ...prev[kind], ...patch } }))
   useEffect(() => {
     let active = true
     const initialEquipment = new URLSearchParams(location.search).get(
@@ -305,7 +296,17 @@ export function EquipmentRegistrationPage() {
         .then(
           ({ row, eq }) => {
             if (active) {
-              setRecord(row)
+              const current = currentPolicyPreview(row, eq)
+              const marker = sessionStorage.getItem(markerKey)
+              if (marker) {
+                try {
+                  if (JSON.parse(marker).id === row.id)
+                    sessionStorage.removeItem(markerKey)
+                } catch {
+                  /* Keep unresolved creation markers available for recovery. */
+                }
+              }
+              setRecord(current)
               setForm((prev) => ({
                 ...prev,
                 ...formEquipment(eq),
@@ -315,7 +316,15 @@ export function EquipmentRegistrationPage() {
               setLoading(false)
               setUncertain(false)
               setNeedsReload(false)
-              setStep(row.status === 'DRAFT' ? 0 : 4)
+              setStep(
+                row.status === 'DRAFT'
+                  ? [0, 1, 2, 4].includes(location.state?.registrationStep)
+                    ? location.state.registrationStep
+                    : current.policyPreview
+                      ? 2
+                      : 0
+                  : 4,
+              )
             }
           },
           (e) => {
@@ -365,7 +374,7 @@ export function EquipmentRegistrationPage() {
     return () => {
       active = false
     }
-  }, [id, location.search, markerKey, navigate])
+  }, [id, location.search, location.state, markerKey, navigate])
 
   async function selectExisting(equipmentId: string) {
     const sequence = ++selectedSequence.current
@@ -413,38 +422,9 @@ export function EquipmentRegistrationPage() {
       )
         return 'Ngày thực tế của thiết bị không được ở tương lai.'
     }
-    if (record?.policyPreview && part >= 2) return "";
-    const choice = part === 2 ? form.warranty : form.maintenance;
-    if (part >= 2 && part <= 3) {
-      if (final && choice.mode === 'UNCONFIRMED')
-        return 'Xác nhận bảo hành và bảo trì trước khi hoàn tất.'
-      if (choice.mode === 'NONE' && !choice.reason?.trim())
-        return 'Nhập lý do không áp dụng.'
-      if (
-        choice.mode === 'KEEP' &&
-        !(part === 2 ? choice.warrantyId : choice.planId)
-      )
-        return 'Chọn bản ghi hiện có để giữ lại.'
-      if (
-        choice.mode === 'CREATE' &&
-        part === 2 &&
-        (!choice.startDate ||
-          !choice.endDate ||
-          choice.endDate < choice.startDate ||
-          !choice.warrantyType?.trim())
-      )
-        return 'Nhập đầy đủ loại và khoảng bảo hành hợp lệ.'
-      if (
-        choice.mode === 'CREATE' &&
-        part === 3 &&
-        (!choice.name?.trim() ||
-          !choice.nextDueDate ||
-          !Number.isInteger(choice.frequencyValue) ||
-          choice.frequencyValue! < 1)
-      )
-        return 'Nhập tên kế hoạch, chu kỳ và kỳ đầu hợp lệ.'
-    }
-    return "";
+    if (final && part === 2 && !record?.policyPreview)
+      return 'Áp dụng chính sách của Model trước khi hoàn tất bàn giao.'
+    return ''
   }
   async function recover() {
     setBusy(true)
@@ -484,9 +464,14 @@ export function EquipmentRegistrationPage() {
       setBusy(false)
     }
   }
-  async function persist(complete: boolean, retry = false) {
-    if (busy && !retry) return;
-    const operationGeneration = getSessionGeneration();
+  async function persist(
+    complete: boolean,
+    retry = false,
+    targetStep = 4,
+    applyPolicies = false,
+  ) {
+    if (busy && !retry) return
+    const operationGeneration = getSessionGeneration()
     if (!retry)
       for (let part = 0; part < 4; part++) {
         const issue = validation(part, complete)
@@ -496,9 +481,9 @@ export function EquipmentRegistrationPage() {
           return
         }
       }
-    setBusy(true);
-    setError("");
-    let saved = record;
+    setBusy(true)
+    setError('')
+    let saved = record
     try {
       if (!saved) {
         if (!pending.current) {
@@ -552,35 +537,38 @@ export function EquipmentRegistrationPage() {
           JSON.stringify({ key: pending.current.key, id: saved.id }),
         )
         pending.current = null
-      } else if (saved.status === "DRAFT" && !saved.policyPreview)
-        saved = await api.assetM2<Registration>(
-          `/equipment-registrations/${saved.id}`,
-          {
-            method: 'PATCH',
-            body: {
-              expectedVersion: saved.version,
-              warranty: form.warranty,
-              ...(canMaintain ? { maintenance: form.maintenance } : {}),
-            },
-          },
-        )
-      if (getSessionGeneration() !== operationGeneration) return;
-      setRecord(saved);
-      setUncertain(false);
+      }
+      if (getSessionGeneration() !== operationGeneration) return
+      // Pin server-resolved Model policies once, without replacing an existing preview.
+      if (applyPolicies && saved.status === 'DRAFT' && !saved.policyPreview) {
+        const preview = await api.assetM2<
+          Pick<Registration, 'id' | 'version' | 'policyPreview'>
+        >(`/equipment-registrations/${saved.id}/model-policies`, {
+          method: 'POST',
+          body: { expectedVersion: saved.version },
+        })
+        saved = { ...saved, ...preview }
+      }
+      if (getSessionGeneration() !== operationGeneration) return
+      setRecord(saved)
+      setUncertain(false)
       if (complete && saved.status === 'DRAFT')
         saved = await api.assetM2<Registration>(
           `/equipment-registrations/${saved.id}/submit`,
           { method: 'POST', body: { expectedVersion: saved.version } },
         )
-      if (getSessionGeneration() !== operationGeneration) return;
-      setRecord(saved);
-      setStep(4);
-      setRevision((v) => v + 1);
-      sessionStorage.removeItem(markerKey);
-      navigate(`/app/equipment-registrations/${saved.id}`, { replace: true });
+      if (getSessionGeneration() !== operationGeneration) return
+      setRecord(saved)
+      setStep(complete ? 4 : targetStep)
+      setRevision((v) => v + 1)
+      sessionStorage.removeItem(markerKey)
+      navigate(`/app/equipment-registrations/${saved.id}`, {
+        replace: true,
+        state: { registrationStep: complete ? 4 : targetStep },
+      })
     } catch (e) {
       if (getSessionGeneration() !== operationGeneration) return
-      setError(errorText(e))
+      setError(modelSetupError(e))
       if (
         e instanceof ApiError &&
         e.code === 'REGISTRATION_ALREADY_EXISTS' &&
@@ -605,7 +593,10 @@ export function EquipmentRegistrationPage() {
       } else {
         if (getSessionGeneration() !== operationGeneration) return
         setRecord(saved)
-        navigate(`/app/equipment-registrations/${saved.id}`, { replace: true })
+        navigate(`/app/equipment-registrations/${saved.id}`, {
+          replace: true,
+          state: { registrationStep: targetStep },
+        })
         if (
           !(e instanceof ApiError) ||
           e.status >= 500 ||
@@ -618,7 +609,7 @@ export function EquipmentRegistrationPage() {
           setNeedsReload(true)
       }
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
   }
   async function reloadStored() {
@@ -629,7 +620,7 @@ export function EquipmentRegistrationPage() {
         `/equipment-registrations/${record.id}`,
       )
       const eq = await api.assetM2<Equipment>(`/equipment/${row.equipmentId}`)
-      setRecord(row)
+      setRecord(currentPolicyPreview(row, eq))
       setForm((prev) => ({
         ...prev,
         ...formEquipment(eq),
@@ -708,59 +699,38 @@ export function EquipmentRegistrationPage() {
       document.removeEventListener('click', leave, true)
     }
   }, [dirty, busy, datesDirty])
-  function choiceSelect(kind: 'warranty' | 'maintenance') {
-    const choice = form[kind]
-    return (
-      <label>
-        {kind === 'warranty' ? 'Cách áp dụng bảo hành' : 'Kế hoạch bảo trì'}
-        <select
-          aria-label={
-            kind === 'warranty' ? 'Cách áp dụng bảo hành' : 'Kế hoạch bảo trì'
-          }
-          value={choice.mode}
-          disabled={frozen || busy || (kind === 'maintenance' && !canMaintain)}
-          onChange={(e) => {
-            const mode = e.target.value as Choice['mode']
-            field(
-              kind,
-              mode === 'CREATE'
-                ? kind === 'warranty'
-                  ? {
-                      mode,
-                      warrantyType: 'STANDARD',
-                      startDate: form.handoverDate,
-                      endDate: '',
-                      terms: '',
-                    }
-                  : {
-                      mode,
-                      name: `Bảo trì ${form.displayName || form.assetCode}`,
-                      frequencyUnit: 'MONTH',
-                      frequencyValue: 3,
-                      nextDueDate: '',
-                      description: '',
-                    }
-                : { mode },
-            )
-          }}
-        >
-          <option value="UNCONFIRMED">Chưa xác định</option>
-          <option value="CREATE">
-            {kind === 'warranty'
-              ? 'Có điều khoản bảo hành'
-              : 'Tạo kế hoạch định kỳ'}
-          </option>
-          {currentEquipmentId && (
-            <option value="KEEP">Giữ bản ghi hiện có</option>
-          )}
-          <option value="NONE">
-            {kind === 'warranty'
-              ? 'Không áp dụng bảo hành'
-              : 'Không thiết lập bảo trì định kỳ'}
-          </option>
-        </select>
-      </label>
-    )
+  async function goToStep(target: number) {
+    if (busy || (frozen && target !== 4)) return
+    if (target > step) {
+      for (const part of [0, 1]) {
+        if (part >= target) continue
+        const issue = validation(part, target >= 2)
+        if (issue) {
+          setStep(part)
+          setError(issue)
+          return
+        }
+      }
+      if (target === 4 && !record?.policyPreview) {
+        setStep(2)
+        setError('Xem và áp dụng chính sách của Model trước khi xác nhận.')
+        return
+      }
+    }
+    setError('')
+    if (target === 2 && (!record || !record.policyPreview)) {
+      await persist(false, false, 2, canMaintain)
+    } else setStep(target)
+  }
+  async function refreshPolicies() {
+    if (!record) return
+    const [row, eq] = await Promise.all([
+      api.assetM2<Registration>(`/equipment-registrations/${record.id}`),
+      api.assetM2<Equipment>(`/equipment/${record.equipmentId}`),
+    ])
+    setRecord(currentPolicyPreview(row, eq))
+    if (row.status !== 'DRAFT') setStep(4)
+    setRevision((v) => v + 1)
   }
   const quickPath =
     quick === 'customer'
@@ -792,7 +762,7 @@ export function EquipmentRegistrationPage() {
   return (
     <SetupPage
       title="Ghi nhận thiết bị đã bàn giao"
-      description="Khách hàng → máy cụ thể → bảo hành → bảo trì. Mỗi máy có một hồ sơ dịch vụ riêng."
+      description="Khách hàng → thiết bị → chính sách của Model → xác nhận bàn giao."
       actions={
         <Link
           to="/app/equipment-registrations"
@@ -829,37 +799,6 @@ export function EquipmentRegistrationPage() {
                 Kiểm tra / thử lại cùng yêu cầu
               </button>
             </section>
-          )}
-          {!record && !uncertain && (
-            <section className="m1-card">
-              <h2>Lấy chính sách từ Model</h2>
-              <p>
-                Điền thông tin thiết bị và ngày bàn giao, lưu nháp rồi lấy chính
-                sách Model để không phải nhập lại bảo hành, bảo trì.
-              </p>
-              <button disabled={busy} onClick={() => void persist(false)}>
-                Lưu nháp để áp dụng chính sách Model
-              </button>
-            </section>
-          )}
-          {record && (
-            <HandoverPolicyPanel
-              key={record.id}
-              id={record.id}
-              version={record.version}
-              status={record.status}
-              snapshot={record.policyPreview}
-              changed={() => {
-                void api
-                  .assetM2<Registration>(
-                    `/equipment-registrations/${record.id}`,
-                  )
-                  .then((row) => {
-                    setRecord(row);
-                    setRevision((v) => v + 1);
-                  });
-              }}
-            />
           )}
           {record && (
             <section
@@ -979,26 +918,22 @@ export function EquipmentRegistrationPage() {
             </section>
           )}
           <nav className="registration-steps" aria-label="Các bước bàn giao">
-            {['Khách hàng', 'Thiết bị', 'Bảo hành', 'Bảo trì', 'Kiểm tra'].map(
-              (name, index) => (
-                <button
-                  type="button"
-                  key={name}
-                  aria-current={step === index ? 'step' : undefined}
-                  disabled={busy || (frozen && index !== 4)}
-                  onClick={() => {
-                    const issue = index > step ? validation(step) : ''
-                    if (issue) setError(issue)
-                    else {
-                      setStep(index)
-                      setError('')
-                    }
-                  }}
-                >
-                  {index + 1}. {name}
-                </button>
-              ),
-            )}
+            {[
+              { index: 0, name: 'Khách hàng' },
+              { index: 1, name: 'Thiết bị' },
+              { index: 2, name: 'Chính sách Model' },
+              { index: 4, name: 'Xác nhận' },
+            ].map(({ index, name }, position) => (
+              <button
+                type="button"
+                key={name}
+                aria-current={step === index ? 'step' : undefined}
+                disabled={busy || (frozen && index !== 4)}
+                onClick={() => void goToStep(index)}
+              >
+                {position + 1}. {name}
+              </button>
+            ))}
           </nav>
           {quick && (
             <QuickForm
@@ -1272,6 +1207,8 @@ export function EquipmentRegistrationPage() {
                             },
                           )
                           setDatesDirty(false)
+                          if (record)
+                            setRecord({ ...record, policyPreview: null })
                           setRevision((v) => v + 1)
                         } catch (e) {
                           setError(errorText(e))
@@ -1298,266 +1235,82 @@ export function EquipmentRegistrationPage() {
                   )}
                 </>
               )}
-              {(step === 2 || step === 3) && record?.policyPreview && <p>Điều khoản và lịch bảo trì theo Model đã hiển thị phía trên. Kiểm tra các phiên bản đã chọn rồi xác nhận áp dụng cho thiết bị.</p>}
-              {step === 2 && !record?.policyPreview && (
-                <>
-                  <h2>Điều khoản bảo hành của máy</h2>
-                  {choiceSelect('warranty')}
-                  {form.warranty.mode === 'NONE' && (
-                    <label>
-                      Lý do không áp dụng *
-                      <textarea
-                        maxLength={2000}
-                        value={form.warranty.reason || ''}
-                        onChange={(e) =>
-                          policy('warranty', { reason: e.target.value })
-                        }
-                      />
-                    </label>
-                  )}
-                  {form.warranty.mode === 'KEEP' && (
-                    <>
-                      <LoadState {...warranties} />
-                      <label>
-                        Bảo hành đã ghi nhận
-                        <select
-                          value={form.warranty.warrantyId || ''}
-                          onChange={(e) =>
-                            policy('warranty', { warrantyId: e.target.value })
-                          }
+              {(step === 2 || step === 4) &&
+                (record?.status === 'DRAFT' ||
+                  record?.policyPreview ||
+                  !record) && (
+                  <>
+                    {form.modelId && (
+                      <p>
+                        Model:{' '}
+                        <strong>
+                          {model.value?.name ||
+                            model.value?.modelCode ||
+                            'Đang tải…'}
+                        </strong>{' '}
+                        ·{' '}
+                        <Link
+                          to={`/app/equipment-models/${form.modelId}`}
+                          state={{ registrationId: record?.id }}
                         >
-                          <option value="">Chọn bản ghi</option>
-                          {warranties.value
-                            ?.filter((row) => row.status === 'ACTIVE')
-                            .map((row) => (
-                              <option value={row.id} key={row.id}>
-                                {row.startDate} → {row.endDate}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
-                    </>
-                  )}
-                  {form.warranty.mode === 'CREATE' && (
-                    <div className="registration-fields">
-                      <label>
-                        Loại bảo hành
-                        <input
-                          maxLength={50}
-                          value={form.warranty.warrantyType || ''}
-                          onChange={(e) =>
-                            policy('warranty', { warrantyType: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Bắt đầu
-                        <input
-                          type="date"
-                          value={form.warranty.startDate || ''}
-                          onChange={(e) =>
-                            policy('warranty', { startDate: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Kết thúc, bao gồm ngày này
-                        <input
-                          type="date"
-                          value={form.warranty.endDate || ''}
-                          min={form.warranty.startDate}
-                          onChange={(e) =>
-                            policy('warranty', { endDate: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label className="registration-wide">
-                        Điều khoản hiển thị cho khách
-                        <textarea
-                          value={form.warranty.terms || ''}
-                          onChange={(e) =>
-                            policy('warranty', { terms: e.target.value })
-                          }
-                        />
-                      </label>
-                    </div>
-                  )}
-                  <p>
-                    Ngày bảo hành theo điều khoản thực tế, không tính lại từ
-                    ngày nhập hồ sơ. Xét duyệt từng yêu cầu dịch vụ vẫn được
-                    thực hiện riêng.
-                  </p>
-                </>
-              )}
-              {step === 3 && !record?.policyPreview && (
-                <>
-                  <h2>Bảo trì định kỳ</h2>
-                  {!canMaintain && (
-                    <p className="registration-notice">
-                      Cần Service Manager xác nhận bước này. Bạn có thể lưu hồ
-                      sơ để hoàn thiện sau.
-                    </p>
-                  )}
-                  <fieldset
-                    className="registration-content"
-                    disabled={!canMaintain}
-                  >
-                    {choiceSelect('maintenance')}
-                    {form.maintenance.mode === 'NONE' && (
-                      <label>
-                        Lý do không lập định kỳ *
-                        <textarea
-                          disabled={!canMaintain || frozen || busy}
-                          maxLength={2000}
-                          value={form.maintenance.reason || ''}
-                          onChange={(e) =>
-                            policy('maintenance', { reason: e.target.value })
-                          }
-                        />
-                      </label>
+                          Xem / cấu hình chính sách Model
+                        </Link>
+                      </p>
                     )}
-                    {form.maintenance.mode === 'KEEP' && (
+                    {record ? (
+                      <HandoverPolicyPanel
+                        key={record.id}
+                        id={record.id}
+                        version={record.version}
+                        status={record.status}
+                        snapshot={record.policyPreview}
+                        changed={refreshPolicies}
+                        onBusyChange={setBusy}
+                        showCompleteButton={false}
+                        readOnly={record.status !== 'DRAFT'}
+                      />
+                    ) : (
                       <>
-                        <LoadState {...plans} />
-                        <label>
-                          Kế hoạch hiện có
-                          <select
-                            disabled={!canMaintain || frozen || busy}
-                            value={form.maintenance.planId || ''}
-                            onChange={(e) =>
-                              policy('maintenance', { planId: e.target.value })
-                            }
-                          >
-                            <option value="">Chọn kế hoạch</option>
-                            {form.maintenance.planId &&
-                              !plans.value?.items.some(
-                                (row) => row.id === form.maintenance.planId,
-                              ) && (
-                                <option value={form.maintenance.planId}>
-                                  Kế hoạch đã chọn · {form.maintenance.planId}
-                                </option>
-                              )}
-                            {plans.value?.items.map((row) => (
-                              <option value={row.id} key={row.id}>
-                                {row.name} · {row.status} · kỳ tiếp theo{' '}
-                                {row.nextDueDate}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {plans.value && (
-                          <div className="registration-pagination">
-                            <span>
-                              Trang {planPage} · {plans.value.total} kế hoạch
-                            </span>
-                            <button
-                              disabled={planPage === 1 || busy}
-                              onClick={() => setPlanPage(planPage - 1)}
-                            >
-                              Trước
-                            </button>
-                            <button
-                              disabled={
-                                planPage * 20 >= plans.value.total || busy
-                              }
-                              onClick={() => setPlanPage(planPage + 1)}
-                            >
-                              Sau
-                            </button>
-                          </div>
+                        <h2>Áp dụng chính sách theo Model</h2>
+                        <p>
+                          Hệ thống tự lấy thời hạn bảo hành, điều khoản và các
+                          lịch bảo trì từ Model đã chọn.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={busy || !canMaintain}
+                          onClick={() => void persist(false, false, 2, true)}
+                        >
+                          Lấy chính sách Model
+                        </button>
+                        {!canMaintain && (
+                          <p>
+                            Lưu nháp để Service Manager áp dụng chính sách và
+                            xác nhận bàn giao.
+                          </p>
                         )}
                       </>
                     )}
-                    {form.maintenance.mode === 'CREATE' && (
-                      <div className="registration-fields">
-                        <label className="registration-wide">
-                          Tên kế hoạch
-                          <input
-                            maxLength={200}
-                            value={form.maintenance.name || ''}
-                            onChange={(e) =>
-                              policy('maintenance', { name: e.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Mỗi
-                          <input
-                            type="number"
-                            min={1}
-                            max={10000}
-                            value={form.maintenance.frequencyValue || 1}
-                            onChange={(e) =>
-                              policy('maintenance', {
-                                frequencyValue: Number(e.target.value),
-                              })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Đơn vị
-                          <select
-                            value={form.maintenance.frequencyUnit || 'MONTH'}
-                            onChange={(e) =>
-                              policy('maintenance', {
-                                frequencyUnit: e.target.value,
-                              })
-                            }
-                          >
-                            {[
-                              ['DAY', 'Ngày'],
-                              ['WEEK', 'Tuần'],
-                              ['MONTH', 'Tháng'],
-                              ['YEAR', 'Năm'],
-                            ].map(([value, label]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Kỳ bảo trì đầu tiên
-                          <input
-                            type="date"
-                            value={form.maintenance.nextDueDate || ''}
-                            onChange={(e) =>
-                              policy('maintenance', {
-                                nextDueDate: e.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <label className="registration-wide">
-                          Nội dung công việc
-                          <textarea
-                            maxLength={10000}
-                            value={form.maintenance.description || ''}
-                            onChange={(e) =>
-                              policy('maintenance', {
-                                description: e.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                      </div>
+                  </>
+                )}
+              {step === 4 &&
+                record &&
+                record.status !== 'DRAFT' &&
+                !record.policyPreview && (
+                  <section>
+                    <h2>Chính sách đã ghi nhận trước đây</h2>
+                    <p>
+                      Giữ nguyên điều khoản của hồ sơ bàn giao cũ. Thông tin
+                      dưới đây chỉ để xem.
+                    </p>
+                    {form.warranty.terms && (
+                      <p>Điều khoản bảo hành: {form.warranty.terms}</p>
                     )}
-                    {form.maintenance.mode === 'CREATE' &&
-                      form.maintenance.nextDueDate &&
-                      form.maintenance.nextDueDate <= today() && (
-                        <p className="registration-notice">
-                          Kỳ đầu đã đến hạn: scheduler có thể tạo công việc
-                          ngay. Sau thời gian bỏ lỡ, hệ thống chỉ sinh kỳ gần
-                          nhất đến hạn, không phục dựng mọi kỳ cũ.
-                        </p>
-                      )}
-                  </fieldset>
-                  <p>
-                    Bảo trì không tự dừng khi hết bảo hành. Giữ Plan
-                    PAUSED/INACTIVE không tự kích hoạt lại lịch.
-                  </p>
-                </>
-              )}
+                    {form.maintenance.description && (
+                      <p>Nội dung bảo trì: {form.maintenance.description}</p>
+                    )}
+                  </section>
+                )}
               {step === 4 && (
                 <>
                   <h2>Kiểm tra thông tin ghi nhận</h2>
@@ -1579,26 +1332,34 @@ export function EquipmentRegistrationPage() {
                     <dt>Bảo hành</dt>
                     <dd>
                       {record?.policyPreview
-                        ? record.policyPreview.warranty.body.mode === 'NONE' ? `Không áp dụng: ${record.policyPreview.warranty.body.reason}` : `Model v${record.policyPreview.warranty.revision} · ${record.policyPreview.warranty.startDate} → ${record.policyPreview.warranty.endDate}`
-                        : form.warranty.mode === 'CREATE'
-                        ? `${form.warranty.warrantyType} · ${form.warranty.startDate} → ${form.warranty.endDate}`
-                        : form.warranty.mode === 'KEEP'
-                          ? 'Giữ bản ghi bảo hành đã chọn'
-                          : form.warranty.mode === 'NONE'
-                            ? `Không áp dụng: ${form.warranty.reason}`
-                            : 'Chưa xác định'}
+                        ? record.policyPreview.warranty.body.mode === 'NONE'
+                          ? `Không áp dụng: ${record.policyPreview.warranty.body.reason}`
+                          : `Model v${record.policyPreview.warranty.revision} · ${record.policyPreview.warranty.startDate} → ${record.policyPreview.warranty.endDate}`
+                        : record?.status === 'DRAFT' || !record
+                          ? 'Chưa áp dụng chính sách Model'
+                          : form.warranty.mode === 'CREATE'
+                            ? `${form.warranty.warrantyType} · ${form.warranty.startDate} → ${form.warranty.endDate}`
+                            : form.warranty.mode === 'KEEP'
+                              ? 'Giữ bản ghi bảo hành đã chọn'
+                              : form.warranty.mode === 'NONE'
+                                ? `Không áp dụng: ${form.warranty.reason}`
+                                : 'Chưa xác định'}
                     </dd>
                     <dt>Bảo trì</dt>
                     <dd>
                       {record?.policyPreview
-                        ? record.policyPreview.maintenance.body.mode === 'NONE' ? `Không lập định kỳ: ${record.policyPreview.maintenance.body.reason}` : `Model v${record.policyPreview.maintenance.revision} · ${record.policyPreview.maintenance.body.rules.length} lịch bảo trì`
-                        : form.maintenance.mode === 'CREATE'
-                        ? `${form.maintenance.name} · mỗi ${form.maintenance.frequencyValue} ${{ DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng', YEAR: 'năm' }[form.maintenance.frequencyUnit || 'MONTH']} · kỳ đầu ${form.maintenance.nextDueDate}`
-                        : form.maintenance.mode === 'KEEP'
-                          ? 'Giữ kế hoạch và trạng thái đã chọn'
-                          : form.maintenance.mode === 'NONE'
-                            ? `Không lập định kỳ: ${form.maintenance.reason}`
-                            : 'Chờ Service Manager xác nhận'}
+                        ? record.policyPreview.maintenance.body.mode === 'NONE'
+                          ? `Không lập định kỳ: ${record.policyPreview.maintenance.body.reason}`
+                          : `Model v${record.policyPreview.maintenance.revision} · ${record.policyPreview.maintenance.body.rules.length} lịch bảo trì`
+                        : record?.status === 'DRAFT' || !record
+                          ? 'Chưa áp dụng chính sách Model'
+                          : form.maintenance.mode === 'CREATE'
+                            ? `${form.maintenance.name} · mỗi ${form.maintenance.frequencyValue} ${{ DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng', YEAR: 'năm' }[form.maintenance.frequencyUnit || 'MONTH']} · kỳ đầu ${form.maintenance.nextDueDate}`
+                            : form.maintenance.mode === 'KEEP'
+                              ? 'Giữ kế hoạch và trạng thái đã chọn'
+                              : form.maintenance.mode === 'NONE'
+                                ? `Không lập định kỳ: ${form.maintenance.reason}`
+                                : 'Chờ Service Manager xác nhận'}
                     </dd>
                   </dl>
                 </>
@@ -1609,21 +1370,14 @@ export function EquipmentRegistrationPage() {
             <footer className="registration-actions">
               <button
                 disabled={busy || step === 0}
-                onClick={() => setStep(step - 1)}
+                onClick={() => void goToStep(step === 4 ? 2 : step - 1)}
               >
                 Quay lại
               </button>
               {step < 4 && (
                 <button
                   disabled={busy}
-                  onClick={() => {
-                    const issue = validation(step)
-                    if (issue) setError(issue)
-                    else {
-                      setStep(step + 1)
-                      setError('')
-                    }
-                  }}
+                  onClick={() => void goToStep(step === 2 ? 4 : step + 1)}
                 >
                   Tiếp tục
                 </button>
@@ -1637,7 +1391,7 @@ export function EquipmentRegistrationPage() {
               {step === 4 && canMaintain && (
                 <button
                   className="registration-primary"
-                  disabled={busy || quick !== null}
+                  disabled={busy || quick !== null || !record?.policyPreview}
                   onClick={() => void persist(true)}
                 >
                   Hoàn tất ghi nhận
@@ -1648,5 +1402,5 @@ export function EquipmentRegistrationPage() {
         </>
       )}
     </SetupPage>
-  );
+  )
 }
