@@ -215,6 +215,8 @@ export class EquipmentRepository {
         data: {
           tenantId,
           modelId: input.modelId,
+          handoverRequired: input.handoverRequired ?? false,
+          status: input.handoverRequired ? 'OUT_OF_SERVICE' : 'ACTIVE',
           customerId: input.customerId,
           customerSiteId: input.customerSiteId,
           locationId: input.locationId ?? null,
@@ -311,6 +313,13 @@ export class EquipmentRepository {
           ? input.handoverDate
           : dateString(before.handoverDate);
       const status = input.status ?? before.status;
+      if (before.handoverRequired && status === 'ACTIVE' && before.status !== 'ACTIVE') {
+        const acceptance = before.currentHandoverId && await tx.equipmentHandover.findFirst({
+          where: { id: before.currentHandoverId, tenantId: scope.tenantId, equipmentId: id,
+            customerId: before.customerId, status: 'ACTIVATED', supersededById: null },
+        });
+        if (!acceptance) throw new ConflictException({ code: 'CUSTOMER_ACCEPTANCE_REQUIRED', message: 'Current customer acceptance is required' });
+      }
       const profileBefore = {
         displayName: before.displayName ?? null,
         description: before.description ?? null,

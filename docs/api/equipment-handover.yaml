@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Equipment Handover API
   version: 1.0.0
-  description: Additive contract proposed for owner review (ADR 0018). All operations require JWT. Internal membership validation is not routed by Gateway.
+  description: Additive contract proposed for owner review (ADR 0019). All operations require JWT. Internal membership validation is not routed by Gateway.
 servers:
   - url: /api/assets
 security:

@@ -493,6 +493,7 @@ export function EquipmentRegistrationPage() {
               : {
                   mode: 'NEW',
                   data: {
+                    ...(new URLSearchParams(location.search).get('handoverRequired') === 'true' ? { handoverRequired: true } : {}),
                     customerId: form.customerId,
                     customerSiteId: form.siteId,
                     ...(form.locationId ? { locationId: form.locationId } : {}),
@@ -834,6 +835,7 @@ export function EquipmentRegistrationPage() {
                     kế hoạch hiện hành được theo dõi trong hồ sơ.
                   </p>
                   <div className="registration-actions">
+                    <Link to={`/app/equipment-handovers/new?equipmentId=${record.equipmentId}`}>Tạo yêu cầu khách xác nhận bàn giao</Link>
                     <Link
                       className="m1-button"
                       to={`/app/equipment/${record.equipmentId}`}
@@ -974,7 +976,7 @@ export function EquipmentRegistrationPage() {
                     />
                   ) : (
                     <p>
-                      Khách hàng: {customer.value?.name || form.customerId}. Đổi
+                      Khách hàng: {customer.value?.name || 'Khách hàng không xác định'}. Đổi
                       chủ sở hữu không thuộc luồng này.
                     </p>
                   )}
@@ -1316,11 +1318,11 @@ export function EquipmentRegistrationPage() {
                   <h2>Kiểm tra thông tin ghi nhận</h2>
                   <dl className="registration-summary">
                     <dt>Khách hàng</dt>
-                    <dd>{customer.value?.name || form.customerId}</dd>
+                    <dd>{customer.value?.name || 'Khách hàng không xác định'}</dd>
                     <dt>Địa điểm</dt>
                     <dd>
                       {sites.value?.find((row) => row.id === form.siteId)
-                        ?.name || form.siteId}
+                        ?.name || 'Địa điểm không xác định'}
                     </dd>
                     <dt>Máy</dt>
                     <dd>

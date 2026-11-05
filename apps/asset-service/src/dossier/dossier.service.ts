@@ -75,6 +75,8 @@ const orderFields = [
   'scheduledStart',
   'scheduledEnd',
   'currentTechnicianId',
+  'currentTechnicianName',
+  'currentTechnicianEmployeeCode',
   'createdBy',
   'createdAt',
   'updatedAt',

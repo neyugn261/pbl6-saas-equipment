@@ -25,6 +25,7 @@ export const NOTIFICATION_BUSINESS_CONSUMER =
   'notification-service.business-events';
 
 export const NOTIFICATION_BUSINESS_EVENTS = [
+  Events.EquipmentHandoverChanged,
   Events.ServiceRequestCreated,
   Events.ServiceRequestStatusChanged,
   Events.WorkOrderCreated,
@@ -41,6 +42,9 @@ const RETRY_POLICY = {
 } as const;
 
 type PendingPayload =
+  | { kind: 'EQUIPMENT_HANDOVER_CHANGED'; occurredAt: string; handoverId: string; equipmentId: string;
+      customerId: string; createdBy: string; handoverNo: string; assetCode: string; version: number;
+      status: 'PENDING_CUSTOMER_CONFIRMATION' | 'ACTIVATED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED' }
   | {
       kind: 'SERVICE_REQUEST_CREATED';
       occurredAt: string;
@@ -633,6 +637,36 @@ export class NotificationEventsService {
     let rendered: RenderedNotification;
 
     switch (payload.kind) {
+      case 'EQUIPMENT_HANDOVER_CHANGED': {
+        // A late submit notification must not override a terminal decision.
+        const newer = await tx.pendingNotificationEvent.findFirst({ where: {
+          tenantId: row.tenantId, eventType: 'EquipmentHandoverChanged',
+          AND: [{ payload: { path: ['handoverId'], equals: payload.handoverId } },
+            { payload: { path: ['version'], gt: payload.version } }],
+        } });
+        if (newer) return { kind: 'STALE' };
+        if (payload.status === 'PENDING_CUSTOMER_CONFIRMATION' || payload.status === 'ACTIVATED') {
+          const customers = await tx.recipientSnapshot.findMany({ where: { tenantId: row.tenantId,
+            userType: 'CUSTOMER', customerId: payload.customerId, accountStatus: 'ACTIVE', membershipStatus: 'ACTIVE' } });
+          for (const customer of customers) {
+            if (customer.membershipId && customer.membershipSourceChangedAt && this.canReadNotifications(customer) &&
+              permissionsOf(this.roles(customer)).has('equipment_handover:respond')) {
+              this.add(recipients, { userId: customer.userId, customerId: payload.customerId });
+            }
+          }
+          if (recipients.size === 0 && payload.status === 'PENDING_CUSTOMER_CONFIRMATION')
+            return { kind: 'WAIT', reason: 'WAITING_FOR_HANDOVER_CUSTOMER_RECIPIENT' };
+        }
+        if (payload.status !== 'PENDING_CUSTOMER_CONFIRMATION') {
+          await this.addStaffByRoles(tx, row.tenantId, ['TENANT_ADMIN', 'SERVICE_MANAGER'], recipients);
+        }
+        const labels = { PENDING_CUSTOMER_CONFIRMATION: 'Bạn có thiết bị mới cần xác nhận bàn giao.',
+          ACTIVATED: 'Bàn giao đã được xác nhận và thiết bị đã kích hoạt.', REJECTED: 'Khách hàng đã từ chối bàn giao.',
+          EXPIRED: 'Yêu cầu xác nhận bàn giao đã hết hạn.', CANCELLED: 'Yêu cầu bàn giao đã bị hủy.' };
+        rendered = { title: labels[payload.status], body: `${payload.handoverNo} · ${payload.assetCode}`,
+          resourceType: 'EQUIPMENT_HANDOVER', resourceId: payload.handoverId };
+        break;
+      }
       case 'SERVICE_REQUEST_CREATED': {
         const requester = await this.getRequester(
           tx,
@@ -1069,6 +1103,12 @@ export class NotificationEventsService {
   }
 
   private allowlistedPayload(envelope: EventEnvelope): PendingPayload | undefined {
+    if (isEvent(envelope, Events.EquipmentHandoverChanged)) {
+      const p = envelope.payload;
+      return { kind: 'EQUIPMENT_HANDOVER_CHANGED', occurredAt: envelope.occurredAt,
+        handoverId: p.handoverId, equipmentId: p.equipmentId, customerId: p.customerId,
+        createdBy: p.createdBy, handoverNo: p.handoverNo, assetCode: p.assetCode, status: p.status, version: p.version };
+    }
     if (isEvent(envelope, Events.ServiceRequestCreated)) {
       return {
         kind: 'SERVICE_REQUEST_CREATED',
@@ -1193,6 +1233,14 @@ export class NotificationEventsService {
     const hasOneOrigin = (serviceRequestId: string | null, maintenanceTaskId: string | null) =>
       (serviceRequestId === null) !== (maintenanceTaskId === null);
     switch (kind) {
+      case 'EQUIPMENT_HANDOVER_CHANGED':
+        if (uuid(raw.handoverId) && uuid(raw.equipmentId) && uuid(raw.customerId) && uuid(raw.createdBy) &&
+          text(raw.handoverNo, 50) && text(raw.assetCode, 100) && typeof raw.version === 'number' && Number.isSafeInteger(raw.version) && raw.version > 0 &&
+          oneOf(raw.status, ['PENDING_CUSTOMER_CONFIRMATION', 'ACTIVATED', 'REJECTED', 'CANCELLED', 'EXPIRED']))
+          return { kind, occurredAt, handoverId: raw.handoverId, equipmentId: raw.equipmentId, customerId: raw.customerId,
+            createdBy: raw.createdBy, handoverNo: raw.handoverNo, assetCode: raw.assetCode, version: raw.version,
+            status: raw.status as Extract<PendingPayload, { kind: 'EQUIPMENT_HANDOVER_CHANGED' }>['status'] };
+        return undefined;
       case 'SERVICE_REQUEST_CREATED':
         if (
           hasOnlyKeys(

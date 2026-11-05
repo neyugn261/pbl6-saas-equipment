@@ -13,6 +13,13 @@ import { PrismaService } from '../prisma/prisma.service';
 export class BranchesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  displayNames(tenantId: string, ids: string[]) {
+    return this.prisma.branch.findMany({
+      where: { tenantId, id: { in: [...new Set(ids)] }, deletedAt: null },
+      select: { id: true, tenantId: true, name: true, code: true },
+    });
+  }
+
   async list(tenantId: string, query: ListQueryDto): Promise<[Branch[], number]> {
     const where: Prisma.BranchWhereInput = {
       tenantId,

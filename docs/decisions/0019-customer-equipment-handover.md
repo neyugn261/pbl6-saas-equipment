@@ -1,4 +1,4 @@
-# ADR 0018 — Customer handover and activation
+# ADR 0019 — Customer handover and activation
 
 Status: implementation proposal for Asset, Organization, Identity, Notification,
 Web and shared-contract owner review. No approval or deployment implied.

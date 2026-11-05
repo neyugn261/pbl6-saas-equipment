@@ -6,10 +6,11 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import type { Principal } from '@pbl6/auth';
 import { enqueueEvent, Events } from '@pbl6/event-contracts';
-import { getCorrelationId } from '@pbl6/service-kit';
+import { getCorrelationId, DisplayNameLookup } from '@pbl6/service-kit';
 import { invalid } from '../common/errors';
 import { WorkOrderWorkflowRepository } from './workflow.repository';
 import {
@@ -34,12 +35,17 @@ type ActionInput = Partial<
 > & { report?: ServiceReportDto };
 @Injectable()
 export class WorkOrderWorkflowService {
-  constructor(private readonly repo: WorkOrderWorkflowRepository) {}
-  assignments(p: Principal, id: string) {
-    return this.repo.assignments(p, id);
+  constructor(private readonly repo: WorkOrderWorkflowRepository, @Optional() private readonly names?: DisplayNameLookup) {}
+  async assignments(p: Principal, id: string) {
+    const rows = await this.repo.assignments(p, id);
+    const users = await this.names?.lookup('users', rows.flatMap(row => [row.technicianUserId, row.assignedBy]), p);
+    return rows.map(row => ({ ...row, technicianName: users?.get(row.technicianUserId.toLowerCase())?.name ?? null,
+      assignedByName: users?.get(row.assignedBy.toLowerCase())?.name ?? null }));
   }
-  logs(p: Principal, id: string) {
-    return this.repo.logs(p, id);
+  async logs(p: Principal, id: string) {
+    const rows = await this.repo.logs(p, id);
+    const users = await this.names?.lookup('users', rows.map(row => row.actorUserId), p);
+    return rows.map(row => ({ ...row, actorName: users?.get(row.actorUserId.toLowerCase())?.name ?? null }));
   }
   report(p: Principal, id: string) {
     return this.repo.report(p, id);

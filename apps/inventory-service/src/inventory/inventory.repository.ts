@@ -277,6 +277,7 @@ export class InventoryRepository {
       [
         this.db.stockTransaction.findMany({
           where,
+          include: { warehouse: { select: { name: true, code: true } }, part: { select: { name: true, sku: true } } },
           ...toSkipTake(q),
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         }),

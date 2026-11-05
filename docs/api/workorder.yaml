@@ -939,6 +939,8 @@ components:
         scheduledStart: { type: [string, 'null'], format: date-time }
         scheduledEnd: { type: [string, 'null'], format: date-time }
         currentTechnicianId: { type: [string, 'null'], format: uuid, description: Technician of the ASSIGNED / ACCEPTED assignment }
+        currentTechnicianName: { type: [string, 'null'], description: Optional current Identity name; null if lookup unavailable }
+        currentTechnicianEmployeeCode: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     WorkOrderDetail:
@@ -987,6 +989,9 @@ components:
         id: { type: string, format: uuid }
         technicianId: { type: string, format: uuid }
         technicianUserId: { type: string, format: uuid }
+        technicianName: { type: [string, 'null'], description: Optional current name on assignment history reads; no historical name snapshot exists }
+        technicianEmployeeCode: { type: [string, 'null'] }
+        assignedByName: { type: [string, 'null'] }
         assignedBy: { type: string, format: uuid }
         status: { $ref: '#/components/schemas/AssignmentStatus' }
         assignedAt: { type: string, format: date-time }
@@ -1008,6 +1013,7 @@ components:
       type: object
       required: [id, actorUserId, eventType, createdAt]
       properties:
+        actorName: { type: [string, 'null'], description: Optional current Identity name }
         id: { type: string, format: uuid }
         actorUserId: { type: string, format: uuid }
         technicianId: { type: [string, 'null'], format: uuid }
@@ -1048,6 +1054,9 @@ components:
       type: object
       required: [id, userId, branchId, employeeCode, status, skills]
       properties:
+        fullName: { type: [string, 'null'], description: Optional current name from tenant-scoped Identity batch lookup }
+        branchName: { type: [string, 'null'] }
+        branchCode: { type: [string, 'null'] }
         id: { type: string, format: uuid }
         userId: { type: string, format: uuid }
         branchId: { type: string, format: uuid }

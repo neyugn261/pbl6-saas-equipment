@@ -45,6 +45,15 @@ describe('Sites, locations and internal lookups (e2e, organization_test_db)', ()
   });
 
   describe('sites', () => {
+    it('batch labels respect customer scope, include inactive sites and hide deleted sites', async () => {
+      const otherSite = await manager().post(`/customers/${other}/sites`, { code: 'S2', name: 'Other plant', address: 'x' }).expect(201);
+      await manager().patch(`/sites/${site}`, { status: 'INACTIVE' }).expect(200);
+      const path = `/internal/display-names/sites?ids=${site},${otherSite.body.id}`;
+      expect((await customerUser().get(path).expect(200)).body).toEqual([{ id: site, tenantId: tenantA, code: 'S1', name: 'Main' }]);
+      expect((await manager().get(path).expect(200)).body).toHaveLength(2);
+      await manager().delete(`/sites/${site}`).expect(204);
+      expect((await customerUser().get(path).expect(200)).body).toEqual([]);
+    });
     it('returns coordinates as numbers and nulls for absent values', async () => {
       const res = await customerUser().get(`/sites/${site}`).expect(200);
       expect(res.body).toEqual({

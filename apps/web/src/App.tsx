@@ -1,3 +1,4 @@
+import { HandoverListPage, HandoverCreatePage, HandoverDetailPage } from './routes/EquipmentHandovers'
 import { ModelPolicyPage } from "./routes/ModelPolicyPage";
 import { WarrantyAssessmentPanel } from "./routes/ModelPolicyPanels";
 import { useDirectory } from "./routes/registration-data";
@@ -246,6 +247,8 @@ function Layout({ children }: { children: ReactNode }) {
   }
   const workspaceItems: { path: string; label: string; icon: LucideIcon; group: string; roles: string[] }[] = [
     { path: '/app/equipment-registrations', label: 'Hồ sơ bàn giao', icon: ClipboardList, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-handovers', label: 'Xác nhận bàn giao', icon: ClipboardList, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/portal/equipment-handovers', label: 'Xác nhận bàn giao', icon: ClipboardList, group: 'Cổng khách hàng', roles: ['CUSTOMER_ADMIN', 'CUSTOMER_USER'] },
     { path: '/app/equipment-models', label: 'Model thiết bị', icon: Boxes, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/work-orders', label: 'Lệnh công việc', icon: Wrench, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
     { path: '/app/equipment-history', label: 'Lịch sử thiết bị', icon: History, group: 'Vận hành dịch vụ', roles: ['TENANT_ADMIN', 'SERVICE_MANAGER', 'DISPATCHER', 'TECHNICIAN'] },
@@ -746,6 +749,10 @@ function RequestDetailPage() {
     override?.generation === sessionGeneration ? override.value : null;
   const current =
     currentOverride?.id === data.value?.id ? currentOverride : data.value;
+  const equipmentLabel = useLoad<EquipmentRecord | null>(
+    () => current?.equipmentId ? api.assetM2(`/equipment/${current.equipmentId}`) : Promise.resolve(null),
+    `request-equipment:${current?.equipmentId ?? ''}:${version}`,
+  )
   async function refreshRequest(conflict?: unknown) {
     if (!current || getSessionGeneration() !== sessionGeneration) return
     setBusy(true)
@@ -899,7 +906,7 @@ function RequestDetailPage() {
             <div className="m1-request-detail-grid">
               <div>
                 <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Mô tả sự cố</h2></div><div className="m1-section-body m1-prose">{current.description}</div></section>
-                <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Thiết bị & vị trí</h2></div><div className="m1-section-body"><Link className="m1-equipment-link" to={`/equipment/${current.equipmentId}`}><span className="m1-entity-avatar"><Boxes size={19} /></span><span><strong>Mở hồ sơ thiết bị</strong><small>{current.equipmentId}</small></span><ChevronRight size={18} /></Link></div></section>
+                <section className="m1-card m1-section-card"><div className="m1-section-header"><h2>Thiết bị & vị trí</h2></div><div className="m1-section-body"><Link className="m1-equipment-link" to={`/equipment/${current.equipmentId}`}><span className="m1-entity-avatar"><Boxes size={19} /></span><span><strong>Mở hồ sơ thiết bị</strong><small>{equipmentLabel.value?.displayName || equipmentLabel.value?.model?.name || equipmentLabel.value?.assetCode || "Thiết bị không xác định"}</small></span><ChevronRight size={18} /></Link></div></section>
                 <section className="m1-card m1-section-card">
                   <div className="m1-section-header">
                     <h2>Trao đổi</h2>
@@ -1180,6 +1187,9 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
     },
     { path: '/app/equipment-models', element: <EquipmentModelsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/equipment-registrations', element: <RegistrationListPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-handovers', element: <HandoverListPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-handovers/new', element: <HandoverCreatePage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
+    { path: '/app/equipment-handovers/:id', element: <HandoverDetailPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/equipment-registrations/new', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: '/app/equipment-registrations/:id', element: <EquipmentRegistrationPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     { path: "/app/equipment", element: <EquipmentPage />, roles: tenantRoles },
@@ -1342,6 +1352,8 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
       element: <NotificationInbox />,
       roles: customerRoles,
     },
+    { path: '/portal/equipment-handovers', element: <HandoverListPage />, roles: customerRoles },
+    { path: '/portal/equipment-handovers/:id', element: <HandoverDetailPage />, roles: customerRoles },
     { path: "/portal/profile", element: <ProfilePage />, roles: customerRoles },
   ];
 function Authenticated() {

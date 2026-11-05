@@ -9,6 +9,7 @@ import { api, ApiError } from "../api/client";
 import { getSessionGeneration, useSession } from "../auth/session";
 import type { Page } from "../types/domain";
 import { AttachmentsPanel } from "../features/attachments/AttachmentsPanel";
+import { displayName, technicianName } from '../display-names';
 
 type Row = Record<string, unknown>;
 type Availability =
@@ -182,7 +183,13 @@ function Fields({ row, fields }: { row: Row; fields: [string, string][] }) {
       {fields.map(([key, label]) => (
         <div key={key}>
           <dt>{label}</dt>
-          <dd>{/(Date|At)$/.test(key) ? date(row[key]) : asText(row[key])}</dd>
+          <dd>{key === 'currentTechnicianId'
+            ? row.currentTechnicianId ? technicianName(row.currentTechnicianName, row.currentTechnicianEmployeeCode) : 'Chưa phân công'
+            : key === 'branchId' ? displayName('branch', { name: row.branchName, code: row.branchCode })
+            : key === 'userId' ? displayName('user', { name: row.fullName, code: row.employeeCode })
+            : key === 'equipmentId' ? displayName('equipment', { name: row.equipmentName, code: row.assetCode })
+            : key === 'workOrderId' ? row.workOrderId ? displayName('workOrder', { code: row.workOrderNo }) : 'Chưa tạo lệnh công việc'
+            : /(Date|At)$/.test(key) ? date(row[key]) : asText(row[key])}</dd>
         </div>
       ))}
     </dl>
@@ -1149,7 +1156,7 @@ function WorkOrderControls({
                 )
                 .map((row) => (
                   <option key={String(row.id)} value={String(row.id)}>
-                    {asText(row.employeeCode ?? row.userId)} ·{" "}
+                    {technicianName(row.fullName, row.employeeCode)} ·{" "}
                     {asText(row.status)}
                   </option>
                 ))}
@@ -1300,7 +1307,7 @@ export function WorkOrderPage() {
                                 <Link
                                   to={`/app/technicians/${item.technicianId}`}
                                 >
-                                  {asText(item.technicianId)}
+                                  {technicianName(item.technicianName, item.technicianEmployeeCode)}
                                 </Link>{" "}
                                 · {asText(item.status)}
                               </span>
@@ -1332,7 +1339,7 @@ export function WorkOrderPage() {
                             <li key={String(item.id)}>
                               <strong>{asText(item.eventType)}</strong> ·{" "}
                               {date(item.createdAt)}
-                              <p>Người thực hiện: {asText(item.actorUserId)}</p>
+                              <p>Người thực hiện: {displayName('user', { name: item.actorName })}</p>
                               {Boolean(item.note) && <p>{asText(item.note)}</p>}
                             </li>
                           ))}
@@ -1858,6 +1865,11 @@ export function MaintenanceRecordPage() {
   const state = useRemote<Row>(`${path}:${revision}`, () =>
     api.maintenance(path),
   );
+  const equipmentLabel = useRemote<Row | null>(`maintenance-equipment:${state.value?.equipmentId}:${revision}`, () =>
+    state.value?.equipmentId ? api.assetM2(`/equipment/${state.value.equipmentId}`) : Promise.resolve(null));
+  const workOrderLabel = useRemote<Row | null>(`maintenance-order:${state.value?.workOrderId}:${revision}`, () =>
+    state.value?.workOrderId && profile?.userType === 'TENANT_STAFF'
+      ? api.workorders(`/work-orders/${state.value.workOrderId}`) : Promise.resolve(null));
   const historyParams = new URLSearchParams({
     page: String(historyPageNo),
     pageSize: "20",
@@ -1938,7 +1950,7 @@ export function MaintenanceRecordPage() {
         {state.value && (
           <Card title="Thông tin">
             <Fields
-              row={state.value}
+              row={{ ...state.value, equipmentName: equipmentLabel.value?.displayName ?? (equipmentLabel.value?.model as Row | undefined)?.name, assetCode: equipmentLabel.value?.assetCode, workOrderNo: workOrderLabel.value?.workOrderNo }}
               fields={[
                 ["name", "Tên"],
                 ["status", "Trạng thái"],
@@ -2116,7 +2128,7 @@ export function TechniciansPage() {
               {state.value.items.map((row) => (
                 <li key={String(row.id)}>
                   <Link to={`/app/technicians/${row.id}`}>
-                    {asText(row.employeeCode ?? row.userId)}
+                    {technicianName(row.fullName, row.employeeCode)}
                   </Link>
                   <span>
                     <span className={`m2-status m2-status--${String(row.status ?? '').toLowerCase()}`}>{statusLabel[String(row.status)] ?? asText(row.status)}</span>
@@ -2168,7 +2180,7 @@ export function TechnicianPage() {
               Kỹ năng:{" "}
               {Array.isArray(state.value.skills)
                 ? state.value.skills
-                    .map((skill: Row) => asText(skill.name ?? skill.skillId))
+                    .map((skill: Row) => asText(skill.name ?? skill.code ?? 'Kỹ năng không xác định'))
                     .join(", ")
                 : "—"}
             </p>

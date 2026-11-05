@@ -156,13 +156,14 @@ export class WorkOrderWorkflowRepository {
     await this.requireReadable(p, id);
     const rows = await this.db.workOrderAssignment.findMany({
       where: { tenantId: requireTenantId(p), workOrderId: id },
-      include: { technician: { select: { userId: true } } },
+      include: { technician: { select: { userId: true, employeeCode: true } } },
       orderBy: [{ assignedAt: 'desc' }, { id: 'desc' }],
     });
     return rows.map((r) => ({
       id: r.id,
       technicianId: r.technicianId,
       technicianUserId: r.technician.userId,
+      technicianEmployeeCode: r.technician.employeeCode,
       assignedBy: r.assignedBy,
       status: r.status,
       assignedAt: r.assignedAt,

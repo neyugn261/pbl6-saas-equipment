@@ -32,6 +32,20 @@ describe('Identity Users & Internal API (e2e)', () => {
 
   const http = () => request(app.getHttpServer());
 
+  it('batch display names include inactive users, omit foreign tenants and preserve internal staff authorization', async () => {
+    await prisma.user.update({ where: { id: adminUserIdA }, data: { status: 'DISABLED', fullName: 'Historical technician' } });
+    const other = await prisma.user.findFirstOrThrow({ where: { tenantId: tenantB } });
+    const result = await http().get('/internal/display-names/users')
+      .query({ ids: [adminUserIdA, other.id, adminUserIdA].join(',') })
+      .set('Authorization', `Bearer ${techTokenA}`).expect(200);
+    expect(result.body).toEqual([{ id: adminUserIdA, tenantId: tenantA, name: 'Historical technician' }]);
+    await http().get('/internal/display-names/users').query({ ids: adminUserIdA }).expect(401);
+    await http().get('/internal/display-names/users').query({ ids: adminUserIdA })
+      .set('Authorization', `Bearer ${customerAdminTokenA}`).expect(403);
+    await http().get('/internal/display-names/users').query({ ids: Array(101).fill(adminUserIdA).join(',') })
+      .set('Authorization', `Bearer ${techTokenA}`).expect(400);
+  });
+
   beforeAll(async () => {
     ({ app, prisma } = await createTestApp());
   });

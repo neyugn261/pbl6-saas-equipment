@@ -90,6 +90,7 @@ export function workOrderView(row: WorkOrderRow, p: Principal) {
           id: assignment.id,
           technicianId: assignment.technicianId,
           technicianUserId: assignment.technician.userId,
+          technicianEmployeeCode: assignment.technician.employeeCode,
           assignedBy: assignment.assignedBy,
           status: assignment.status,
           assignedAt: assignment.assignedAt,

@@ -13,6 +13,7 @@ export interface AppEnv extends JwtEnv {
   WORKORDER_SERVICE_URL?: string;
   MAINTENANCE_SERVICE_URL?: string;
   INVENTORY_SERVICE_URL?: string;
+  IDENTITY_SERVICE_URL?: string;
 }
 
 export const PORT_VARIABLE = 'ASSET_SERVICE_PORT';
@@ -31,6 +32,7 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
       ['true', 'false'] as const,
       'true',
     ),
+    IDENTITY_SERVICE_URL: env.optionalUrl('IDENTITY_SERVICE_URL', ['http:', 'https:']),
     PORT: env.port(PORT_VARIABLE, DEFAULT_PORT),
     ASSET_DATABASE_URL: env.postgresUrl('ASSET_DATABASE_URL'),
     ORGANIZATION_SERVICE_URL: env.url('ORGANIZATION_SERVICE_URL', [

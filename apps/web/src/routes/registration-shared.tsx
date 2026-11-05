@@ -269,7 +269,7 @@ export function DirectoryPicker({
       >
         <option value="">Chọn {label.toLowerCase()}</option>
         {selected && !state.value?.items.some((row) => row.id === selected) && (
-          <option value={selected}>Đã chọn · {selected}</option>
+          <option value={selected}>Đã chọn · Tên chưa tải được</option>
         )}
         {state.value?.items.map((row) => (
           <option key={row.id} value={row.id}>

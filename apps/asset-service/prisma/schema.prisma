@@ -68,6 +68,9 @@ model Equipment {
   createdAt                  DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                  DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   model                      EquipmentModel         @relation(fields: [tenantId, modelId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  handoverRequired           Boolean                @default(false) @map("handover_required")
+  currentHandoverId          String?                @map("current_handover_id") @db.Uuid
+  handovers                  EquipmentHandover[]
   warranties                 Warranty[]
   qrCodes                    EquipmentQrCode[]
   history                    EquipmentHistory[]
@@ -80,6 +83,46 @@ model Equipment {
   @@index([tenantId, customerSiteId], map: "idx_equipments_tenant_site")
   @@index([tenantId, status], map: "idx_equipments_tenant_status")
   @@map("equipments")
+}
+
+model EquipmentHandover {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  equipmentId String @map("equipment_id") @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  handoverNo String @map("handover_no") @db.VarChar(50)
+  status String @default("DRAFT") @db.VarChar(40)
+  version Int @default(1)
+  createdBy String @map("created_by") @db.Uuid
+  acceptedBy String? @map("accepted_by") @db.Uuid
+  snapshot Json
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  submittedAt DateTime? @map("submitted_at") @db.Timestamptz(6)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  activatedAt DateTime? @map("activated_at") @db.Timestamptz(6)
+  rejectedReason String? @map("rejected_reason") @db.VarChar(2000)
+  supersededById String? @map("superseded_by_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  equipment Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  audit EquipmentHandoverAudit[]
+  @@unique([tenantId, handoverNo])
+  @@index([tenantId, customerId, createdAt])
+  @@index([status, expiresAt])
+  @@map("equipment_handovers")
+}
+
+model EquipmentHandoverAudit {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  handoverId String @map("handover_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  action String @db.VarChar(40)
+  actorId String? @map("actor_id") @db.Uuid
+  correlationId String? @map("correlation_id") @db.VarChar(128)
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  handover EquipmentHandover @relation(fields: [handoverId], references: [id], onDelete: Restrict)
+  @@index([handoverId, occurredAt])
+  @@map("equipment_handover_audit")
 }
 
 /// EXPIRED is derived from end_date at query time, never stored.

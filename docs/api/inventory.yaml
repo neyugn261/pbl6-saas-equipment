@@ -598,6 +598,8 @@ components:
         - type: object
           required: [id, status, createdAt, updatedAt]
           properties:
+            branchName: { type: [string, 'null'], description: Optional current branch name on list reads }
+            branchCode: { type: [string, 'null'] }
             id: { type: string, format: uuid }
             status: { $ref: "#/components/schemas/Status" }
             createdAt: { type: string, format: date-time }
@@ -663,6 +665,18 @@ components:
           createdAt,
         ]
       properties:
+        part:
+          type: object
+          description: Current metadata on ledger reads, including inactive parts. Prefer partSnapshot for historical labels.
+          properties:
+            name: { type: string }
+            sku: { type: string }
+        warehouse:
+          type: object
+          description: Current metadata on ledger reads, including inactive warehouses. Prefer warehouseSnapshot for historical labels.
+          properties:
+            name: { type: string }
+            code: { type: string }
         reasonCode: { type: [string, 'null'] }
         documentReference: { type: [string, 'null'] }
         relatedTransactionId: { type: [string, 'null'], format: uuid }

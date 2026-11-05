@@ -3,10 +3,12 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  Optional,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { requireTenantId, type Principal } from '@pbl6/auth';
+import { DisplayNameLookup, type Page } from '@pbl6/service-kit';
 import { isUUID } from 'class-validator';
 import type { InventoryOperation } from '../generated/prisma/client.js';
 import {
@@ -47,6 +49,7 @@ export class InventoryService {
   constructor(
     private readonly repo: InventoryRepository,
     private readonly refs: ReferencesClient,
+    @Optional() private readonly names?: DisplayNameLookup,
   ) {}
   private tenant(p: Principal) {
     if (p.userType !== 'TENANT_STAFF')
@@ -133,8 +136,12 @@ export class InventoryService {
       await this.repo.updatePart(this.tenant(p), id, input, p.userId),
     );
   }
-  warehouses(p: Principal, q: InventoryQuery) {
-    return this.repo.warehouses(this.tenant(p), q);
+  async warehouses(p: Principal, q: InventoryQuery) {
+    const page = await this.repo.warehouses(this.tenant(p), q) as unknown as Page<Record<string, unknown> & { branchId: string }>;
+    const branches = await this.names?.lookup('branches', page.items.map(row => row.branchId), p);
+    return { ...page, items: page.items.map(row => ({ ...row,
+      branchName: branches?.get(row.branchId.toLowerCase())?.name ?? null,
+      branchCode: branches?.get(row.branchId.toLowerCase())?.code ?? null })) };
   }
   async warehouse(p: Principal, id: string) {
     return json(await this.repo.warehouse(this.tenant(p), id));

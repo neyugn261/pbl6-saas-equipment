@@ -165,6 +165,19 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
   });
   const receive = (quantity = '10', key = randomUUID()) =>
     api('post', '/stock-transactions/receive', move(quantity), key);
+
+  it('ledger resolves inactive part/warehouse metadata independently of dropdown pages, preserving snapshots', async () => {
+    await receive().expect(201);
+    const before = await db.stockTransaction.findFirstOrThrow({ where: { tenantId, partId } });
+    await db.part.update({ where: { id: partId }, data: { status: 'INACTIVE', name: 'Renamed inactive part' } });
+    await db.warehouse.update({ where: { id: warehouseId }, data: { status: 'INACTIVE', name: 'Renamed inactive warehouse' } });
+    const response = await api('get', `/stock-transactions?partId=${partId}`).expect(200);
+    expect(response.body.items[0]).toMatchObject({ partId, warehouseId,
+      part: { name: 'Renamed inactive part' }, warehouse: { name: 'Renamed inactive warehouse' },
+      partSnapshot: before.partSnapshot, warehouseSnapshot: before.warehouseSnapshot });
+    const foreign = await api('get', `/stock-transactions?partId=${partId}`, undefined, undefined, foreignToken).expect(200);
+    expect(foreign.body.items).toEqual([]);
+  });
   const issue = (quantity = '1', key = randomUUID()) =>
     api(
       'post',

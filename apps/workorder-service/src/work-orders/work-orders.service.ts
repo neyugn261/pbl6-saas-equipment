@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { DisplayNameLookup } from '@pbl6/service-kit';
 import type { Principal } from '@pbl6/auth';
 import {
   REFERENCES,
@@ -20,12 +21,21 @@ export class WorkOrdersService {
   constructor(
     private readonly repo: WorkOrdersRepository,
     @Inject(REFERENCES) private readonly refs: ReferencesClient,
+    @Optional() private readonly names?: DisplayNameLookup,
   ) {}
-  list(p: Principal, query: ListWorkOrdersDto) {
-    return this.repo.list(p, query);
+  async list(p: Principal, query: ListWorkOrdersDto) {
+    const page = await this.repo.list(p, query);
+    return { ...page, items: await this.display(p, page.items) };
   }
-  detail(p: Principal, id: string) {
-    return this.repo.detail(p, id);
+  async detail(p: Principal, id: string) {
+    return (await this.display(p, [await this.repo.detail(p, id)]))[0];
+  }
+  private async display<T extends { currentAssignment: { technicianUserId: string; technicianEmployeeCode: string | null } | null }>(p: Principal, rows: T[]) {
+    const users = await this.names?.lookup('users', rows.map(row => row.currentAssignment?.technicianUserId), p);
+    return rows.map(row => ({ ...row,
+      currentTechnicianName: row.currentAssignment ? users?.get(row.currentAssignment.technicianUserId.toLowerCase())?.name ?? null : null,
+      currentTechnicianEmployeeCode: row.currentAssignment?.technicianEmployeeCode ?? null,
+    }));
   }
   history(p: Principal, id: string) {
     return this.repo.history(p, id);

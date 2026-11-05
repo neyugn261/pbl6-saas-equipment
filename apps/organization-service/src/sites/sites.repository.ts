@@ -19,6 +19,15 @@ export type LocationWithCustomer = Location & {
 export class SitesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  displayNames(scope: { tenantId: string; customerId: string | null }, ids: string[]) {
+    return this.prisma.customerSite.findMany({
+      where: { tenantId: scope.tenantId, id: { in: [...new Set(ids)] },
+        ...(scope.customerId ? { customerId: scope.customerId } : {}),
+        deletedAt: null, customer: { deletedAt: null } },
+      select: { id: true, tenantId: true, name: true, code: true },
+    });
+  }
+
   listSites(tenantId: string, customerId: string): Promise<CustomerSite[]> {
     return this.prisma.customerSite.findMany({
       where: { tenantId, customerId, deletedAt: null },

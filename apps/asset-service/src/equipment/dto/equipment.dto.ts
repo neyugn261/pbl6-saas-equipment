@@ -1,5 +1,6 @@
 import { PaginationQueryDto } from '@pbl6/service-kit';
 import {
+  IsBoolean,
   IsIn,
   IsISO8601,
   IsOptional,
@@ -53,6 +54,7 @@ export const WARRANTY_RESULTS = [
 export type WarrantyResult = (typeof WARRANTY_RESULTS)[number];
 
 export class CreateEquipmentDto {
+  @ValidateIf((_, v) => v !== undefined) @IsBoolean() handoverRequired?: boolean;
   @ValidateIf((_, v) => v !== undefined)
   @IsString()
   @MinLength(1)

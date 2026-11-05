@@ -10,7 +10,7 @@ type Notification = {
   eventType: string
   title: string
   body: string
-  resourceType: 'SERVICE_REQUEST' | 'WORK_ORDER' | 'EQUIPMENT' | 'STOCK' | null
+  resourceType: 'SERVICE_REQUEST' | 'WORK_ORDER' | 'EQUIPMENT' | 'STOCK' | 'EQUIPMENT_HANDOVER' | null
   resourceId: string | null
   createdAt: string
   readAt: string | null
@@ -29,6 +29,7 @@ function errorText(error: unknown) {
 
 function resourcePath(item: Notification, customer: boolean): string | null {
   if (!item.resourceId) return null
+  if (item.resourceType === 'EQUIPMENT_HANDOVER') return `${customer ? '/portal' : '/app'}/equipment-handovers/${item.resourceId}`
   if (item.resourceType === 'SERVICE_REQUEST') return `${customer ? '/portal/requests' : '/app/service-requests'}/${item.resourceId}`
   if (item.resourceType === 'WORK_ORDER') return customer ? null : `/app/work-orders/${item.resourceId}`
   if (item.resourceType === 'EQUIPMENT') return `${customer ? '/portal/equipment' : '/app/equipment'}/${item.resourceId}`

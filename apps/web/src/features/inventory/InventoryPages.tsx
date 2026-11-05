@@ -4,6 +4,7 @@ import { ApiError, api } from '../../api/client'
 import { getSessionGeneration, useSession } from '../../auth/session'
 import type { Page } from '../../types/domain'
 import { StockMutation, type StockRequest } from './stock-mutation'
+import { displayName } from '../../display-names'
 
 type Part = {
   id: string
@@ -17,6 +18,8 @@ type Part = {
 type Warehouse = {
   id: string
   branchId: string
+  branchName?: string | null
+  branchCode?: string | null
   code: string
   name: string
   address: string | null
@@ -37,6 +40,10 @@ type Stock = {
 }
 type LedgerRow = {
   id: string
+  partSnapshot?: { name?: string; sku?: string } | null
+  warehouseSnapshot?: { name?: string; code?: string } | null
+  part?: { name?: string; sku?: string } | null
+  warehouse?: { name?: string; code?: string } | null
   type: string
   reasonCode?: string | null
   quantity: string
@@ -268,7 +275,7 @@ export function InventoryWarehousesPage() {
     <PageStatus loading={state.loading} error={state.error}>
       {state.data && <>
         <div className="m2-inventory-table"><table><thead><tr><th>Mã kho</th><th>Kho</th><th>Chi nhánh</th><th>Trạng thái</th><th></th></tr></thead>
-          <tbody>{state.data.items.map((warehouse) => <tr key={warehouse.id}><td>{warehouse.code}</td><td>{warehouse.name}</td><td>{warehouse.branchId}</td><td>{warehouse.status}</td><td><button onClick={() => setSelected(warehouse.id)}>Xem tồn</button></td></tr>)}</tbody>
+          <tbody>{state.data.items.map((warehouse) => <tr key={warehouse.id}><td>{warehouse.code}</td><td>{warehouse.name}</td><td>{displayName('branch', { name: warehouse.branchName, code: warehouse.branchCode })}</td><td>{warehouse.status}</td><td><button onClick={() => setSelected(warehouse.id)}>Xem tồn</button></td></tr>)}</tbody>
         </table></div>
         <Pager page={page} total={state.data.total} onPage={setPage} />
       </>}
@@ -512,7 +519,7 @@ export function InventoryTransactionsPage() {
         </form>
         {usageState.error && usageState.workOrderId === workOrderId && usageState.generation === sessionGeneration && <p role="alert" className="m1-error">{usageState.error}</p>}
         {usages.map((usage) => <div key={usage.id} className="m2-linked-list">
-          <div><strong>{usage.partSnapshot?.sku ?? usage.partId} · {usage.partSnapshot?.name ?? 'Phụ tùng'}</strong>
+          <div><strong>{displayName('part', null, usage.partSnapshot)}</strong>
             <p>Đã xuất {usage.quantityIssued} · Đã trả {usage.quantityReturned} · Còn đối soát {usage.quantityOutstanding} · Đã xác nhận dùng {usage.quantityConfirmedUsed}</p>
             <form className="m2-editor" onSubmit={(event) => void submit(event, usage.id)}>
               <label>Số lượng trả<input required inputMode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></label>
@@ -529,7 +536,7 @@ export function InventoryTransactionsPage() {
       <PageStatus loading={ledger.loading} error={ledger.error}>
         {ledger.data && <>
           <div className="m2-inventory-table"><table><thead><tr><th>Thời điểm</th><th>Loại</th><th>Số lượng</th><th>Kho</th><th>Phụ tùng</th><th>Tham chiếu</th><th>ID giao dịch</th><th>Ghi chú</th></tr></thead>
-            <tbody>{ledger.data.items.map((row) => <tr key={row.id}><td>{date(row.createdAt)}</td><td>{row.type}</td><td>{row.quantity}</td><td>{warehouses.find((warehouse) => warehouse.id === row.warehouseId)?.name ?? row.warehouseId}</td><td>{parts.find((part) => part.id === row.partId)?.name ?? row.partId}</td><td>{row.referenceType && row.referenceId ? `${row.referenceType} · ${row.referenceId}` : '—'}</td><td>{row.id}</td><td>{row.note ?? '—'}</td></tr>)}</tbody>
+            <tbody>{ledger.data.items.map((row) => <tr key={row.id}><td>{date(row.createdAt)}</td><td>{row.type}</td><td>{row.quantity}</td><td>{displayName('warehouse', row.warehouse, row.warehouseSnapshot)}</td><td>{displayName('part', row.part, row.partSnapshot)}</td><td>{row.referenceType && row.referenceId ? `${row.referenceType} · ${row.referenceId}` : '—'}</td><td>{row.id}</td><td>{row.note ?? '—'}</td></tr>)}</tbody>
           </table></div>
           {!ledger.data.items.length && <p>Chưa có giao dịch phù hợp.</p>}
           <Pager page={page} total={ledger.data.total} onPage={setPage} />

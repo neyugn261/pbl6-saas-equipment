@@ -116,3 +116,18 @@ itemId, title and result status. Existing v2 payloads remain valid. Item notes a
 N/A reasons are excluded. Maintenance stores the approved completion projection;
 Service Request can expose it in its public resolution. No event implies an
 Inventory ISSUE. Existing inventory-hold/report/outbox transaction remains in force.
+
+## Equipment handover addition — proposed for owner/consumer review
+
+`EquipmentHandoverChanged.v1`, producer `asset-service`, aggregate
+`EquipmentHandover`: handoverId, equipmentId, customerId, createdBy (UUIDs),
+handoverNo (<=50), assetCode (<=100), version (positive integer), status
+PENDING_CUSTOMER_CONFIRMATION/ACTIVATED/REJECTED/CANCELLED/EXPIRED.
+No internal notes, rejection text, JWT or signed file URL is transmitted.
+Submit/decision/expiry append to the Asset outbox in the owning transaction.
+Notification uses its existing durable pending/inbox and unique fan-out keys;
+active CUSTOMER_ADMIN members receive submission/activation, active managers
+and tenant admins receive results. Missing eligible customer projection remains
+pending for reconciliation. A known newer occurrence-version suppresses a late
+older notification. These events cannot mutate Asset state.
+See [ADR 0019](../decisions/0019-customer-equipment-handover.md).

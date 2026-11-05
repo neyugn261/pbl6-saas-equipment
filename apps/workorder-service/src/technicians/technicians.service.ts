@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { DisplayNameLookup } from '@pbl6/service-kit';
 import { requireTenantId, type Principal } from '@pbl6/auth';
 import {
   REFERENCES,
@@ -21,15 +22,26 @@ export class TechniciansService {
   constructor(
     private readonly repo: TechniciansRepository,
     @Inject(REFERENCES) private readonly refs: ReferencesClient,
+    @Optional() private readonly names?: DisplayNameLookup,
   ) {}
-  list(p: Principal, query: ListTechniciansDto) {
-    return this.repo.list(requireTenantId(p), query);
+  async list(p: Principal, query: ListTechniciansDto) {
+    const page = await this.repo.list(requireTenantId(p), query);
+    return { ...page, items: await this.display(p, page.items) };
   }
-  detail(p: Principal, id: string) {
-    return this.repo.detail(requireTenantId(p), id);
+  async detail(p: Principal, id: string) {
+    return (await this.display(p, [await this.repo.detail(requireTenantId(p), id)]))[0];
   }
-  me(p: Principal) {
-    return this.repo.me(requireTenantId(p), p.userId);
+  async me(p: Principal) {
+    return (await this.display(p, [await this.repo.me(requireTenantId(p), p.userId)]))[0];
+  }
+  private async display<T extends { userId: string; branchId: string }>(p: Principal, rows: T[]) {
+    const [users, branches] = await Promise.all([
+      this.names?.lookup('users', rows.map(row => row.userId), p),
+      this.names?.lookup('branches', rows.map(row => row.branchId), p),
+    ]);
+    return rows.map(row => ({ ...row, fullName: users?.get(row.userId.toLowerCase())?.name ?? null,
+      branchName: branches?.get(row.branchId.toLowerCase())?.name ?? null,
+      branchCode: branches?.get(row.branchId.toLowerCase())?.code ?? null }));
   }
   async create(p: Principal, input: CreateTechnicianDto) {
     const tenantId = requireTenantId(p);

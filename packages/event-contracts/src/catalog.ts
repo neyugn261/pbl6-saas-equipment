@@ -251,7 +251,18 @@ export interface LowStockDetectedV1 {
   minQuantity: string;
 }
 
+export interface EquipmentHandoverChangedV1 {
+  handoverId: string; equipmentId: string; customerId: string; createdBy: string;
+  handoverNo: string; assetCode: string; version: number;
+  status: 'PENDING_CUSTOMER_CONFIRMATION' | 'ACTIVATED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+}
 export const Events = {
+  EquipmentHandoverChanged: define<EquipmentHandoverChangedV1>({
+    type: 'EquipmentHandoverChanged', version: 1, aggregateType: 'EquipmentHandover', producer: 'asset-service',
+    fields: { handoverId: is.uuid, equipmentId: is.uuid, customerId: is.uuid, createdBy: is.uuid,
+      handoverNo: is.string(50), assetCode: is.string(100), version: value => Number.isSafeInteger(value) && Number(value) > 0,
+      status: is.oneOf(['PENDING_CUSTOMER_CONFIRMATION', 'ACTIVATED', 'REJECTED', 'CANCELLED', 'EXPIRED']), },
+  }),
   EquipmentMoved: define<EquipmentMovedV1>({
     type: 'EquipmentMoved',
     version: 1,

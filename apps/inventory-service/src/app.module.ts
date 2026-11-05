@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
-import { HealthModule } from '@pbl6/service-kit';
+import { HealthModule, DisplayNameLookup } from '@pbl6/service-kit';
 import { prismaHealthCheck } from '@pbl6/service-kit/prisma';
 import { validateEnv } from './config/env.validation';
 import { PrismaService } from './prisma/prisma.service';
@@ -41,6 +41,8 @@ import { EventsService } from './events/events.service';
     ServicePartsController,
   ],
   providers: [
+    { provide: DisplayNameLookup, inject: [ConfigService], useFactory: (config: ConfigService) =>
+      new DisplayNameLookup({ organization: config.get<string>('ORGANIZATION_SERVICE_URL') }) },
     InventoryRepository,
     InventoryService,
     ReferencesClient,

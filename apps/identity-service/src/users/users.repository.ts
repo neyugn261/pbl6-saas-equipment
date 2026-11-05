@@ -38,6 +38,14 @@ function toCustomerId(user: UserWithRoles): string | null {
 export class UsersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async displayNames(tenantId: string, ids: string[]) {
+    const rows = await this.prisma.user.findMany({
+      where: { tenantId, id: { in: [...new Set(ids)] } },
+      select: { id: true, tenantId: true, fullName: true },
+    });
+    return rows.map(row => ({ id: row.id, tenantId: row.tenantId, name: row.fullName }));
+  }
+
   async findUsers(
     tenantId: string,
     query: ListUsersDto,

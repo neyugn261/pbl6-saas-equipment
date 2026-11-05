@@ -25,6 +25,11 @@ function renderM2(componentName, response, path = '') {
     } }) } },
     '../auth/session': tab.session, '../display-names': labels,
     '../features/attachments/AttachmentsPanel': { AttachmentsPanel: 'attachments' },
+    './ModelPolicyPanels': {
+      MaintenancePolicyDetails: 'policy-details',
+      WorkOrderChecklist: 'work-order-checklist',
+      AppliedPolicyPanel: 'applied-policy-panel',
+    },
   })
   return { render: () => h.render(module[componentName]), h }
 }

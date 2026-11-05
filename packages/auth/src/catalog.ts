@@ -53,6 +53,7 @@ export function permissionsOf(roles: readonly string[]): Set<PermissionCode> {
 }
 
 export const PERMISSIONS = {
+  'equipment_handover:respond': 'Accept or reject equipment handovers for own customer',
   'tenant:read': 'View tenants',
   'tenant:manage': 'Create, suspend and update tenants',
   'user:read': 'View users of the tenant',
@@ -180,6 +181,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   // Customer roles are additionally limited to their own Customer
   // (customer_user_memberships) by the owning services.
   CUSTOMER_ADMIN: [
+    'equipment_handover:respond',
     'user:read',
     'user:manage',
     'role:assign',

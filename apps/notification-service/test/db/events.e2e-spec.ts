@@ -93,6 +93,36 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
     });
   }
 
+  it('delivers handover submission/results once and suppresses late older versions', async () => {
+    await recipientSnapshot(users.manager, 'TENANT_STAFF', 'SERVICE_MANAGER', '1000', null, 'ACTIVE', null);
+    await recipientSnapshot(users.customer, 'CUSTOMER', 'CUSTOMER_ADMIN', '1000', {
+      membershipId: randomUUID(), customerId, status: 'ACTIVE', sourceChangedAt: new Date().toISOString(),
+    }, 'ACTIVE', null);
+    const run = randomUUID(); bootstrapRunIds.push(run);
+    await projections.applyBootstrapCompleted(envelope(Events.NotificationRecipientBootstrapCompleted, {
+      bootstrapRunId: run, expectedUsers: 0, startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+    }, run, new Date().toISOString()));
+    const handoverId = randomUUID();
+    const payload = { handoverId, equipmentId: randomUUID(), customerId, createdBy: users.manager,
+      handoverNo: 'BG-notification-test', assetCode: 'P-01', version: 2, status: 'PENDING_CUSTOMER_CONFIRMATION' as const };
+    const submitted = envelope(Events.EquipmentHandoverChanged, payload, handoverId, new Date().toISOString());
+    await events.handle(submitted); await events.handle(submitted);
+    const delivered = await db.notification.findMany({ where: { sourceEventId: submitted.eventId } });
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({ userId: users.customer, customerId, payload: { resourceType: 'EQUIPMENT_HANDOVER', resourceId: handoverId } });
+    const activated = envelope(Events.EquipmentHandoverChanged, { ...payload, version: 3, status: 'ACTIVATED' }, handoverId, new Date().toISOString());
+    await events.handle(activated); await events.handle(activated);
+    expect(await db.notification.count({ where: { sourceEventId: activated.eventId } })).toBe(2);
+    const late = envelope(Events.EquipmentHandoverChanged, payload, handoverId, new Date().toISOString());
+    await events.handle(late);
+    expect(await db.notification.count({ where: { sourceEventId: late.eventId } })).toBe(0);
+    // Restore original suite fixtures; the independent test above may run first.
+    await db.notification.deleteMany({ where: { sourceEventId: { in: [submitted.eventId, activated.eventId, late.eventId] } } });
+    await db.pendingNotificationEvent.deleteMany({ where: { sourceEventId: { in: [submitted.eventId, activated.eventId, late.eventId] } } });
+    await db.recipientSnapshot.deleteMany({ where: { userId: { in: [users.manager, users.customer] } } });
+    await db.recipientBootstrapRun.delete({ where: { bootstrapRunId: run } });
+  });
+
   beforeAll(async () => {
     db = new PrismaClient({
       adapter: new PrismaPg({ connectionString: testDatabaseUrl() }),

@@ -27,6 +27,11 @@ import { MembershipsService } from './memberships.service';
 export class MembershipsController {
   constructor(private readonly memberships: MembershipsService) {}
 
+  @Get('internal/my/customer-membership')
+  @AllowUserTypes('CUSTOMER')
+  @RequirePermissions('equipment:read')
+  self(@CurrentUser() user: Principal) { return this.memberships.self(user); }
+
   @Get('customers/:customerId/memberships')
   @RequirePermissions('user:read')
   list(

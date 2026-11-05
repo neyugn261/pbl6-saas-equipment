@@ -34,6 +34,18 @@ describe('Branches (e2e, organization_test_db)', () => {
 
   const admin = () => api(app, bearer('TENANT_ADMIN', tenantA));
 
+  it('batch display names include inactive branches, exclude foreign/deleted rows and enforce existing permissions', async () => {
+    const local = await admin().post('/branches', branch).expect(201);
+    const foreign = await api(app, bearer('TENANT_ADMIN', tenantB)).post('/branches', branch).expect(201);
+    await admin().patch(`/branches/${local.body.id}`, { status: 'INACTIVE' }).expect(200);
+    const path = `/internal/display-names/branches?ids=${local.body.id},${foreign.body.id},${local.body.id}`;
+    const result = await admin().get(path).expect(200);
+    expect(result.body).toEqual([{ id: local.body.id, tenantId: tenantA, name: branch.name, code: branch.code }]);
+    await api(app, bearer('CUSTOMER_USER', tenantA, randomUUID())).get(path).expect(403);
+    await admin().delete(`/branches/${local.body.id}`).expect(204);
+    expect((await admin().get(path).expect(200)).body).toEqual([]);
+  });
+
   it('creates, lists, reads, updates and soft-deletes a branch', async () => {
     const created = await admin().post('/branches', branch).expect(201);
     expect(created.body).toMatchObject({ ...branch, phone: null, email: null, status: 'ACTIVE' });

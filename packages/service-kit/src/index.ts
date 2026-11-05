@@ -4,6 +4,7 @@ export * from './env';
 export * from './errors';
 export * from './health';
 export * from './http-client';
+export * from './display-names';
 export * from './logger';
 export * from './pagination';
 export * from './public';

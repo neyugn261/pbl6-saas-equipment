@@ -25,6 +25,16 @@ export class MembershipsService {
     private readonly identity: IdentityClient,
   ) {}
 
+  async self(caller: Principal): Promise<MembershipResponse> {
+    const scope = dataScope(caller);
+    if (!scope.customerId) throw notFound('MEMBERSHIP_NOT_FOUND', 'Membership not found');
+    const customer = await this.customers.load(scope, scope.customerId);
+    const row = (await this.memberships.list(scope.tenantId, scope.customerId))
+      .find(m => m.userId === caller.userId && m.status === 'ACTIVE');
+    if (!row || customer.status !== 'ACTIVE') throw notFound('MEMBERSHIP_NOT_FOUND', 'Membership not found');
+    return toMembershipResponse(row);
+  }
+
   async list(caller: Principal, customerId: string): Promise<MembershipResponse[]> {
     const scope = dataScope(caller);
     await this.customers.load(scope, customerId);

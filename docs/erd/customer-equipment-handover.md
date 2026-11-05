@@ -1,4 +1,4 @@
-# Customer handover schema delta (ADR 0018)
+# Customer handover schema delta (ADR 0019)
 
 Asset owns `equipment_handovers` and append-only API audit
 `equipment_handover_audit`. Equipment has permanent `handover_required` and
