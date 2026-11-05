@@ -13,3 +13,11 @@ qua các service và database test. Không dùng mock network để dựng kết
 Thông tin môi trường, lệnh kiểm thử và giới hạn: [báo cáo](../../model-service-policies-acceptance.md).
 
 Kết quả máy đọc được và IDs fixture của lần integration: [results.json](results.json).
+
+## Model-only handover — 2026-11-05
+
+Giao diện bốn bước, thay các form thủ công trong luồng mới:
+
+- [Chính sách Model và lịch server tính sẵn](web-handover-model-step.png)
+- [Xác nhận bàn giao ở viewport 390px](web-handover-model-mobile.png)
+- [Kết quả kiểm tra](handover-model-ui-results.json)

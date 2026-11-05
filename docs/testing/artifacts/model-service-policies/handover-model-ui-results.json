@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-05",
+  "implementationCommit": "61d108f",
+  "branch": "feature/model-service-policies",
+  "web": {
+    "build": "PASS",
+    "lint": "PASS",
+    "tests": {
+      "pass": 40,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "browser": {
+    "realStack": true,
+    "desktop": "PASS",
+    "mobile390px": "PASS",
+    "modelOnlyWizard": "PASS",
+    "handoverDateRecompute": "PASS",
+    "lostPreviewResponseReconciliation": "PASS",
+    "missingPolicyBlocksCompletion": "PASS",
+    "explicitNone": "PASS",
+    "tenantAdminPermissions": "PASS",
+    "legacyReadOnly": "PASS"
+  },
+  "backendRegression": {
+    "status": "PASS",
+    "tenantId": "cf476dd1-8ef7-4df1-9ff6-5b6119a20942",
+    "references": {
+      "modelId": "561c3e7c-5956-42dc-a42e-5cab5f8481e8",
+      "equipmentId": "5752743c-9c68-4249-b92b-42fb64631b4b",
+      "registrationId": "dc134fd5-bf85-44a0-a184-2c46035bcd4d",
+      "planIds": [
+        "a50ad302-e315-4e58-a129-626819c30043",
+        "a93858a5-a712-45e6-8344-17e9ed3ccfa8"
+      ],
+      "warrantyRevisionId": "04e27a73-d2f2-4840-bfbe-d51fcca4725f",
+      "maintenanceRevisionId": "83551617-dce8-42eb-b42a-d3b42e2e6039",
+      "workOrderId": "0da47802-34c2-49d7-b6cc-734f33db5615",
+      "serviceRequestId": "c86d99e6-d96d-4fec-a955-92eb9fc8d9ef"
+    },
+    "evidence": [
+      {
+        "case": "policy versions, frozen handover, multiple plans, replay, customer scope",
+        "status": "PASS"
+      },
+      {
+        "case": "real broker, task snapshot, required checklist, report completion",
+        "status": "PASS"
+      },
+      {
+        "case": "real Identity login, in-term exclusion, estimate/customer approval; warranty remains active",
+        "status": "PASS"
+      },
+      {
+        "case": "lost remote response after commit + four parallel resumes: one Warranty and exactly two Plans",
+        "status": "PASS"
+      },
+      {
+        "case": "second-rule failure rolls back the whole Maintenance group; retry recovers without a second Warranty",
+        "status": "PASS"
+      },
+      {
+        "case": "reasoned overrides; forged source rejected; staff cannot execute technician checklist; customer summary excludes notes; retired preview cannot submit",
+        "status": "PASS"
+      },
+      {
+        "case": "forged receipt cannot complete; covered cause needs no estimate; UNKNOWN rejected; same-tenant customer isolation and draft privacy",
+        "status": "PASS"
+      },
+      {
+        "case": "independent anniversary Tasks; assignment removal blocks old technician, preserves audit; replacement replay keeps frozen checklist with fresh results; NONE differs from missing configuration",
+        "status": "PASS"
+      }
+    ],
+    "limits": [
+      "No production database used",
+      "Optional Browser/Android UAT runs only when the corresponding environment flag is true"
+    ]
+  },
+  "nativeAndroid": "Not rerun: no native changes",
+  "developmentDatabase": "No migration/seed/test fixtures applied during this UI change"
+}

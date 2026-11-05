@@ -139,3 +139,36 @@ Root `dev:backend` nay chạy `db:migrate` trước `concurrently`; tám lệnh
 Migration lỗi sẽ dừng khởi động. Gateway/Web không có DB nên giữ lệnh khởi động
 hiện tại. Khi chạy trực tiếp `start:dev`/`start:prod`, vẫn áp dụng migration theo
 runbook trước khi mở API.
+
+
+## Luồng bàn giao chỉ dùng chính sách Model — 2026-11-05
+
+Implementation: `61d108f`, tiếp tục trên `feature/model-service-policies`.
+Web thay hai bước nhập tay bằng bốn bước Khách hàng → Thiết bị → Chính sách Model
+→ Xác nhận. Không còn selector CREATE/KEEP/NONE hoặc form nhập lại điều khoản và
+Plan trong luồng bàn giao mới. Preview được lấy từ server sau khi lưu thông tin
+máy; thay ngày bàn giao phải tính lại preview trước khi hoàn tất. Ngoại lệ nằm
+trong phần thu gọn, có lý do và giữ revision cùng những ngoại lệ đã lưu ở phần khác.
+Hồ sơ cũ đã submit chỉ xem điều khoản cũ/tiếp tục đối soát, không tự chuyển nguồn.
+
+Kiểm tra đã thực chạy:
+
+- `pnpm --filter web build`: PASS (bao gồm TypeScript); còn cảnh báo bundle lớn như trước.
+- `pnpm --filter web lint`: PASS.
+- `pnpm --filter web test`: 40 PASS, 0 FAIL, 0 SKIP; thêm 4 test cho double submit,
+  giữ nguồn/ngoại lệ khi chỉnh lịch, mất phản hồi và chế độ chỉ xem.
+- Chạy `scripts/test-model-policies.cjs` với `MODEL_POLICY_BROWSER=true`,
+  Playwright/Chromium và Gateway/Identity/services/PostgreSQL/RabbitMQ thật: PASS.
+  Luồng browser tạo máy → preview → đổi ngày/tính lại → submit tạo hai Plan;
+  Model thiếu cấu hình không có cách nhập tay để hoàn tất; explicit NONE hoàn tất
+  không tạo Warranty/Plan; Tenant Admin không gọi được thao tác của Service Manager.
+- Browser bỏ phản hồi preview sau khi server commit rồi GET lại kết quả, không
+  tạo thêm hồ sơ. Kiểm tra lịch cũ, checklist WO và customer dossier vẫn đạt.
+- Browser tạo fixture qua codec legacy, đọc lại điều khoản lịch sử mà không có
+  nút áp dụng Model; giao diện 390px không tràn ngang, menu mobile đóng đúng.
+
+Không đổi backend, schema, event hoặc chạy migration/seed trên DB dev cho thay đổi
+UI này. Các fixture và mutation acceptance chỉ đi vào DB test riêng. Android
+native không thay đổi và không chạy lại trong đợt UI này.
+Ảnh mới: [bước chính sách](artifacts/model-service-policies/web-handover-model-step.png)
+và [màn hình mobile](artifacts/model-service-policies/web-handover-model-mobile.png).
