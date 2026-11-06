@@ -15,6 +15,7 @@ export 'service_report_read.dart';
 import 'read_widgets.dart';
 import 'workspace_repository.dart';
 import 'report_form.dart';
+import 'job_parts.dart';
 
 class JobReadScreen extends StatefulWidget {
   const JobReadScreen({super.key, required this.repo, required this.id});
@@ -233,10 +234,7 @@ class _JobReadScreenState extends State<JobReadScreen>
             onSaved: () => unawaited(workflow.load()),
           ),
         ),
-      if (_tab == 4)
-        const Notice(
-          'Phụ tùng chờ Inventory M3. Chưa có dữ liệu xuất kho thật.',
-        ),
+      if (_tab == 4) JobParts(repo: repo, orderId: w.id, revision: _revision),
       const SizedBox(height: 20),
       if (w.terminal)
         const Notice('Công việc đã kết thúc. Chỉ xem dữ liệu và báo cáo.')

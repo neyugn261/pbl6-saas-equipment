@@ -36,9 +36,9 @@ apps/
   notification-service/     :3005  ✅ in-app inbox/count/read, recipient snapshot/bootstrap, event fan-out
   organization-service/     :3006  ✅ Tenant, Branch, Customer, Site, Location và membership
   service-request-service/  :3007  ✅ M1 API Service Request, RBAC tenant/customer, warranty snapshot và transactional outbox
-  inventory-service/        :3008  ✅ M3 catalogue, stock/ledger, idempotency, LowStock; ISSUE awaits WO reservation integration
+  inventory-service/        :3008  ✅ M3 catalogue, stock/ledger, idempotency, LowStock, WO reservation issue/return, confirmed use/corrections
   web/                      :5173  React UI kết nối API qua Gateway
-  mobile/                          Flutter Android Technician: WO/report/checklist, encrypted drafts, in-app notifications
+  mobile/                          Flutter Android Technician: WO/report/checklist, encrypted drafts, in-app notifications, scoped parts reads
 packages/                   thư viện dùng chung: service-kit, auth, event-contracts, testing (packages/README.md)
 infrastructure/postgres/    init.sql (8 database của service), dev-databases.sql (shadow/test DB)
 docs/                       SRS, ADR, ERD, API contract, kiến trúc (event, state machine)

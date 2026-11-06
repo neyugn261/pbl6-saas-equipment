@@ -1,0 +1,40 @@
+{
+  "status": "PASS",
+  "baseCommit": "988e1653c29a97a6359c68ca3fa1b47c7d8621db",
+  "testedApkSha256": "4e133c111e551a19ce2d7851be3a27e9e8bf780ce38f633b472f850bbefd158d",
+  "device": "emulator-5556",
+  "cases": [
+    "real Identity login",
+    "scoped WO parts displayed",
+    "historical names survive catalogue changes",
+    "issued/returned/confirmed remain distinct",
+    "good and damaged return history",
+    "missing legacy metadata explicitly shown",
+    "completed use confirmations and reversal",
+    "cancelled return pending inspection",
+    "true empty WO"
+  ],
+  "fixtureChecks": {
+    "runningUsageId": "94f4ba1c-22e2-4b73-89be-50b741502edf",
+    "completedUsageId": "99b1aba6-6c34-49ff-b08f-147112fcdd92",
+    "legacyUsageId": "363f64eb-72d1-4959-8a02-963331a1bc79",
+    "cancelledUsageId": "61bcf691-21b4-4960-a976-f526709415de",
+    "realIssueReturn": true,
+    "realConfirmationReversal": true,
+    "historicalSnapshotsAfterRename": true,
+    "emptyOrder": true,
+    "sameTenantUnassigned404": true,
+    "crossTenant404": true,
+    "customer403": true,
+    "technicianIssueReturn403": true
+  },
+  "screenshots": [
+    "issued-returned.png",
+    "return-history.png",
+    "legacy-metadata.png",
+    "confirmed-quantities.png",
+    "confirmation-history.png",
+    "cancelled-return.png",
+    "empty-parts.png"
+  ]
+}

@@ -4,6 +4,7 @@ import '../../core/api/api_exception.dart';
 import '../session/session_models.dart';
 import 'attachment_client.dart';
 import 'workspace_store.dart';
+import 'part_usage.dart';
 
 typedef Json = Map<String, dynamic>;
 typedef GatewayRead = Future<Object?> Function(String path);
@@ -455,6 +456,15 @@ class WorkspaceRepository extends ChangeNotifier {
 
   Future<WorkOrder> order(String id) async =>
       WorkOrder(await get('$wo/work-orders/$id'));
+  Future<List<PartUsage>> workOrderParts(String id) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    final result = await read(
+      '/api/inventory/work-orders/${Uri.encodeComponent(id)}/parts',
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    return PartUsage.forOrder(result, id);
+  }
+
   Future<Equipment> equipment(String id) async =>
       Equipment(await get('$asset/equipment/$id'));
   Future<Json> dossier(String id) async {

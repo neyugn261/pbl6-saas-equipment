@@ -1,5 +1,15 @@
 # PBL6 Technician — Flutter Android
 
+**Giai đoạn 3 — phụ tùng chỉ đọc:** tab Phụ tùng trong WO đã nối Inventory thật.
+Hiển thị tên/mã/đơn vị và kho tại lúc cấp, số đã cấp, đã trả, đã xác nhận dùng,
+chưa đối soát, lịch sử trả kho và đính chính xác nhận. Số lượng giữ dạng decimal
+string; số chưa trả không bị coi là đã sử dụng. Dữ liệu lịch sử thiếu thông tin
+được ghi rõ, không thay bằng tên hiện tại hoặc tự giả định số lượng bằng 0.
+Có tìm theo mã/tên/kho, lọc chưa đối soát, loading/empty/error/retry và tải lại
+khi về foreground. Chỉ dùng GET của WO trong scope; không có thao tác cấp/trả,
+chỉnh tồn hoặc xác nhận sử dụng trong phần mobile chỉ đọc này.
+[Nghiệm thu và bằng chứng giai đoạn 3](../../docs/testing/mobile-stage-3.md).
+
 **Giai đoạn 2 — Notification:** nút chuông đã nối hộp thư thật qua Gateway,
 badge lấy tổng chưa đọc từ server, có phân trang/bộ lọc và đánh dấu đã đọc.
 Mở thông báo tự đánh dấu đã đọc; nút Xem công việc kiểm tra quyền bằng API WO

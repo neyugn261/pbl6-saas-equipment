@@ -15,7 +15,9 @@ const { requireTestDatabaseUrl, testJwtEnv } = r('@pbl6/testing');
 const { configureApp } = r('@pbl6/service-kit');
 const { Events, RabbitMqEventBus, OutboxRelay, subscriptionQueues } = r('@pbl6/event-contracts');
 const withNotifications = process.argv.includes('--notifications');
-const names = ['identity', 'organization', 'asset', 'maintenance', 'workorder', 'service-request', ...(withNotifications ? ['notification'] : [])];
+const withParts = process.argv.includes('--parts');
+const stage = withParts ? '03' : withNotifications ? '02' : '01';
+const names = ['identity', 'organization', 'asset', 'maintenance', 'workorder', 'service-request', ...(withNotifications ? ['notification'] : []), ...(withParts ? ['inventory'] : [])];
 const urls = Object.fromEntries(names.map(name => [name, requireTestDatabaseUrl(name.replaceAll('-', '_').toUpperCase() + '_TEST_DATABASE_URL')]));
 const broker = process.env.RABBITMQ_TEST_URL || process.env.RABBITMQ_URL;
 assert.ok(broker, 'Configure a test broker for Maintenance fixture');
@@ -24,10 +26,10 @@ for (const name of names) process.env[name.replaceAll('-', '_').toUpperCase() + 
 const apps = {}, db = {}, ports = {}, relays = [];
 const tenants = [randomUUID(), randomUUID()], suffix = randomUUID().slice(0, 8);
 const password = 'M01-' + randomBytes(18).toString('hex') + '!aA1';
-const exchange = `pbl6.test.mobile-stage${withNotifications ? '02' : '01'}.` + randomUUID();
+const exchange = `pbl6.test.mobile-stage${stage}.` + randomUUID();
 const queues = [];
 let bus;
-const runtime = path.resolve(process.env.MOBILE_STAGE01_RUNTIME || `/tmp/pbl6-mobile-stage${withNotifications ? '02' : '01'}-runtime.json`);
+const runtime = path.resolve(process.env.MOBILE_STAGE01_RUNTIME || `/tmp/pbl6-mobile-stage${stage}-runtime.json`);
 if (fs.existsSync(runtime)) {
   const previous = JSON.parse(fs.readFileSync(runtime, 'utf8'));
   if (previous.status === 'READY' && Number.isInteger(previous.pid)) {
@@ -42,7 +44,7 @@ async function freePort() { const s = net.createServer(); await new Promise(reso
 async function start(name) {
   const { NestFactory } = req(name)('@nestjs/core');
   const app = await NestFactory.create(req(name)('./dist/app.module.js').AppModule, { logger: false });
-  // This harness owns all seven app lifecycles. Individual Nest signal handlers
+  // This harness owns all app lifecycles. Individual Nest signal handlers
   // would kill the shared process before its queue/runtime cleanup finishes.
   Object.defineProperty(app, 'enableShutdownHooks', { value: () => app, configurable: true });
   if (name === 'gateway') req(name)('./dist/gateway.setup.js').configureGateway(app, app.get(req(name)('@nestjs/config').ConfigService));
@@ -50,8 +52,8 @@ async function start(name) {
   await app.listen(ports[name], '127.0.0.1'); apps[name] = app;
   if (name !== 'gateway') db[name] = app.get(req(name)('./dist/prisma/prisma.service.js').PrismaService);
 }
-async function call(method, route, token, body, expected = 200) {
-  const response = await fetch(`http://127.0.0.1:${ports.gateway}${route}`, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}), ...(route === '/api/assets/equipment-registrations' ? { 'Idempotency-Key': randomUUID() } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
+async function call(method, route, token, body, expected = 200, key) {
+  const response = await fetch(`http://127.0.0.1:${ports.gateway}${route}`, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}), ...(key ? { 'Idempotency-Key': key } : route === '/api/assets/equipment-registrations' ? { 'Idempotency-Key': randomUUID() } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) });
   const data = await response.json().catch(() => null);
   assert.equal(response.status, expected, `${method} ${route}: ${response.status} ${data?.code || ''}`);
   return data;
@@ -119,7 +121,7 @@ async function main() {
     const model = await call('POST', A + '/equipment-models', manager.token, { manufacturer: 'Mobile fixture', modelCode: 'M01', name: 'Fixture pump' }, 201);
     const equipment = await call('POST', A + '/equipment', manager.token, { modelId: model.id, customerId: customer.id, customerSiteId: site.id, assetCode: 'EQ-01', serialNumber: randomUUID() }, 201);
     await call('POST', A + `/equipment/${equipment.id}/warranties`, manager.token, { warrantyType: 'STANDARD', startDate: '2020-01-01', endDate: '2099-12-31', terms: 'Fixture coverage' }, 201);
-    fixtures.push({ tenantId, code, admin, manager, tech, technician, customer, customerUser, site, model, equipment });
+    fixtures.push({ tenantId, code, admin, manager, tech, technician, branch, customer, customerUser, site, model, equipment });
     manifest.tenants.push({ id: tenantId, code, admin: admin.email, manager: manager.email, technician: tech.email, customer: customerUser.email, equipmentId: equipment.id });
   }
   const a = fixtures[0], b = fixtures[1];
@@ -129,6 +131,10 @@ async function main() {
   const secondTech = await call('POST', W + '/technicians', a.manager.token, { userId: second.id, branchId: (await call('GET', '/api/organization/branches?page=1&pageSize=1', a.manager.token)).items[0].id, employeeCode: 'TECH-02' }, 201);
   manifest.tenants[0].alternateTechnician = second.email;
   manifest.tenants[0].otherCustomer = outsider.email;
+  if (withParts) {
+    a.inventoryUser = await user(a.tenantId, a.code, 'INVENTORY_STAFF', 'inventory');
+    manifest.tenants[0].inventory = a.inventoryUser.email;
+  }
   if (withNotifications) {
     for (const tenantId of tenants) execFileSync('pnpm', ['--filter', 'identity-service', 'recipient:bootstrap', tenantId], { cwd: root, env: process.env, stdio: 'inherit' });
     await eventually(async () => (await db.notification.recipientBootstrapRun.count({ where: { tenantId: { in: tenants }, status: 'COMPLETED' } })) === 2);
@@ -189,6 +195,57 @@ async function main() {
     await call('GET', `/api/notifications?tenantId=${b.tenantId}`, a.tech.token, undefined, 400);
     manifest.notifications = { unreadCount: 21, total: 22, pagination: true, ownReadIdempotent: true, sameTenantOtherUser404: true, crossTenant404: true, identityBootstrap: 'COMPLETED' };
     console.log('PASS Notification: real Identity bootstrap/outbox/broker fan-out; 22 rows, pagination, filters, idempotent mark-read, exact count, same-tenant user and cross-tenant isolation.');
+  }
+  if (withParts) {
+    const I = '/api/inventory', token = a.inventoryUser.token;
+    const mutate = (route, body, expected = 201, actor = token) => call('POST', I + route, actor, body, expected, randomUUID());
+    const warehouse = await mutate('/warehouses', { branchId: a.branch.id, code: 'MAIN', name: 'Kho luc cap' });
+    const fluid = await mutate('/parts', { sku: 'OIL-M03', name: 'Dau bao tri luc cap', unit: 'l', allowFractional: true });
+    const gasket = await mutate('/parts', { sku: 'SEAL-M03', name: 'Vong dem luc cap', unit: 'cai' });
+    for (const part of [fluid, gasket]) await mutate('/stock-transactions/receive', { warehouseId: warehouse.id, partId: part.id, quantity: '20.00', documentReference: 'M03-RECEIPT' });
+    const issue = (orderId, part, quantity) => mutate(`/work-orders/${orderId}/parts`, { warehouseId: warehouse.id, partId: part.id, quantity, note: 'M03 fixture issue', unitCost: '123.45', unitCostCurrency: 'USD' });
+    const running = manifest.orders.inProgress;
+    const usage = await issue(running.id, fluid, '5.50');
+    await mutate(`/work-order-parts/${usage.id}/return`, { quantity: '1.25', note: 'Unused', condition: 'GOOD' }, 200);
+    await mutate(`/work-order-parts/${usage.id}/return`, { quantity: '0.50', note: 'Damaged', condition: 'DAMAGED' }, 200);
+    const legacy = await issue(running.id, gasket, '2.00');
+    // Only simulate missing pre-snapshot metadata in the owning TEST DB. Quantities
+    // and every business operation above/below still come from real Gateway APIs.
+    const { Prisma } = req('inventory')('./dist/generated/prisma/client.js');
+    await db.inventory.workOrderPart.update({ where: { id: legacy.id }, data: { partSnapshot: Prisma.DbNull, warehouseSnapshot: Prisma.DbNull } });
+    const completed = await order(a, 'partsCompleted', ['accept', 'start']);
+    manifest.orders.partsCompleted = { id: completed.id, number: completed.workOrderNo };
+    const used = await issue(completed.id, fluid, '3.50');
+    await call('POST', W + `/work-orders/${completed.id}/complete`, a.tech.token, { problemDescription: 'Inspection', solution: 'Serviced equipment', result: 'RESOLVED', customerSummary: 'Service complete' });
+    const report = await call('GET', W + `/work-orders/${completed.id}/service-report`, a.tech.token);
+    const confirm = quantity => mutate(`/work-order-parts/${used.id}/confirm-use`, { quantity, serviceReportId: report.id, customerReason: 'Maintenance replacement', removedPartDisposition: 'NOT_APPLICABLE' }, 201, a.tech.token);
+    await confirm('1.50'); const corrected = await confirm('0.25');
+    await mutate(`/usage-confirmations/${corrected.id}/reverse`, { note: 'Correct mistaken confirmation' });
+    await mutate(`/work-order-parts/${used.id}/return`, { quantity: '0.50', note: 'Unused remainder', condition: 'GOOD' }, 200);
+    const cancelled = await order(a, 'partsCancelled');
+    manifest.orders.partsCancelled = { id: cancelled.id, number: cancelled.workOrderNo };
+    const unused = await issue(cancelled.id, gasket, '2.00');
+    await call('POST', W + `/work-orders/${cancelled.id}/cancel`, a.manager.token, { reason: 'Cancelled fixture' });
+    await mutate(`/work-order-parts/${unused.id}/return`, { quantity: '1.00', note: 'Inspect after cancellation', condition: 'PENDING_INSPECTION' }, 200);
+    await call('PATCH', I + `/parts/${fluid.id}`, token, { name: 'Dau hien tai da doi ten', status: 'INACTIVE' });
+    await call('PATCH', I + `/warehouses/${warehouse.id}`, token, { name: 'Kho hien tai da doi ten', status: 'INACTIVE' });
+    const runningRows = await call('GET', I + `/work-orders/${running.id}/parts`, a.tech.token);
+    assert.equal(runningRows.length, 2);
+    const oil = runningRows.find(row => row.id === usage.id);
+    assert.equal(oil.quantityIssued, '5.50'); assert.equal(oil.quantityReturned, '1.75'); assert.equal(oil.quantityConfirmedUsed, '0.00'); assert.equal(oil.quantityUnreconciled, '3.75');
+    assert.equal(oil.partSnapshot.name, 'Dau bao tri luc cap'); assert.equal(oil.warehouseSnapshot.name, 'Kho luc cap'); assert.equal(oil.returns.length, 2);
+    const history = (await call('GET', I + `/work-orders/${completed.id}/parts`, a.tech.token))[0];
+    assert.equal(history.quantityOutstanding, '3.00'); assert.equal(history.quantityConfirmedUsed, '1.50'); assert.equal(history.quantityUnreconciled, '1.50'); assert.equal(history.confirmations.length, 3);
+    assert.equal((await call('GET', I + `/work-orders/${manifest.orders.assigned.id}/parts`, a.tech.token)).length, 0);
+    await call('GET', I + `/work-orders/${running.id}/parts`, b.tech.token, undefined, 404);
+    await call('GET', I + `/work-orders/${running.id}/parts`, second.token, undefined, 404);
+    await call('GET', I + `/work-orders/${running.id}/parts`, a.customerUser.token, undefined, 403);
+    await call('POST', I + `/work-orders/${running.id}/parts`, a.tech.token, {}, 403, randomUUID());
+    await call('POST', I + `/work-order-parts/${usage.id}/return`, a.tech.token, {}, 403, randomUUID());
+    manifest.parts = { runningUsageId: usage.id, completedUsageId: used.id, legacyUsageId: legacy.id, cancelledUsageId: unused.id,
+      realIssueReturn: true, realConfirmationReversal: true, historicalSnapshotsAfterRename: true, emptyOrder: true,
+      sameTenantUnassigned404: true, crossTenant404: true, customer403: true, technicianIssueReturn403: true };
+    console.log('PASS Parts: real ISSUE/RETURN/reservation, completed confirmation/reversal, cancelled reconciliation, immutable labels, legacy metadata, empty state and scope/mutation guards.');
   }
   await call('GET', A + `/equipment/${a.equipment.id}`, b.tech.token, undefined, 404);
   await call('GET', A + `/equipment/${a.equipment.id}`, outsider.token, undefined, 404);

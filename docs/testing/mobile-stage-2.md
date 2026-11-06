@@ -132,3 +132,5 @@ riêng trước khi chốt toàn M3.
 Sau khi các kiểm tra trên PASS, có thể tiếp tục **giai đoạn 3: phụ tùng chỉ đọc
 cho Technician**. Không suy ra notification của toàn bộ role/Web đã được
 nghiệm thu từ kết quả mobile này.
+
+Cập nhật tiếp theo: [nghiệm thu giai đoạn 3](mobile-stage-3.md).
