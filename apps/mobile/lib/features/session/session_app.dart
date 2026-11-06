@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
 import '../workspace/live_workspace.dart';
+import '../workspace/workspace_store.dart';
+import 'session_models.dart';
 import 'session_controller.dart';
 
 class TechnicianApp extends StatefulWidget {
@@ -11,9 +13,11 @@ class TechnicianApp extends StatefulWidget {
     super.key,
     required this.session,
     this.disposeSession = false,
+    this.workspaceStore,
   });
   final SessionController session;
   final bool disposeSession;
+  final WorkspaceStore Function(SessionUser user)? workspaceStore;
 
   @override
   State<TechnicianApp> createState() => _TechnicianAppState();
@@ -90,6 +94,7 @@ class _TechnicianAppState extends State<TechnicianApp>
                 '${user.tenantId}/${user.id}/${user.roles.join(',')}',
               ),
               session: widget.session,
+              store: widget.workspaceStore?.call(user),
             );
           },
         ),

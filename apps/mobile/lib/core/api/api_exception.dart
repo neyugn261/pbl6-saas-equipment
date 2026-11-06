@@ -4,6 +4,7 @@ class ApiException implements Exception {
   final int? status;
 
   String get userMessage => switch (code) {
+    'WORKSPACE_STORAGE_FAILED' => 'Không đọc hoặc lưu được dữ liệu cục bộ. Kiểm tra kết quả trên máy chủ trước khi gửi tiếp.',
     'CHECKLIST_INCOMPLETE' =>
       'Hoàn tất và lưu các mục checklist bắt buộc trước khi gửi báo cáo.',
     'CHECKLIST_VERSION_CONFLICT' =>

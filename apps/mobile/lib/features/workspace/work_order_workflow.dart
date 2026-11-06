@@ -43,6 +43,7 @@ class WorkOrderWorkflow extends ChangeNotifier {
       !loading &&
       !busy &&
       !uncertain &&
+      (action != 'complete' || !repo.pendingChecklists.containsKey(id)) &&
       repo.write != null &&
       (order?.allows(action, repo.user.id) ?? false);
   bool get canNote =>
@@ -68,6 +69,17 @@ class WorkOrderWorkflow extends ChangeNotifier {
 
   Future<void> load() async {
     if (_disposed || busy) return;
+    loading = true;
+    try {
+      await repo.restoreLocal(id);
+    } on ApiException catch (e) {
+      order = null;
+      loadError = e;
+      loading = false;
+      _notify();
+      return;
+    }
+    if (_disposed) return;
     if (pending != null && !pending!.inFlight) {
       await checkOutcome();
       return;
@@ -136,6 +148,11 @@ class WorkOrderWorkflow extends ChangeNotifier {
         );
       }
       if (_disposed) throw const ApiException('SESSION_CHANGED');
+      await repo.records.put(id, 'pendingCommand', attempt.toJson());
+      if (_disposed) {
+        await repo.clearPending(id, attempt);
+        throw const ApiException('SESSION_CHANGED');
+      }
       attempt.attempted = true;
       final response = object(await repo.post(id, action, attempt.body));
       if (action == 'logs') {
@@ -153,7 +170,7 @@ class WorkOrderWorkflow extends ChangeNotifier {
         }
         order = updated;
       }
-      repo.pendingCommands.remove(id);
+      await repo.clearPending(id, attempt);
       revision++;
       notice = '${commandLabels[action]} thành công.';
       repo.changed();
@@ -167,13 +184,17 @@ class WorkOrderWorkflow extends ChangeNotifier {
           (e.status != null && e.status! >= 400 && e.status! < 500) ||
           [
             'CHECK_BEFORE_RETRY',
-            'SESSION_CHANGED',
-            'SESSION_EXPIRED',
             'READ_ONLY',
             'INVALID_COMMAND',
           ].contains(e.code);
       if (definiteFailure) {
-        repo.pendingCommands.remove(id);
+        try {
+          await repo.clearPending(id, attempt);
+        } on ApiException catch (storageError) {
+          notice =
+              '${storageError.userMessage} Kiểm tra kết quả trước khi tiếp tục.';
+          return false;
+        }
         notice = e.status == 409
             ? 'Công việc đã thay đổi. Đã tải lại; kiểm tra trạng thái và phân công trước khi thao tác.'
             : e.userMessage;
@@ -220,6 +241,12 @@ class WorkOrderWorkflow extends ChangeNotifier {
 
   Future<bool> _reconcile(PendingWorkOrderCommand attempt) async {
     try {
+      if (!attempt.attempted) {
+        await repo.clearPending(id, attempt);
+        await _readAfterFailure();
+        notice = 'Thao tác chưa được gửi do lỗi lưu trữ. Đã tải lại công việc; bạn có thể xác nhận lại.';
+        return false;
+      }
       final fresh = await repo.order(id);
       order = fresh;
       revision++;
@@ -247,7 +274,7 @@ class WorkOrderWorkflow extends ChangeNotifier {
             ].every((k) => report[k] == attempt.body[k]) &&
             (report['rootCause'] ?? '') == (attempt.body['rootCause'] ?? '');
         if (!found) {
-          repo.pendingCommands.remove(id);
+          await repo.clearPending(id, attempt);
           notice = 'Công việc đã hoàn thành trên máy chủ với báo cáo khác nội dung đang nhập. Hãy xem lại báo cáo; không gửi lại.';
           repo.changed();
           return false;
@@ -282,7 +309,7 @@ class WorkOrderWorkflow extends ChangeNotifier {
         );
       }
       if (found) {
-        repo.pendingCommands.remove(id);
+        await repo.clearPending(id, attempt);
         notice = attempt.action == 'logs'
             ? 'Đã tìm thấy ghi chú trên máy chủ. Không gửi lại.'
             : 'Đã xác nhận kết quả trên máy chủ. Không gửi lại thao tác.';
@@ -293,7 +320,7 @@ class WorkOrderWorkflow extends ChangeNotifier {
           !fresh.currentFor(repo.user.id) ||
           nested(fresh.data, 'currentAssignment')['id'] !=
               nested(attempt.before.data, 'currentAssignment')['id']) {
-        repo.pendingCommands.remove(id);
+        await repo.clearPending(id, attempt);
         notice = 'Trạng thái hoặc phân công đã thay đổi. Chưa xác nhận thao tác trước đó; xem lịch sử và không gửi lại nội dung cũ.';
         repo.changed();
         return false;

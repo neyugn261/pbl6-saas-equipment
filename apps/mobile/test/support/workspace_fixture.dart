@@ -105,6 +105,9 @@ Map<String, dynamic> dossier() => {
 /// Transport fixtures shaped like public backend DTOs, separate from UI preview.
 http.Response workspaceResponse(http.Request r, SessionFixture f) {
   final path = r.url.path;
+  if (path == '/api/notifications/unread-count') {
+    return jsonResponse({'unreadCount': 0});
+  }
   if (path == '/api/workorders/technicians/me') {
     return jsonResponse(technician());
   }

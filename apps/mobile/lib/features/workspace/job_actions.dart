@@ -9,9 +9,11 @@ class WorkOrderActionBar extends StatefulWidget {
     super.key,
     required this.workflow,
     required this.onReportClosed,
+    this.checklistBlocked = false,
   });
   final WorkOrderWorkflow workflow;
   final VoidCallback onReportClosed;
+  final bool checklistBlocked;
   @override
   State<WorkOrderActionBar> createState() => _WorkOrderActionBarState();
 }
@@ -24,12 +26,12 @@ class _WorkOrderActionBarState extends State<WorkOrderActionBar> {
     setState(() => _opening = true);
     try {
       if (action == 'complete') {
-        final done = await Navigator.of(context).push<bool>(
+        await Navigator.of(context).push<bool>(
           MaterialPageRoute(
             builder: (_) => LiveReportForm(workflow: widget.workflow),
           ),
         );
-        if (mounted && done == true) widget.onReportClosed();
+        if (mounted) widget.onReportClosed();
       } else {
         await showDialog<void>(
           context: context,
@@ -83,7 +85,10 @@ class _WorkOrderActionBarState extends State<WorkOrderActionBar> {
         ))
           FilledButton(
             key: Key('wo-$action'),
-            onPressed: _opening || !flow.can(action)
+            onPressed:
+                _opening ||
+                    !flow.can(action) ||
+                    action == 'complete' && widget.checklistBlocked
                 ? null
                 : () => _command(action),
             child: Text(commandLabels[action]!),
