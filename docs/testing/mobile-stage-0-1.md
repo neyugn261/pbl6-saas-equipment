@@ -161,6 +161,8 @@ flutter build apk --debug --no-pub
 **Đủ chuyển sang giai đoạn 2 trong phạm vi mobile**: giai đoạn 0 và 1 có code,
 fixture và bằng chứng chạy. Chưa phải kết luận chốt toàn M3 hoặc phát hành.
 
+Cập nhật tiếp theo: [giai đoạn 2 — Notification](mobile-stage-2.md).
+
 Các phần theo kế hoạch tiếp tục: notification thật; phụ tùng chỉ đọc cho
 Technician; độ bền vòng đời ảnh/upload; lịch/hồ sơ và UX còn lại; UAT toàn nhóm
 và thiết bị vật lý. QR scanner cho Technician không phải điều kiện chặn.

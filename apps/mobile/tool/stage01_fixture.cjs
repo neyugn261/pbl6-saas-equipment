@@ -14,7 +14,8 @@ const r = req('asset'); r('dotenv').config({ path: path.join(root, '.env'), quie
 const { requireTestDatabaseUrl, testJwtEnv } = r('@pbl6/testing');
 const { configureApp } = r('@pbl6/service-kit');
 const { Events, RabbitMqEventBus, OutboxRelay, subscriptionQueues } = r('@pbl6/event-contracts');
-const names = ['identity', 'organization', 'asset', 'maintenance', 'workorder', 'service-request'];
+const withNotifications = process.argv.includes('--notifications');
+const names = ['identity', 'organization', 'asset', 'maintenance', 'workorder', 'service-request', ...(withNotifications ? ['notification'] : [])];
 const urls = Object.fromEntries(names.map(name => [name, requireTestDatabaseUrl(name.replaceAll('-', '_').toUpperCase() + '_TEST_DATABASE_URL')]));
 const broker = process.env.RABBITMQ_TEST_URL || process.env.RABBITMQ_URL;
 assert.ok(broker, 'Configure a test broker for Maintenance fixture');
@@ -23,10 +24,10 @@ for (const name of names) process.env[name.replaceAll('-', '_').toUpperCase() + 
 const apps = {}, db = {}, ports = {}, relays = [];
 const tenants = [randomUUID(), randomUUID()], suffix = randomUUID().slice(0, 8);
 const password = 'M01-' + randomBytes(18).toString('hex') + '!aA1';
-const exchange = 'pbl6.test.mobile-stage01.' + randomUUID();
+const exchange = `pbl6.test.mobile-stage${withNotifications ? '02' : '01'}.` + randomUUID();
 const queues = [];
 let bus;
-const runtime = path.resolve(process.env.MOBILE_STAGE01_RUNTIME || '/tmp/pbl6-mobile-stage01-runtime.json');
+const runtime = path.resolve(process.env.MOBILE_STAGE01_RUNTIME || `/tmp/pbl6-mobile-stage${withNotifications ? '02' : '01'}-runtime.json`);
 if (fs.existsSync(runtime)) {
   const previous = JSON.parse(fs.readFileSync(runtime, 'utf8'));
   if (previous.status === 'READY' && Number.isInteger(previous.pid)) {
@@ -92,7 +93,15 @@ async function main() {
   subscribe('maintenance-due', [Events.MaintenanceTaskDueV2, Events.MaintenanceWorkOrderReplacementRequestedV2], e => woConsumer.handle(e));
   subscribe('maintenance-results', [Events.WorkOrderCreated, Events.WorkOrderCompletedV2, Events.WorkOrderCancelledV2], e => maintConsumer.handle(e));
   subscribe('request-results', [Events.WorkOrderCreated, Events.WorkOrderCompletedV2, Events.WorkOrderCancelledV2], e => srConsumer.handle(e));
-  await bus.start(); for (const name of ['maintenance', 'workorder', 'service-request']) relay(name);
+  if (withNotifications) {
+    const { NotificationEventsService, NOTIFICATION_BUSINESS_EVENTS } = req('notification')('./dist/events/notification-events.service.js');
+    const { RecipientProjectionService } = req('notification')('./dist/events/recipient-projection.service.js');
+    const processor = apps.notification.get(NotificationEventsService), recipients = apps.notification.get(RecipientProjectionService);
+    subscribe('notification-business', NOTIFICATION_BUSINESS_EVENTS, e => processor.handle(e));
+    subscribe('notification-recipients', [Events.NotificationRecipientSnapshot], e => recipients.applySnapshot(e));
+    subscribe('notification-bootstrap', [Events.NotificationRecipientBootstrapCompleted], e => recipients.applyBootstrapCompleted(e));
+  }
+  await bus.start(); for (const name of ['maintenance', 'workorder', 'service-request', ...(withNotifications ? ['identity', 'asset'] : [])]) relay(name);
   const A = '/api/assets', W = '/api/workorders', S = '/api';
   const fixtures = [];
   for (const [index, tenantId] of tenants.entries()) {
@@ -120,6 +129,10 @@ async function main() {
   const secondTech = await call('POST', W + '/technicians', a.manager.token, { userId: second.id, branchId: (await call('GET', '/api/organization/branches?page=1&pageSize=1', a.manager.token)).items[0].id, employeeCode: 'TECH-02' }, 201);
   manifest.tenants[0].alternateTechnician = second.email;
   manifest.tenants[0].otherCustomer = outsider.email;
+  if (withNotifications) {
+    for (const tenantId of tenants) execFileSync('pnpm', ['--filter', 'identity-service', 'recipient:bootstrap', tenantId], { cwd: root, env: process.env, stdio: 'inherit' });
+    await eventually(async () => (await db.notification.recipientBootstrapRun.count({ where: { tenantId: { in: tenants }, status: 'COMPLETED' } })) === 2);
+  }
   async function order(f, label, actions = [], technician = f.technician) {
     const sr = await call('POST', S + '/service-requests', f.customerUser.token, { equipmentId: f.equipment.id, type: 'REPAIR', priority: 'NORMAL', title: 'M01 ' + label, description: 'Mobile phase 0/1 acceptance' }, 201);
     for (const action of ['review', 'accept']) await call('POST', S + `/service-requests/${sr.id}/${action}`, f.manager.token, {});
@@ -156,6 +169,27 @@ async function main() {
   const checklist = await call('GET', W + `/work-orders/${maintenance.id}/checklist`, a.tech.token);
   assert.equal(checklist.items[0].id, item.id);
   manifest.orders.maintenance = { id: maintenance.id, number: maintenance.workOrderNo };
+  if (withNotifications) {
+    for (let i = 0; i < 14; i++) await order(a, 'pagination-' + i);
+    await eventually(async () => (await call('GET', '/api/notifications/unread-count', a.tech.token)).unreadCount === 22);
+    const inbox = await call('GET', '/api/notifications?page=1&pageSize=20&readStatus=UNREAD', a.tech.token);
+    assert.equal(inbox.total, 22); assert.equal(inbox.items.length, 20);
+    const next = await call('GET', '/api/notifications?page=2&pageSize=20&readStatus=UNREAD', a.tech.token);
+    assert.equal(next.items.length, 2);
+    assert.ok(next.items.every(n => !inbox.items.some(item => n.id === item.id)));
+    const notice = [...inbox.items, ...next.items].find(n => n.resourceId === manifest.orders.completed.id);
+    assert.ok(notice);
+    await call('PATCH', `/api/notifications/${notice.id}/read`, b.tech.token, undefined, 404);
+    await call('PATCH', `/api/notifications/${notice.id}/read`, second.token, undefined, 404);
+    const read = await call('PATCH', `/api/notifications/${notice.id}/read`, a.tech.token);
+    const again = await call('PATCH', `/api/notifications/${notice.id}/read`, a.tech.token);
+    assert.equal(read.readAt, again.readAt);
+    assert.equal((await call('GET', '/api/notifications/unread-count', a.tech.token)).unreadCount, 21);
+    assert.equal((await call('GET', '/api/notifications?readStatus=READ', a.tech.token)).total, 1);
+    await call('GET', `/api/notifications?tenantId=${b.tenantId}`, a.tech.token, undefined, 400);
+    manifest.notifications = { unreadCount: 21, total: 22, pagination: true, ownReadIdempotent: true, sameTenantOtherUser404: true, crossTenant404: true, identityBootstrap: 'COMPLETED' };
+    console.log('PASS Notification: real Identity bootstrap/outbox/broker fan-out; 22 rows, pagination, filters, idempotent mark-read, exact count, same-tenant user and cross-tenant isolation.');
+  }
   await call('GET', A + `/equipment/${a.equipment.id}`, b.tech.token, undefined, 404);
   await call('GET', A + `/equipment/${a.equipment.id}`, outsider.token, undefined, 404);
   await call('GET', W + `/work-orders/${hidden.id}`, a.tech.token, undefined, 404);

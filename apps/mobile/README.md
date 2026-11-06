@@ -1,5 +1,19 @@
 # PBL6 Technician — Flutter Android
 
+**Giai đoạn 2 — Notification:** nút chuông đã nối hộp thư thật qua Gateway,
+badge lấy tổng chưa đọc từ server, có phân trang/bộ lọc và đánh dấu đã đọc.
+Mở thông báo tự đánh dấu đã đọc; nút Xem công việc kiểm tra quyền bằng API WO
+mới trước khi điều hướng. Hộp thư không biến ID của SR/Equipment/Stock thành WO.
+Khi lỗi mạng/403, app báo chưa đọc được dữ liệu, không coi là hộp thư rỗng.
+
+Số chưa đọc cập nhật khi mở app/hộp thư, kéo tải lại, đánh dấu đã đọc, trở về
+foreground và mỗi 30 giây lúc app ở foreground. Polling dừng khi về nền hoặc
+đăng xuất; thay đổi số chưa đọc làm mới danh sách đang mở. Đây là thông báo
+in-app, chưa phải FCM/system push khi app đóng. Cần Notification Service đã
+nhận Identity recipient snapshot/bootstrap; quyền `notification:read` tiếp
+tục được backend kiểm tra. Cách dựng fixture và nghiệm thu:
+[mobile giai đoạn 2](../../docs/testing/mobile-stage-2.md).
+
 Mobile dành cho Technician. Đã có nền tảng/session P0: đăng nhập Identity thật,
 lưu token mã hóa, khôi phục phiên, refresh tuần tự, kiểm tra profile và đăng
 xuất. Giao diện 5 tab và các màn hình nghiệp vụ theo
