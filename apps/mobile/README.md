@@ -11,6 +11,34 @@ ghi chú, Service Report và complete. Có bảo vệ form, chống gửi lặp 
 khi mất phản hồi. Xem [N5 và nghiệm thu Android N6](../../docs/testing/mobile-n5-n6.md).
 Luồng 9/9 toàn nhóm còn bước web tạo/phân công WO chờ Hatsady; M3 còn TODO.
 
+**Giai đoạn 0–1 (07/11/2026):** đã bổ sung fixture nghiệm thu với hai tenant,
+checklist giữ nội dung khi chuyển tab/rời màn hình và bản nháp checklist/report
+được lưu mã hóa trên Android. Nháp và thông tin đối soát khôi phục sau khi app
+bị tắt; phân công cũ chỉ được xem lại. Mutation chưa rõ kết quả không tự gửi lại.
+Phạm vi, ma trận kiểm thử và các phần còn lại:
+[nghiệm thu mobile giai đoạn 0–1](../../docs/testing/mobile-stage-0-1.md).
+
+Entry point chính cung cấp `SecureWorkspaceStore`, tách khóa theo Gateway
+origin/tenant/user/WO, dùng cùng namespace và adapter flush với session. Nháp
+tự lưu sau 250 ms và khi app về nền; lựa chọn lưu nháp trước khi rời chờ ghi
+xong. Logout giữ nháp mã hóa để đúng tài khoản có thể tiếp tục sau khi đăng
+nhập lại; tài khoản khác không được đọc qua workspace của mình. Xóa dữ liệu app
+sẽ xóa nháp. Chỉ draft và thông tin đối soát được lưu; không có hàng đợi mutation
+tự đồng bộ khi có mạng.
+
+Tạo fixture từ repository root sau khi cấu hình các `*_TEST_DATABASE_URL` và
+broker local theo [hướng dẫn](../../docs/testing/mobile-stage-0-1.md#chạy-lại-fixture-và-nghiệm-thu-android):
+
+```bash
+node apps/mobile/tool/stage01_fixture.cjs
+# Hoặc giữ Gateway test chạy cho emulator:
+node apps/mobile/tool/stage01_fixture.cjs --serve
+```
+
+Manifest chứa tài khoản test ngẫu nhiên chỉ nằm trong `/tmp`, quyền `0600`.
+Không đưa manifest này vào Git. Tool Android yêu cầu emulator dùng riêng và
+cờ `--reset-test-app` vì cần xóa dữ liệu app test để bắt đầu luồng nghiệm thu.
+
 ## Xem giao diện không cần backend
 
 Từ `apps/mobile`, khi emulator đã chạy:

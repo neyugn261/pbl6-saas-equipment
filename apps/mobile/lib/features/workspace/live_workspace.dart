@@ -12,11 +12,13 @@ import 'equipment_reads.dart';
 import 'job_reads.dart';
 import 'read_widgets.dart';
 import 'workspace_repository.dart';
+import 'workspace_store.dart';
 
 /// Authenticated workspace. Preview fixtures are never used on this route.
 class LiveWorkspace extends StatefulWidget {
-  const LiveWorkspace({super.key, required this.session});
+  const LiveWorkspace({super.key, required this.session, this.store});
   final SessionController session;
+  final WorkspaceStore? store;
   @override
   State<LiveWorkspace> createState() => _LiveWorkspaceState();
 }
@@ -45,6 +47,7 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
     repo = WorkspaceRepository(
       (path) => request('GET', path),
       user,
+      store: widget.store,
       write: (path, body) => request('POST', path, body: body),
       attachments: AttachmentClient(
         api: (method, path, {body, idempotencyKey}) {

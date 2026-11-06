@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../ui/components.dart';
@@ -6,6 +8,7 @@ import 'read_widgets.dart';
 import 'command_dialog.dart';
 import 'work_order_workflow.dart';
 import 'workspace_repository.dart';
+import '../../core/api/api_exception.dart';
 
 class LiveReportForm extends StatefulWidget {
   const LiveReportForm({super.key, required this.workflow});
@@ -14,13 +17,17 @@ class LiveReportForm extends StatefulWidget {
   State<LiveReportForm> createState() => _LiveReportFormState();
 }
 
-class _LiveReportFormState extends State<LiveReportForm> {
+class _LiveReportFormState extends State<LiveReportForm>
+    with WidgetsBindingObserver {
   final _form = GlobalKey<FormState>();
   final _problem = TextEditingController(),
       _cause = TextEditingController(),
       _solution = TextEditingController(),
       _summary = TextEditingController();
-  late final Object? _assignmentId;
+  Object? _assignmentId;
+  Timer? _autosave;
+  bool _ready = false, _discarded = false, _draftTouched = false;
+  String? _draftNotice, _draftError;
   int _step = 0;
   String _result = 'RESOLVED';
   bool _observedDirty = false;
@@ -38,13 +45,112 @@ class _LiveReportFormState extends State<LiveReportForm> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     for (final c in [_problem, _cause, _solution, _summary]) {
       c.addListener(_onEdit);
     }
     _assignmentId = nested(flow.order!.data, 'currentAssignment')['id'];
+    unawaited(_restoreDraft());
+  }
+
+  Future<void> _restoreDraft() async {
+    try {
+      final draft = await flow.repo.records.get(flow.id, 'reportDraft');
+      if (!mounted) return;
+      if (draft != null) {
+        _draftTouched = true;
+        final body = object(draft['body']);
+        if (draft['assignmentId'] is! String ||
+            ![
+              'RESOLVED',
+              'PARTIALLY_RESOLVED',
+              'UNRESOLVED',
+            ].contains(body['result'])) {
+          throw const ApiException('WORKSPACE_STORAGE_FAILED');
+        }
+        _assignmentId = draft['assignmentId'];
+        _problem.text = body['problemDescription'] as String;
+        _cause.text = body['rootCause'] as String;
+        _solution.text = body['solution'] as String;
+        _summary.text = body['customerSummary'] as String;
+        _result = body['result'] as String;
+        _step = (draft['step'] as int).clamp(0, 2);
+        _observedDirty = _dirty;
+        _draftNotice =
+            'Đã khôi phục bản nháp trên máy. Chưa gửi báo cáo lên máy chủ.';
+      }
+      setState(() {
+        _ready = true;
+        _draftError = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () =>
+              _draftError = const ApiException('WORKSPACE_STORAGE_FAILED')
+                  .userMessage,
+        );
+      }
+    }
+  }
+
+  Future<void> _persistDraft() async {
+    _autosave?.cancel();
+    if (!_ready || _submitted || _discarded || !_draftTouched) return;
+    if (!_dirty) {
+      await flow.repo.records.put(flow.id, 'reportDraft', null);
+      return;
+    }
+    final snapshot = <String, dynamic>{
+      'assignmentId': _assignmentId,
+      'step': _step,
+      'body': {
+        'problemDescription': _problem.text,
+        'rootCause': _cause.text,
+        'solution': _solution.text,
+        'customerSummary': _summary.text,
+        'result': _result,
+      },
+    };
+    await flow.repo.records.put(flow.id, 'reportDraft', snapshot);
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      await _persistDraft();
+      if (mounted) {
+        setState(() {
+          _draftError = null;
+          _draftNotice = 'Đã lưu nháp trên máy; chưa gửi lên máy chủ.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () =>
+              _draftError = const ApiException('WORKSPACE_STORAGE_FAILED')
+                  .userMessage,
+        );
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      unawaited(_saveDraft());
+    }
   }
 
   void _onEdit() {
+    if (!_ready) return;
+    _draftTouched = true;
+    _autosave?.cancel();
+    _autosave = Timer(
+      const Duration(milliseconds: 250),
+      () => unawaited(_saveDraft()),
+    );
     final dirty = _dirty;
     if (mounted && dirty != _observedDirty) {
       setState(() => _observedDirty = dirty);
@@ -53,6 +159,12 @@ class _LiveReportFormState extends State<LiveReportForm> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autosave?.cancel();
+    // Capture the last keystroke before disposing controllers, even if the OS
+    // removes the route without a user navigation callback.
+    final save = _persistDraft();
+    unawaited(save.catchError((Object _) {}));
     for (final c in [_problem, _cause, _solution, _summary]) {
       c.dispose();
     }
@@ -75,28 +187,52 @@ class _LiveReportFormState extends State<LiveReportForm> {
     }
     _leaving = true;
     try {
-      final leave = await showDialog<bool>(
+      final leave = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Rời báo cáo đang nhập?'),
           content: Text(
             flow.uncertain
-                ? 'Kết quả gửi chưa được xác định. Nội dung đang nhập sẽ mất khi rời; ứng dụng vẫn khóa gửi lại và kiểm tra máy chủ khi mở lại công việc.'
-                : 'Báo cáo chưa gửi. Nội dung đang nhập sẽ mất khi rời màn hình.',
+                ? 'Kết quả gửi chưa được xác định. Bản nháp và thông tin đối soát được giữ trên máy; không tự gửi lại.'
+                : 'Lưu nháp trên máy để tiếp tục sau hoặc bỏ bản nháp này.',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context),
               child: const Text('Tiếp tục nhập'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(context, 'save'),
               child: const Text('Rời báo cáo'),
             ),
+            if (!flow.uncertain)
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'discard'),
+                child: const Text('Bỏ bản nháp'),
+              ),
           ],
         ),
       );
-      if (mounted && leave == true) {
+      if (!mounted || leave == null) return;
+      try {
+        if (leave == 'discard') {
+          _autosave?.cancel();
+          await flow.repo.records.put(flow.id, 'reportDraft', null);
+          _discarded = true;
+        } else {
+          await _persistDraft();
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(
+            () =>
+                _draftError = const ApiException('WORKSPACE_STORAGE_FAILED')
+                    .userMessage,
+          );
+        }
+        return;
+      }
+      if (mounted) {
         setState(() => _allowExit = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) Navigator.pop(context, false);
@@ -108,6 +244,7 @@ class _LiveReportFormState extends State<LiveReportForm> {
   }
 
   void _next() {
+    if (!_ready) return;
     if (!_form.currentState!.validate()) return;
     setState(() {
       if (_step < 2) {
@@ -116,26 +253,55 @@ class _LiveReportFormState extends State<LiveReportForm> {
         _preview = true;
       }
     });
+    unawaited(_saveDraft());
   }
 
   Future<void> _submit() async {
-    if (!_sameAssignment || !flow.can('complete')) return;
+    if (!_ready || !_sameAssignment || !flow.can('complete')) return;
+    try {
+      await _persistDraft();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () =>
+              _draftError = const ApiException('WORKSPACE_STORAGE_FAILED')
+                  .userMessage,
+        );
+      }
+      return;
+    }
     final success = await flow.execute('complete', body: _body);
     if (mounted && success) {
+      _autosave?.cancel();
       setState(() {
         _submitted = true;
         _allowExit = true;
       });
+      await _clearSubmittedDraft();
     }
   }
 
   Future<void> _check() async {
     final success = await flow.checkOutcome();
     if (mounted && success && flow.order?.status == 'COMPLETED') {
+      _autosave?.cancel();
       setState(() {
         _submitted = true;
         _allowExit = true;
       });
+      await _clearSubmittedDraft();
+    }
+  }
+
+  Future<void> _clearSubmittedDraft() async {
+    try {
+      await flow.repo.records.put(flow.id, 'reportDraft', null);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _draftError = 'Báo cáo đã được máy chủ ghi nhận; chưa dọn được bản nháp cục bộ. Không gửi lại.',
+        );
+      }
     }
   }
 
@@ -169,6 +335,7 @@ class _LiveReportFormState extends State<LiveReportForm> {
                   const Notice(
                     'Máy chủ đã ghi nhận báo cáo và công việc đã hoàn thành.',
                   ),
+                  if (_draftError != null) Notice(_draftError!),
                   DataCard(
                     flow.order!.number,
                     fields: {
@@ -197,6 +364,14 @@ class _LiveReportFormState extends State<LiveReportForm> {
                     subtitle: 'Chẩn đoán nội bộ và tóm tắt cho khách hàng được lưu riêng.',
                   ),
                   if (flow.notice != null) Notice(flow.notice!),
+                  if (_draftNotice != null && !_preview) Text(_draftNotice!),
+                  if (_draftError != null) Notice(_draftError!),
+                  if (!_ready)
+                    TextButton(
+                      onPressed: _restoreDraft,
+                      child: const Text('Thử lại đọc bản nháp'),
+                    ),
+                  if (!_ready) const LinearProgressIndicator(),
                   if (!_sameAssignment)
                     const Notice(
                       'Phân công đã thay đổi. Giữ lại bản đang nhập để đối chiếu; không gửi báo cáo cho phân công mới.',
@@ -309,9 +484,17 @@ class _LiveReportFormState extends State<LiveReportForm> {
                                     child: Text(label(r)),
                                   ),
                               ],
-                              onChanged: flow.busy || flow.uncertain
+                              onChanged:
+                                  !_ready ||
+                                      !_sameAssignment ||
+                                      (flow.order?.terminal ?? true) ||
+                                      flow.busy ||
+                                      flow.uncertain
                                   ? null
-                                  : (v) => setState(() => _result = v!),
+                                  : (v) {
+                                      setState(() => _result = v!);
+                                      _onEdit();
+                                    },
                             ),
                             const SizedBox(height: 16),
                             _field(
@@ -342,7 +525,12 @@ class _LiveReportFormState extends State<LiveReportForm> {
   }) => TextFormField(
     key: Key(key),
     controller: controller,
-    enabled: !flow.busy && !flow.uncertain,
+    enabled:
+        _ready &&
+        _sameAssignment &&
+        !(flow.order?.terminal ?? true) &&
+        !flow.busy &&
+        !flow.uncertain,
     minLines: 4,
     maxLines: 8,
     maxLength: limit,
@@ -391,7 +579,7 @@ class _LiveReportFormState extends State<LiveReportForm> {
                   )
                 : FilledButton(
                     key: Key(_preview ? 'report-submit' : 'report-next'),
-                    onPressed: flow.busy
+                    onPressed: flow.busy || !_ready
                         ? null
                         : _preview
                         ? (_sameAssignment && flow.can('complete')

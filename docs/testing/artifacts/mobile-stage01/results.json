@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "baseCommit": "b5f182b110224ca9b865e05bbd943eb5acd00005",
+  "testedApkSha256": "798a30a2959a9c147b24f54171fbb39ed7402aecec08c26839b25826ffb2d894",
+  "device": "emulator-5556",
+  "cases": [
+    "real Identity login",
+    "checklist draft restored after Android force-stop",
+    "required checklist saved",
+    "report draft restored after Android force-stop",
+    "report completed and verified through Gateway"
+  ],
+  "screenshots": [
+    "checklist-restored.png",
+    "report-restored.png",
+    "report-completed.png"
+  ]
+}

@@ -6,6 +6,7 @@ import 'core/api/gateway_client.dart';
 import 'features/session/session_app.dart';
 import 'features/session/session_controller.dart';
 import 'features/session/session_store.dart';
+import 'features/workspace/workspace_store.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,7 +16,17 @@ void main() {
       GatewayClient(config),
       SecureSessionStore(scope: config.baseUrl.origin),
     );
-    runApp(TechnicianApp(session: session, disposeSession: true));
+    runApp(
+      TechnicianApp(
+        session: session,
+        disposeSession: true,
+        workspaceStore: (user) => SecureWorkspaceStore(
+          origin: config.baseUrl.origin,
+          tenantId: user.tenantId,
+          userId: user.id,
+        ),
+      ),
+    );
   } on FormatException {
     runApp(
       const MaterialApp(
