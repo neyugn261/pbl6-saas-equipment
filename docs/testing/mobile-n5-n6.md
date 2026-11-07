@@ -1,5 +1,10 @@
 # Mobile N5 và nghiệm thu N6 phía Android
 
+> Cập nhật 07/11/2026: đây là bằng chứng lịch sử của N5/N6. Nháp và marker
+> đối soát hiện đã lưu bền vững, tách theo môi trường/tài khoản; xem
+> [mobile giai đoạn 0–1](mobile-stage-0-1.md). Các đoạn bên dưới mô tả giới hạn
+> lưu trong session ở thời điểm 29/10, không còn là giới hạn của bản mới.
+
 Ngày 29/10/2026, nhánh `feature/khuong-mobile-session`. Phạm vi đã thống nhất:
 hoàn thành mobile; web tạo/phân công WO bàn giao Hatsady. Không thay backend,
 OpenAPI, event, migration hay quyền. Không đánh dấu toàn nhóm đã chốt M2.

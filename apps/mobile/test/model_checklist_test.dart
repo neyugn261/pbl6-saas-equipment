@@ -5,6 +5,21 @@ import 'package:pbl6_technician/features/session/session_models.dart';
 import 'package:pbl6_technician/features/workspace/checklist_panel.dart';
 import 'package:pbl6_technician/features/workspace/workspace_repository.dart';
 
+import 'support/workspace_fixture.dart' show workOrder;
+
+Future<Object?> readChecklist(String path, {bool editable = true}) async =>
+    path.endsWith('/checklist')
+    ? data(editable: editable)
+    : {
+        ...workOrder(),
+        'currentAssignment': {
+          'id': 'assignment',
+          'technicianUserId': 'tech',
+          'technicianId': 'profile',
+          'status': 'ACCEPTED',
+        },
+      };
+
 const user = SessionUser(
   id: 'tech',
   tenantId: 'tenant',
@@ -40,7 +55,7 @@ void main() {
       var posts = 0;
       Json? sent;
       final repo = WorkspaceRepository(
-        (_) async => data(),
+        readChecklist,
         user,
         write: (path, body) async {
           posts++;
@@ -75,7 +90,10 @@ void main() {
   testWidgets('server edit permission disables controls and hides save', (
     tester,
   ) async {
-    final repo = WorkspaceRepository((_) async => data(editable: false), user);
+    final repo = WorkspaceRepository(
+      (path) => readChecklist(path, editable: false),
+      user,
+    );
     await tester.pumpWidget(app(repo));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('checklist-save')), findsNothing);

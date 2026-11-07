@@ -14,6 +14,8 @@ import 'service_report_read.dart';
 export 'service_report_read.dart';
 import 'read_widgets.dart';
 import 'workspace_repository.dart';
+import 'report_form.dart';
+import 'job_parts.dart';
 
 class JobReadScreen extends StatefulWidget {
   const JobReadScreen({super.key, required this.repo, required this.id});
@@ -26,6 +28,9 @@ class JobReadScreen extends StatefulWidget {
 class _JobReadScreenState extends State<JobReadScreen>
     with WidgetsBindingObserver {
   int _tab = 0;
+  bool _checklistVisited = false, _allowExit = false, _leaving = false;
+  final _checklist = GlobalKey<ChecklistPanelState>();
+  Json? _reportDraft;
   late final WorkOrderWorkflow workflow;
   int get _revision => workflow.revision;
   WorkspaceRepository get repo => widget.repo;
@@ -35,7 +40,7 @@ class _JobReadScreenState extends State<JobReadScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     workflow = WorkOrderWorkflow(repo, widget.id);
-    unawaited(workflow.load());
+    unawaited(_refresh());
   }
 
   @override
@@ -48,16 +53,75 @@ class _JobReadScreenState extends State<JobReadScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
-      unawaited(workflow.load());
+      unawaited(_refresh());
     }
   }
 
-  Future<void> _refresh() => workflow.load();
+  Future<void> _refresh() async {
+    await workflow.load();
+    try {
+      final draft = await repo.records.get(widget.id, 'reportDraft');
+      if (!mounted) return;
+      setState(() {
+        _reportDraft = draft;
+        if (repo.pendingChecklists.containsKey(widget.id)) {
+          _tab = 5;
+          _checklistVisited = true;
+        }
+      });
+    } catch (_) {
+      /* Workflow/store errors remain visible and cannot enable a mutation. */
+    }
+  }
+
+  Future<void> _leave() async {
+    if (_leaving || workflow.busy || (_checklist.currentState?.busy ?? false)) {
+      return;
+    }
+    _leaving = true;
+    try {
+      if (!await (_checklist.currentState?.prepareLeave() ??
+              Future.value(true)) ||
+          !mounted) {
+        return;
+      }
+      setState(() => _allowExit = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context);
+      });
+    } finally {
+      _leaving = false;
+    }
+  }
+
+  Future<void> _openDraft() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => LiveReportForm(workflow: workflow)),
+    );
+    if (mounted) await _refresh();
+  }
+
+  void _select(int tab) {
+    if (_checklist.currentState?.busy ?? false) return;
+    setState(() {
+      _tab = tab;
+      if (tab == 5) _checklistVisited = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: workflow,
     builder: (context, _) => PopScope(
-      canPop: !workflow.busy,
+      canPop:
+          !workflow.busy &&
+          !(_checklist.currentState?.busy ?? false) &&
+          (_allowExit ||
+              !(_checklist.currentState?.dirty ?? false) &&
+                  !(_checklist.currentState?.pending ?? false)),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_leave());
+      },
       child: ReadPage(
         title: 'Chi tiết công việc',
         actions: [
@@ -69,7 +133,13 @@ class _JobReadScreenState extends State<JobReadScreen>
         ],
         bottom: WorkOrderActionBar(
           workflow: workflow,
-          onReportClosed: () => setState(() => _tab = 2),
+          checklistBlocked:
+              (_checklist.currentState?.dirty ?? false) ||
+              (_checklist.currentState?.busy ?? false),
+          onReportClosed: () {
+            _select(2);
+            unawaited(_refresh());
+          },
         ),
         child: ReadList(
           refresh: _refresh,
@@ -107,9 +177,15 @@ class _JobReadScreenState extends State<JobReadScreen>
       ),
       if (w.data['policyVersionId'] != null && _tab != 5)
         OutlinedButton.icon(
-          onPressed: () => setState(() => _tab = 5),
+          onPressed: () => _select(5),
           icon: const Icon(Icons.checklist),
           label: const Text('Thực hiện checklist'),
+        ),
+      if (_reportDraft != null)
+        OutlinedButton(
+          key: const Key('report-draft-open'),
+          onPressed: workflow.busy ? null : _openDraft,
+          child: const Text('Mở bản nháp báo cáo'),
         ),
       const SizedBox(height: 20),
       ChoicePills(
@@ -122,7 +198,7 @@ class _JobReadScreenState extends State<JobReadScreen>
           'Checklist',
         ],
         selected: _tab,
-        onSelected: (i) => setState(() => _tab = i),
+        onSelected: _select,
       ),
       const SizedBox(height: 20),
       if (_tab == 0) ..._overview(w),
@@ -144,17 +220,21 @@ class _JobReadScreenState extends State<JobReadScreen>
           canUploadWorkOrder: !w.terminal && w.currentFor(repo.user.id),
           reportCompleted: w.status == 'COMPLETED',
         ),
-      if (_tab == 5)
-        ChecklistPanel(
-          key: ValueKey(w.id),
-          repo: repo,
-          orderId: w.id,
-          onSaved: () => unawaited(workflow.load()),
+      if (_checklistVisited)
+        Offstage(
+          offstage: _tab != 5,
+          child: ChecklistPanel(
+            key: _checklist,
+            repo: repo,
+            orderId: w.id,
+            order: w,
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+            onSaved: () => unawaited(workflow.load()),
+          ),
         ),
-      if (_tab == 4)
-        const Notice(
-          'Phụ tùng chờ Inventory M3. Chưa có dữ liệu xuất kho thật.',
-        ),
+      if (_tab == 4) JobParts(repo: repo, orderId: w.id, revision: _revision),
       const SizedBox(height: 20),
       if (w.terminal)
         const Notice('Công việc đã kết thúc. Chỉ xem dữ liệu và báo cáo.')

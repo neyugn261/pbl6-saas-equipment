@@ -1,5 +1,29 @@
 # PBL6 Technician — Flutter Android
 
+**Giai đoạn 3 — phụ tùng chỉ đọc:** tab Phụ tùng trong WO đã nối Inventory thật.
+Hiển thị tên/mã/đơn vị và kho tại lúc cấp, số đã cấp, đã trả, đã xác nhận dùng,
+chưa đối soát, lịch sử trả kho và đính chính xác nhận. Số lượng giữ dạng decimal
+string; số chưa trả không bị coi là đã sử dụng. Dữ liệu lịch sử thiếu thông tin
+được ghi rõ, không thay bằng tên hiện tại hoặc tự giả định số lượng bằng 0.
+Có tìm theo mã/tên/kho, lọc chưa đối soát, loading/empty/error/retry và tải lại
+khi về foreground. Chỉ dùng GET của WO trong scope; không có thao tác cấp/trả,
+chỉnh tồn hoặc xác nhận sử dụng trong phần mobile chỉ đọc này.
+[Nghiệm thu và bằng chứng giai đoạn 3](../../docs/testing/mobile-stage-3.md).
+
+**Giai đoạn 2 — Notification:** nút chuông đã nối hộp thư thật qua Gateway,
+badge lấy tổng chưa đọc từ server, có phân trang/bộ lọc và đánh dấu đã đọc.
+Mở thông báo tự đánh dấu đã đọc; nút Xem công việc kiểm tra quyền bằng API WO
+mới trước khi điều hướng. Hộp thư không biến ID của SR/Equipment/Stock thành WO.
+Khi lỗi mạng/403, app báo chưa đọc được dữ liệu, không coi là hộp thư rỗng.
+
+Số chưa đọc cập nhật khi mở app/hộp thư, kéo tải lại, đánh dấu đã đọc, trở về
+foreground và mỗi 30 giây lúc app ở foreground. Polling dừng khi về nền hoặc
+đăng xuất; thay đổi số chưa đọc làm mới danh sách đang mở. Đây là thông báo
+in-app, chưa phải FCM/system push khi app đóng. Cần Notification Service đã
+nhận Identity recipient snapshot/bootstrap; quyền `notification:read` tiếp
+tục được backend kiểm tra. Cách dựng fixture và nghiệm thu:
+[mobile giai đoạn 2](../../docs/testing/mobile-stage-2.md).
+
 Mobile dành cho Technician. Đã có nền tảng/session P0: đăng nhập Identity thật,
 lưu token mã hóa, khôi phục phiên, refresh tuần tự, kiểm tra profile và đăng
 xuất. Giao diện 5 tab và các màn hình nghiệp vụ theo
@@ -10,6 +34,34 @@ Technician. Đã nối thao tác N5 thật: accept/reject/travel/start/hold/resu
 ghi chú, Service Report và complete. Có bảo vệ form, chống gửi lặp và đối soát
 khi mất phản hồi. Xem [N5 và nghiệm thu Android N6](../../docs/testing/mobile-n5-n6.md).
 Luồng 9/9 toàn nhóm còn bước web tạo/phân công WO chờ Hatsady; M3 còn TODO.
+
+**Giai đoạn 0–1 (07/11/2026):** đã bổ sung fixture nghiệm thu với hai tenant,
+checklist giữ nội dung khi chuyển tab/rời màn hình và bản nháp checklist/report
+được lưu mã hóa trên Android. Nháp và thông tin đối soát khôi phục sau khi app
+bị tắt; phân công cũ chỉ được xem lại. Mutation chưa rõ kết quả không tự gửi lại.
+Phạm vi, ma trận kiểm thử và các phần còn lại:
+[nghiệm thu mobile giai đoạn 0–1](../../docs/testing/mobile-stage-0-1.md).
+
+Entry point chính cung cấp `SecureWorkspaceStore`, tách khóa theo Gateway
+origin/tenant/user/WO, dùng cùng namespace và adapter flush với session. Nháp
+tự lưu sau 250 ms và khi app về nền; lựa chọn lưu nháp trước khi rời chờ ghi
+xong. Logout giữ nháp mã hóa để đúng tài khoản có thể tiếp tục sau khi đăng
+nhập lại; tài khoản khác không được đọc qua workspace của mình. Xóa dữ liệu app
+sẽ xóa nháp. Chỉ draft và thông tin đối soát được lưu; không có hàng đợi mutation
+tự đồng bộ khi có mạng.
+
+Tạo fixture từ repository root sau khi cấu hình các `*_TEST_DATABASE_URL` và
+broker local theo [hướng dẫn](../../docs/testing/mobile-stage-0-1.md#chạy-lại-fixture-và-nghiệm-thu-android):
+
+```bash
+node apps/mobile/tool/stage01_fixture.cjs
+# Hoặc giữ Gateway test chạy cho emulator:
+node apps/mobile/tool/stage01_fixture.cjs --serve
+```
+
+Manifest chứa tài khoản test ngẫu nhiên chỉ nằm trong `/tmp`, quyền `0600`.
+Không đưa manifest này vào Git. Tool Android yêu cầu emulator dùng riêng và
+cờ `--reset-test-app` vì cần xóa dữ liệu app test để bắt đầu luồng nghiệm thu.
 
 ## Xem giao diện không cần backend
 

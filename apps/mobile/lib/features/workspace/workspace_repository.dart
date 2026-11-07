@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../../core/api/api_exception.dart';
 import '../session/session_models.dart';
 import 'attachment_client.dart';
+import 'workspace_store.dart';
+import 'part_usage.dart';
 
 typedef Json = Map<String, dynamic>;
 typedef GatewayRead = Future<Object?> Function(String path);
@@ -203,9 +205,15 @@ class Equipment {
       text(data, 'displayName', text(nested(data, 'model'), 'name', code));
 }
 
-/// Session-local uncertainty marker. Never an offline queue and never replayed.
+/// Durable uncertainty receipt. Never an offline queue and never replayed.
 class PendingWorkOrderCommand {
-  PendingWorkOrderCommand(this.action, this.body, this.before);
+  PendingWorkOrderCommand(
+    this.action,
+    this.body,
+    this.before, {
+    String? operationId,
+  }) : operationId = operationId ?? localOperationId();
+  final String operationId;
   final String action;
   final Json body;
   final WorkOrder before;
@@ -213,6 +221,54 @@ class PendingWorkOrderCommand {
   final beforeHistoryIds = <String>{};
   bool attempted = false;
   bool inFlight = true;
+  Json toJson() => {
+    'operationId': operationId,
+    'action': action,
+    'body': body,
+    'before': {
+      for (final key in [
+        'id',
+        'workOrderNo',
+        'title',
+        'equipmentId',
+        'status',
+        'updatedAt',
+        'currentAssignment',
+      ])
+        key: before.data[key],
+    },
+    'beforeLogIds': beforeLogIds.toList(),
+    'beforeHistoryIds': beforeHistoryIds.toList(),
+  };
+  factory PendingWorkOrderCommand.fromJson(Json data) {
+    final action = jsonString(data, 'action');
+    if (![
+      'accept',
+      'reject',
+      'start-travel',
+      'start',
+      'hold',
+      'resume',
+      'complete',
+      'logs',
+    ].contains(action)) {
+      throw const ApiException('WORKSPACE_STORAGE_FAILED');
+    }
+    final result =
+        PendingWorkOrderCommand(
+            action,
+            object(data['body']),
+            WorkOrder(object(data['before'])),
+            operationId: jsonString(data, 'operationId'),
+          )
+          ..attempted = true
+          ..inFlight = false;
+    result.beforeLogIds.addAll((data['beforeLogIds'] as List).cast<String>());
+    result.beforeHistoryIds.addAll(
+      (data['beforeHistoryIds'] as List).cast<String>(),
+    );
+    return result;
+  }
 }
 
 class PersonalWork {
@@ -227,16 +283,74 @@ class PersonalWork {
 }
 
 /// Public Gateway reads and Technician commands. No credentials or DB access.
-/// No durable business cache: a workspace and its data die with the session.
+/// Only drafts and uncertainty receipts survive a session; reads stay authoritative.
 class WorkspaceRepository extends ChangeNotifier {
-  WorkspaceRepository(this.read, this.user, {this.write, this.attachments});
+  WorkspaceRepository(
+    this.read,
+    this.user, {
+    this.write,
+    this.attachments,
+    WorkspaceStore? store,
+  }) : records = WorkspaceRecords(store ?? MemoryWorkspaceStore());
   final GatewayRead read;
   final GatewayWrite? write;
   final AttachmentClient? attachments;
   final SessionUser user;
+  final WorkspaceRecords records;
   final pendingCommands = <String, PendingWorkOrderCommand>{};
+  final pendingChecklists = <String, Json>{};
+  final _restores = <String, Future<void>>{};
   final pendingUploads = <String, AttachmentAttempt>{};
   bool _closed = false;
+  Future<void> restoreLocal(String id) => _restores.putIfAbsent(id, () async {
+    try {
+      final command = await records.get(id, 'pendingCommand');
+      final checklist = await records.get(id, 'pendingChecklist');
+      if (_closed) throw const ApiException('SESSION_CHANGED');
+      if (command != null && !pendingCommands.containsKey(id)) {
+        final restored = PendingWorkOrderCommand.fromJson(command);
+        if (restored.before.id != id) {
+          throw const ApiException('WORKSPACE_STORAGE_FAILED');
+        }
+        pendingCommands[id] = restored;
+      }
+      if (checklist != null) {
+        if (checklist['operationId'] is! String ||
+            checklist['assignmentId'] is! String ||
+            checklist['expectedVersion'] is! int ||
+            (checklist['expectedVersion'] as int) < 0) {
+          throw const ApiException('WORKSPACE_STORAGE_FAILED');
+        }
+        for (final result in rows(checklist['results'])) {
+          if (result['itemId'] is! String ||
+              result['note'] is! String ||
+              ![
+                'NOT_DONE',
+                'DONE',
+                'NOT_APPLICABLE',
+              ].contains(result['status'])) {
+            throw const ApiException('WORKSPACE_STORAGE_FAILED');
+          }
+        }
+        pendingChecklists.putIfAbsent(id, () => checklist);
+      }
+    } catch (_) {
+      _restores.remove(id);
+      throw const ApiException('WORKSPACE_STORAGE_FAILED');
+    }
+  });
+
+  Future<void> clearPending(String id, PendingWorkOrderCommand attempt) async {
+    if (!identical(pendingCommands[id], attempt)) return;
+    await records.removeIf(
+      id,
+      'pendingCommand',
+      'operationId',
+      attempt.operationId,
+    );
+    if (identical(pendingCommands[id], attempt)) pendingCommands.remove(id);
+  }
+
   void changed() {
     if (!_closed) notifyListeners();
   }
@@ -342,6 +456,15 @@ class WorkspaceRepository extends ChangeNotifier {
 
   Future<WorkOrder> order(String id) async =>
       WorkOrder(await get('$wo/work-orders/$id'));
+  Future<List<PartUsage>> workOrderParts(String id) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    final result = await read(
+      '/api/inventory/work-orders/${Uri.encodeComponent(id)}/parts',
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    return PartUsage.forOrder(result, id);
+  }
+
   Future<Equipment> equipment(String id) async =>
       Equipment(await get('$asset/equipment/$id'));
   Future<Json> dossier(String id) async {

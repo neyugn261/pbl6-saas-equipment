@@ -7,16 +7,21 @@ import '../../core/api/api_exception.dart';
 import '../../ui/components.dart';
 import '../../ui/theme.dart';
 import '../session/session_controller.dart';
+import '../notifications/notification_repository.dart';
+import '../notifications/notification_controller.dart';
+import '../notifications/notification_screens.dart';
 import 'attachment_client.dart';
 import 'equipment_reads.dart';
 import 'job_reads.dart';
 import 'read_widgets.dart';
 import 'workspace_repository.dart';
+import 'workspace_store.dart';
 
 /// Authenticated workspace. Preview fixtures are never used on this route.
 class LiveWorkspace extends StatefulWidget {
-  const LiveWorkspace({super.key, required this.session});
+  const LiveWorkspace({super.key, required this.session, this.store});
   final SessionController session;
+  final WorkspaceStore? store;
   @override
   State<LiveWorkspace> createState() => _LiveWorkspaceState();
 }
@@ -24,6 +29,7 @@ class LiveWorkspace extends StatefulWidget {
 class _LiveWorkspaceState extends State<LiveWorkspace>
     with WidgetsBindingObserver {
   late final WorkspaceRepository repo;
+  late final NotificationController notifications;
   late Future<PersonalWork> _work;
   int _index = 0, _revision = 0;
   String _stage = '';
@@ -45,6 +51,7 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
     repo = WorkspaceRepository(
       (path) => request('GET', path),
       user,
+      store: widget.store,
       write: (path, body) => request('POST', path, body: body),
       attachments: AttachmentClient(
         api: (method, path, {body, idempotencyKey}) {
@@ -70,6 +77,14 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
       ),
     );
     repo.addListener(_businessChanged);
+    notifications = NotificationController(
+      NotificationRepository((method, path) => request(method, path)),
+    );
+    notifications.setForeground(
+      WidgetsBinding.instance.lifecycleState == null ||
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+    );
+    unawaited(notifications.refreshCount());
     _work = repo.personalWork();
     // ReadView attaches its listener during the first build. Attach an error
     // listener immediately too, for synchronous test transports / fast failures.
@@ -80,6 +95,7 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     repo.removeListener(_businessChanged);
+    notifications.dispose();
     repo.dispose();
     super.dispose();
   }
@@ -90,6 +106,7 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    notifications.setForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed &&
         widget.session.phase == SessionPhase.authenticated) {
       unawaited(_refresh());
@@ -97,6 +114,7 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
   }
 
   Future<void> _refresh() async {
+    unawaited(notifications.refreshCount());
     setState(() {
       _revision++;
       _work = repo.personalWork();
@@ -151,20 +169,13 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Text('Xin chào, ${repo.user.fullName}')),
-                  RoundIcon(
-                    Icons.notifications_none_rounded,
-                    label: 'Thông báo',
-                    onTap: () => openPage(
+                  NotificationBell(
+                    controller: notifications,
+                    onOpen: () => openPage(
                       context,
-                      const ReadPage(
-                        title: 'Thông báo',
-                        child: ReadList(
-                          children: [
-                            Notice(
-                              'Thông báo đang chờ Notification Service (M3). Chưa có hộp thư từ backend.',
-                            ),
-                          ],
-                        ),
+                      NotificationInbox(
+                        controller: notifications,
+                        workspace: repo,
                       ),
                     ),
                   ),

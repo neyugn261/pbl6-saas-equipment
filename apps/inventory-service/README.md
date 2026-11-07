@@ -2,9 +2,12 @@
 
 M3 runtime owned by Minh. Part/Warehouse, stock/threshold reads, immutable ledger,
 receive/adjust, issue/return, durable idempotency and LowStockDetected outbox/relay.
-**ISSUE requires the proposed WO reservation API; current develop has no such WO
-endpoint, so it fails closed with 503 and leaves stock unchanged.** Inventory's
-side is implemented/tested against a contract fixture; do not call that real WO integration.
+ISSUE uses the durable WO reservation API implemented under ADR 0016. Missing
+reservation/proof services still fail closed. On 07/11/2026 the
+[mobile stage 3 fixture](../../docs/testing/mobile-stage-3.md) verified real
+Gateway/Identity/WO/Inventory ISSUE, settlement, RETURN, completed-report use
+confirmation and reversal against isolated test databases. This supersedes
+the earlier contract-fixture-only integration status in this README.
 
 - Port: `INVENTORY_SERVICE_PORT` (default 3008)
 - Database: `inventory_db` via `INVENTORY_DATABASE_URL` — see [prisma/README.md](prisma/README.md)

@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "baseCommit": "9b4a569e6f349119f0d63b08b97511f824be8f33",
+  "testedApkSha256": "adfc4fa1a049d8e2712a060a6f4680eac80fb0a92a82683b0d62440ab9bf5e06",
+  "device": "emulator-5556",
+  "cases": [
+    "real Identity login",
+    "unread badge equals server count",
+    "real inbox and unread filter",
+    "explicit mark-read refreshes exact count",
+    "opening notice marks read",
+    "WO link reauthorized through Gateway",
+    "new assignment through real outbox and RabbitMQ while app backgrounded",
+    "foreground refresh updates badge"
+  ],
+  "fixtureChecks": {
+    "unreadCount": 21,
+    "total": 22,
+    "pagination": true,
+    "ownReadIdempotent": true,
+    "sameTenantOtherUser404": true,
+    "crossTenant404": true,
+    "identityBootstrap": "COMPLETED"
+  },
+  "screenshots": [
+    "badge-before.png",
+    "inbox.png",
+    "notice-read.png",
+    "work-order-link.png",
+    "badge-foreground.png"
+  ]
+}
