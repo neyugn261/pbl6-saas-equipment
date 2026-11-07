@@ -1,5 +1,14 @@
 # PBL6 Technician — Flutter Android
 
+**Giai đoạn 5 — lịch, hồ sơ và tùy chọn:** giữ bộ lọc/trang/ngày qua refresh,
+lỗi/retry, foreground và quay lại từ chi tiết. Lịch Ngày/Tuần/Tháng có lưới,
+số việc theo ngày, agenda, lịch sử cá nhân và nhóm chưa xếp lịch. Hồ sơ đọc
+Identity hiện hành; thêm sáng/tối/theo hệ thống có lưu trên máy, hướng dẫn,
+phiên bản APK thực tế và xác nhận logout với chính sách nháp. Material picker
+dùng tiếng Việt. Lịch vẫn theo ngày bắt đầu dự kiến, không phải overlap hay
+lịch hẹn khách đã xác nhận.
+[Nghiệm thu giai đoạn 5](../../docs/testing/mobile-stage-5.md).
+
 **Giai đoạn 4 — camera và tải tệp bền vững:** lưu ảnh/PDF riêng trên máy trước
 khi gửi, có preview và nút gửi chủ động. Android khôi phục ảnh nếu app bị đóng
 khi camera mở; file và khóa prepare/finalize giữ qua restart, không tự gửi

@@ -63,7 +63,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Chẩn đoán từ API'), findsOneWidget);
       expect(find.text('Xử lý một phần'), findsOneWidget);
-      await t.pageBack();
+      await t.tap(find.byType(BackButton).hitTestable());
       await t.pumpAndSettle();
       await nav(t, 'schedule');
       expect(find.text('Lịch công việc'), findsOneWidget);
@@ -80,7 +80,7 @@ void main() {
       await t.tap(find.text('Lịch sử'));
       await t.pumpAndSettle();
       expect(find.text('Chưa ghi nhận lịch sử thiết bị.'), findsOneWidget);
-      await t.pageBack();
+      await t.tap(find.byType(BackButton).hitTestable());
       await t.pumpAndSettle();
       await nav(t, 'profile');
       expect(find.text('TECH-API'), findsOneWidget);

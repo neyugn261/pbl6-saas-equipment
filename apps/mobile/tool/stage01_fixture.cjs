@@ -17,7 +17,8 @@ const { Events, RabbitMqEventBus, OutboxRelay, subscriptionQueues } = r('@pbl6/e
 const withNotifications = process.argv.includes('--notifications');
 const withParts = process.argv.includes('--parts');
 const withFiles = process.argv.includes('--files');
-const stage = withFiles ? '04' : withParts ? '03' : withNotifications ? '02' : '01';
+const withExperience = process.argv.includes('--experience');
+const stage = withExperience ? '05' : withFiles ? '04' : withParts ? '03' : withNotifications ? '02' : '01';
 const names = ['identity', 'organization', 'asset', 'maintenance', 'workorder', 'service-request', ...(withNotifications ? ['notification'] : []), ...(withParts ? ['inventory'] : [])];
 const urls = Object.fromEntries(names.map(name => [name, requireTestDatabaseUrl(name.replaceAll('-', '_').toUpperCase() + '_TEST_DATABASE_URL')]));
 const broker = process.env.RABBITMQ_TEST_URL || process.env.RABBITMQ_URL;
@@ -143,9 +144,16 @@ async function main() {
     await eventually(async () => (await db.notification.recipientBootstrapRun.count({ where: { tenantId: { in: tenants }, status: 'COMPLETED' } })) === 2);
   }
   async function order(f, label, actions = [], technician = f.technician) {
+    const day = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+    const scheduled = withExperience && ['inProgress', 'completed', 'onHold'].includes(label);
+    const start = new Date(day + 'T01:00:00Z');
+    if (label === 'onHold') start.setUTCDate(start.getUTCDate() + 1);
+    if (label === 'completed') start.setUTCHours(3);
     const sr = await call('POST', S + '/service-requests', f.customerUser.token, { equipmentId: f.equipment.id, type: 'REPAIR', priority: 'NORMAL', title: 'M01 ' + label, description: 'Mobile phase 0/1 acceptance' }, 201);
     for (const action of ['review', 'accept']) await call('POST', S + `/service-requests/${sr.id}/${action}`, f.manager.token, {});
-    const wo = await call('POST', W + '/work-orders', f.manager.token, { serviceRequestId: sr.id }, 201);
+    const wo = await call('POST', W + '/work-orders', f.manager.token, { serviceRequestId: sr.id,
+      ...(scheduled ? { scheduledStart: start.toISOString(), scheduledEnd: new Date(+start + 3600000).toISOString() } : {}) }, 201);
+    if (withExperience) manifest.calendar = { today: day, timezone: 'Asia/Ho_Chi_Minh', scheduledThroughPublicApi: true };
     await call('POST', W + `/work-orders/${wo.id}/assign`, f.manager.token, { technicianId: technician.id });
     for (const action of actions) await call('POST', W + `/work-orders/${wo.id}/${action}`, f.tech.token,
       action === 'hold' ? { reason: 'Waiting for inspection' } : action === 'complete' ? { problemDescription: 'Fixture problem', solution: 'Fixture solution', result: 'RESOLVED', customerSummary: 'Fixture completed' } : {});

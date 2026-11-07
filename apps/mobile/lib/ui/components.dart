@@ -88,10 +88,14 @@ class RoundIcon extends StatelessWidget {
           onPressed: onTap,
           tooltip: label,
           style: IconButton.styleFrom(
-            backgroundColor: AppColors.paper,
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
             minimumSize: const Size(44, 44),
           ),
-          icon: Icon(icon, size: 21, color: AppColors.ink),
+          icon: Icon(
+            icon,
+            size: 21,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
         ),
         if (badge)
           const Positioned(
@@ -144,9 +148,13 @@ class UiPage extends StatelessWidget {
     bottomNavigationBar: bottom == null
         ? null
         : Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: AppColors.line)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                top: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
             ),
             child: SafeArea(
               top: false,
@@ -211,7 +219,14 @@ class SoftCard extends StatelessWidget {
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => Material(
-    color: color,
+    color: Theme.of(context).brightness == Brightness.dark
+        ? (color == AppColors.paper
+              ? Theme.of(context).colorScheme.surfaceContainerLow
+              : Color.alphaBlend(
+                  color.withValues(alpha: .12),
+                  Theme.of(context).colorScheme.surfaceContainerLow,
+                ))
+        : color,
     borderRadius: BorderRadius.circular(26),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
@@ -267,7 +282,11 @@ class Pill extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 12, color: filled ? Colors.white : color),
+          Icon(
+            icon,
+            size: 12,
+            color: filled ? Colors.white : readableAccent(context, color),
+          ),
           const SizedBox(width: 5),
         ],
         Flexible(
@@ -276,7 +295,7 @@ class Pill extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: filled ? Colors.white : color,
+              color: filled ? Colors.white : readableAccent(context, color),
             ),
           ),
         ),
@@ -308,14 +327,18 @@ class ChoicePills extends StatelessWidget {
             selected: i == selected,
             showCheckmark: false,
             onSelected: (_) => onSelected(i),
-            selectedColor: AppColors.ink,
-            backgroundColor: Colors.white,
+            selectedColor: Theme.of(context).colorScheme.onSurface,
+            backgroundColor: Theme.of(context).colorScheme.surface,
             side: BorderSide(
-              color: i == selected ? AppColors.ink : AppColors.line,
+              color: i == selected
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).colorScheme.outlineVariant,
             ),
             shape: const StadiumBorder(),
             labelStyle: TextStyle(
-              color: i == selected ? Colors.white : AppColors.muted,
+              color: i == selected
+                  ? Theme.of(context).colorScheme.surface
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),

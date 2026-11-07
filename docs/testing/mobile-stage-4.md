@@ -131,6 +131,9 @@ flutter build apk --debug --no-pub
 
 ## Chuyển giai đoạn
 
+Giai đoạn 5 được theo dõi tại [lịch, hồ sơ và UX](mobile-stage-5.md), gồm
+xử lý bộ lọc khi refresh được ghi ở giai đoạn 3.
+
 Hoàn tất phạm vi giai đoạn 4 trên Android, đủ chuyển sang giai đoạn 5.
 Chưa nghiệm thu điện thoại vật lý/iOS. Lỗi đồng bộ SR/WO cũ (giai đoạn 0–1)
 và giữ bộ lọc Lịch sử khi pull-to-refresh (giai đoạn 3) còn là đầu việc riêng.

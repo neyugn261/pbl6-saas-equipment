@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'config/app_config.dart';
+import 'features/preferences/app_preferences.dart';
 import 'core/api/gateway_client.dart';
 import 'features/session/session_app.dart';
 import 'features/session/session_controller.dart';
@@ -13,6 +14,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     final config = AppConfig.environment(release: !kDebugMode);
+    final preferences = AppPreferences(SecurePreferencesStore());
+    await preferences.load();
     final uploads = UploadRuntime(config.baseUrl.origin);
     await uploads.recover();
     final session = SessionController(
@@ -23,6 +26,7 @@ Future<void> main() async {
       TechnicianApp(
         session: session,
         disposeSession: true,
+        preferences: preferences,
         uploads: uploads,
         workspaceStore: (user) => SecureWorkspaceStore(
           origin: config.baseUrl.origin,
