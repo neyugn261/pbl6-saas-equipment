@@ -7,11 +7,14 @@ import 'features/session/session_app.dart';
 import 'features/session/session_controller.dart';
 import 'features/session/session_store.dart';
 import 'features/workspace/workspace_store.dart';
+import 'features/workspace/upload_picker.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     final config = AppConfig.environment(release: !kDebugMode);
+    final uploads = UploadRuntime(config.baseUrl.origin);
+    await uploads.recover();
     final session = SessionController(
       GatewayClient(config),
       SecureSessionStore(scope: config.baseUrl.origin),
@@ -20,6 +23,7 @@ void main() {
       TechnicianApp(
         session: session,
         disposeSession: true,
+        uploads: uploads,
         workspaceStore: (user) => SecureWorkspaceStore(
           origin: config.baseUrl.origin,
           tenantId: user.tenantId,

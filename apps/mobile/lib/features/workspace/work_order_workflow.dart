@@ -44,6 +44,7 @@ class WorkOrderWorkflow extends ChangeNotifier {
       !busy &&
       !uncertain &&
       (action != 'complete' || !repo.pendingChecklists.containsKey(id)) &&
+      (action != 'complete' || repo.pendingUploads[id]?.report != false) &&
       repo.write != null &&
       (order?.allows(action, repo.user.id) ?? false);
   bool get canNote =>

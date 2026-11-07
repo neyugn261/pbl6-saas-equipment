@@ -16,7 +16,8 @@ const { configureApp } = r('@pbl6/service-kit');
 const { Events, RabbitMqEventBus, OutboxRelay, subscriptionQueues } = r('@pbl6/event-contracts');
 const withNotifications = process.argv.includes('--notifications');
 const withParts = process.argv.includes('--parts');
-const stage = withParts ? '03' : withNotifications ? '02' : '01';
+const withFiles = process.argv.includes('--files');
+const stage = withFiles ? '04' : withParts ? '03' : withNotifications ? '02' : '01';
 const names = ['identity', 'organization', 'asset', 'maintenance', 'workorder', 'service-request', ...(withNotifications ? ['notification'] : []), ...(withParts ? ['inventory'] : [])];
 const urls = Object.fromEntries(names.map(name => [name, requireTestDatabaseUrl(name.replaceAll('-', '_').toUpperCase() + '_TEST_DATABASE_URL')]));
 const broker = process.env.RABBITMQ_TEST_URL || process.env.RABBITMQ_URL;
@@ -29,6 +30,7 @@ const password = 'M01-' + randomBytes(18).toString('hex') + '!aA1';
 const exchange = `pbl6.test.mobile-stage${stage}.` + randomUUID();
 const queues = [];
 let bus;
+let filesFixture;
 const runtime = path.resolve(process.env.MOBILE_STAGE01_RUNTIME || `/tmp/pbl6-mobile-stage${stage}-runtime.json`);
 if (fs.existsSync(runtime)) {
   const previous = JSON.parse(fs.readFileSync(runtime, 'utf8'));
@@ -83,6 +85,7 @@ function relay(name) {
   const instance = new OutboxRelay({ db: scoped, publisher: bus, producer: name + '-service', intervalMs: 100 }); instance.start(); relays.push(instance);
 }
 async function main() {
+  if (withFiles) filesFixture = await require('./stage04_storage.cjs')(req('workorder'), freePort);
   for (const name of names) execFileSync('pnpm', ['--filter', name + '-service', 'db:migrate'], { cwd: root, env: process.env, stdio: 'inherit' });
   for (const name of [...names, 'gateway']) ports[name] = await freePort();
   for (const name of [...names, 'gateway']) process.env[name === 'gateway' ? 'GATEWAY_SERVICE_URL' : name.replaceAll('-', '_').toUpperCase() + '_SERVICE_URL'] = `http://127.0.0.1:${ports[name]}`;
@@ -251,7 +254,9 @@ async function main() {
   await call('GET', A + `/equipment/${a.equipment.id}`, outsider.token, undefined, 404);
   await call('GET', W + `/work-orders/${hidden.id}`, a.tech.token, undefined, 404);
   for (const name of [...names, 'gateway']) assert.equal((await fetch(`http://127.0.0.1:${ports[name]}/health`)).status, 200);
-  manifest.gateway = `http://127.0.0.1:${ports.gateway}`; manifest.status = 'READY'; saveRuntime();
+  manifest.gateway = filesFixture ? await filesFixture.gateway(`http://127.0.0.1:${ports.gateway}`) : `http://127.0.0.1:${ports.gateway}`;
+  if (filesFixture) manifest.files = { privateBucket: filesFixture.bucket, faultProxy: true };
+  manifest.status = 'READY'; saveRuntime();
   console.log('PASS: two tenants, same-tenant customer isolation, alternate Technician, 10 WO fixtures, real maintenance checklist and Gateway health.');
   console.log('Private fixture manifest (password is never printed): ' + runtime);
   if (process.argv.includes('--serve')) await new Promise(resolve => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve); });
@@ -260,6 +265,7 @@ main().catch(error => { console.error(error.message); process.exitCode = 1; }).f
   for (const relay of relays) await relay.stop().catch(() => {});
   if (bus) await bus.close().catch(() => {});
   for (const app of Object.values(apps).reverse()) await app.close().catch(() => {});
+  if (filesFixture) await filesFixture.close();
   if (bus) {
     const eventRequire = createRequire(path.join(root, 'packages/event-contracts/package.json'));
     const connection = await eventRequire('amqplib').connect(broker); const channel = await connection.createChannel();

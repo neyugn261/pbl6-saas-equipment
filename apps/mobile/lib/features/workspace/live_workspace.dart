@@ -16,12 +16,20 @@ import 'job_reads.dart';
 import 'read_widgets.dart';
 import 'workspace_repository.dart';
 import 'workspace_store.dart';
+import 'upload_picker.dart';
+import 'upload_store.dart';
 
 /// Authenticated workspace. Preview fixtures are never used on this route.
 class LiveWorkspace extends StatefulWidget {
-  const LiveWorkspace({super.key, required this.session, this.store});
+  const LiveWorkspace({
+    super.key,
+    required this.session,
+    this.store,
+    this.uploads,
+  });
   final SessionController session;
   final WorkspaceStore? store;
+  final ScopedUploads? uploads;
   @override
   State<LiveWorkspace> createState() => _LiveWorkspaceState();
 }
@@ -52,6 +60,7 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
       (path) => request('GET', path),
       user,
       store: widget.store,
+      selection: widget.uploads,
       write: (path, body) => request('POST', path, body: body),
       attachments: AttachmentClient(
         api: (method, path, {body, idempotencyKey}) {
@@ -72,10 +81,44 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
                 widget.session.user?.id == user.id &&
                 widget.session.user?.tenantId == user.tenantId &&
                 widget.session.user?.roles.join(',') == user.roles.join(',')
-            ? '${user.tenantId}/${user.id}/${user.roles.join(',')}'
+            ? '${user.tenantId}/${user.id}'
             : '',
       ),
     );
+    final files = widget.uploads;
+    if (files != null) {
+      repo.attachments!.mayWrite = (attempt) async {
+        final order = await repo.order(attempt.workOrderId);
+        if (!attempt.report) {
+          return order.currentFor(user.id) &&
+              !order.terminal &&
+              [
+                'ACCEPTED',
+                'TRAVELLING',
+                'IN_PROGRESS',
+                'ON_HOLD',
+              ].contains(order.status) &&
+              nested(order.data, 'currentAssignment')['id'] ==
+                  attempt.authorityId;
+        }
+        final report = await repo.get(
+          '${WorkspaceRepository.wo}/work-orders/${attempt.workOrderId}/service-report',
+        );
+        final technician = await repo.technician();
+        return order.status == 'COMPLETED' &&
+            report['id'] == attempt.authorityId &&
+            report['technicianId'] == technician['id'];
+      };
+      repo.attachments!.persistenceReady = files.persistence.then(
+        (store) => DurableUploads(repo.records, store.files),
+      );
+      unawaited(
+        repo.attachments!.persistenceReady!.then<void>(
+          (_) {},
+          onError: (Object _, StackTrace _) {},
+        ),
+      );
+    }
     repo.addListener(_businessChanged);
     notifications = NotificationController(
       NotificationRepository((method, path) => request(method, path)),
@@ -158,6 +201,20 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
           ReadList(
             refresh: _refresh,
             children: [
+              if (widget.uploads?.recoveryMessage != null)
+                Notice(
+                  widget.uploads!.recoveryMessage!,
+                  action: TextButton(
+                    onPressed: () => openPage(
+                      context,
+                      JobReadScreen(
+                        repo: repo,
+                        id: widget.uploads!.recoveryOrderId!,
+                      ),
+                    ),
+                    child: const Text('Mở công việc có tệp khôi phục'),
+                  ),
+                ),
               Row(
                 children: [
                   CircleAvatar(

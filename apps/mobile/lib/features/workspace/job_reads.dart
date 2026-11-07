@@ -30,6 +30,8 @@ class _JobReadScreenState extends State<JobReadScreen>
   int _tab = 0;
   bool _checklistVisited = false, _allowExit = false, _leaving = false;
   final _checklist = GlobalKey<ChecklistPanelState>();
+  final _files = GlobalKey<JobAttachmentsState>();
+  bool _filesVisited = false;
   Json? _reportDraft;
   late final WorkOrderWorkflow workflow;
   int get _revision => workflow.revision;
@@ -64,6 +66,10 @@ class _JobReadScreenState extends State<JobReadScreen>
       if (!mounted) return;
       setState(() {
         _reportDraft = draft;
+        if (repo.pendingUploads.containsKey(widget.id)) {
+          _tab = 3;
+          _filesVisited = true;
+        }
         if (repo.pendingChecklists.containsKey(widget.id)) {
           _tab = 5;
           _checklistVisited = true;
@@ -80,6 +86,10 @@ class _JobReadScreenState extends State<JobReadScreen>
     }
     _leaving = true;
     try {
+      if (!await (_files.currentState?.prepareLeave() ?? Future.value(true)) ||
+          !mounted) {
+        return;
+      }
       if (!await (_checklist.currentState?.prepareLeave() ??
               Future.value(true)) ||
           !mounted) {
@@ -106,6 +116,7 @@ class _JobReadScreenState extends State<JobReadScreen>
     setState(() {
       _tab = tab;
       if (tab == 5) _checklistVisited = true;
+      if (tab == 3) _filesVisited = true;
     });
   }
 
@@ -115,6 +126,7 @@ class _JobReadScreenState extends State<JobReadScreen>
     builder: (context, _) => PopScope(
       canPop:
           !workflow.busy &&
+          !(_files.currentState?.busy ?? false) &&
           !(_checklist.currentState?.busy ?? false) &&
           (_allowExit ||
               !(_checklist.currentState?.dirty ?? false) &&
@@ -135,7 +147,8 @@ class _JobReadScreenState extends State<JobReadScreen>
           workflow: workflow,
           checklistBlocked:
               (_checklist.currentState?.dirty ?? false) ||
-              (_checklist.currentState?.busy ?? false),
+              (_checklist.currentState?.busy ?? false) ||
+              (_files.currentState?.blocksCompletion ?? false),
           onReportClosed: () {
             _select(2);
             unawaited(_refresh());
@@ -212,13 +225,27 @@ class _JobReadScreenState extends State<JobReadScreen>
       ],
       if (_tab == 2)
         ServiceReportRead(repo: repo, workOrderId: w.id, revision: _revision),
-      if (_tab == 3)
-        JobAttachments(
-          repo: repo,
-          orderId: w.id,
-          revision: _revision,
-          canUploadWorkOrder: !w.terminal && w.currentFor(repo.user.id),
-          reportCompleted: w.status == 'COMPLETED',
+      if (_filesVisited)
+        Offstage(
+          offstage: _tab != 3,
+          child: JobAttachments(
+            key: _files,
+            repo: repo,
+            orderId: w.id,
+            revision: _revision,
+            canUploadWorkOrder:
+                [
+                  'ACCEPTED',
+                  'TRAVELLING',
+                  'IN_PROGRESS',
+                  'ON_HOLD',
+                ].contains(w.status) &&
+                w.currentFor(repo.user.id),
+            reportCompleted: w.status == 'COMPLETED',
+            onChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
         ),
       if (_checklistVisited)
         Offstage(

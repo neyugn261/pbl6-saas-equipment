@@ -1,4 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:pbl6_technician/config/app_config.dart';
@@ -6,6 +9,45 @@ import 'package:pbl6_technician/core/api/api_exception.dart';
 import 'package:pbl6_technician/core/api/gateway_client.dart';
 
 void main() {
+  test('attached replay exposes only a validated attachment ID', () async {
+    const id = '10000000-0000-4000-8000-000000000001';
+    var code = 'UPLOAD_ALREADY_ATTACHED';
+    var returnedId = id;
+    final client = GatewayClient(
+      AppConfig('http://gateway.test'),
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'code': code,
+            'details': {
+              'attachmentId': returnedId,
+              'uploadUrl': 'secret-signed-url',
+            },
+            'message': 'secret upstream message',
+          }),
+          409,
+        ),
+      ),
+    );
+    addTearDown(client.close);
+    Future<void> check(String? expected) async {
+      try {
+        await client.request('POST', '/test');
+        fail('Expected conflict');
+      } on ApiException catch (e) {
+        expect(e.attachmentId, expected);
+        expect(e.toString(), isNot(contains('secret')));
+        expect(e.userMessage, isNot(contains('secret')));
+      }
+    }
+
+    await check(id);
+    returnedId = 'https://secret.test/token';
+    await check(null);
+    returnedId = id;
+    code = 'OTHER_CONFLICT';
+    await check(null);
+  });
   test('requires an origin and HTTPS in release', () {
     for (final value in [
       '',

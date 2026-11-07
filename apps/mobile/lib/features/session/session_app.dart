@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../ui/theme.dart';
 import '../workspace/live_workspace.dart';
 import '../workspace/workspace_store.dart';
+import '../workspace/upload_picker.dart';
 import 'session_models.dart';
 import 'session_controller.dart';
 
@@ -14,10 +15,12 @@ class TechnicianApp extends StatefulWidget {
     required this.session,
     this.disposeSession = false,
     this.workspaceStore,
+    this.uploads,
   });
   final SessionController session;
   final bool disposeSession;
   final WorkspaceStore Function(SessionUser user)? workspaceStore;
+  final UploadRuntime? uploads;
 
   @override
   State<TechnicianApp> createState() => _TechnicianAppState();
@@ -95,6 +98,7 @@ class _TechnicianAppState extends State<TechnicianApp>
               ),
               session: widget.session,
               store: widget.workspaceStore?.call(user),
+              uploads: widget.uploads?.forUser(user),
             );
           },
         ),

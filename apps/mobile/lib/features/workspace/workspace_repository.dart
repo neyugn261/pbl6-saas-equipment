@@ -290,11 +290,13 @@ class WorkspaceRepository extends ChangeNotifier {
     this.user, {
     this.write,
     this.attachments,
+    this.selection,
     WorkspaceStore? store,
   }) : records = WorkspaceRecords(store ?? MemoryWorkspaceStore());
   final GatewayRead read;
   final GatewayWrite? write;
   final AttachmentClient? attachments;
+  final AttachmentSelection? selection;
   final SessionUser user;
   final WorkspaceRecords records;
   final pendingCommands = <String, PendingWorkOrderCommand>{};
@@ -306,6 +308,7 @@ class WorkspaceRepository extends ChangeNotifier {
     try {
       final command = await records.get(id, 'pendingCommand');
       final checklist = await records.get(id, 'pendingChecklist');
+      final upload = await attachments?.restore(id);
       if (_closed) throw const ApiException('SESSION_CHANGED');
       if (command != null && !pendingCommands.containsKey(id)) {
         final restored = PendingWorkOrderCommand.fromJson(command);
@@ -314,6 +317,7 @@ class WorkspaceRepository extends ChangeNotifier {
         }
         pendingCommands[id] = restored;
       }
+      if (upload != null) pendingUploads.putIfAbsent(id, () => upload);
       if (checklist != null) {
         if (checklist['operationId'] is! String ||
             checklist['assignmentId'] is! String ||
