@@ -17,6 +17,7 @@ const statusLabels: Record<string, string> = {
   INACTIVE: 'Không hoạt động',
   SUSPENDED: 'Tạm khóa',
   DISABLED: 'Đã vô hiệu hóa',
+  INVITED: 'Chờ kích hoạt',
   IN_WARRANTY: 'Còn bảo hành',
   OUT_OF_WARRANTY: 'Hết bảo hành',
   NO_WARRANTY: 'Không có bảo hành',

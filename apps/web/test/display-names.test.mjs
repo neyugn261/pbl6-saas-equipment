@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hooks, nodes, settle, webTab } from './helpers/web-tab.mjs'
+import { detailUI } from './helpers/service-detail.mjs'
 
 const tab = webTab(async () => { throw new Error('Unexpected request') })
 const labels = tab.load('display-names.ts')
@@ -24,6 +25,9 @@ function renderM2(componentName, response, path = '') {
       assignments: { status: 'AVAILABLE', data: response.assignments ?? [] }, history: { status: 'AVAILABLE', data: [] }, logs: { status: 'AVAILABLE', data: [] }, report: { status: 'NOT_FOUND', data: null },
     } }) } },
     '../auth/session': tab.session, '../display-names': labels,
+    '../features/workspace/ServiceDetailUI': detailUI(tab,h),
+    '../features/workspace/service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
+    '../features/workspace/WorkspaceUI': {EntityPicker:'picker',RelatedName:'related-name'},
     '../features/attachments/AttachmentsPanel': { AttachmentsPanel: 'attachments' },
     './ModelPolicyPanels': {
       MaintenancePolicyDetails: 'policy-details',

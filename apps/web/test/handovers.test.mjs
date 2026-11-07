@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hooks, nodes, settle, webTab } from './helpers/web-tab.mjs'
+import { detailUI, expand } from './helpers/service-detail.mjs'
 const fixture = { id: 'handover', handoverNo: 'BG-test', equipmentId: 'equipment', status: 'PENDING_CUSTOMER_CONFIRMATION',
   isCurrent: true, expiresAt: '2099-01-01T00:00:00Z', submittedAt: '2026-11-04T00:00:00Z', acceptedAt: null, activatedAt: null,
   equipmentStatus: 'OUT_OF_SERVICE', audit: [], snapshot: { assetCode: 'Pump', name: 'Pump', model: 'P', serialNumber: 'S',
@@ -11,11 +12,13 @@ function setup(row = fixture, roles = ['CUSTOMER_ADMIN'], userType = 'CUSTOMER',
   const api = { asset: async (url, options) => { calls.push({ url, options }); return options ? { ...row, status: 'ACTIVATED' } : row } }
   const component = tab.load('routes/EquipmentHandovers.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
     'react-router-dom': { Link: 'a', useParams: () => ({ id: 'handover' }), useNavigate: () => () => {}, useSearchParams: () => [new URLSearchParams()] },
-    '../api/client': { api }, '../auth/session': session, './registration-shared': { DirectoryPicker: 'picker' },
+    '../api/client': { ...tab.client, api }, '../auth/session': session, './registration-shared': { DirectoryPicker: 'picker' },
     './registration-data': { errorText: e => e.message },
     '../display-names': tab.load('display-names.ts'),
+    '../features/workspace/ServiceDetailUI': detailUI(tab,h),
+    '../features/workspace/service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
   })[componentName]
-  return { calls, h, render: () => h.render(component) }
+  return { calls, h, render: () => expand(h.render(component)) }
 }
 test('handover site prefers historical snapshot and displays current name without mutating snapshot', async () => {
   for (const historical of [undefined, 'Original site']) {

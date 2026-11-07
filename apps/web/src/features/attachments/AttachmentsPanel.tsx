@@ -213,10 +213,10 @@ export function AttachmentsPanel(props: Props) {
       if (ticket && putSucceeded && finalizeKey)
         setPendingFinalize({ uploadId: ticket.uploadId, idempotencyKey: finalizeKey, generation: uploadGeneration })
       const failure = putSucceeded
-        ? `PUT đã hoàn tất nhưng finalize chưa được xác nhận. Dùng “Thử finalize lại” cùng operation hoặc dọn upload. ${apiMessage(cause)}`
+        ? `PUT đã hoàn tất nhưng finalize chưa được xác nhận. Dùng “Kiểm tra và lưu tệp lại” cùng operation hoặc dọn upload. ${apiMessage(cause)}`
         : apiMessage(cause)
       setError(cleanupFailure
-        ? `${failure} Dọn upload tạm cũng thất bại: ${apiMessage(cleanupFailure)}`
+        ? `${failure} Hủy tệp đang chờ tạm cũng thất bại: ${apiMessage(cleanupFailure)}`
         : failure)
       setErrorGeneration(uploadGeneration)
     } finally {
@@ -351,12 +351,12 @@ export function AttachmentsPanel(props: Props) {
                 }}
               />
             </label>
-            <p>JPEG, PNG hoặc PDF; tối đa 10 MiB. File chỉ được gắn sau khi backend xác minh checksum.</p>
+            <p>JPEG, PNG hoặc PDF; tối đa 10 MB. Tệp được hiển thị sau khi hệ thống kiểm tra và lưu thành công.</p>
             {pendingFinalize?.generation === sessionGeneration && (
               <div role="status">
-                Một upload đang chờ xác nhận finalize.
-                <button disabled={busy} onClick={() => void retryFinalize()}>Thử finalize lại</button>
-                <button disabled={busy} onClick={() => void deletePendingUpload()}>Dọn upload</button>
+                Tệp đã tải lên đang chờ xác nhận lưu vào hồ sơ.
+                <button disabled={busy} onClick={() => void retryFinalize()}>Kiểm tra và lưu tệp lại</button>
+                <button disabled={busy} onClick={() => void deletePendingUpload()}>Hủy tệp đang chờ</button>
               </div>
             )}
           </div>

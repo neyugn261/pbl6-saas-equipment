@@ -1,3 +1,5 @@
+import { serviceLabels } from "../features/workspace/service-detail-data";
+import { ServiceSections } from "../features/workspace/ServiceDetailUI";
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../api/client";
@@ -112,8 +114,28 @@ export function ModelPolicyPage() {
       <LoadState {...model} />
       {model.value && id && (
         <>
-          <PolicyEditor key={id + "w"} modelId={id} maintenance={false} />
-          <PolicyEditor key={id + "m"} modelId={id} maintenance />
+          <ServiceSections
+            items={[
+              {
+                key: "warranty",
+                label: "Chính sách bảo hành",
+                content: (
+                  <PolicyEditor
+                    key={id + "w"}
+                    modelId={id}
+                    maintenance={false}
+                  />
+                ),
+              },
+              {
+                key: "maintenance",
+                label: "Chính sách bảo trì & checklist",
+                content: (
+                  <PolicyEditor key={id + "m"} modelId={id} maintenance />
+                ),
+              },
+            ]}
+          />
         </>
       )}
     </div>
@@ -219,7 +241,7 @@ function PolicyEditor({
             <option value="">Tạo bản nháp mới</option>
             {data.value?.items.map((r) => (
               <option key={r.id} value={r.id}>
-                v{r.revision} · {r.status}
+                Phiên bản {r.revision} · {serviceLabels[r.status] ?? r.status}
                 {r.isDefault ? " · Mặc định" : ""}
               </option>
             ))}
@@ -376,7 +398,7 @@ function PolicyEditor({
                       <label>
                         Hành động
                         <select
-                          value={item.action}
+                          value={serviceLabels[item.action] ?? item.action}
                           onChange={(e) =>
                             updateRule(index, {
                               checklist: rule.checklist.map((v, k) =>
@@ -392,7 +414,9 @@ function PolicyEditor({
                             "ADJUST",
                             "REPLACE",
                           ].map((a) => (
-                            <option key={a}>{a}</option>
+                            <option key={a} value={a}>
+                              {serviceLabels[a] ?? a}
+                            </option>
                           ))}
                         </select>
                       </label>

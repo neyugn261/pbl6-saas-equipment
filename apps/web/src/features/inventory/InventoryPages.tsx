@@ -143,7 +143,7 @@ export function InventoryPartsPage() {
 
   return <div className="m2-page">
     <h1>Danh mục phụ tùng</h1>
-    <p>Danh mục và số tồn được lấy từ Inventory Service; số lượng được giữ nguyên dưới dạng decimal string.</p>
+    <p>Tra cứu phụ tùng, đơn vị tính và tồn khả dụng để chuẩn bị xử lý dịch vụ.</p>
     {canManage && <button onClick={() => setShowForm((value) => !value)}>Thêm phụ tùng</button>}
     {canManage && showForm && <form className="m2-editor" onSubmit={(event) => void create(event)}>
       <label>Mã SKU<input required maxLength={100} value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} /></label>
@@ -160,8 +160,8 @@ export function InventoryPartsPage() {
     </form>
     <PageStatus loading={state.loading} error={state.error}>
       {state.data && <>
-        <div className="m2-inventory-table"><table><thead><tr><th>SKU</th><th>Tên phụ tùng</th><th>Đơn vị</th><th>Phân số</th><th>Trạng thái</th></tr></thead>
-          <tbody>{state.data.items.map((part) => <tr key={part.id}><td><Link to={`/app/inventory/parts/${part.id}`}>{part.sku}</Link></td><td>{part.name}</td><td>{part.unit}</td><td>{part.allowFractional ? 'Có' : 'Không'}</td><td>{part.status}</td></tr>)}</tbody>
+        <div className="m2-inventory-table"><table><thead><tr><th>SKU</th><th>Tên phụ tùng</th><th>Đơn vị</th><th>Cho phép lượng lẻ</th><th>Trạng thái</th></tr></thead>
+          <tbody>{state.data.items.map((part) => <tr key={part.id}><td><Link to={`/app/inventory/parts/${part.id}`}>{part.sku}</Link></td><td>{part.name}</td><td>{part.unit}</td><td>{part.allowFractional ? 'Có' : 'Không'}</td><td>{part.status === 'ACTIVE' ? 'Đang sử dụng' : 'Ngừng sử dụng'}</td></tr>)}</tbody>
         </table></div>
         {!state.data.items.length && <p>Không có phụ tùng phù hợp.</p>}
         <Pager page={page} total={state.data.total} onPage={setPage} />
@@ -176,7 +176,8 @@ export function InventoryPartPage() {
   const canManage = isManager(profile?.roles ?? [])
   const sessionGeneration = getSessionGeneration()
   const [revision, setRevision] = useState(0)
-  const key = `${id ?? ''}:${revision}:session-${sessionGeneration}`
+  const [stockPage,setStockPage] = useState(1)
+  const key = `${id ?? ''}:${stockPage}:${revision}:session-${sessionGeneration}`
   const [state, setState] = useState<{ key: string; part: Part | null; stock: Page<Stock> | null; error: string }>({
     key: '', part: null, stock: null, error: '',
   })
@@ -184,14 +185,14 @@ export function InventoryPartPage() {
     let active = true
     Promise.all([
       api.inventory<Part>(`/parts/${encodeURIComponent(id ?? '')}`),
-      api.inventory<Page<Stock>>(`/stocks?page=1&pageSize=100&partId=${encodeURIComponent(id ?? '')}`),
+      api.inventory<Page<Stock>>(`/stocks?page=${stockPage}&pageSize=20&partId=${encodeURIComponent(id ?? '')}`),
     ]).then(([partResult, stockResult]) => {
       if (active) setState({ key, part: partResult, stock: stockResult, error: '' })
     }, (cause: unknown) => {
       if (active) setState({ key, part: null, stock: null, error: message(cause) })
     })
     return () => { active = false }
-  }, [id, key])
+  }, [id, key, stockPage])
   const current = state.key === key
   const part = current ? state.part : null
   const stock = current ? state.stock : null
@@ -200,8 +201,8 @@ export function InventoryPartPage() {
   return <div className="m2-page">
     <Link to="/app/inventory/parts">← Danh mục phụ tùng</Link>
     {loading ? <p role="status">Đang tải phụ tùng…</p> : error ? <p role="alert" className="m1-error">{error}</p> : part && <>
-      <h1>{part.name}</h1><p>{part.sku} · {part.unit} · {part.status}</p>
-      <h2>Tồn theo kho</h2>
+      <h1>{part.name}</h1><p>{part.sku} · Đơn vị: {part.unit} · {part.status === 'ACTIVE' ? 'Đang sử dụng' : 'Ngừng sử dụng'}</p>
+      <section className="m1-card m1-section-card"><div className="m1-section-body"><h2>Thông tin phụ tùng</h2><p>{part.description || 'Chưa có mô tả bổ sung.'}</p><p>Cho phép số lượng lẻ: {part.allowFractional ? 'Có' : 'Không'}</p>{!canManage && <p>Quản lý dịch vụ có quyền tra cứu. Liên hệ nhân viên kho để nhập, xuất, nhận trả hoặc điều chỉnh tồn.</p>}</div></section><h2>Tồn theo kho</h2>
       {stock?.items.map((row) => <section className="m1-card m1-section-card" key={`${row.warehouseId}:${row.partId}`}>
         <div className="m1-section-body"><strong>{row.warehouse.name}</strong>
           <p>Khả dụng: {row.quantity} {part.unit} · Cách ly: {row.quantityQuarantined} · Mức tối thiểu: {row.minQuantity}</p>
@@ -209,7 +210,7 @@ export function InventoryPartPage() {
           {canManage && <MinimumQuantityForm key={`${row.warehouseId}:${row.partId}:${row.minQuantity}`} warehouseId={row.warehouseId} partId={row.partId} initial={row.minQuantity} onSaved={() => setRevision((value) => value + 1)} />}
         </div>
       </section>)}
-      {!stock?.items.length && <p>Chưa có tồn kho cho phụ tùng này.</p>}
+      {!stock?.items.length && <p>Chưa có tồn kho cho phụ tùng này.</p>}{stock && <Pager page={stockPage} total={stock.total} onPage={setStockPage}/>}
     </>}
   </div>
 }
@@ -246,11 +247,12 @@ export function InventoryWarehousesPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState('')
+  const [stockPage,setStockPage] = useState(1)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ branchId: '', code: '', name: '', address: '' })
   const state = usePage<Warehouse>(`/warehouses?page=${page}&pageSize=${pageSize}`, revision)
-  const stocks = usePage<Stock>(`/stocks?page=1&pageSize=100${selected ? `&warehouseId=${encodeURIComponent(selected)}` : ''}`, revision)
+  const stocks = usePage<Stock>(`/stocks?page=${stockPage}&pageSize=20${selected ? `&warehouseId=${encodeURIComponent(selected)}` : ''}`, revision)
   const branches = usePage<Branch>('/branches?page=1&pageSize=100', revision)
 
   async function create(event: FormEvent) {
@@ -261,7 +263,7 @@ export function InventoryWarehousesPage() {
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
   return <div className="m2-page">
-    <h1>Kho và tồn kho</h1>
+    <h1>Kho và tồn kho</h1><p>Kiểm tra tồn khả dụng, lượng cách ly và phụ tùng cần bổ sung trước khi điều phối công việc.</p>
     {canManage && <button onClick={() => setShowCreate((value) => !value)}>Thêm kho</button>}
     {canManage && showCreate && <form className="m2-editor" onSubmit={(event) => void create(event)}>
       {branches.loading ? <p role="status">Đang tải chi nhánh…</p> : branches.error ? <p role="alert" className="m1-error">{branches.error}</p> :
@@ -275,18 +277,19 @@ export function InventoryWarehousesPage() {
     <PageStatus loading={state.loading} error={state.error}>
       {state.data && <>
         <div className="m2-inventory-table"><table><thead><tr><th>Mã kho</th><th>Kho</th><th>Chi nhánh</th><th>Trạng thái</th><th></th></tr></thead>
-          <tbody>{state.data.items.map((warehouse) => <tr key={warehouse.id}><td>{warehouse.code}</td><td>{warehouse.name}</td><td>{displayName('branch', { name: warehouse.branchName, code: warehouse.branchCode })}</td><td>{warehouse.status}</td><td><button onClick={() => setSelected(warehouse.id)}>Xem tồn</button></td></tr>)}</tbody>
+          <tbody>{state.data.items.map((warehouse) => <tr key={warehouse.id}><td>{warehouse.code}</td><td>{warehouse.name}</td><td>{displayName('branch', { name: warehouse.branchName, code: warehouse.branchCode })}</td><td>{warehouse.status === 'ACTIVE' ? 'Đang hoạt động' : 'Ngừng hoạt động'}</td><td><button onClick={() => {setSelected(warehouse.id);setStockPage(1)}}>Xem tồn</button></td></tr>)}</tbody>
         </table></div>
         <Pager page={page} total={state.data.total} onPage={setPage} />
       </>}
     </PageStatus>
-    <h2>Tồn kho {selected ? 'đã lọc theo kho' : 'toàn bộ kho'}</h2>
+    <div className="registration-actions"><h2>Tồn kho {selected ? 'đã lọc theo kho' : 'toàn bộ kho'}</h2>{selected && <button onClick={() => {setSelected('');setStockPage(1)}}>Bỏ lọc kho</button>}</div>
     <PageStatus loading={stocks.loading} error={stocks.error}>
       {stocks.data && <>
         {stocks.data.items.some((row) => row.isLowStock) && <p role="status">Có phụ tùng dưới ngưỡng tồn tối thiểu.</p>}
         <div className="m2-inventory-table"><table><thead><tr><th>Kho</th><th>SKU / Phụ tùng</th><th>Khả dụng</th><th>Cách ly</th><th>Tối thiểu</th><th>Cảnh báo</th></tr></thead>
-          <tbody>{stocks.data.items.map((row) => <tr key={`${row.warehouseId}:${row.partId}`}><td>{row.warehouse.name}</td><td>{row.part.sku} · {row.part.name}</td><td>{row.quantity} {row.part.unit}</td><td>{row.quantityQuarantined} {row.part.unit}</td><td>{row.minQuantity}</td><td>{row.isLowStock ? `Thiếu ${row.shortageQuantity}` : 'Đủ'}</td></tr>)}</tbody>
+          <tbody>{stocks.data.items.map((row) => <tr key={`${row.warehouseId}:${row.partId}`}><td>{row.warehouse.name}</td><td><Link to={`/app/inventory/parts/${row.partId}`}>{row.part.sku} · {row.part.name}</Link></td><td>{row.quantity} {row.part.unit}</td><td>{row.quantityQuarantined} {row.part.unit}</td><td>{row.minQuantity}</td><td>{row.isLowStock ? `Thiếu ${row.shortageQuantity}` : 'Đủ'}</td></tr>)}</tbody>
         </table></div>
+        {!stocks.data.items.length && <p>Chưa có số tồn phù hợp.</p>}<Pager page={stockPage} total={stocks.data.total} onPage={setStockPage}/>
       </>}
     </PageStatus>
   </div>

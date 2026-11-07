@@ -15,11 +15,27 @@ function setup(fetch, profile = { id: 'admin', tenantId: 'tenant-a', customerId:
     '../api/client': tab.client, '../auth/session': tab.session,
     '../components/Badges': { StatusBadge: 'badge' }, './registration-data': directory,
     './live-administration.css': {},
+    '../features/workspace/role-workspace': tab.load('features/workspace/role-workspace.ts'),
   }, { FormData: class { constructor(form) { this.form = form } entries() { return Object.entries(this.form.fields) } } })
   return { tab, host, pages, navigations }
 }
 const strings = tree => JSON.stringify(tree)
 const submit = fields => ({ preventDefault() {}, currentTarget: { fields } })
+
+test('Customer Admin manages Customer Users without offering staff roles or managing other Customer Admins', async () => {
+  const profile = { id: 'ca', tenantId: 'tenant-a', customerId: 'customer-a', roles: ['CUSTOMER_ADMIN'], userType: 'CUSTOMER' }
+  const { host, pages } = setup(async () => Response.json({ items: [
+    { id: 'ca', fullName: 'Me', email: 'me@local', roles: ['CUSTOMER_ADMIN'], userType: 'CUSTOMER', status: 'ACTIVE' },
+    { id: 'peer', fullName: 'Peer admin', email: 'peer@local', roles: ['CUSTOMER_ADMIN'], userType: 'CUSTOMER', status: 'ACTIVE' },
+    { id: 'user', fullName: 'Member', email: 'member@local', roles: ['CUSTOMER_USER'], userType: 'CUSTOMER', status: 'ACTIVE' },
+  ], total: 3 }), profile)
+  host.render(pages.UsersPage); await settle()
+  const tree = host.render(pages.UsersPage)
+  assert.equal(nodes(tree, n => n.type === 'button' && n.props.children === 'Gán vai trò').length, 0)
+  assert.equal(nodes(tree, n => n.type === 'button' && n.props.children === 'Tạm khóa').length, 1)
+  assert.ok(strings(tree).includes('/portal/users/invite'))
+  assert.ok(strings(tree).includes('Người dùng khách hàng'))
+})
 
 test('legacy mock flags cannot redirect application data to Prism', () => {
   const tab = webTab(() => {}, { VITE_M1_API_MODE: 'mock', VITE_GATEWAY_API_URL: '/edge', VITE_ORGANIZATION_API_URL: '/mock/organization' })

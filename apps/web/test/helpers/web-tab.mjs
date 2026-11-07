@@ -49,6 +49,7 @@ export function hooks() {
   let cursor = 0, effects = []
   const slots = []
   const react = {
+    useId() { return `test-${cursor++}` },
     useRef(initial) {
       const index = cursor++
       if (!(index in slots)) slots[index] = { current: initial }
