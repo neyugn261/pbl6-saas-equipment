@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Equipment Handover API
   version: 1.0.0
-  description: Additive contract proposed for owner review (ADR 0019). All operations require JWT. Internal membership validation is not routed by Gateway.
+  description: Implemented contract (ADR 0019 and ADR 0021). Registration handovers use snapshot contentVersion 2; CUSTOMER_SITE confirmation completes its linked registration and applies the exact frozen warranty, with asynchronous maintenance setup. All operations require JWT. Internal membership validation is not routed by Gateway.
 servers:
   - url: /api/assets
 security:
@@ -21,7 +21,7 @@ paths:
         '200': {description: 'Paged items, total, page, pageSize; scoped to tenant'}
     post:
       summary: Create immutable draft snapshot for equipment's existing customer/site
-      description: Staff only. Existing open occurrence is a 409. Cancel it first. Terminal occurrences may be replaced. expiresAt must be future and within 90 days. Retired/in-service equipment cannot be handed over.
+      description: Staff only. Equipment with an explicit registration deliveryMethod must use that registration instead (409). Existing open occurrence is a 409. Cancel it first. Terminal occurrences may be replaced. expiresAt must be future and within 90 days. Retired/in-service equipment cannot be handed over.
       requestBody:
         required: true
         content:
@@ -83,8 +83,17 @@ paths:
     parameters: [{$ref: '#/components/parameters/Id'}]
     post:
       summary: Explicit customer-admin acceptance and atomic Asset activation
-      description: Requires equipment_handover:respond, live Identity session/roles and Organization membership, unexpired current occurrence and unchanged destination. Acceptance, audit, ACTIVE and outbox commit together. A committed retry returns current detail; no second acceptance. Failure before commit changes neither acceptance nor Asset. Broker delivery is asynchronous.
-      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      description: Requires equipment_handover:respond, live Identity session/roles and Organization membership, unexpired current occurrence and unchanged destination. Acceptance, audit, ACTIVE and outbox commit together. A committed retry returns current detail; no second acceptance. Failure before commit changes neither acceptance nor Asset. Broker delivery is asynchronous. For snapshot v2, expectedVersion is required; Warranty/Registration/Equipment/outbox commit atomically. Reject/cancel/expiry reopens the linked registration as DRAFT for correction and a new handover occurrence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                expectedVersion: {type: integer, minimum: 1, description: Required for registration snapshot v2; optional for legacy snapshot v1}
+
       responses:
         '200': {description: ACTIVATED only after Asset commit; includes equipmentStatus and activatedAt}
         '400': {$ref: '#/components/responses/Invalid'}
@@ -105,6 +114,7 @@ paths:
               additionalProperties: false
               required: [reason]
               properties:
+                expectedVersion: {type: integer, minimum: 1, description: Required for registration snapshot v2}
                 reason: {type: string, minLength: 1, maxLength: 2000, pattern: '\S', description: Plain text}
       responses:
         '200': {description: REJECTED; replay preserves original reason and audit}

@@ -83,6 +83,7 @@ describe('EquipmentRepository', () => {
     const update = jest.fn().mockImplementation(async ({ data }) => ({ ...base(), ...data }));
     const tx = { $executeRawUnsafe: jest.fn().mockResolvedValue(1), $queryRaw: jest.fn().mockResolvedValue([{ id: equipmentId }]),
       equipment: { findFirst: jest.fn().mockResolvedValue(base()), update },
+      equipmentRegistration: { findFirst: jest.fn().mockResolvedValue(null) },
       equipmentHistory: { createMany: events } };
     const repo = new EquipmentRepository({ $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(tx) } as unknown as PrismaService);
     const after = await repo.patchWithHistory({ tenantId, customerId: null }, equipmentId, actorId,
@@ -98,7 +99,7 @@ describe('EquipmentRepository', () => {
   it('does not update or write history for a no-op and blocks RETIRED after lock', async () => {
     const update = jest.fn(); const createMany = jest.fn();
     const findFirst = jest.fn().mockResolvedValueOnce(base()).mockResolvedValueOnce({ ...base(), status: 'RETIRED' });
-    const tx = { $queryRaw: jest.fn(), equipment: { findFirst, update }, equipmentHistory: { createMany } };
+    const tx = { $queryRaw: jest.fn(), equipment: { findFirst, update }, equipmentRegistration: { findFirst: jest.fn().mockResolvedValue(null) }, equipmentHistory: { createMany } };
     const repo = new EquipmentRepository({ $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(tx) } as unknown as PrismaService);
     expect(await repo.patchWithHistory({ tenantId, customerId: null }, equipmentId, actorId, { status: 'ACTIVE' }))
       .toMatchObject({ status: 'ACTIVE' });

@@ -1,5 +1,6 @@
 # Web user guides
 
+- [Equipment delivery methods](./equipment-delivery-methods.md) — store completion and customer-site confirmation.
 - [Staff](./staff.md) — Tenant Admin, Service Manager, and Dispatcher workflows.
 - [Inventory Staff](./inventory-staff.md) — catalog, stock, and Work Order parts.
 - [Technician](./technician.md) — assigned work, service report, and evidence.

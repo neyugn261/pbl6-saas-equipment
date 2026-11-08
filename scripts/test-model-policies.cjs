@@ -140,17 +140,19 @@ async function fixtureUser(role, tenant, email, customerId) {
       roles: { create: { role: { connect: { code: role } } } },
     },
   });
-  if (customerId)
+  if (customerId) {
+    const membership = await dbs.organization.customerUserMembership.create({ data: { tenantId: tenant, customerId, userId: user.id, status: "ACTIVE" } });
     await dbs.identity.userCustomerLink.create({
       data: {
         userId: user.id,
         tenantId: tenant,
         customerId,
-        membershipId: randomUUID(),
+        membershipId: membership.id,
         status: "ACTIVE",
         sourceChangedAt: new Date(),
       },
     });
+  }
   return user;
 }
 function relay(name) {
@@ -543,6 +545,10 @@ async function main() {
     ],
     handler: (e) => srConsumer.handle(e),
   });
+  const registrationGroup = () => apps.maintenance.get(maintReq(path.join(root, 'apps/maintenance-service/dist/registrations/registration-group.service.js')).RegistrationGroupService);
+  const registrationReceipt = () => apps.asset.get(assetReq(path.join(root, 'apps/asset-service/dist/events/registration-maintenance.consumer.js')).RegistrationMaintenanceConsumer);
+  bus.subscribe({ queue: exchange + '.registration-confirmations', events: [Events.EquipmentRegistrationConfirmed], handler: e => registrationGroup().confirmed(e) });
+  bus.subscribe({ queue: exchange + '.registration-receipts', events: [Events.RegistrationMaintenanceReady], handler: e => registrationReceipt().handle(e) });
   await bus.start();
   relay("maintenance");
   relay("workorder");
@@ -1555,6 +1561,11 @@ async function main() {
   });
   await require('./test-maintenance-terms.cjs')({ call, A, M, manager, customerToken, other,
     warranty, item, registration, dbs, scheduler, tenantId, drain, evidence, root, ports, tenantCode: tenantCodeA, password });
+  relay('asset');
+  await require('./test-handover-methods.cjs')({ call, A, M, manager, customerToken, other, warranty, item,
+    dbs, scheduler, tenantId, customer, site, drain, evidence, root, ports, tenantCode: tenantCodeA, password,
+    fixtureUser, login, registrationGroup, registrationReceipt,
+    expire: () => apps.asset.get(assetReq(path.join(root, 'apps/asset-service/dist/handovers/handover.service.js')).HandoverService).expireDue() });
   console.log(
     JSON.stringify(
       {
@@ -1599,6 +1610,8 @@ main()
         "requests",
         "asset-history",
         "request-orders",
+        "registration-confirmations",
+        "registration-receipts",
       ])
         for (const name of Object.values(
           subscriptionQueues(exchange + "." + suffix),

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hooks, nodes, settle, webTab } from './helpers/web-tab.mjs'
 import { detailUI, expand } from './helpers/service-detail.mjs'
-const fixture = { id: 'handover', handoverNo: 'BG-test', equipmentId: 'equipment', status: 'PENDING_CUSTOMER_CONFIRMATION',
+const fixture = { id: 'handover', version: 3, handoverNo: 'BG-test', equipmentId: 'equipment', status: 'PENDING_CUSTOMER_CONFIRMATION',
   isCurrent: true, expiresAt: '2099-01-01T00:00:00Z', submittedAt: '2026-11-04T00:00:00Z', acceptedAt: null, activatedAt: null,
   equipmentStatus: 'OUT_OF_SERVICE', audit: [], snapshot: { assetCode: 'Pump', name: 'Pump', model: 'P', serialNumber: 'S',
     customerName: 'Customer', customerSiteId: 'site', deliveryAt: '2026-11-04T00:00:00Z', condition: 'New', notes: '<script>text</script>', contentVersion: 1 } }
@@ -14,6 +14,7 @@ function setup(row = fixture, roles = ['CUSTOMER_ADMIN'], userType = 'CUSTOMER',
     'react-router-dom': { Link: 'a', useParams: () => ({ id: 'handover' }), useNavigate: () => () => {}, useSearchParams: () => [new URLSearchParams()] },
     '../api/client': { ...tab.client, api }, '../auth/session': session, './registration-shared': { DirectoryPicker: 'picker' },
     './registration-data': { errorText: e => e.message },
+    './ModelPolicyPanels': { ModelPolicySummary: 'policy-summary' },
     '../display-names': tab.load('display-names.ts'),
     '../features/workspace/ServiceDetailUI': detailUI(tab,h),
     '../features/workspace/HandoverServiceContext': { default: 'handover-service-context' },
@@ -51,7 +52,7 @@ test('customer detail GET cannot accept; explicit confirmation POST uses scoped 
   await nodes(tree, n => n.type === 'form')[0].props.onSubmit({ preventDefault() {} })
   const mutation = calls.find(c => c.options)
   assert.equal(mutation.url, '/my/equipment-handovers/handover/accept')
-  assert.deepEqual(JSON.parse(JSON.stringify(mutation.options)), { method: 'POST', body: {} })
+  assert.deepEqual(JSON.parse(JSON.stringify(mutation.options)), { method: 'POST', body: { expectedVersion: fixture.version } })
 })
 test('reject dialog requires a reason and posts text without rendering HTML', async () => {
   const { calls, render } = setup()
@@ -77,4 +78,16 @@ test('activated detail displays authoritative lifecycle and accepted/activated t
   render(); await settle(); const tree = render()
   assert.ok(nodes(tree, n => n.type === 'dd' && n.props.children === 'Đã đưa vào dịch vụ').length)
   assert.equal(nodes(tree, n => n.type === 'button' && n.props.children === 'Chấp thuận').length, 0)
+})
+
+test('registration handover exposes exact actual dates and customer-safe policy snapshot', async () => {
+  const row = { ...fixture, snapshot: { ...fixture.snapshot, contentVersion: 2, registrationId: 'registration',
+    handoverDate: '2026-03-01', installationDate: '2026-03-02', commissionedDate: null, policies: { warranty: {}, maintenance: {} } } }
+  const { render } = setup(row)
+  render(); await settle(); const tree = render()
+  const text = JSON.stringify(tree)
+  assert.ok(text.includes('2026-03-01'))
+  assert.ok(text.includes('2026-03-02'))
+  assert.ok(text.includes('Chưa ghi nhận'))
+  assert.equal(nodes(tree, n => n.type === 'policy-summary').length, 1)
 })

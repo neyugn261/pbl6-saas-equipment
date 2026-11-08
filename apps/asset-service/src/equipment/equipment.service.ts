@@ -312,7 +312,7 @@ export class EquipmentService {
     const scope = dataScope(principal);
     const row = assertInScope(
       scope,
-      await this.repository.findScoped(scope, id),
+      await this.repository.findDetail(scope, id),
       'EQUIPMENT_NOT_FOUND',
     );
     return {
@@ -323,6 +323,7 @@ export class EquipmentService {
       status: row.status,
       assetCode: row.assetCode,
       snapshotVersion: row.snapshotVersion,
+      serviceSetupPending: !!row.registration?.deliveryMethod && (row.registration.status !== 'COMPLETED' || row.registration.maintenanceProvisioning === 'PENDING'),
     };
   }
 

@@ -1,3 +1,4 @@
+import { validModelSetupSnapshot, hashCheck, type EquipmentRegistrationConfirmedV1, type RegistrationMaintenanceReadyV1 } from './equipment-registration';
 import {
   validChecklist,
   validCustomerChecklist,
@@ -257,6 +258,17 @@ export interface EquipmentHandoverChangedV1 {
   status: 'PENDING_CUSTOMER_CONFIRMATION' | 'ACTIVATED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
 }
 export const Events = {
+  EquipmentRegistrationConfirmed: define<EquipmentRegistrationConfirmedV1>({
+    type: 'EquipmentRegistrationConfirmed', version: 1, aggregateType: 'EquipmentRegistration', producer: 'asset-service',
+    fields: { registrationId: is.uuid, equipmentId: is.uuid, customerId: is.uuid, customerSiteId: is.uuid,
+      snapshotVersion: v => Number.isSafeInteger(v) && Number(v) >= 0, submittedBy: is.uuid, confirmedBy: is.uuid,
+      confirmedAt: is.isoDateTime, snapshot: validModelSetupSnapshot },
+  }),
+  RegistrationMaintenanceReady: define<RegistrationMaintenanceReadyV1>({
+    type: 'RegistrationMaintenanceReady', version: 1, aggregateType: 'EquipmentRegistration', producer: 'maintenance-service',
+    fields: { registrationId: is.uuid, equipmentId: is.uuid, inputHash: hashCheck,
+      plans: is.arrayOf(is.object({ itemId: is.uuid, planId: is.uuid }), 8) },
+  }),
   EquipmentHandoverChanged: define<EquipmentHandoverChangedV1>({
     type: 'EquipmentHandoverChanged', version: 1, aggregateType: 'EquipmentHandover', producer: 'asset-service',
     fields: { handoverId: is.uuid, equipmentId: is.uuid, customerId: is.uuid, createdBy: is.uuid,

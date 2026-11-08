@@ -131,3 +131,20 @@ and tenant admins receive results. Missing eligible customer projection remains
 pending for reconciliation. A known newer occurrence-version suppresses a late
 older notification. These events cannot mutate Asset state.
 See [ADR 0019](../decisions/0019-customer-equipment-handover.md).
+
+
+## ADR 0021 — Registration confirmation and maintenance receipt
+
+- `EquipmentRegistrationConfirmed.v1`: producer Asset, aggregate EquipmentRegistration,
+  registrationId, equipmentId, customerId, customerSiteId, snapshotVersion, submittedBy,
+  confirmedBy, confirmedAt and the immutable `model-setup.v1` snapshot (schema, hash,
+  selected warranty/maintenance revisions and applied dates). Emitted only after customer
+  acceptance and only for APPLY maintenance. No JWT. Maintenance consumes into its inbox,
+  validates tenant/source/hash and atomically creates one group receipt and Plans.
+- `RegistrationMaintenanceReady.v1`: producer Maintenance, same aggregate, registrationId,
+  equipmentId, inputHash and itemId/planId mappings. Asset validates the exact approved
+  snapshot and records Plan IDs without changing customer completion timestamps.
+
+Both use transactional outbox/inbox and current retry/DLQ. Bind both consumers before
+rolling out the new wizard; replay unbound events from the outbox with original IDs.
+STORE and legacy registrations retain synchronous setup. See [ADR 0021](../decisions/0021-registration-delivery-methods.md).

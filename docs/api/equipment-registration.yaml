@@ -3,7 +3,7 @@ info:
   title: Equipment registration / handover
   version: 0.1.0-local
   description: Implemented supplement to Asset and Maintenance contracts, based on ADR
-    0012 and docs/plans/equipment-registration-technical-design.md. Reuse current Organization/Identity/RBAC/Gateway
+    0012, ADR 0021 and docs/plans/equipment-registration-technical-design.md. Explicit deliveryMethod selects STORE staff completion or CUSTOMER_SITE acceptance before applying policies. Null preserves legacy behavior. Reuse current Organization/Identity/RBAC/Gateway
     and existing domain APIs. Additive migrations 20261031090000_equipment_registration and 20261031090000_plan_registration_link are service-owned. Public operations
     use the Asset Gateway prefix; /internal operations require direct service origins and are blocked
     by Gateway. All references and permission/state rules must also be enforced by the owning backend.
@@ -131,7 +131,7 @@ paths:
     - $ref: '#/components/parameters/RegistrationId'
     get:
       operationId: getEquipmentRegistration
-      summary: Read draft, immutable progress or completion receipt
+      summary: Read draft, customer confirmation progress or completion receipt
       description: ''
       tags:
       - Equipment registration
@@ -632,6 +632,7 @@ components:
       enum:
       - DRAFT
       - PENDING_MAINTENANCE
+      - PENDING_CUSTOMER_CONFIRMATION
       - COMPLETED
     SubmitInput:
       type: object
@@ -667,12 +668,22 @@ components:
       - $ref: '#/components/schemas/MaintenanceCreate'
       - $ref: '#/components/schemas/MaintenanceKeep'
       - $ref: '#/components/schemas/NoPolicy'
+    HandoverDetails:
+      type: object
+      additionalProperties: false
+      required: [condition, expiresAt]
+      properties:
+        condition: {type: string, minLength: 1, maxLength: 2000, pattern: '\S'}
+        notes: {type: string, maxLength: 4000}
+        expiresAt: {type: string, format: date-time, description: Future deadline within 90 days at submit; expiry never accepts}
     CreateInput:
       type: object
       additionalProperties: false
       required:
       - equipment
       properties:
+        deliveryMethod: {type: string, enum: [STORE, CUSTOMER_SITE], description: Optional for legacy API clients; fixed after creation. STORE forbids installation/commissioning dates.}
+        handoverDetails: {$ref: '#/components/schemas/HandoverDetails'}
         equipment:
           $ref: '#/components/schemas/EquipmentSource'
         warranty:
@@ -685,6 +696,7 @@ components:
       required:
       - expectedVersion
       properties:
+        handoverDetails: {$ref: '#/components/schemas/HandoverDetails'}
         expectedVersion:
           type: integer
           minimum: 1
@@ -693,6 +705,7 @@ components:
         maintenance:
           $ref: '#/components/schemas/MaintenanceDecision'
       anyOf:
+      - required: [handoverDetails]
       - required:
         - warranty
       - required:
@@ -716,6 +729,10 @@ components:
       - createdAt
       - updatedAt
       properties:
+        deliveryMethod: {type: [string, 'null'], enum: [STORE, CUSTOMER_SITE, null]}
+        handoverDetails: {oneOf: [{$ref: '#/components/schemas/HandoverDetails'}, {type: 'null'}]}
+        handoverId: {type: [string, 'null'], format: uuid}
+        maintenanceProvisioning: {type: [string, 'null'], enum: [PENDING, READY, null], description: Onsite registration is complete on acceptance while plans provision asynchronously. Resume repairs pending setup.}
         id:
           type: string
           format: uuid

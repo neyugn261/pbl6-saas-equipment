@@ -106,6 +106,8 @@ model EquipmentHandover {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   equipment Equipment @relation(fields: [tenantId, equipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   audit EquipmentHandoverAudit[]
+  registrations EquipmentRegistration[]
+  @@unique([tenantId, id])
   @@unique([tenantId, handoverNo])
   @@index([tenantId, customerId, createdAt])
   @@index([status, expiresAt])
@@ -240,12 +242,18 @@ model OutboxEvent {
 
 /// Asset-owned initial service setup, separate from Equipment lifecycle status.
 model EquipmentRegistration {
+  /// Null preserves registrations created before delivery methods existed.
+  deliveryMethod       String?   @map("delivery_method") @db.VarChar(20)
+  handoverDetails      Json?     @map("handover_details")
+  handoverId           String?   @map("handover_id") @db.Uuid
+  maintenanceProvisioning String? @map("maintenance_provisioning") @db.VarChar(20)
+  handover EquipmentHandover? @relation(fields: [tenantId, handoverId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   policyPreview        Json?     @map("policy_preview")
   maintenancePlanIds   String[]  @default([]) @map("maintenance_plan_ids") @db.Uuid
   id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId             String    @map("tenant_id") @db.Uuid
   equipmentId          String    @map("equipment_id") @db.Uuid
-  status               String    @default("DRAFT") @db.VarChar(30)
+  status               String    @default("DRAFT") @db.VarChar(40)
   version              Int       @default(1)
   createActorId        String    @map("create_actor_id") @db.Uuid
   createKey            String    @map("create_key") @db.Uuid

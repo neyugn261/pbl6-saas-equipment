@@ -7,6 +7,7 @@ export interface EquipmentRef {
   customerSiteId: string | null;
   status: string;
   snapshotVersion: number;
+  serviceSetupPending?: boolean;
 }
 export interface AssetClient {
   equipment(id: string, principal: Principal): Promise<EquipmentRef | null>;

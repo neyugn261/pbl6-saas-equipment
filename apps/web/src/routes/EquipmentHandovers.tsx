@@ -1,4 +1,8 @@
-import { serviceLabels, equipmentLifecycleLabel } from "../features/workspace/service-detail-data";
+import { ModelPolicySummary } from "./ModelPolicyPanels";
+import {
+  serviceLabels,
+  equipmentLifecycleLabel,
+} from "../features/workspace/service-detail-data";
 import HandoverServiceContext from "../features/workspace/HandoverServiceContext";
 import {
   ServiceCard,
@@ -32,6 +36,7 @@ const labels: Record<string, string> = {
 type Handover = {
   id: string;
   handoverNo: string;
+  version: number;
   equipmentId: string;
   customerId: string;
   status: string;
@@ -47,7 +52,12 @@ type Handover = {
     customerSiteId: string;
     customerSiteName?: string;
     createdByName?: string;
-    deliveryAt: string;
+    deliveryAt?: string;
+    handoverDate?: string;
+    installationDate?: string | null;
+    commissionedDate?: string | null;
+    registrationId?: string;
+    policies?: Parameters<typeof ModelPolicySummary>[0]["snapshot"];
     condition: string;
     notes: string;
     contentVersion: number;
@@ -63,7 +73,7 @@ type Handover = {
   isCurrent?: boolean;
   audit?: { action: string; occurredAt: string }[];
 };
-const date = (value: string | null) =>
+const date = (value: string | null | undefined) =>
   value
     ? new Date(value).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
     : "—";
@@ -395,6 +405,7 @@ export function HandoverDetailPage() {
     e.preventDefault();
     if (
       !action ||
+      !row ||
       actionLock.current ||
       generation !== getSessionGeneration() ||
       (action === "reject" && !reason.trim())
@@ -406,7 +417,12 @@ export function HandoverDetailPage() {
     try {
       await api.asset(`${base}/${id}/${action}`, {
         method: "POST",
-        body: action === "reject" ? { reason: reason.trim() } : {},
+        body:
+          action === "reject"
+            ? { reason: reason.trim(), expectedVersion: row.version }
+            : action === "accept"
+              ? { expectedVersion: row.version }
+              : {},
       });
       if (generation !== getSessionGeneration()) return;
       setMessage(
@@ -523,10 +539,42 @@ export function HandoverDetailPage() {
                             },
                             {
                               label: "Thời gian bàn giao",
-                              value: date(row.snapshot.deliveryAt),
+                              value:
+                                row.snapshot.handoverDate ||
+                                date(row.snapshot.deliveryAt),
                             },
                           ]}
                         />
+                        {row.snapshot.registrationId && (
+                          <>
+                            <p>Hình thức: bàn giao tại cơ sở khách hàng</p>
+                            <p>
+                              Ngày lắp đặt:{" "}
+                              {row.snapshot.installationDate || "Chưa ghi nhận"}
+                            </p>
+                            <p>
+                              Ngày đưa vào vận hành:{" "}
+                              {row.snapshot.commissionedDate || "Chưa ghi nhận"}
+                            </p>
+                            <p>
+                              Bảo hành và lịch bảo trì tính từ ngày bàn giao
+                              thực tế. Xác nhận nghĩa là đồng ý với các ngày và
+                              nội dung trong hồ sơ này.
+                            </p>
+                            {!customer && (
+                              <Link
+                                to={`/app/equipment-registrations/${row.snapshot.registrationId}`}
+                              >
+                                Mở hồ sơ bàn giao để chỉnh sửa / theo dõi
+                              </Link>
+                            )}
+                          </>
+                        )}
+                        {row.snapshot.policies && (
+                          <ModelPolicySummary
+                            snapshot={row.snapshot.policies}
+                          />
+                        )}
                         <h3>Tình trạng khi bàn giao</h3>
                         <p className="sd-prose">{row.snapshot.condition}</p>
                         <h3>Ghi chú cho khách hàng</h3>
@@ -571,7 +619,10 @@ export function HandoverDetailPage() {
                           </Link>
                         </p>
                       </ServiceCard>
-                      <HandoverServiceContext equipmentId={row.equipmentId} customer={customer} />
+                      <HandoverServiceContext
+                        equipmentId={row.equipmentId}
+                        customer={customer}
+                      />
                     </div>
                   ),
                 },
@@ -644,8 +695,16 @@ export function HandoverDetailPage() {
                 ["REJECTED", "CANCELLED", "EXPIRED", "ACTIVATED"].includes(
                   row.status,
                 ) && (
-                  <Link to={`${path}/new?equipmentId=${row.equipmentId}`}>
-                    Tạo lần bàn giao mới
+                  <Link
+                    to={
+                      row.snapshot.registrationId
+                        ? `/app/equipment-registrations/${row.snapshot.registrationId}`
+                        : `${path}/new?equipmentId=${row.equipmentId}`
+                    }
+                  >
+                    {row.snapshot.registrationId
+                      ? "Mở lại hồ sơ bàn giao"
+                      : "Tạo lần bàn giao mới"}
                   </Link>
                 )}
             </div>

@@ -1,3 +1,4 @@
+import { RegistrationHandoverService } from '../registrations/registration-handover.service';
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Optional } from '@nestjs/common';
 import { dataScope, type Principal } from '@pbl6/auth';
@@ -16,7 +17,8 @@ const conflict = (message: string) => new ConflictException({ code: 'HANDOVER_CO
 export class HandoverService {
   constructor(private readonly repo: HandoverRepository, private readonly auth: HandoverAuthorization,
     @Inject(ORGANIZATION_CLIENT) private readonly organization: OrganizationClient,
-    @Optional() private readonly names?: DisplayNameLookup) {}
+    @Optional() private readonly names?: DisplayNameLookup,
+    @Optional() private readonly registrations?: RegistrationHandoverService) {}
 
   private view(row: EquipmentHandover, customer: boolean) {
     return { id: row.id, handoverNo: row.handoverNo, equipmentId: row.equipmentId, customerId: row.customerId,
@@ -66,6 +68,8 @@ export class HandoverService {
     if (!customer || customer.status !== 'ACTIVE' || !site || site.siteStatus !== 'ACTIVE') throw conflict('Customer or site is inactive');
     const row = await this.repo.db.$transaction(async tx => {
       const eq = await this.repo.lockEquipment(tx, tenantId, input.equipmentId);
+      if (await tx.equipmentRegistration.findFirst({ where: { tenantId, equipmentId: eq.id, deliveryMethod: { not: null } } }))
+        throw conflict('Complete or correct the handover from its registration');
       const now = await this.repo.now(tx);
       const deadline = new Date(input.expiresAt);
       if (!Number.isFinite(deadline.getTime()) || deadline <= now || deadline.getTime() > now.getTime() + 90 * 86400000)
@@ -95,7 +99,7 @@ export class HandoverService {
     });
     return this.view(row, false);
   }
-  async act(p: Principal, id: string, action: Exclude<HandoverAction, 'expire'>, reason?: string) {
+  async act(p: Principal, id: string, action: Exclude<HandoverAction, 'expire'>, reason?: string, expectedVersion?: number) {
     const decision = action === 'accept' || action === 'reject';
     if ((decision && p.userType !== 'CUSTOMER') || (!decision && p.userType !== 'TENANT_STAFF')) throw new ForbiddenException();
     await this.auth.check(p, decision);
@@ -111,6 +115,8 @@ export class HandoverService {
         await this.expire(tx, row);
         return { expired: true };
       }
+      if ((row.snapshot as Record<string, unknown>).contentVersion === 2 && decision && expectedVersion !== row.version)
+        throw conflict('Reload the submitted handover before deciding on this version');
       if (!canTransition(row.status, action)) throw conflict('Invalid handover transition');
       const snapshot = row.snapshot as Record<string, unknown>;
       if (decision || action === 'submit') {
@@ -120,6 +126,8 @@ export class HandoverService {
       if (action === 'submit' && row.expiresAt <= now) throw conflict('Draft deadline has passed; create a new handover');
       if (action === 'reject' && !reason?.trim()) throw new BadRequestException({ code: 'VALIDATION_FAILED', message: 'A rejection reason is required' });
       if (action === 'accept') {
+        if ((row.snapshot as Record<string, unknown>).contentVersion === 2 && !this.registrations) throw new Error('Registration handovers are not configured');
+        await this.registrations?.accept(tx, row, eq, p, now);
         await tx.equipmentHandover.update({ where: { id }, data: { status: 'ACCEPTED', acceptedAt: now, acceptedBy: p.userId } });
         await this.audit(tx, row, 'ACCEPTED', p.userId);
         await this.audit(tx, row, 'ACTIVATION_REQUESTED', p.userId);
@@ -131,6 +139,7 @@ export class HandoverService {
         ...(action === 'reject' ? { rejectedReason: reason!.trim() } : {}),
       } });
       await this.audit(tx, row, { accept: 'ACTIVATED', submit: 'SUBMITTED', cancel: 'CANCELLED', reject: 'REJECTED' }[action], p.userId);
+      if (action === 'reject' || action === 'cancel') await this.registrations?.reopen(tx, updated);
       await this.publish(tx, updated);
       return { row: updated };
     });
@@ -147,6 +156,7 @@ export class HandoverService {
   }
   private async expire(tx: HandoverTx, row: EquipmentHandover) {
     const updated = await tx.equipmentHandover.update({ where: { id: row.id }, data: { status: 'EXPIRED', version: { increment: 1 } } });
+    await this.registrations?.reopen(tx, updated);
     await this.audit(tx, row, 'EXPIRED', null);
     await this.publish(tx, updated);
   }

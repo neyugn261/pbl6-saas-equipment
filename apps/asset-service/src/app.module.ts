@@ -1,3 +1,4 @@
+import { RegistrationMaintenanceConsumer } from './events/registration-maintenance.consumer';
 import { ModelPoliciesModule } from './model-policies/model-policies.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -36,6 +37,6 @@ import { HistoryConsumer } from './events/history.consumer';
       useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
   ],
-  providers: [EventsService, HistoryConsumer],
+  providers: [EventsService, HistoryConsumer, RegistrationMaintenanceConsumer],
 })
 export class AppModule {}

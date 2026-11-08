@@ -11,6 +11,7 @@ import { PlansService } from './plans.service';
 import { JourneyService } from './journey.service';
 import { JourneyController } from './journey.controller';
 @Module({
+  exports: [RegistrationGroupService],
   controllers: [
     PlansController,
     TasksController,

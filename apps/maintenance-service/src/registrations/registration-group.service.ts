@@ -7,6 +7,13 @@ import { ConfigService } from '@nestjs/config';
 import { dataScope, type Principal } from '@pbl6/auth';
 import { ServiceHttpClient } from '@pbl6/service-kit';
 import {
+  enqueueEvent,
+  Events,
+  isEvent,
+  parseEnvelope,
+  processOnce,
+  InvalidEventError,
+  type EventEnvelope,
   validMaintenanceProfile,
   validWarrantyPolicy,
   maintenanceEndDate,
@@ -16,7 +23,12 @@ import {
 import { createHash } from 'node:crypto';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
-import { PlansRepository, lockEquipment } from '../plans/plans.repository';
+import type { EquipmentRef } from '../asset/asset.client';
+import {
+  PlansRepository,
+  lockEquipment,
+  type Tx,
+} from '../plans/plans.repository';
 import { calendarDate, dateText, occurrence } from '../common/calendar';
 const canonical = (value: unknown): unknown =>
   Array.isArray(value)
@@ -73,23 +85,7 @@ export class RegistrationGroupService {
       `/internal/equipment-registrations/${id}/model-policy-input`,
       { accessToken: p.accessToken },
     );
-    const snap = source.snapshot;
-    if (
-      source.registrationId !== id ||
-      source.tenantId !== tenantId ||
-      !snap ||
-      snap.schema !== 'model-setup.v1' ||
-      snap.hash !== source.inputHash ||
-      hash({ equipmentId: source.equipmentId, ...snap, hash: undefined }) !==
-        source.inputHash ||
-      !validMaintenanceProfile(snap.maintenance.body) ||
-      !validWarrantyPolicy(snap.warranty.body) ||
-      snap.maintenance.body.mode !== 'APPLY'
-    )
-      throw new BadGatewayException({
-        code: 'INVALID_POLICY_SOURCE',
-        message: 'Frozen setup source is invalid',
-      });
+    this.validate(source, tenantId, id);
     const prior = await this.db.maintenanceSetupGroup.findUnique({
       where: { tenantId_registrationId: { tenantId, registrationId: id } },
     });
@@ -118,132 +114,231 @@ export class RegistrationGroupService {
         code: 'EQUIPMENT_REFERENCE_INVALID',
         message: 'Equipment cannot receive this setup',
       });
-    return this.db.$transaction(async (tx) => {
-      const key = `registration-group:${tenantId}:${id}`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`;
-      const existing = await tx.maintenanceSetupGroup.findUnique({
-        where: { tenantId_registrationId: { tenantId, registrationId: id } },
+    return this.db.$transaction((tx) =>
+      this.apply(tx, source, eq, p.userId, p.roles),
+    );
+  }
+  private validate(source: Source, tenantId: string, id: string) {
+    const snap = source.snapshot;
+    if (
+      source.registrationId !== id ||
+      source.tenantId !== tenantId ||
+      !snap ||
+      snap.schema !== 'model-setup.v1' ||
+      snap.hash !== source.inputHash ||
+      hash({ equipmentId: source.equipmentId, ...snap, hash: undefined }) !==
+        source.inputHash ||
+      !validMaintenanceProfile(snap.maintenance.body) ||
+      !validWarrantyPolicy(snap.warranty.body) ||
+      snap.maintenance.body.mode !== 'APPLY'
+    )
+      throw new BadGatewayException({
+        code: 'INVALID_POLICY_SOURCE',
+        message: 'Frozen setup source is invalid',
       });
-      if (existing) {
-        if (
-          existing.inputHash !== source.inputHash ||
-          existing.equipmentId !== source.equipmentId
-        )
-          throw new ConflictException({
-            code: 'REGISTRATION_PLAN_CONFLICT',
-            message: 'Setup identity changed',
-          });
-        return existing.receipt;
-      }
-      await lockEquipment(tx, tenantId, eq.id);
+  }
+  private async apply(
+    tx: Tx,
+    source: Source,
+    eq: EquipmentRef,
+    actorId: string,
+    roles: readonly string[],
+  ) {
+    const { tenantId, registrationId: id, snapshot: snap } = source;
+
+    const key = `registration-group:${tenantId}:${id}`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))::text`;
+    const existing = await tx.maintenanceSetupGroup.findUnique({
+      where: { tenantId_registrationId: { tenantId, registrationId: id } },
+    });
+    if (existing) {
       if (
-        await tx.maintenancePlan.count({
-          where: {
-            tenantId,
-            equipmentId: eq.id,
-            status: { in: ['ACTIVE', 'PAUSED'] },
-          },
-        })
+        existing.inputHash !== source.inputHash ||
+        existing.equipmentId !== source.equipmentId
       )
         throw new ConflictException({
-          code: 'EXISTING_MAINTENANCE_PLAN',
-          message:
-            'Keep or manage existing plans before applying a new programme',
+          code: 'REGISTRATION_PLAN_CONFLICT',
+          message: 'Setup identity changed',
         });
-      await tx.maintenanceSetupGroup.create({
-        data: {
+      return existing.receipt;
+    }
+    await lockEquipment(tx, tenantId, eq.id);
+    if (
+      await tx.maintenancePlan.count({
+        where: {
           tenantId,
-          registrationId: id,
           equipmentId: eq.id,
-          inputHash: source.inputHash,
-          receipt: { plans: [] },
+          status: { in: ['ACTIVE', 'PAUSED'] },
         },
+      })
+    )
+      throw new ConflictException({
+        code: 'EXISTING_MAINTENANCE_PLAN',
+        message:
+          'Keep or manage existing plans before applying a new programme',
       });
-      const plans: { itemId: string; planId: string }[] = [];
-      for (const rule of snap.maintenance.body.rules) {
-        // Resolve from the frozen applied warranty, never from a later Model revision.
-        const warrantyBody = snap.warranty.body;
-        if (!validWarrantyPolicy(warrantyBody))
-          throw new BadGatewayException('Invalid warranty source');
-        const appliedWarrantyEnd =
-          warrantyBody.mode === 'APPLY'
-            ? warrantyEnd(snap.handoverDate, warrantyBody.durationMonths)
-            : undefined;
-        if (
-          rule.term?.mode === 'WARRANTY_END' &&
-          snap.warranty.endDate !== appliedWarrantyEnd
-        )
-          throw new BadGatewayException(
-            'Applied warranty dates do not match the frozen policy',
-          );
-        let endDate: string | null;
-        try {
-          endDate = maintenanceEndDate(
-            snap.handoverDate,
-            rule.term,
-            appliedWarrantyEnd,
-          );
-        } catch {
-          throw new BadGatewayException(
-            'Invalid frozen maintenance term or missing applied warranty',
-          );
-        }
-        const anchor = calendarDate(snap.handoverDate),
-          first = occurrence(
-            anchor,
-            rule.frequencyUnit,
-            rule.frequencyValue,
-            rule.firstOccurrence,
-          );
-        if (endDate && dateText(first) > endDate)
-          throw new BadGatewayException(
-            'First maintenance occurrence exceeds the frozen term',
-          );
-        const plan = await this.repo.create(
-          tenantId,
-          {
-            equipmentId: eq.id,
-            name: rule.name,
-            description: snap.maintenance.body.terms,
-            frequencyUnit: rule.frequencyUnit,
-            frequencyValue: rule.frequencyValue,
-            nextDueDate: dateText(first),
-          },
-          eq,
-          undefined,
-          p.userId,
-          p.roles,
-          tx,
-          undefined,
-          {
-            termMode: rule.term?.mode ?? 'UNLIMITED',
-            termYears: rule.term?.mode === 'YEARS' ? rule.term.years : null,
-            endDate: endDate ? calendarDate(endDate) : null,
-          },
-        );
-        await tx.maintenancePlan.update({
-          where: { id: plan.id },
-          data: {
-            anchorDate: anchor,
-            policyVersionId: snap.maintenance.revisionId,
-            checklist: rule.checklist as unknown as Prisma.InputJsonValue,
-            setupGroupId: id,
-            setupItemId: rule.id,
-          },
-        });
-        plans.push({ itemId: rule.id, planId: plan.id });
-      }
-      const receipt = {
+    await tx.maintenanceSetupGroup.create({
+      data: {
+        tenantId,
         registrationId: id,
         equipmentId: eq.id,
         inputHash: source.inputHash,
-        plans,
-      };
-      await tx.maintenanceSetupGroup.update({
-        where: { tenantId_registrationId: { tenantId, registrationId: id } },
-        data: { receipt },
-      });
-      return receipt;
+        receipt: { plans: [] },
+      },
     });
+    const plans: { itemId: string; planId: string }[] = [];
+    for (const rule of snap.maintenance.body.rules) {
+      // Resolve from the frozen applied warranty, never from a later Model revision.
+      const warrantyBody = snap.warranty.body;
+      if (!validWarrantyPolicy(warrantyBody))
+        throw new BadGatewayException('Invalid warranty source');
+      const appliedWarrantyEnd =
+        warrantyBody.mode === 'APPLY'
+          ? warrantyEnd(snap.handoverDate, warrantyBody.durationMonths)
+          : undefined;
+      if (
+        rule.term?.mode === 'WARRANTY_END' &&
+        snap.warranty.endDate !== appliedWarrantyEnd
+      )
+        throw new BadGatewayException(
+          'Applied warranty dates do not match the frozen policy',
+        );
+      let endDate: string | null;
+      try {
+        endDate = maintenanceEndDate(
+          snap.handoverDate,
+          rule.term,
+          appliedWarrantyEnd,
+        );
+      } catch {
+        throw new BadGatewayException(
+          'Invalid frozen maintenance term or missing applied warranty',
+        );
+      }
+      const anchor = calendarDate(snap.handoverDate),
+        first = occurrence(
+          anchor,
+          rule.frequencyUnit,
+          rule.frequencyValue,
+          rule.firstOccurrence,
+        );
+      if (endDate && dateText(first) > endDate)
+        throw new BadGatewayException(
+          'First maintenance occurrence exceeds the frozen term',
+        );
+      const plan = await this.repo.create(
+        tenantId,
+        {
+          equipmentId: eq.id,
+          name: rule.name,
+          description: snap.maintenance.body.terms,
+          frequencyUnit: rule.frequencyUnit,
+          frequencyValue: rule.frequencyValue,
+          nextDueDate: dateText(first),
+        },
+        eq,
+        undefined,
+        actorId,
+        roles,
+        tx,
+        undefined,
+        {
+          termMode: rule.term?.mode ?? 'UNLIMITED',
+          termYears: rule.term?.mode === 'YEARS' ? rule.term.years : null,
+          endDate: endDate ? calendarDate(endDate) : null,
+        },
+      );
+      await tx.maintenancePlan.update({
+        where: { id: plan.id },
+        data: {
+          anchorDate: anchor,
+          policyVersionId: snap.maintenance.revisionId,
+          checklist: rule.checklist as unknown as Prisma.InputJsonValue,
+          setupGroupId: id,
+          setupItemId: rule.id,
+        },
+      });
+      plans.push({ itemId: rule.id, planId: plan.id });
+    }
+    const receipt = {
+      registrationId: id,
+      equipmentId: eq.id,
+      inputHash: source.inputHash,
+      plans,
+    };
+    await tx.maintenanceSetupGroup.update({
+      where: { tenantId_registrationId: { tenantId, registrationId: id } },
+      data: { receipt },
+    });
+    return receipt;
+  }
+  async confirmed(envelope: EventEnvelope): Promise<void> {
+    if (!isEvent(envelope, Events.EquipmentRegistrationConfirmed)) return;
+    parseEnvelope(JSON.stringify(envelope));
+    const p = envelope.payload;
+    if (
+      !envelope.tenantId ||
+      envelope.producer !== 'asset-service' ||
+      envelope.aggregateType !== 'EquipmentRegistration' ||
+      envelope.aggregateId.toLowerCase() !== p.registrationId.toLowerCase()
+    )
+      throw new InvalidEventError(['Invalid registration confirmation source']);
+    const source: Source = {
+      tenantId: envelope.tenantId,
+      registrationId: p.registrationId,
+      equipmentId: p.equipmentId,
+      inputHash: p.snapshot.hash,
+      snapshot: p.snapshot,
+    };
+    this.validate(source, envelope.tenantId, p.registrationId);
+    await processOnce(
+      this.db,
+      {
+        eventId: envelope.eventId,
+        eventType: envelope.eventType,
+        consumer: 'maintenance-service.registration-confirmations',
+      },
+      async (tx) => {
+        if (
+          (await tx.maintenancePlan.findFirst({
+            where: {
+              equipmentId: p.equipmentId,
+              tenantId: { not: envelope.tenantId! },
+            },
+          })) ||
+          (await tx.equipmentSnapshot.findFirst({
+            where: {
+              equipmentId: p.equipmentId,
+              tenantId: { not: envelope.tenantId! },
+            },
+          }))
+        )
+          throw new InvalidEventError(['Equipment tenant mismatch']);
+        const receipt = await this.apply(
+          tx,
+          source,
+          {
+            id: p.equipmentId,
+            customerId: p.customerId,
+            customerSiteId: p.customerSiteId,
+            status: 'ACTIVE',
+            snapshotVersion: p.snapshotVersion,
+          },
+          p.confirmedBy,
+          [],
+        );
+        await enqueueEvent(tx, Events.RegistrationMaintenanceReady, {
+          tenantId: envelope.tenantId!,
+          aggregateId: p.registrationId,
+          correlationId: envelope.correlationId,
+          payload: receipt as {
+            registrationId: string;
+            equipmentId: string;
+            inputHash: string;
+            plans: { itemId: string; planId: string }[];
+          },
+        });
+      },
+    );
   }
 }

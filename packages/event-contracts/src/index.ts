@@ -9,3 +9,5 @@ export * from './retry';
 export * from './sql';
 
 export * from './model-policies';
+
+export * from './equipment-registration';
