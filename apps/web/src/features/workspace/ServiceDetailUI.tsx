@@ -1,5 +1,5 @@
 import { serviceLabels } from "./service-detail-data";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Info, RefreshCw } from "lucide-react";
 import { Badge } from "./WorkspaceUI";
@@ -12,6 +12,7 @@ export function ServiceHeader({
   title,
   description,
   status,
+  statusLabel,
   actions,
 }: {
   back: string;
@@ -20,6 +21,7 @@ export function ServiceHeader({
   title: string;
   description: string;
   status?: unknown;
+  statusLabel?: string;
   actions?: ReactNode;
 }) {
   return (
@@ -35,7 +37,8 @@ export function ServiceHeader({
           <p>{description}</p>
         </div>
         <div className="sd-header-actions">
-          {status != null && <Badge status={status} />} {actions}
+          {status != null && <Badge status={status} label={statusLabel} />}{" "}
+          {actions}
         </div>
       </div>
     </header>
@@ -70,7 +73,21 @@ export function ServiceSections({
 }: {
   items: { key: string; label: string; content: ReactNode }[];
 }) {
-  const [selected, setSelected] = useState(items[0]?.key);
+  const fromHash = () =>
+    new URLSearchParams(window.location?.hash.slice(1) ?? "").get("section");
+  const [selected, setSelected] = useState(fromHash() ?? items[0]?.key);
+  const [visited, setVisited] = useState<string[]>([selected]);
+  useEffect(() => {
+    const changed = () => {
+      const key = fromHash();
+      if (key) {
+        setSelected(key);
+        setVisited((values) => [...new Set([...values, key])]);
+      }
+    };
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, []);
   const instance = useId();
   const active = items.some((item) => item.key === selected)
     ? selected
@@ -84,7 +101,15 @@ export function ServiceSections({
             type="button"
             aria-pressed={active === item.key}
             aria-controls={`${instance}-${item.key}`}
-            onClick={() => setSelected(item.key)}
+            onClick={() => {
+              setSelected(item.key);
+              setVisited((values) => [...new Set([...values, item.key])]);
+              window.history?.replaceState(
+                null,
+                "",
+                `#section=${encodeURIComponent(item.key)}`,
+              );
+            }}
           >
             {item.label}
           </button>
@@ -97,7 +122,9 @@ export function ServiceSections({
           className="sd-section-panel"
           hidden={active !== item.key}
         >
-          {item.content}
+          {active === item.key || visited.includes(item.key)
+            ? item.content
+            : null}
         </div>
       ))}
     </div>

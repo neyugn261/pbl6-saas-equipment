@@ -11,6 +11,30 @@ export type Area =
   | "workorders"
   | "maintenance"
   | "inventory";
+const concurrentReads = new Map<string, Promise<unknown>>();
+let readGeneration = -1;
+function sharedRead<T>(
+  area: Area,
+  path: string,
+  generation: number,
+  revision: number,
+): Promise<T> {
+  if (readGeneration !== generation) {
+    concurrentReads.clear();
+    readGeneration = generation;
+  }
+  const key = `${generation}:${area}:${path}:${revision}`;
+  let pending = concurrentReads.get(key);
+  if (!pending) {
+    pending = api[area](path);
+    concurrentReads.set(key, pending);
+    const release = () => {
+      if (concurrentReads.get(key) === pending) concurrentReads.delete(key);
+    };
+    void pending.then(release, release);
+  }
+  return pending as Promise<T>;
+}
 export const value = (input: unknown, fallback = "Chưa có thông tin") =>
   typeof input === "string" && input.trim()
     ? input
@@ -86,7 +110,7 @@ export function useWorkspaceData<T>(
   useEffect(() => {
     let current = true;
     if (path)
-      api[area]<T>(path).then(
+      sharedRead<T>(area, path, generation, revision).then(
         (data) => {
           if (current && generation === getSessionGeneration())
             setState({ key, data });
@@ -107,7 +131,7 @@ export function useWorkspaceData<T>(
     return () => {
       current = false;
     };
-  }, [area, path, generation, key]);
+  }, [area, path, generation, key, revision]);
   return path === null
     ? { data: undefined, error: undefined, loading: false }
     : state.key === key

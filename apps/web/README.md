@@ -2,7 +2,20 @@
 
 Web React + Vite gọi Identity, Organization, Asset và Service Request qua API Gateway theo mặc định. Menu lấy vai trò từ `/auth/me`; backend quyết định quyền và phạm vi tenant/customer. Các trang M1 gồm khách hàng, thiết bị, yêu cầu dịch vụ, mời người dùng và đường dẫn QR `/portal/qr/{token}`.
 
-Giao diện dùng lại ngôn ngữ thiết kế Servio từ bản mẫu của Khương (sidebar, topbar, thẻ số liệu và trạng thái), nhưng dashboard lấy số liệu thật từ API trong phạm vi quyền của tài khoản. Các màn hình và dữ liệu giả của bản mẫu không được dùng để thay thế luồng M1.
+Web sử dụng giao diện **Workshop** (xám ấm, cam đất, điều hướng ngang) cho cả 8 vai trò, kết hợp bàn xử lý **Field Desk** và hồ sơ **Casebook**. Menu, dashboard và thao tác theo vai trò hiện hành; khách hàng dùng `/portal`, quản trị nền tảng dùng `/admin`, nhân viên dùng `/app`. Dashboard, danh sách và hồ sơ lấy dữ liệu thật từ API trong phạm vi quyền của tài khoản; dữ liệu bản mẫu không được dùng để thay thế luồng ứng dụng. Flutter trong `apps/mobile` là ứng dụng riêng và không thay đổi trong đợt này.
+
+### Không gian Service Manager
+
+- `/dashboard`: nhóm **Cần tôi xử lý / Chờ khách hàng / Chờ đội thực hiện / Cần xem lại kết quả**. Bao gồm yêu cầu đã tiếp nhận, chờ thông tin/chi phí, bàn giao, bảo trì thất bại và kết quả chờ xác nhận. Mỗi nguồn lấy tối đa 6 hồ sơ; hỗ trợ hồ sơ cũ trước hoặc ưu tiên cao trước ở nguồn có API tương ứng. Tổng từng bộ lọc lấy từ server, không cộng trùng Request và WO. Lỗi dữ liệu hiển thị riêng và không được coi là số 0.
+- `/app/work-orders`: mặc định bảng công việc, có thể chuyển **Danh sách**. Mỗi cột gọi server theo trạng thái và bộ lọc, tối đa 4 hồ sơ; **Xem danh sách đầy đủ** giữ bộ lọc và hỗ trợ phân trang. Lệnh hoàn tất/đã hủy có thể chọn qua bộ lọc trạng thái hoặc xem trong danh sách.
+- `/app/equipment/:id`: khối nhận dạng, serial, khách hàng, địa điểm, bàn giao, bảo hành theo lịch và tình trạng đã ghi nhận. Có mục lịch sử phụ tùng đã xác nhận sử dụng/điều chỉnh; cùng component phục vụ `/portal/equipment/:id` qua API Asset đã lọc quyền. Không lấy lượng xuất kho làm lượng đã lắp, không tự suy ra chi phí hoặc gia hạn bảo hành.
+- Chi tiết WO dùng địa điểm đã lưu trên lệnh; vị trí hiện tại của máy có nhãn riêng. Đầu hồ sơ tách trạng thái công việc, kết quả kỹ thuật, tình trạng máy, xác nhận yêu cầu và đối soát phụ tùng. Lỗi reservation đang giữ giải thích cần phối hợp kho.
+- Dispatcher/Tenant Admin cùng sử dụng bảng và hồ sơ WO; kỹ thuật viên web giữ thao tác thực hiện theo `allowedActions`. Lọc đội ngũ theo chi nhánh/kỹ năng và xem trước lệnh đang giao; chưa có cơ chế tự chặn lịch trùng.
+- Các vai trò khác có dashboard chọn nhóm theo dõi và liên kết đúng loại hồ sơ. Style Workshop áp dụng cho trang con, biểu mẫu, bảng, kho, quản trị và portal trong shell chung. Menu vẫn lấy từ catalog quyền hiện hành.
+
+Chi tiết triển khai, kiểm tra và giới hạn nghiệm thu: [báo cáo Workshop UI](../../docs/reports/2026-11-07-service-manager-workshop-ui.md).
+
+Đợt mở rộng toàn web và các phần cần backend tiếp tục: [bàn giao Workshop và nghiệp vụ](../../docs/reports/2026-11-08-workshop-web-rollout.md). Xác nhận thay khách hiện được ghi nhãn và hướng dẫn ghi căn cứ trong trao đổi; API chưa có bộ trường bằng chứng bắt buộc. Đối chiếu dự toán/thực hiện là phần đọc hỗ trợ kiểm tra, chưa phải cơ chế phê duyệt phát sinh hoặc điều kiện đóng hồ sơ mới.
 
 ## Luồng demo trên web
 
@@ -54,7 +67,7 @@ Thêm `--exercise-equipment-update` để kiểm tra PATCH hồ sơ, xác nhận
 
 ## Các route dùng dữ liệu thật
 
-Tất cả route ứng dụng gọi API thật. `VITE_M1_API_MODE=mock` và các biến URL
+Các route vận hành gọi API thật. Studio DEV được tách riêng ở mục dưới. `VITE_M1_API_MODE=mock` và các biến URL
 Prism cũ không còn chuyển nguồn dữ liệu của route. `VITE_GATEWAY_API_URL`
 định nghĩa gốc Gateway; `VITE_IDENTITY_API_URL` vẫn cho phép dùng Identity
 riêng khi phát triển.
@@ -123,3 +136,31 @@ kho trước khi tạo lại một giao dịch chưa rõ kết quả.
 `pnpm --filter web test` bao gồm kiểm thử hồi quy mất phản hồi, tải lại trang,
 đổi phiên, thao tác lặp và URL Notification từ component qua API client thật.
 Phạm vi và kết quả: [M3 acceptance matrix](../../docs/testing/m3-test-cases.md).
+
+## Workshop: thiết kế UI trước API (08/11/2026)
+
+Chạy `pnpm --filter web dev`, mở **http://localhost:5173/design/workshop**.
+Đây là studio chỉ có trong DEV, không yêu cầu tài khoản, có nhãn dữ liệu minh họa
+và không gọi API. Đổi góc nhìn trong studio không đổi phiên đăng nhập hay quyền thật.
+Studio và fixture không được import vào route vận hành; build production loại studio.
+
+12 hành trình cho 8 role: sự cố, trách nhiệm, dự toán, lịch điều phối, thực hiện/báo cáo,
+phiếu kho, xác nhận kết quả, bảo trì, bàn giao, tổng quan/hồ sơ nguồn, tài khoản,
+tài liệu/thông báo/lịch sử. Có bộ chọn trạng thái loading, rỗng, nguồn lỗi, thiếu quyền,
+chỉ đọc, chưa rõ kết quả và xung đột. Biên nhận/in/tải trong studio đều là minh họa.
+
+Route thật đã sửa khóa khôi phục dự toán, lựa chọn thiết bị độc lập kết quả tìm,
+xác nhận đúng revision, số lượng kho, preview kỳ bảo trì và textarea báo cáo.
+Yêu cầu mới có mã lỗi/liên hệ/hiện trường; hiện gửi các nội dung bổ sung **trong mô tả**,
+không giả định có trường API riêng. Báo cáo một phần cần ghi phần còn lại trong tóm tắt.
+
+Nháp Request/Estimate/Report lưu trong `sessionStorage`, tách tài khoản/tenant/customer/hồ sơ,
+thông thường hết hạn sau 12 giờ. Dấu lần gửi chưa rõ kết quả được giữ để đối soát,
+không tự hết hạn thành một form được gửi lại. Không có đồng bộ nháp giữa tab/thiết bị.
+Đóng tab/xóa dữ liệu trình duyệt có thể mất nháp. Kho tiếp tục dùng cơ chế key/khôi phục riêng.
+
+Tách tải nhóm route và panel chưa mở; panel đã mở giữ editor. Mục hồ sơ có deep link
+`#section=...`. Lỗi tải bundle có màn hướng dẫn tải lại, không để app trống.
+
+Báo cáo triển khai, kiểm thử và nhận xét khắt khe:
+[2026-11-08-workshop-ui-v2-acceptance.md](../../docs/reports/2026-11-08-workshop-ui-v2-acceptance.md).

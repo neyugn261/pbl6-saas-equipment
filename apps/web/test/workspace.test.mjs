@@ -139,6 +139,7 @@ test("plan creation submits one intent; an unknown result never reports saved or
     "DataState",
     "EmptyState",
     "EntityPicker",
+    "EquipmentIdentity",
     "NextStep",
     "PageHeading",
     "Pagination",
@@ -181,6 +182,9 @@ test("plan creation submits one intent; an unknown result never reports saved or
       },
       "../../components/Badges": { PriorityBadge: "PriorityBadge" },
       "./WorkspaceUI": ui,
+      "./WorkOrderBoard": { default: "WorkOrderBoard" },
+      "./service-detail-data": local.load("features/workspace/service-detail-data.ts"),
+      "./calendar-preview":local.load("features/workspace/calendar-preview.ts"),
       "./workspace-data": { formatDate: String },
     },
     {
@@ -240,7 +244,7 @@ function operationsFixture(profile, search, response) {
   const data = local.load("features/workspace/workspace-data.ts", {
     react: h.react, "../../api/client": local.client, "../../auth/session": session,
   });
-  const names = ["Badge", "DataState", "EmptyState", "EntityPicker", "NextStep", "PageHeading", "Pagination", "RelatedName", "SearchField"];
+  const names = ["Badge", "DataState", "EmptyState", "EntityPicker", "EquipmentIdentity", "NextStep", "PageHeading", "Pagination", "RelatedName", "SearchField"];
   const icons = ["ArrowRight", "CalendarDays", "CheckCircle2", "Clock3", "Info", "Plus", "RefreshCw", "Users", "Wrench"];
   let params = new URLSearchParams(search);
   const module = local.load("features/workspace/OperationsPages.tsx", {
@@ -250,6 +254,9 @@ function operationsFixture(profile, search, response) {
     "../../auth/session": session, "../../api/client": local.client,
     "../../components/Badges": { PriorityBadge: "PriorityBadge" },
     "./WorkspaceUI": Object.fromEntries(names.map(name => [name, name])),
+    "./WorkOrderBoard": { default: "WorkOrderBoard" },
+    "./service-detail-data": local.load("features/workspace/service-detail-data.ts"),
+    "./calendar-preview":local.load("features/workspace/calendar-preview.ts"),
     "./workspace-data": { ...data, useWorkspaceData: (area, path) => { calls.push({ area, path }); return { loading: false, data: response }; } },
   });
   return { render: (name, props) => h.render(module[name], props), calls };
@@ -257,7 +264,7 @@ function operationsFixture(profile, search, response) {
 
 test("Technician work list always requests own assignments; manager list does not force mine", () => {
   for (const role of ["TECHNICIAN", "SERVICE_MANAGER"]) {
-    const fixture = operationsFixture({ roles: [role], userType: "TENANT_STAFF" }, "status=ASSIGNED&page=2", { items: [], total: 25 });
+    const fixture = operationsFixture({ roles: [role], userType: "TENANT_STAFF" }, "status=ASSIGNED&page=2&view=list", { items: [], total: 25 });
     fixture.render("WorkspaceWorkOrdersPage");
     const url = new URL(fixture.calls[0].path, "http://local");
     assert.equal(url.searchParams.get("mine"), role === "TECHNICIAN" ? "true" : null);

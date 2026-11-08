@@ -1,124 +1,56 @@
-import {
-  HandoverCreatePage,
-  HandoverDetailPage,
-} from "./routes/EquipmentHandovers";
-import {
-  WorkspaceRequestsPage,
-  WorkspaceHandoverPage as HandoverListPage,
-  WorkspaceWorkOrdersPage as WorkOrderListPage,
-  WorkspaceTechniciansPage as LiveTechniciansPage,
-  WorkspaceMaintenancePage as LiveMaintenancePage,
-  WorkspaceMaintenanceHistoryPage as MaintenanceHistoryPage,
-} from "./features/workspace/OperationsPages";
-import { navigationFor } from "./features/workspace/role-workspace";
 import ServiceManagerWorkOrder from "./features/workspace/ServiceManagerWorkOrder";
+import ServiceManagerShell from "./features/workspace/ServiceManagerShell";
+import WorkspaceRouteBoundary from "./features/workspace/WorkspaceRouteBoundary";
 import {
   ServiceSections,
   ServiceNotice,
 } from "./features/workspace/ServiceDetailUI";
 import { RequestLinkedOrders } from "./features/workspace/CustomerServicePanel";
-import { serviceLabels } from "./features/workspace/service-detail-data";
+import {
+  serviceLabels,
+  equipmentLifecycleLabel,
+  requestResponsibility,
+} from "./features/workspace/service-detail-data";
+import RequestCloseoutSummary from "./features/workspace/RequestCloseoutSummary";
 import { ModelPolicyPage } from "./routes/ModelPolicyPage";
 import { WarrantyAssessmentPanel } from "./routes/ModelPolicyPanels";
 import { useDirectory } from "./routes/registration-data";
-import {
-  CustomerDirectoryPage,
-  CustomerCreatePage,
-  CustomerWorkspacePage,
-  EquipmentModelsPage,
-} from "./routes/EquipmentDirectories";
-import {
-  EquipmentRegistrationPage,
-  RegistrationListPage,
-} from "./routes/EquipmentRegistration";
+
 import {
   useEffect,
   useRef,
   useState,
+  lazy,
+  Suspense,
   type FormEvent,
   type ReactNode,
 } from "react";
 import {
   Link,
   Navigate,
-  NavLink,
   Route,
   Routes,
   useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
-import {
-  Boxes,
-  Building2,
-  Bell,
-  ChevronRight,
-  ClipboardList,
-  Factory,
-  Gauge,
-  History,
-  LayoutDashboard,
-  LogOut,
-  MapPin,
-  Menu,
-  Package,
-  PanelLeftClose,
-  Search,
-  ShieldCheck,
-  SlidersHorizontal,
-  UserCog,
-  UserPlus,
-  Users,
-  Wrench,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Boxes, Building2, ChevronRight, Search, Wrench } from "lucide-react";
 import { api, ApiError } from "./api/client";
 import { creators, has, home, menu } from "./auth/access";
 import { PriorityBadge, StatusBadge } from "./components/Badges";
 import ActivatePage from "./routes/ActivatePage";
 import DashboardPage from "./features/workspace/RoleDashboard";
 import DemoPage from "./routes/DemoPage";
-import {
-  DossierPage,
-  EquipmentFeedPage,
-  HistoryFeedPage,
-  ResourceHistoryPage,
-  WorkOrderPage as LegacyWorkOrderPage,
-  MaintenanceRecordPage,
-  RequestDossierExtras,
-  TechnicianPage,
-} from "./routes/M2Pages";
-import { rememberDemoRequest } from "./routes/demo-request";
+
 import InvitePage from "./routes/InvitePage";
 import QrPage from "./routes/QrPage";
 import EstimatePanel from "./routes/EstimatePanel";
-import {
-  NotificationInbox,
-  NotificationBell,
-} from "./features/notifications/NotificationInbox";
+import { NotificationInbox } from "./features/notifications/NotificationInbox";
 import { AttachmentsPanel } from "./features/attachments/AttachmentsPanel";
 import { WorkOrderReportsPage } from "./features/reports/WorkOrderReports";
-import {
-  InventoryPartPage,
-  InventoryPartsPage,
-  InventoryTransactionsPage,
-  InventoryWarehousesPage,
-} from "./features/inventory/InventoryPages";
-import {
-  TenantListPage,
-  TenantCreatePage,
-  TenantDetailPage,
-  BranchesPage,
-  UsersPage,
-  RolesPage,
-  ProfilePage,
-  PortalLocationsPage,
-  UnavailablePage,
-} from "./routes/LiveAdministration";
+
 import {
   login,
-  logout,
   restoreSession,
   getSessionGeneration,
   SessionProvider,
@@ -130,14 +62,193 @@ import type {
   Page,
   RequestComment,
   RequestDetail,
-  RequestRecord,
   RequestStatusChange,
 } from "./types/domain";
 import "./sample.css";
 import "./App.css";
 import "./restored.css";
 import "./m2.css";
+import "./features/workspace/workshop.css";
 
+const DossierPage = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.DossierPage,
+  })),
+);
+const EquipmentFeedPage = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.EquipmentFeedPage,
+  })),
+);
+const HistoryFeedPage = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.HistoryFeedPage,
+  })),
+);
+const ResourceHistoryPage = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.ResourceHistoryPage,
+  })),
+);
+const LegacyWorkOrderPage = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.WorkOrderPage,
+  })),
+);
+const MaintenanceRecordPage = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.MaintenanceRecordPage,
+  })),
+);
+const RequestDossierExtras = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.RequestDossierExtras,
+  })),
+);
+const TechnicianPage = lazy(() =>
+  import("./routes/M2Pages").then((module) => ({
+    default: module.TechnicianPage,
+  })),
+);
+const InventoryPartPage = lazy(() =>
+  import("./features/inventory/InventoryPages").then((module) => ({
+    default: module.InventoryPartPage,
+  })),
+);
+const InventoryPartsPage = lazy(() =>
+  import("./features/inventory/InventoryPages").then((module) => ({
+    default: module.InventoryPartsPage,
+  })),
+);
+const InventoryTransactionsPage = lazy(() =>
+  import("./features/inventory/InventoryPages").then((module) => ({
+    default: module.InventoryTransactionsPage,
+  })),
+);
+const InventoryWarehousesPage = lazy(() =>
+  import("./features/inventory/InventoryPages").then((module) => ({
+    default: module.InventoryWarehousesPage,
+  })),
+);
+const TenantListPage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.TenantListPage,
+  })),
+);
+const TenantCreatePage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.TenantCreatePage,
+  })),
+);
+const TenantDetailPage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.TenantDetailPage,
+  })),
+);
+const BranchesPage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.BranchesPage,
+  })),
+);
+const UsersPage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.UsersPage,
+  })),
+);
+const RolesPage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.RolesPage,
+  })),
+);
+const ProfilePage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.ProfilePage,
+  })),
+);
+const PortalLocationsPage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.PortalLocationsPage,
+  })),
+);
+const UnavailablePage = lazy(() =>
+  import("./routes/LiveAdministration").then((module) => ({
+    default: module.UnavailablePage,
+  })),
+);
+const HandoverCreatePage = lazy(() =>
+  import("./routes/EquipmentHandovers").then((module) => ({
+    default: module.HandoverCreatePage,
+  })),
+);
+const HandoverDetailPage = lazy(() =>
+  import("./routes/EquipmentHandovers").then((module) => ({
+    default: module.HandoverDetailPage,
+  })),
+);
+const CustomerDirectoryPage = lazy(() =>
+  import("./routes/EquipmentDirectories").then((module) => ({
+    default: module.CustomerDirectoryPage,
+  })),
+);
+const CustomerCreatePage = lazy(() =>
+  import("./routes/EquipmentDirectories").then((module) => ({
+    default: module.CustomerCreatePage,
+  })),
+);
+const CustomerWorkspacePage = lazy(() =>
+  import("./routes/EquipmentDirectories").then((module) => ({
+    default: module.CustomerWorkspacePage,
+  })),
+);
+const EquipmentModelsPage = lazy(() =>
+  import("./routes/EquipmentDirectories").then((module) => ({
+    default: module.EquipmentModelsPage,
+  })),
+);
+const EquipmentRegistrationPage = lazy(() =>
+  import("./routes/EquipmentRegistration").then((module) => ({
+    default: module.EquipmentRegistrationPage,
+  })),
+);
+const RegistrationListPage = lazy(() =>
+  import("./routes/EquipmentRegistration").then((module) => ({
+    default: module.RegistrationListPage,
+  })),
+);
+const WorkspaceRequestsPage = lazy(() =>
+  import("./features/workspace/OperationsPages").then((module) => ({
+    default: module.WorkspaceRequestsPage,
+  })),
+);
+const HandoverListPage = lazy(() =>
+  import("./features/workspace/OperationsPages").then((module) => ({
+    default: module.WorkspaceHandoverPage,
+  })),
+);
+const WorkOrderListPage = lazy(() =>
+  import("./features/workspace/OperationsPages").then((module) => ({
+    default: module.WorkspaceWorkOrdersPage,
+  })),
+);
+const LiveTechniciansPage = lazy(() =>
+  import("./features/workspace/OperationsPages").then((module) => ({
+    default: module.WorkspaceTechniciansPage,
+  })),
+);
+const LiveMaintenancePage = lazy(() =>
+  import("./features/workspace/OperationsPages").then((module) => ({
+    default: module.WorkspaceMaintenancePage,
+  })),
+);
+const MaintenanceHistoryPage = lazy(() =>
+  import("./features/workspace/OperationsPages").then((module) => ({
+    default: module.WorkspaceMaintenanceHistoryPage,
+  })),
+);
+const NewRequestPage = lazy(() => import("./routes/NewServiceRequest"));
+const WorkshopDesignStudio = import.meta.env.DEV
+  ? lazy(() => import("./features/design/WorkshopDesignStudio"))
+  : null;
 const actionLabels: Record<string, string> = {
   review: "Xem xét và kiểm tra bảo hành",
   "request-info": "Yêu cầu bổ sung",
@@ -148,16 +259,6 @@ const actionLabels: Record<string, string> = {
   confirm: "Xác nhận hoàn tất",
   reopen: "Mở lại",
 };
-const roleLabels: Record<string, string> = {
-  PLATFORM_ADMIN: "Quản trị nền tảng",
-  TENANT_ADMIN: "Quản trị doanh nghiệp",
-  SERVICE_MANAGER: "Quản lý dịch vụ",
-  DISPATCHER: "Điều phối viên",
-  INVENTORY_STAFF: "Nhân viên kho",
-  TECHNICIAN: "Kỹ thuật viên",
-  CUSTOMER_ADMIN: "Quản trị khách hàng",
-  CUSTOMER_USER: "Khách hàng",
-};
 const requestTypeLabels: Record<string, string> = {
   WARRANTY: "Bảo hành",
   REPAIR: "Sửa chữa",
@@ -165,8 +266,10 @@ const requestTypeLabels: Record<string, string> = {
   INSPECTION: "Kiểm tra",
 };
 function Problem({ error }: { error: unknown }) {
+  const summary = useRef<HTMLParagraphElement>(null);
+  useEffect(() => summary.current?.focus(), [error]);
   return (
-    <p className="m1-error" role="alert">
+    <p ref={summary} tabIndex={-1} className="m1-error" role="alert">
       {error instanceof ApiError
         ? `${error.status} · ${error.message}`
         : error instanceof Error
@@ -191,10 +294,22 @@ function Gate({ roles, children }: { roles: string[]; children: ReactNode }) {
 }
 function WorkOrderPage() {
   const { profile } = useSession();
-  return profile?.roles.includes("SERVICE_MANAGER") ? (
+  return profile?.roles.some((role) =>
+    ["SERVICE_MANAGER", "TENANT_ADMIN", "DISPATCHER"].includes(role),
+  ) ? (
     <ServiceManagerWorkOrder />
   ) : (
     <LegacyWorkOrderPage />
+  );
+}
+function InventoryTransactionsRoute() {
+  const location = useLocation();
+  return (
+    <InventoryTransactionsPage
+      initialWorkOrderId={
+        new URLSearchParams(location.search).get("workOrderId") ?? ""
+      }
+    />
   );
 }
 
@@ -302,225 +417,18 @@ function LoginPage() {
   );
 }
 function Layout({ children }: { children: ReactNode }) {
-  const { profile, clear } = useSession();
-  const navigate = useNavigate();
+  const { profile } = useSession();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
-    if (profile?.roles.includes("SERVICE_MANAGER"))
-      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-  }, [location.pathname, profile]);
-  if (!profile) return null;
-  const icons: Record<string, LucideIcon> = {
-    Building2,
-    Boxes,
-    Bell,
-    ClipboardList,
-    Factory,
-    Gauge,
-    History,
-    MapPin,
-    Package,
-    ShieldCheck,
-    SlidersHorizontal,
-    UserCog,
-    UserPlus,
-    Users,
-    Wrench,
-  };
-  const navigation = [
-    {
-      path: "/dashboard",
-      label: "Tổng quan",
-      icon: LayoutDashboard,
-      group: "Không gian làm việc",
-    },
-    ...navigationFor(profile.roles).map((item) => ({
-      ...item,
-      icon: icons[item.icon] ?? ClipboardList,
-    })),
-  ];
-  const navigationPath =
-    location.pathname === "/tenants" ? "/admin/tenants" : location.pathname;
-  const section = navigation.find(
-    (item) =>
-      navigationPath === item.path ||
-      navigationPath.startsWith(`${item.path}/`),
-  );
-  const initials = profile.fullName
-    .split(" ")
-    .slice(-2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-  const scope =
-    profile.userType === "PLATFORM_STAFF"
-      ? "Phạm vi nền tảng"
-      : profile.userType === "CUSTOMER"
-        ? "Cổng khách hàng"
-        : "Doanh nghiệp hiện tại";
-  return (
-    <div className={`m1-layout ${collapsed ? "m1-layout--collapsed" : ""}`}>
-      {mobileOpen && (
-        <button
-          className="m1-mobile-overlay"
-          aria-label="Đóng menu"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-      <aside className={`m1-sidebar ${mobileOpen ? "m1-sidebar--open" : ""}`}>
-        <div className="m1-brand">
-          <Link to="/dashboard" onClick={() => setMobileOpen(false)}>
-            <span className="m1-brand__mark">
-              <Wrench size={20} />
-            </span>
-            <span className="m1-brand__name">
-              <strong>Servio</strong>
-              <small>Field Service Cloud</small>
-            </span>
-          </Link>
-          <button
-            className="m1-mobile-close"
-            aria-label="Đóng menu"
-            onClick={() => setMobileOpen(false)}
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="m1-scope">
-          <small>{scope}</small>
-          <strong>
-            {profile.userType === "PLATFORM_STAFF"
-              ? "PBL6 Service Cloud"
-              : profile.userType === "CUSTOMER"
-                ? "Doanh nghiệp của bạn"
-                : "Không gian doanh nghiệp"}
-          </strong>
-          <span>
-            {profile.roles.map((role) => roleLabels[role] ?? role).join(", ")}
-          </span>
-        </div>
-        <nav className="m1-nav" aria-label="Điều hướng chính">
-          {navigation.map((item, index) => {
-            const Icon = item.icon;
-            return (
-              <div key={item.path}>
-                {(index === 0 ||
-                  item.group !== navigation[index - 1]?.group) && (
-                  <p className="m1-nav-group">{item.group}</p>
-                )}
-                <NavLink
-                  to={item.path}
-                  end={item.path === "/dashboard"}
-                  title={collapsed ? item.label : undefined}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  <Icon size={19} />
-                  <span>{item.label}</span>
-                </NavLink>
-              </div>
-            );
-          })}
-        </nav>
-        <div className="m1-sidebar-footer">
-          <button
-            onClick={async () => {
-              await logout();
-              clear();
-              navigate("/login");
-            }}
-          >
-            <LogOut size={19} />
-            <span>Đăng xuất</span>
-          </button>
-        </div>
-      </aside>
-      <div className="m1-workspace">
-        <header className="m1-topbar">
-          <div className="m1-topbar__left">
-            <button
-              className="m1-topbar-icon m1-mobile-menu"
-              aria-label="Mở menu"
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu size={20} />
-            </button>
-            <button
-              className="m1-topbar-icon m1-desktop-collapse"
-              aria-label={collapsed ? "Mở rộng menu" : "Thu gọn menu"}
-              onClick={() => setCollapsed((value) => !value)}
-            >
-              <PanelLeftClose size={19} />
-            </button>
-            <Link
-              className="m1-topbar-search"
-              to={
-                profile.userType === "PLATFORM_STAFF"
-                  ? "/admin/tenants"
-                  : profile.userType === "CUSTOMER"
-                    ? "/portal/equipment"
-                    : "/app/equipment"
-              }
-            >
-              <Search size={17} />
-              <span>
-                {has(profile.roles, menu[1].roles)
-                  ? "Tra cứu thiết bị"
-                  : "Xem doanh nghiệp"}
-              </span>
-            </Link>
-          </div>
-          <div className="m1-topbar-user">
-            {profile.userType !== "PLATFORM_STAFF" && (
-              <NotificationBell
-                href={
-                  profile.userType === "CUSTOMER"
-                    ? "/portal/notifications"
-                    : "/app/notifications"
-                }
-              />
-            )}
-            <span className="m1-avatar">{initials}</span>
-            <span>
-              <strong>{profile.fullName}</strong>
-              <small>
-                {profile.roles
-                  .map((role) => roleLabels[role] ?? role)
-                  .join(", ")}
-              </small>
-            </span>
-          </div>
-        </header>
-        <main
-          className={`m1-main ${profile.roles.includes("SERVICE_MANAGER") ? "sm-workspace" : ""}`}
-        >
-          <nav className="m1-breadcrumbs" aria-label="Đường dẫn">
-            <Link to="/dashboard">Trang chủ</Link>
-            {location.pathname !== "/dashboard" && (
-              <>
-                <ChevronRight size={14} />
-                <Link to={section?.path ?? "/dashboard"}>
-                  {section?.label ?? "Trang"}
-                </Link>
-                {section && location.pathname !== section.path && (
-                  <>
-                    <ChevronRight size={14} />
-                    <span>
-                      {location.pathname.endsWith("/new")
-                        ? "Tạo mới"
-                        : "Chi tiết"}
-                    </span>
-                  </>
-                )}
-              </>
-            )}
-          </nav>
-          {children}
-        </main>
-      </div>
-    </div>
-  );
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location.pathname]);
+  return profile ? (
+    <ServiceManagerShell>
+      <WorkspaceRouteBoundary>
+        <Suspense fallback={<Loading />}>{children}</Suspense>
+      </WorkspaceRouteBoundary>
+    </ServiceManagerShell>
+  ) : null;
 }
 function useLoad<T>(load: () => Promise<T>, key: string) {
   const sessionGeneration = getSessionGeneration();
@@ -904,7 +812,10 @@ function EquipmentPage() {
                           )}
                         </td>
                         <td>
-                          <StatusBadge status={item.status} />
+                          <StatusBadge
+                            status={item.status}
+                            label={equipmentLifecycleLabel(item.status)}
+                          />
                         </td>
                         {canManage && (
                           <td>
@@ -1035,6 +946,7 @@ function RequestActivity({
   );
 }
 function RequestDetailPage() {
+  const entry = useLocation();
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile } = useSession();
@@ -1227,6 +1139,28 @@ function RequestDetailPage() {
               <PriorityBadge priority={current.priority} />
               <span>{requestTypeLabels[current.type] ?? current.type}</span>
             </div>
+            {entry.state?.created && (
+              <ServiceNotice title="Biên nhận yêu cầu dịch vụ">
+                <p>
+                  {current.requestNo} · Đã ghi nhận lúc{" "}
+                  {formatDate(current.createdAt)}. Bạn có thể theo dõi phản hồi
+                  và bổ sung thông tin ngay trong hồ sơ này.
+                </p>
+              </ServiceNotice>
+            )}
+            <ServiceNotice
+              title={`Bên cần hành động: ${requestResponsibility(current.status)[0]}`}
+            >
+              <p>
+                {requestResponsibility(current.status)[1]}. Người kiểm tra bảo
+                hành và người thực hiện công việc được ghi riêng trong lịch sử.
+              </p>
+            </ServiceNotice>
+            {(current.status === "RESOLVED" ||
+              current.status === "CLOSED" ||
+              Boolean(current.resolutionResult)) && (
+              <RequestCloseoutSummary request={current} />
+            )}
             {error ? <Problem error={error} /> : null}
             <div className="m1-actions">
               <button disabled={busy} onClick={() => void refreshRequest()}>
@@ -1253,7 +1187,9 @@ function RequestDetailPage() {
                       actionDialog.current?.showModal();
                     }}
                   >
-                    {actionLabels[action] ?? action}
+                    {action === "confirm" && profile?.userType !== "CUSTOMER"
+                      ? "Xác nhận thay khách hàng"
+                      : (actionLabels[action] ?? action)}
                   </button>
                 ))}
             </div>
@@ -1363,6 +1299,7 @@ function RequestDetailPage() {
                                 "add-comment",
                               ) ? (
                                 <form
+                                  id="request-comments"
                                   className="m1-comment"
                                   onSubmit={addComment}
                                 >
@@ -1483,6 +1420,12 @@ function RequestDetailPage() {
                         changed={() => void refreshRequest()}
                       />
                       <EstimatePanel
+                        requestNo={current.requestNo}
+                        equipmentSummary={
+                          equipmentLabel.value
+                            ? `${equipmentLabel.value.assetCode} · serial ${equipmentLabel.value.serialNumber}`
+                            : undefined
+                        }
                         requestId={current.id}
                         allowedActions={current.allowedActions ?? []}
                         onChange={() => void refreshRequest()}
@@ -1519,8 +1462,33 @@ function RequestDetailPage() {
                 }}
               >
                 <h2 id="request-action-title">
-                  {actionLabels[pendingAction] ?? "Xác nhận thao tác"}
+                  {pendingAction === "confirm" &&
+                  profile?.userType !== "CUSTOMER"
+                    ? "Xác nhận thay khách hàng"
+                    : (actionLabels[pendingAction] ?? "Xác nhận thao tác")}
                 </h2>
+                {pendingAction === "confirm" && (
+                  <div className="workshop-next">
+                    <strong>
+                      {profile?.userType === "CUSTOMER"
+                        ? "Bạn đang xác nhận kết quả được công bố"
+                        : "Thao tác được ghi dưới tài khoản nhân viên của bạn"}
+                    </strong>
+                    <p>
+                      {current.resolutionResult === "PARTIALLY_RESOLVED"
+                        ? "Kết quả hiện chỉ xử lý một phần. Làm rõ phần chưa giải quyết trước khi xác nhận."
+                        : "Đối chiếu kết quả và phạm vi đã đồng ý trước khi khép yêu cầu."}
+                    </p>
+                    {profile?.userType !== "CUSTOMER" && (
+                      <p>
+                        Ghi người đồng ý, kênh phản hồi và căn cứ xác nhận trong
+                        mục trao đổi của hồ sơ trước khi xác nhận thay khách.
+                        Việc bạn bấm nút không phải bằng chứng khách tự xác
+                        nhận.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <p>
                   {pendingAction === "reject" || pendingAction === "cancel"
                     ? "Thao tác sẽ dừng xử lý yêu cầu theo quy tắc hiện tại và được ghi vào lịch sử. Kiểm tra thông tin trước khi xác nhận."
@@ -1575,327 +1543,7 @@ function RequestDetailPage() {
     </Frame>
   );
 }
-function NewRequestPage() {
-  const { profile } = useSession();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const requestedEquipmentId = new URLSearchParams(location.search).get(
-    "equipmentId",
-  );
-  const [equipmentPage, setEquipmentPage] = useState(1);
-  const [equipmentSearch, setEquipmentSearch] = useState("");
-  const [equipmentDraft, setEquipmentDraft] = useState("");
-  const generation = getSessionGeneration();
-  const submitLock = useRef(false);
-  const [uncertain, setUncertain] = useState(false);
-  const data = useLoad<Page<EquipmentRecord>>(
-    () =>
-      api.assetM2(
-        `/equipment?page=${equipmentPage}&pageSize=20&q=${encodeURIComponent(equipmentSearch)}`,
-      ),
-    `request-equipment:${equipmentPage}:${equipmentSearch}`,
-  );
-  const [equipmentId, setEquipmentId] = useState(requestedEquipmentId ?? "");
-  const selected = useLoad<EquipmentRecord | null>(
-    () =>
-      equipmentId
-        ? api.assetM2(`/equipment/${equipmentId}`)
-        : Promise.resolve(null),
-    `selected-request-equipment:${equipmentId}`,
-  );
-  const [type, setType] = useState("REPAIR");
-  const [priority, setPriority] = useState("NORMAL");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [error, setError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (
-      submitLock.current ||
-      uncertain ||
-      generation !== getSessionGeneration()
-    )
-      return;
-    const selectedEquipment = selected.value;
-    if (!selectedEquipment) {
-      setError(new Error("Vui lòng chọn thiết bị."));
-      return;
-    }
-    submitLock.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await api.requestsLive<RequestRecord>(
-        "/service-requests",
-        {
-          method: "POST",
-          body: {
-            equipmentId,
-            type,
-            priority,
-            title,
-            description,
-            ...(profile?.userType === "CUSTOMER"
-              ? {}
-              : { customerId: selectedEquipment.customerId }),
-          },
-        },
-      );
-      if (generation !== getSessionGeneration()) return;
-      rememberDemoRequest(profile?.tenantId ?? null, created.id);
-      navigate(
-        `${profile?.userType === "CUSTOMER" ? "/portal/requests" : "/app/service-requests"}/${created.id}`,
-      );
-    } catch (cause) {
-      if (generation === getSessionGeneration()) {
-        const unknown =
-          !(cause instanceof ApiError) ||
-          [401, 408].includes(cause.status) ||
-          cause.status >= 500;
-        setUncertain(unknown);
-        setError(
-          unknown
-            ? new Error(
-                "Chưa xác định yêu cầu đã tạo hay chưa. Kiểm tra danh sách yêu cầu trước khi tạo lại để tránh trùng hồ sơ.",
-              )
-            : cause,
-        );
-      }
-    } finally {
-      submitLock.current = false;
-      if (generation === getSessionGeneration()) setBusy(false);
-    }
-  }
-  const selectedEquipment = selected.value;
-  return (
-    <Frame
-      title="Bạn cần hỗ trợ thiết bị nào?"
-      eyebrow="YÊU CẦU MỚI"
-      description="Cung cấp thông tin sự cố để bộ phận dịch vụ tiếp nhận và xử lý."
-    >
-      {data.loading ? (
-        <Loading />
-      ) : data.error ? (
-        <Problem error={data.error} />
-      ) : (
-        <form className="m1-form m1-request-form" onSubmit={submit}>
-          {error ? <Problem error={error} /> : null}
-          {uncertain && (
-            <Link
-              to={
-                profile?.userType === "CUSTOMER"
-                  ? "/portal/requests"
-                  : "/app/service-requests"
-              }
-            >
-              Kiểm tra danh sách yêu cầu →
-            </Link>
-          )}
-          <div className="m1-request-detail-grid">
-            <div>
-              <section className="m1-card m1-section-card">
-                <div className="m1-section-header">
-                  <h2>1. Chọn thiết bị</h2>
-                </div>
-                <div className="m1-section-body">
-                  <div className="ws-actions">
-                    <label>
-                      Tìm thiết bị
-                      <input
-                        value={equipmentDraft}
-                        onChange={(event) =>
-                          setEquipmentDraft(event.target.value)
-                        }
-                        placeholder="Mã tài sản hoặc serial…"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEquipmentSearch(equipmentDraft);
-                        setEquipmentPage(1);
-                      }}
-                    >
-                      Tìm
-                    </button>
-                  </div>
-                  <label>
-                    Thiết bị
-                    <select
-                      required
-                      value={equipmentId}
-                      onChange={(event) => setEquipmentId(event.target.value)}
-                    >
-                      <option value="">Chọn thiết bị</option>
-                      {selectedEquipment &&
-                        !data.value?.items.some(
-                          (item) => item.id === equipmentId,
-                        ) && (
-                          <option value={equipmentId}>
-                            {selectedEquipment.displayName ||
-                              selectedEquipment.assetCode}{" "}
-                            · {selectedEquipment.serialNumber}
-                          </option>
-                        )}
-                      {data.value?.items
-                        .filter((item) => item.status !== "RETIRED")
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.displayName ||
-                              item.model?.name ||
-                              item.assetCode}{" "}
-                            · Serial {item.serialNumber}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  {data.value && (
-                    <div className="registration-pagination">
-                      <button
-                        type="button"
-                        disabled={equipmentPage === 1}
-                        onClick={() => setEquipmentPage((p) => p - 1)}
-                      >
-                        Trước
-                      </button>
-                      <span>
-                        Trang {equipmentPage} · {data.value.total} thiết bị
-                      </span>
-                      <button
-                        type="button"
-                        disabled={equipmentPage * 20 >= data.value.total}
-                        onClick={() => setEquipmentPage((p) => p + 1)}
-                      >
-                        Sau
-                      </button>
-                    </div>
-                  )}
-                  {selected.loading && (
-                    <p role="status">Đang tải thông tin thiết bị đã chọn…</p>
-                  )}
-                  {selected.error ? <Problem error={selected.error} /> : null}
-                  {selectedEquipment && (
-                    <div className="m1-selected-equipment">
-                      <span className="m1-entity-avatar">
-                        <Boxes size={19} />
-                      </span>
-                      <span>
-                        <strong>
-                          {selectedEquipment.model?.name ??
-                            selectedEquipment.assetCode}
-                        </strong>
-                        <small>
-                          {selectedEquipment.assetCode} · Serial{" "}
-                          {selectedEquipment.serialNumber}
-                        </small>
-                      </span>
-                      {selectedEquipment.warranty?.result && (
-                        <StatusBadge
-                          status={selectedEquipment.warranty.result}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-              </section>
-              <section className="m1-card m1-section-card">
-                <div className="m1-section-header">
-                  <h2>2. Mô tả vấn đề</h2>
-                </div>
-                <div className="m1-section-body m1-form-fields">
-                  <label>
-                    Loại
-                    <select
-                      value={type}
-                      onChange={(event) => setType(event.target.value)}
-                    >
-                      {["WARRANTY", "REPAIR", "MAINTENANCE", "INSPECTION"].map(
-                        (value) => (
-                          <option key={value} value={value}>
-                            {
-                              {
-                                WARRANTY: "Bảo hành",
-                                REPAIR: "Sửa chữa sự cố",
-                                MAINTENANCE: "Bảo trì",
-                                INSPECTION: "Kiểm tra thiết bị",
-                              }[value]
-                            }
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </label>
-                  <label>
-                    Ưu tiên
-                    <select
-                      value={priority}
-                      onChange={(event) => setPriority(event.target.value)}
-                    >
-                      {["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => (
-                        <option key={value} value={value}>
-                          {
-                            {
-                              LOW: "Thấp",
-                              NORMAL: "Trung bình",
-                              HIGH: "Cao",
-                              URGENT: "Khẩn cấp",
-                            }[value]
-                          }
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Tiêu đề
-                    <input
-                      required
-                      maxLength={200}
-                      value={title}
-                      onChange={(event) => setTitle(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Mô tả
-                    <textarea
-                      required
-                      maxLength={10000}
-                      rows={5}
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                    />
-                  </label>
-                </div>
-              </section>
-            </div>
-            <aside>
-              <section className="m1-card m1-section-card">
-                <div className="m1-section-header">
-                  <h2>Xác nhận yêu cầu</h2>
-                </div>
-                <div className="m1-section-body m1-submit-panel">
-                  <p>
-                    Kiểm tra thông tin thiết bị và mô tả trước khi gửi yêu cầu.
-                  </p>
-                  <button
-                    disabled={
-                      busy ||
-                      uncertain ||
-                      selected.loading ||
-                      !data.value?.items.length
-                    }
-                  >
-                    {busy ? "Đang gửi…" : "Gửi yêu cầu dịch vụ"}
-                  </button>
-                </div>
-              </section>
-            </aside>
-          </div>
-        </form>
-      )}
-    </Frame>
-  );
-}
+
 function Message({ code, title }: { code: string; title: string }) {
   return (
     <div className="m1-card">
@@ -2113,7 +1761,7 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
     },
     {
       path: "/app/inventory/transactions",
-      element: <InventoryTransactionsPage />,
+      element: <InventoryTransactionsRoute />,
       roles: ["TENANT_ADMIN", "INVENTORY_STAFF"],
     },
     {
@@ -2431,6 +2079,16 @@ function Content() {
   ) : (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {WorkshopDesignStudio && (
+        <Route
+          path="/design/workshop"
+          element={
+            <Suspense fallback={<Loading />}>
+              <WorkshopDesignStudio />
+            </Suspense>
+          }
+        />
+      )}
       <Route path="/activate" element={<ActivatePage />} />
       <Route path="/*" element={<Authenticated />} />
     </Routes>

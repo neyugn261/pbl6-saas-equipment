@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { hooks, nodes, settle, webTab } from "./helpers/web-tab.mjs";
 import { detailUI, expand } from "./helpers/service-detail.mjs";
+import { draftHook } from "./helpers/draft.mjs";
 
 const available = (data) => ({ status: "AVAILABLE", data });
 const emptyPage = { items: [], total: 0, page: 1, pageSize: 20 };
@@ -95,7 +96,7 @@ function setup(name, asset = dossier, kind = "plan") {
         : { workOrderNo: "WO-01" };
     },
   };
-  const ui = detailUI(tab, h);
+  const ui = { ...detailUI(tab, h), ServiceSections: ({items})=>h.jsx.jsx('sections',{children:items.map(item=>item.content)}) };
   const mod = tab.load("routes/M2Pages.tsx", {
     react: h.react,
     "react/jsx-runtime": h.jsx,
@@ -119,6 +120,11 @@ function setup(name, asset = dossier, kind = "plan") {
       AppliedPolicyPanel: "applied-policy",
     },
     "../features/workspace/ServiceDetailUI": ui,
+    "../features/workspace/EquipmentPartsHistory": { default: "parts-history" },
+    "../features/workspace/WorkOrderReadiness": { WorkOrderLocation: "work-location" },
+    "../features/workspace/TechnicianOrderContext": { default: "technician-context" },
+    "../features/workspace/use-form-draft": draftHook(tab,h,session),
+    "../features/workspace/ui-values":tab.load('features/workspace/ui-values.ts'),
     "../features/workspace/service-detail-data": tab.load(
       "features/workspace/service-detail-data.ts",
     ),

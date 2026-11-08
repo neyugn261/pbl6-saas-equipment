@@ -1,4 +1,5 @@
-import { serviceLabels } from "../features/workspace/service-detail-data";
+import { serviceLabels, equipmentLifecycleLabel } from "../features/workspace/service-detail-data";
+import HandoverServiceContext from "../features/workspace/HandoverServiceContext";
 import {
   ServiceCard,
   ServiceSections,
@@ -542,12 +543,7 @@ export function HandoverDetailPage() {
                           <div>
                             <dt>Trạng thái thiết bị hiện tại</dt>
                             <dd>
-                              {customer
-                                ? row.equipmentStatus
-                                : row.equipmentStatus === "ACTIVE"
-                                  ? "Đang hoạt động"
-                                  : (serviceLabels[row.equipmentStatus ?? ""] ??
-                                    "Chưa xác nhận")}
+                              {equipmentLifecycleLabel(row.equipmentStatus)}
                             </dd>
                           </div>
                           <div>
@@ -575,6 +571,7 @@ export function HandoverDetailPage() {
                           </Link>
                         </p>
                       </ServiceCard>
+                      <HandoverServiceContext equipmentId={row.equipmentId} customer={customer} />
                     </div>
                   ),
                 },
@@ -667,7 +664,7 @@ export function HandoverDetailPage() {
           <h2 id="handover-confirm-title">Xác nhận thao tác</h2>
           <p>
             {action === "accept"
-              ? "Bạn xác nhận đã nhận thiết bị theo nội dung bàn giao. Thiết bị sẽ được yêu cầu kích hoạt sau xác nhận."
+              ? "Bạn xác nhận đã nhận thiết bị theo nội dung bàn giao. Thiết bị được kích hoạt khi xác nhận thành công; thời hạn bảo hành đã ghi nhận không tự thay đổi theo thao tác này."
               : action === "reject"
                 ? "Vui lòng nêu lý do từ chối bàn giao."
                 : action === "cancel"

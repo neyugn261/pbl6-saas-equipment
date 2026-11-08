@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hooks, nodes, settle, webTab } from './helpers/web-tab.mjs'
 import { detailUI } from './helpers/service-detail.mjs'
+import { draftHook } from './helpers/draft.mjs'
 
 const tab = webTab(async () => { throw new Error('Unexpected request') })
 const labels = tab.load('display-names.ts')
@@ -26,6 +27,11 @@ function renderM2(componentName, response, path = '') {
     } }) } },
     '../auth/session': tab.session, '../display-names': labels,
     '../features/workspace/ServiceDetailUI': detailUI(tab,h),
+    '../features/workspace/EquipmentPartsHistory': { default: 'parts-history' },
+    '../features/workspace/WorkOrderReadiness': { WorkOrderLocation: 'work-location' },
+    '../features/workspace/TechnicianOrderContext': { default: 'technician-context' },
+    '../features/workspace/use-form-draft': draftHook(tab,h),
+    '../features/workspace/ui-values': tab.load('features/workspace/ui-values.ts'),
     '../features/workspace/service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
     '../features/workspace/WorkspaceUI': {EntityPicker:'picker',RelatedName:'related-name'},
     '../features/attachments/AttachmentsPanel': { AttachmentsPanel: 'attachments' },
@@ -73,7 +79,7 @@ test('ledger component renders inactive rows outside dropdowns, preserving histo
   const api = { inventory: async path => path.startsWith('/stock-transactions?') ? ledger : empty, workorders: async () => empty }
   const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
-    './stock-mutation': tab.stock, '../../display-names': labels })
+    './stock-mutation': tab.stock, '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
   h.render(InventoryTransactionsPage); await settle(); const tree = expand(h.render(InventoryTransactionsPage))
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Inactive warehouse').length)
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Historical part').length)
@@ -87,7 +93,7 @@ test('warehouse list uses scoped branch name and keeps branch ID as form value',
   } : empty }
   const { InventoryWarehousesPage } = tab.load('features/inventory/InventoryPages.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
-    './stock-mutation': tab.stock, '../../display-names': labels })
+    './stock-mutation': tab.stock, '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
   h.render(InventoryWarehousesPage); await settle(); const tree = expand(h.render(InventoryWarehousesPage))
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Chi nhánh Hà Nội').length)
   assert.equal(nodes(tree, n => n.type === 'td' && n.props.children === 'branch-id').length, 0)

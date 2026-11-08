@@ -56,7 +56,7 @@ export function WorkOrderReportsPage() {
   return (
     <div className="m2-page">
       <h1>Báo cáo dịch vụ</h1>
-      <p>Theo dõi khối lượng công việc và kết quả thực hiện theo khoảng thời gian.</p>
+      <p>Theo dõi khối lượng và trạng thái công việc theo khoảng thời gian. Số lệnh hoàn tất chưa thể hiện tỷ lệ sửa chữa thành công hoặc mức hài lòng của khách hàng.</p>
       <WorkOrderSummaryPanel />
     </div>
   )
@@ -109,7 +109,7 @@ export function WorkOrderSummaryPanel() {
 
   return (
     <section className="m1-card m1-section-card">
-      <div className="m1-section-header"><h2>Hiệu quả xử lý công việc</h2></div>
+      <div className="m1-section-header"><h2>Khối lượng công việc đã ghi nhận</h2></div>
       <div className="m1-section-body">
         <form className="m2-editor" onSubmit={apply}>
           <label>Từ ngày (giờ Việt Nam)

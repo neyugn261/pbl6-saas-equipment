@@ -1,4 +1,6 @@
 import { useState } from "react";
+import ServiceManagerDashboard from "./ServiceManagerDashboard";
+import { equipmentLifecycleLabel } from "./service-detail-data";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -180,7 +182,7 @@ const metrics: Record<WorkspaceRole, Metric[]> = {
   INVENTORY_STAFF: [
     {
       label: "Thao tác chờ đồng bộ",
-      description: "Kiểm tra proof trước khi thao tác lại",
+      description: "Kiểm tra kết quả ghi kho trước khi thao tác lại",
       area: "inventory",
       path: `/inventory-operations?${page}&reservationPending=true`,
       to: "/app/inventory/transactions",
@@ -272,10 +274,14 @@ function MetricCard({
   metric,
   revision,
   index,
+  selected,
+  onSelect,
 }: {
   metric: Metric;
   revision: number;
   index: number;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const state = useWorkspaceData<Page<Row>>(metric.area, metric.path, revision);
   const icons = [Clock3, ClipboardList, Wrench, CheckCircle2],
@@ -284,16 +290,23 @@ function MetricCard({
     <div
       className={`ws-stat ${index === 0 ? "ws-stat--amber" : index === 3 ? "ws-stat--green" : ""}`}
     >
-      <div className="ws-stat-top">
-        {metric.label}
-        <span className="ws-stat-icon">
-          <Icon size={17} />
-        </span>
-      </div>
-      <strong>
-        {state.loading ? "…" : state.error ? "—" : (state.data?.total ?? "—")}
-      </strong>
-      <small>{state.error || metric.description}</small>
+      <button
+        className="workshop-metric-pick"
+        type="button"
+        aria-pressed={selected}
+        onClick={onSelect}
+      >
+        <div className="ws-stat-top">
+          {metric.label}
+          <span className="ws-stat-icon">
+            <Icon size={17} />
+          </span>
+        </div>
+        <strong>
+          {state.loading ? "…" : state.error ? "—" : (state.data?.total ?? "—")}
+        </strong>
+        <small>{state.error || metric.description}</small>
+      </button>
       <Link className="ws-text-link" to={metric.to}>
         Mở danh sách
         <ArrowRight size={12} />
@@ -306,17 +319,29 @@ function recordPath(metric: Metric, row: Row, customer: boolean) {
   if (metric.area === "requestsLive")
     return `${base === "/portal" ? "/portal/requests" : "/app/service-requests"}/${row.id}`;
   if (metric.area === "workorders") return `${base}/work-orders/${row.id}`;
-  if (metric.area === "assetM2") return `${base}/equipment-handovers/${row.id}`;
+  if (metric.area === "assetM2")
+    return `${base}/${metric.path.startsWith("/equipment-handovers") || metric.path.startsWith("/my/equipment-handovers") ? "equipment-handovers" : "equipment"}/${row.id}`;
   if (metric.area === "organization") return `/admin/tenants/${row.id}`;
   return metric.to;
 }
 export default function RoleDashboard() {
+  const { profile } = useSession();
+  if (!profile) return null;
+  return primaryRole(profile.roles) === "SERVICE_MANAGER" ? (
+    <ServiceManagerDashboard />
+  ) : (
+    <StandardDashboard />
+  );
+}
+
+function StandardDashboard() {
   const { profile } = useSession(),
-    [revision, refresh] = useState(0);
+    [revision, refresh] = useState(0),
+    [focusIndex, setFocusIndex] = useState(0);
   const role = primaryRole(profile?.roles ?? []),
     config = roleDescriptions[role],
     cards = metrics[role],
-    focus = cards[0];
+    focus = cards[focusIndex] ?? cards[0];
   const state = useWorkspaceData<Page<Row>>(focus.area, focus.path, revision);
   if (!profile) return null;
   const customer = profile.userType === "CUSTOMER",
@@ -345,7 +370,7 @@ export default function RoleDashboard() {
               <RefreshCw size={15} />
               Cập nhật
             </button>
-            {(customer || role === "SERVICE_MANAGER") && (
+            {customer && (
               <Link
                 className="ws-button"
                 to={
@@ -368,6 +393,8 @@ export default function RoleDashboard() {
             metric={metric}
             revision={revision}
             index={index}
+            selected={focus === metric}
+            onSelect={() => setFocusIndex(index)}
           />
         ))}
       </div>
@@ -380,7 +407,11 @@ export default function RoleDashboard() {
                   ? "Doanh nghiệp gần đây"
                   : "Ưu tiên theo dõi"}
               </h2>
-              <p>{focus.label} · Hiển thị tối đa 4 hồ sơ gần nhất</p>
+              <p>
+                {focus.label} · Đang xem {state.data?.items.length ?? "—"} trong{" "}
+                {state.data?.total ?? "—"} hồ sơ. Chọn nhóm phía trên để đổi nội
+                dung.
+              </p>
             </div>
             <Link className="ws-text-link" to={focus.to}>
               Mở danh sách
@@ -413,22 +444,40 @@ export default function RoleDashboard() {
                                 row.requestNo ??
                                   row.workOrderNo ??
                                   row.handoverNo ??
+                                  row.assetCode ??
+                                  row.sku ??
+                                  row.employeeCode ??
+                                  row.fullName ??
                                   row.name ??
                                   (row.operation
                                     ? "Thao tác xuất kho"
                                     : undefined),
-                                "Mở hồ sơ đối soát",
+                                "Mở hồ sơ",
                               )}
                             </Link>
                             <small>
                               {value(
-                                row.title ?? snapshot.name ?? row.description,
+                                row.title ??
+                                  row.displayName ??
+                                  snapshot.name ??
+                                  row.description,
                                 focus.description,
                               )}
                             </small>
                           </td>
                           <td data-label="Trạng thái">
-                            <Badge status={row.status ?? row.state} label={focus.area === "requestsLive" && row.status === "ACCEPTED" ? "Đã tiếp nhận" : undefined} />
+                            <Badge
+                              status={row.status ?? row.state}
+                              label={
+                                focus.area === "assetM2" &&
+                                focus.path.startsWith("/equipment?")
+                                  ? equipmentLifecycleLabel(row.status)
+                                  : focus.area === "requestsLive" &&
+                                      row.status === "ACCEPTED"
+                                    ? "Đã tiếp nhận"
+                                    : undefined
+                              }
+                            />
                           </td>
                           <td data-label="Ghi nhận">
                             {formatDate(row.createdAt ?? row.submittedAt)}

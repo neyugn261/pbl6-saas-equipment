@@ -310,7 +310,7 @@ const links: NavigationItem[] = [
 ];
 export function navigationFor(roles: readonly string[]) {
   return links
-    .filter((item) => item.roles.some((role) => roles.includes(role)))
+    .filter((item) => item.path !== "/admin/audit-logs" && item.roles.some((role) => roles.includes(role)))
     .map((item) => ({
       ...item,
       label:

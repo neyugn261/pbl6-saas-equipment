@@ -118,6 +118,87 @@ export const serviceLabels: Record<string, string> = {
   CUSTOMER_ADMIN: "Quản trị khách hàng",
   CUSTOMER_USER: "Khách hàng",
 };
+
+/** Equipment lifecycle is not a technical assertion about the machine. */
+export function equipmentLifecycleLabel(status: unknown) {
+  return (
+    (
+      {
+        ACTIVE: "Đã đưa vào dịch vụ",
+        IN_SERVICE: "Đang có hoạt động dịch vụ",
+        OUT_OF_SERVICE: "Chưa đưa vào dịch vụ",
+        RETIRED: "Đã ngừng sử dụng",
+      } as Record<string, string>
+    )[String(status)] ?? "Chưa xác nhận vòng đời"
+  );
+}
+export function requestResponsibility(status: unknown) {
+  switch (status) {
+    case "NEW":
+    case "REVIEWING":
+      return ["Bộ phận dịch vụ", "Đánh giá sự cố và phạm vi bảo hành"];
+    case "ACCEPTED":
+      return [
+        "Bộ phận dịch vụ",
+        "Kiểm tra lệnh liên quan trước khi tạo hoặc tiếp tục điều phối",
+      ];
+    case "COST_REJECTED":
+      return [
+        "Bộ phận dịch vụ",
+        "Xem phản hồi chi phí và thống nhất phương án tiếp theo",
+      ];
+    case "AWAITING_INFO":
+      return ["Khách hàng", "Bổ sung thông tin theo nội dung trao đổi"];
+    case "AWAITING_CUSTOMER_APPROVAL":
+      return ["Quản trị khách hàng", "Xem và phản hồi đúng phiên bản dự toán"];
+    case "PROCESSING":
+      return ["Đội ngũ thực hiện", "Theo dõi lệnh công việc và các trở ngại"];
+    case "RESOLVED":
+      return [
+        "Khách hàng / bộ phận dịch vụ",
+        "Đọc kết quả, phần còn lại và xác nhận phạm vi đã xử lý",
+      ];
+    case "CLOSED":
+      return ["Đã khép yêu cầu", "Tra cứu kết quả và lịch sử xác nhận"];
+    default:
+      return ["Xem hồ sơ nguồn", "Kiểm tra trạng thái và lý do đã ghi nhận"];
+  }
+}
+export function recordAge(input: unknown, now = Date.now()) {
+  const time = input ? Date.parse(String(input)) : NaN;
+  if (!Number.isFinite(time)) return "Chưa có thời điểm tạo";
+  const hours = Math.max(0, Math.floor((now - time) / 3_600_000));
+  return hours < 1
+    ? "Tạo chưa đầy 1 giờ"
+    : hours < 24
+      ? `Tuổi hồ sơ: ${hours} giờ`
+      : `Tuổi hồ sơ: ${Math.floor(hours / 24)} ngày`;
+}
+export function workOrderSiteId(order: Row) {
+  return typeof order.customerSiteId === "string" && order.customerSiteId
+    ? order.customerSiteId
+    : null;
+}
+export function isPositiveQuantity(input: unknown) {
+  return (
+    typeof input === "string" &&
+    /^\d+(\.\d+)?$/.test(input) &&
+    /[1-9]/.test(input)
+  );
+}
+export function workOrderActionError(error: {
+  code?: string;
+  status?: number;
+  message?: string;
+}) {
+  if (error.code === "INVENTORY_RESERVATION_HELD")
+    return "Công việc đang chờ đối soát giao dịch kho. Nhờ nhân viên kho kiểm tra giao dịch của lệnh này trước khi hoàn tất hoặc hủy; làm mới trang không tự giải quyết giao dịch đang treo.";
+  if (error.status === 409)
+    return "Hồ sơ vừa thay đổi. Làm mới để kiểm tra trước khi thao tác tiếp.";
+  if (error.status === 403)
+    return "Tài khoản không có quyền thực hiện thao tác này.";
+  return error.message || "Không thể lưu thay đổi.";
+}
 /** Display only: arithmetic and final totals remain authoritative at the server. */
 export function formatServiceMoney(input: unknown, currency = "VND") {
   const text = String(input ?? "");

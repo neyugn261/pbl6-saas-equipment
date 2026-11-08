@@ -16,6 +16,7 @@ function setup(row = fixture, roles = ['CUSTOMER_ADMIN'], userType = 'CUSTOMER',
     './registration-data': { errorText: e => e.message },
     '../display-names': tab.load('display-names.ts'),
     '../features/workspace/ServiceDetailUI': detailUI(tab,h),
+    '../features/workspace/HandoverServiceContext': { default: 'handover-service-context' },
     '../features/workspace/service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
   })[componentName]
   return { calls, h, render: () => expand(h.render(component)) }
@@ -74,6 +75,6 @@ test('expired, cancelled, superseded and unauthorized details have no accept act
 test('activated detail displays authoritative lifecycle and accepted/activated timestamps', async () => {
   const { render } = setup({ ...fixture, status: 'ACTIVATED', equipmentStatus: 'ACTIVE', acceptedAt: '2026-11-04T01:00:00Z', activatedAt: '2026-11-04T01:00:00Z' })
   render(); await settle(); const tree = render()
-  assert.ok(nodes(tree, n => n.type === 'dd' && n.props.children === 'ACTIVE').length)
+  assert.ok(nodes(tree, n => n.type === 'dd' && n.props.children === 'Đã đưa vào dịch vụ').length)
   assert.equal(nodes(tree, n => n.type === 'button' && n.props.children === 'Chấp thuận').length, 0)
 })

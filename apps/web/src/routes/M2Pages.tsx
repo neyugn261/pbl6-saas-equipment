@@ -1,4 +1,13 @@
-import { serviceLabels } from "../features/workspace/service-detail-data";
+import {
+  serviceLabels,
+  equipmentLifecycleLabel,
+  workOrderActionError,
+} from "../features/workspace/service-detail-data";
+import EquipmentPartsHistory from "../features/workspace/EquipmentPartsHistory";
+import { WorkOrderLocation } from "../features/workspace/WorkOrderReadiness";
+import TechnicianOrderContext from "../features/workspace/TechnicianOrderContext";
+import { useFormDraft } from "../features/workspace/use-form-draft";
+import { vietnamInstant } from "../features/workspace/ui-values";
 import {
   BusinessValues,
   ServiceSections,
@@ -724,8 +733,9 @@ export function DossierPage() {
             dossier?.equipment.assetCode ??
             "Hồ sơ thiết bị",
         )}
-        description={`Thông tin thiết bị, bảo hành và toàn bộ hành trình dịch vụ · Cập nhật ${date(dossier?.asOf)}`}
+        description={`Thông tin thiết bị, bảo hành và các hoạt động dịch vụ đã ghi nhận · Cập nhật ${date(dossier?.asOf)}`}
         status={dossier?.equipment.status}
+        statusLabel={equipmentLifecycleLabel(dossier?.equipment.status)}
       />
       {notice && <p role="status">{notice}</p>}
       {canManageEquipment && dossier && (
@@ -761,6 +771,50 @@ export function DossierPage() {
       <Result state={state}>
         {dossier && (
           <>
+            <section
+              className="workshop-equipment-passport"
+              aria-label="Nhận dạng thiết bị"
+            >
+              <div>
+                <span className="workshop-code">
+                  HỒ SƠ THIẾT BỊ / {asText(dossier.equipment.assetCode)}
+                </span>
+                <h2>
+                  {asText(
+                    dossier.equipment.displayName ??
+                      dossier.equipment.assetCode,
+                  )}
+                </h2>
+                <p>Serial {asText(dossier.equipment.serialNumber)}</p>
+                <Source section={dossier.customer}>
+                  {(row) => <strong>{asText(row.name)}</strong>}
+                </Source>
+                <Source section={dossier.site}>
+                  {(row) => <p>{asText(row.name)}</p>}
+                </Source>
+              </div>
+              <dl>
+                <div>
+                  <dt>Ngày bàn giao</dt>
+                  <dd>{date(dossier.equipment.handoverDate)}</dd>
+                </div>
+                <div>
+                  <dt>Bảo hành theo lịch</dt>
+                  <dd>
+                    {statusLabel[String(dossier.calendarCoverage?.result)] ??
+                      asText(dossier.calendarCoverage?.result)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Tình trạng vận hành đã ghi nhận</dt>
+                  <dd>
+                    {operationalLabels[
+                      String(dossier.operationalCondition.status)
+                    ] ?? asText(dossier.operationalCondition.status)}
+                  </dd>
+                </div>
+              </dl>
+            </section>
             <ServiceSections
               items={[
                 {
@@ -770,11 +824,16 @@ export function DossierPage() {
                     <div className="m2-grid">
                       <Card title="Thông tin thiết bị">
                         <Fields
-                          row={dossier.equipment}
+                          row={{
+                            ...dossier.equipment,
+                            lifecycleLabel: equipmentLifecycleLabel(
+                              dossier.equipment.status,
+                            ),
+                          }}
                           fields={[
                             ["assetCode", "Mã tài sản"],
                             ["serialNumber", "Serial"],
-                            ["status", "Trạng thái"],
+                            ["lifecycleLabel", "Vòng đời hồ sơ thiết bị"],
                             ["commissionedDate", "Ngày đưa vào vận hành"],
                             ["handoverDate", "Ngày bàn giao"],
                           ]}
@@ -1026,9 +1085,18 @@ export function DossierPage() {
                 },
                 {
                   key: "history",
-                  label: "Toàn bộ lịch sử",
+                  label: "Lịch sử đã ghi nhận",
                   content: (
                     <div className="sd-stack">
+                      <ServiceNotice title="Phạm vi lịch sử được tổng hợp">
+                        <p>
+                          Gồm thay đổi hồ sơ thiết bị, trạng thái yêu cầu và kết
+                          quả công việc đã đồng bộ. Phân công, nhật ký kỹ thuật
+                          và trao đổi chi tiết nằm trong hồ sơ nguồn theo quyền
+                          của bạn. Dữ liệu cũ có thể chưa đầy đủ; các nguồn có
+                          thể cập nhật vào những thời điểm khác nhau.
+                        </p>
+                      </ServiceNotice>
                       <Card title="Dòng lịch sử">
                         <HistoryRows items={dossier.timelinePreview.items} />
                         <Link to={`${base}/equipment/${id}/timeline`}>
@@ -1037,6 +1105,13 @@ export function DossierPage() {
                       </Card>
                     </div>
                   ),
+                },
+                {
+                  key: "service-parts",
+                  label: "Phụ tùng đã sử dụng",
+                  content: id ? (
+                    <EquipmentPartsHistory key={id} equipmentId={id} />
+                  ) : null,
                 },
               ]}
             />
@@ -1513,15 +1588,18 @@ function WorkOrderControls({
   const [end, setEnd] = useState("");
   const [reason, setReason] = useState("");
   const [cancelRequest, setCancelRequest] = useState(false);
-  const [report, setReport] = useState({
+  const [report, setReport, reportDraft] = useFormDraft(`work-report:${id}`, {
     problemDescription: "",
     rootCause: "",
     solution: "",
     result: "RESOLVED",
     customerSummary: "",
+    remainingWork: "",
+    submissionPending: false,
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const performing = useRef(false);
   const technicians = useRemote<Page<Row>>(
     `wo-technicians:${actions.includes("assign")}`,
     () =>
@@ -1530,21 +1608,37 @@ function WorkOrderControls({
         : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 100 }),
   );
   async function perform(path: string, method: string, body?: unknown) {
-    if (getSessionGeneration() !== sessionGeneration) return;
+    if (
+      getSessionGeneration() !== sessionGeneration ||
+      performing.current ||
+      report.submissionPending
+    )
+      return;
+    performing.current = true;
+    if (path === "/complete")
+      reportDraft.save({ ...report, submissionPending: true });
     setBusy(true);
     setError("");
     try {
       await api.workorders(`/work-orders/${id}${path}`, { method, body });
-      if (getSessionGeneration() === sessionGeneration) refresh();
+      if (getSessionGeneration() === sessionGeneration) {
+        if (path === "/complete") reportDraft.clear();
+        refresh();
+      }
     } catch (cause) {
       if (getSessionGeneration() !== sessionGeneration) return;
+      if (
+        cause instanceof ApiError &&
+        cause.status < 500 &&
+        ![401, 408].includes(cause.status)
+      )
+        reportDraft.save({ ...report, submissionPending: false });
       setError(
-        cause instanceof ApiError
-          ? `${cause.status} · ${cause.code} · ${cause.message}`
-          : String(cause),
+        cause instanceof ApiError ? workOrderActionError(cause) : String(cause),
       );
-      refresh();
+      if (cause instanceof ApiError && cause.status === 409) refresh();
     } finally {
+      performing.current = false;
       setBusy(false);
     }
   }
@@ -1579,7 +1673,20 @@ function WorkOrderControls({
       action: "complete",
       path: "/complete",
       label: "Hoàn tất và gửi báo cáo",
-      body: report,
+      body: {
+        problemDescription: report.problemDescription,
+        rootCause: report.rootCause,
+        solution: report.solution,
+        result: report.result,
+        customerSummary: [
+          report.customerSummary,
+          report.result !== "RESOLVED" && report.remainingWork
+            ? `Phần còn lại / phối hợp tiếp: ${report.remainingWork}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      },
     },
     {
       action: "cancel",
@@ -1607,6 +1714,17 @@ function WorkOrderControls({
     return null;
   return (
     <Card title="Thao tác Work Order">
+      {report.submissionPending && (
+        <p role="alert">
+          Lần gửi báo cáo trước chưa xác định kết quả. Đọc lại hồ sơ trước khi
+          thao tác thêm; bản nháp vẫn được giữ.
+        </p>
+      )}
+      {report.submissionPending && (
+        <button type="button" disabled={busy} onClick={refresh}>
+          Kiểm tra trạng thái lệnh
+        </button>
+      )}
       {error && (
         <p className="m1-error" role="alert">
           {error}
@@ -1660,10 +1778,8 @@ function WorkOrderControls({
               return;
             }
             void perform("", "PATCH", {
-              ...(start
-                ? { scheduledStart: new Date(start).toISOString() }
-                : {}),
-              ...(end ? { scheduledEnd: new Date(end).toISOString() } : {}),
+              ...(start ? { scheduledStart: vietnamInstant(start) } : {}),
+              ...(end ? { scheduledEnd: vietnamInstant(end) } : {}),
             });
           }}
         >
@@ -1700,11 +1816,20 @@ function WorkOrderControls({
         </label>
       )}
       {actions.includes("complete") && (
-        <fieldset className="m2-editor">
+        <fieldset
+          className="m2-editor"
+          disabled={busy || report.submissionPending}
+        >
           <legend>Báo cáo dịch vụ bắt buộc khi hoàn tất</legend>
+          <p role="status">
+            {reportDraft.saved === false
+              ? "Nháp chưa lưu được trên trình duyệt; sao chép nội dung trước khi rời."
+              : "Nháp được giữ trong tab này theo tài khoản và lệnh, tối đa 12 giờ. Chưa gửi cho khách."}
+          </p>
           <label>
             Mô tả sự cố
-            <input
+            <textarea
+              rows={4}
               required
               maxLength={5000}
               value={report.problemDescription}
@@ -1715,7 +1840,8 @@ function WorkOrderControls({
           </label>
           <label>
             Nguyên nhân
-            <input
+            <textarea
+              rows={3}
               maxLength={5000}
               value={report.rootCause}
               onChange={(event) =>
@@ -1725,7 +1851,8 @@ function WorkOrderControls({
           </label>
           <label>
             Giải pháp
-            <input
+            <textarea
+              rows={4}
               required
               maxLength={5000}
               value={report.solution}
@@ -1749,15 +1876,45 @@ function WorkOrderControls({
           </label>
           <label>
             Tóm tắt hiển thị khách hàng
-            <input
+            <textarea
+              rows={4}
               required
-              maxLength={2000}
+              maxLength={1500}
               value={report.customerSummary}
               onChange={(event) =>
                 setReport({ ...report, customerSummary: event.target.value })
               }
             />
           </label>
+          {report.result !== "RESOLVED" && (
+            <label>
+              Phần chưa giải quyết / bước cần phối hợp
+              <textarea
+                required
+                rows={3}
+                maxLength={400}
+                value={report.remainingWork}
+                onChange={(event) =>
+                  setReport({ ...report, remainingWork: event.target.value })
+                }
+              />
+            </label>
+          )}
+          <details>
+            <summary>Xem trước nội dung khách sẽ đọc</summary>
+            <h3>{serviceLabels[report.result]}</h3>
+            <p>{report.customerSummary || "Chưa có tóm tắt."}</p>
+            {report.result !== "RESOLVED" && (
+              <p>
+                Phần còn lại:{" "}
+                {report.remainingWork || "Cần bổ sung trước khi gửi."}
+              </p>
+            )}
+            <p>
+              Nguyên nhân và ghi chú nội bộ không tự trở thành nội dung công bố
+              cho khách.
+            </p>
+          </details>
         </fieldset>
       )}
       {actions.includes("cancel") && Boolean(order.serviceRequestId) && (
@@ -1784,12 +1941,15 @@ function WorkOrderControls({
               key={action}
               disabled={
                 busy ||
+                report.submissionPending ||
                 (["reject", "hold", "cancel"].includes(action) &&
                   !reason.trim()) ||
                 (action === "complete" &&
                   (!report.problemDescription.trim() ||
                     !report.solution.trim() ||
-                    !report.customerSummary.trim()))
+                    !report.customerSummary.trim() ||
+                    (report.result !== "RESOLVED" &&
+                      !report.remainingWork.trim())))
               }
               onClick={() =>
                 void perform(
@@ -1828,9 +1988,18 @@ export function WorkOrderPage() {
         : Promise.resolve({ status: "NOT_FOUND", data: null }),
   );
   return (
-    <div className="m2-page">
-      <Link to="/app/work-orders">← Lệnh công việc</Link>
-      <h1>{asText(state.value?.workOrderNo ?? "Chi tiết lệnh công việc")}</h1>
+    <div className="m2-page sd-page">
+      <ServiceHeader
+        back="/app/work-orders"
+        backLabel="Công việc của tôi"
+        code={asText(state.value?.workOrderNo ?? "LỆNH CÔNG VIỆC")}
+        title={asText(state.value?.title ?? "Chi tiết công việc")}
+        description="Nhận đúng thiết bị và địa điểm, thực hiện checklist, ghi nhận kết quả và bằng chứng."
+        status={state.value?.status}
+      />
+      {state.value && (
+        <TechnicianOrderContext order={state.value} revision={revision} />
+      )}
       <Result state={state}>
         {state.value && (
           <Card title="Lệnh công việc">
@@ -1848,12 +2017,14 @@ export function WorkOrderPage() {
             />
             <p>{asText(state.value.description)}</p>
             <p>Khung giờ dự kiến chưa phải lịch hẹn đã xác nhận.</p>
-            {Array.isArray(state.value.allowedActions) && (
+            <WorkOrderLocation order={state.value} />
+            <ServiceNotice title="Thực hiện theo công việc được giao">
               <p>
-                Thao tác hợp lệ:{" "}
-                {state.value.allowedActions.join(", ") || "Không có"}
+                Các thao tác được phép nằm dưới hồ sơ. Khi báo cáo kết quả một
+                phần hoặc chưa xử lý được, ghi rõ phần còn lại và nội dung cần
+                phối hợp cho khách hàng.
               </p>
-            )}
+            </ServiceNotice>
             {Boolean(state.value.serviceRequestId) && (
               <Link
                 to={`/app/service-requests/${state.value.serviceRequestId}`}

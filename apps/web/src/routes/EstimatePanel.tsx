@@ -5,6 +5,8 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError } from "../api/client";
 import { getSessionGeneration, useSession } from "../auth/session";
+import { useFormDraft } from "../features/workspace/use-form-draft";
+import EstimateReview from "../features/workspace/EstimateReview";
 
 type Item = {
   itemType: string;
@@ -40,10 +42,14 @@ export default function EstimatePanel({
   requestId,
   allowedActions,
   onChange,
+  requestNo,
+  equipmentSummary,
 }: {
   requestId: string;
   allowedActions: string[];
   onChange: () => void;
+  requestNo?: string;
+  equipmentSummary?: string;
 }) {
   const { profile } = useSession();
   const sessionGeneration = getSessionGeneration();
@@ -58,35 +64,67 @@ export default function EstimatePanel({
     items: [],
     error: "",
   });
-  const [selected, setSelected] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [draft, setDraft, draftStatus] = useFormDraft(`estimate:${requestId}`, {
+    selected: "",
+    createOpen: false,
+    items: [blankItem()],
+    validUntil: "",
+    notes: "",
+    submissionPending: false,
+    submissionConfirmed: false,
+  });
+  const { selected, createOpen, items, validUntil, notes } = draft;
+  const setSelected = (value: string | null) =>
+    setDraft((old) => ({ ...old, selected: value ?? "" }));
+  const setCreateOpen = (value: boolean) =>
+    setDraft((old) => ({ ...old, createOpen: value }));
+  const setItems = (value: Item[]) =>
+    setDraft((old) => ({ ...old, items: value }));
+  const setValidUntil = (value: string) =>
+    setDraft((old) => ({ ...old, validUntil: value }));
+  const setNotes = (value: string) =>
+    setDraft((old) => ({ ...old, notes: value }));
+  const [decisionReason, setDecisionReason] = useState("");
+  const [receipt, setReceipt] = useState("");
   const [pending, setPending] = useState<{
     path: string;
     method: string;
     label: string;
+    estimate?: Estimate;
   } | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const actionLock = useRef(false);
-  const [uncertain, setUncertain] = useState(false);
-  function confirmAction(path: string, method: string, label: string) {
-    setPending({ path, method, label });
+  const uncertain = draft.submissionPending;
+  function confirmAction(
+    path: string,
+    method: string,
+    label: string,
+    estimate?: Estimate,
+  ) {
+    setDecisionReason("");
+    setPending({ path, method, label, estimate });
     dialog.current?.showModal();
   }
-  const [items, setItems] = useState<Item[]>([blankItem()]);
-  const [validUntil, setValidUntil] = useState("");
-  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const queryKey = `${requestId}:session-${sessionGeneration}`;
   const loading = estimateState.key !== queryKey;
   const estimates = loading ? [] : estimateState.items;
-  async function reload() {
+  async function reload(confirmedWrite = false) {
     if (getSessionGeneration() !== sessionGeneration) return;
     const rows = await api.requestsLive<Estimate[]>(
       `/service-requests/${requestId}/estimates`,
     );
     if (getSessionGeneration() !== sessionGeneration) return;
     setEstimateState({ key: queryKey, items: rows, error: "" });
+    if (confirmedWrite) {
+      draftStatus.save({
+        ...draft,
+        submissionPending: false,
+        submissionConfirmed: false,
+      });
+      draftStatus.clear();
+    }
     onChange();
   }
   useEffect(() => {
@@ -135,12 +173,33 @@ export default function EstimatePanel({
     actionLock.current = true;
     setBusy(true);
     setError("");
+    draftStatus.save({
+      ...draft,
+      submissionPending: true,
+      submissionConfirmed: false,
+    });
+    let writeConfirmed = false;
     try {
       await api.requestsLive(path, { method, body });
       if (getSessionGeneration() !== sessionGeneration) return;
-      await reload();
-      setSelected(null);
-      setCreateOpen(false);
+      writeConfirmed = true;
+      draftStatus.save({
+        ...draft,
+        submissionPending: true,
+        submissionConfirmed: true,
+      });
+      setReceipt(
+        `Đã ghi nhận ${pending?.label ?? "thay đổi dự toán"}. Kiểm tra trạng thái và phiên bản vừa tải bên dưới.`,
+      );
+      await reload(true);
+      draftStatus.save({
+        ...draft,
+        selected: "",
+        createOpen: false,
+        submissionPending: false,
+        submissionConfirmed: false,
+      });
+      draftStatus.clear();
       dialog.current?.close();
       setPending(null);
     } catch (cause) {
@@ -149,11 +208,18 @@ export default function EstimatePanel({
         !(cause instanceof ApiError) ||
         [401, 408].includes(cause.status) ||
         cause.status >= 500;
-      setUncertain(unknown);
+      if (!unknown && !writeConfirmed)
+        draftStatus.save({
+          ...draft,
+          submissionPending: false,
+          submissionConfirmed: false,
+        });
       setError(
-        unknown
-          ? "Chưa xác định thay đổi đã được ghi nhận hay chưa. Đã khóa gửi lại; hãy kiểm tra các phiên bản dự toán trước khi thực hiện tiếp."
-          : message(cause),
+        writeConfirmed
+          ? "Thay đổi đã được ghi nhận nhưng chưa tải được phiên bản mới. Đọc lại hồ sơ trước khi thao tác thêm."
+          : unknown
+            ? "Chưa xác định thay đổi đã được ghi nhận hay chưa. Đã khóa gửi lại; hãy kiểm tra các phiên bản dự toán trước khi thực hiện tiếp."
+            : message(cause),
       );
       if (cause instanceof ApiError && cause.status === 409) {
         try {
@@ -194,6 +260,18 @@ export default function EstimatePanel({
         <h2>Dự toán chi phí</h2>
       </div>
       <div className="m1-section-body">
+        {receipt && (
+          <p role="status" className="sd-feedback">
+            {receipt}
+          </p>
+        )}
+        {uncertain && (
+          <p role="alert">
+            {draft.submissionConfirmed
+              ? "Đã ghi nhận thay đổi; cần đọc lại phiên bản mới trước khi tiếp tục."
+              : "Lần gửi trước chưa xác định kết quả. Có thể đọc lại các phiên bản để đối soát; giữ khóa ghi và không tự gửi thêm."}
+          </p>
+        )}
         {loading ? <p role="status">Đang tải…</p> : null}
         {!loading && estimateState.error && (
           <p role="alert" className="m1-error">
@@ -234,9 +312,11 @@ export default function EstimatePanel({
         {uncertain && (
           <button
             type="button"
-            disabled={busy || uncertain}
+            disabled={busy}
             onClick={() => {
-              void reload().catch((cause) => setError(message(cause)));
+              void reload(draft.submissionConfirmed).catch((cause) =>
+                setError(message(cause)),
+              );
             }}
           >
             Kiểm tra phiên bản đã lưu
@@ -260,6 +340,21 @@ export default function EstimatePanel({
                 .join("/") ?? "Không giới hạn"}
             </p>
             {estimate.notes ? <p>Điều khoản: {estimate.notes}</p> : null}
+            {estimates.some(
+              (row) => row.revisionNo === estimate.revisionNo - 1,
+            ) && (
+              <details>
+                <summary>Đối chiếu với phiên bản trước</summary>
+                <EstimateReview
+                  requestNo={requestNo}
+                  equipmentSummary={equipmentSummary}
+                  estimate={estimate}
+                  previous={estimates.find(
+                    (row) => row.revisionNo === estimate.revisionNo - 1,
+                  )}
+                />
+              </details>
+            )}
             <div className="ws-table-wrap">
               <table className="ws-table">
                 <thead>
@@ -358,8 +453,11 @@ export default function EstimatePanel({
                 <button
                   disabled={busy || uncertain}
                   onClick={() =>
-                    void act(
+                    confirmAction(
                       `/service-requests/estimates/${estimate.id}/approve`,
+                      "POST",
+                      `Chấp thuận dự toán phiên bản ${estimate.revisionNo}`,
+                      estimate,
                     )
                   }
                 >
@@ -372,15 +470,12 @@ export default function EstimatePanel({
                 <button
                   disabled={busy || uncertain}
                   onClick={() => {
-                    const reason = window.prompt(
-                      "Lý do từ chối (có thể bỏ trống)",
+                    confirmAction(
+                      `/service-requests/estimates/${estimate.id}/reject`,
+                      "POST",
+                      `Từ chối dự toán phiên bản ${estimate.revisionNo}`,
+                      estimate,
                     );
-                    if (reason !== null)
-                      void act(
-                        `/service-requests/estimates/${estimate.id}/reject`,
-                        "POST",
-                        reason.trim() ? { reason: reason.trim() } : undefined,
-                      );
                   }}
                 >
                   Từ chối
@@ -519,7 +614,12 @@ export default function EstimatePanel({
             >
               Đóng biểu mẫu
             </button>
-            <p>Tổng tiền do server tính và trả về sau khi lưu.</p>
+            <p>
+              Tổng tiền được xác định sau khi lưu bản nháp.{" "}
+              {draftStatus.saved === false
+                ? "Nháp trên trình duyệt chưa lưu được; sao chép nội dung trước khi rời trang."
+                : "Nội dung đang nhập được giữ trong tab này cho tài khoản hiện tại, tối đa 12 giờ."}
+            </p>
           </form>
         ) : null}
         <dialog
@@ -534,16 +634,57 @@ export default function EstimatePanel({
             className="m1-form"
             onSubmit={(e) => {
               e.preventDefault();
-              if (pending) void act(pending.path, pending.method);
+              if (pending)
+                void act(
+                  pending.path,
+                  pending.method,
+                  pending.path.endsWith("/reject") && decisionReason.trim()
+                    ? { reason: decisionReason.trim() }
+                    : undefined,
+                );
             }}
           >
             <h2 id="estimate-action-title">{pending?.label}</h2>
+            {pending?.estimate && (
+              <EstimateReview
+                requestNo={requestNo}
+                equipmentSummary={equipmentSummary}
+                estimate={pending.estimate}
+                previous={estimates.find(
+                  (row) => row.revisionNo === pending.estimate!.revisionNo - 1,
+                )}
+              />
+            )}
+            {pending?.path.endsWith("/reject") && (
+              <label>
+                Lý do từ chối (khuyến khích ghi để nhận phương án phù hợp)
+                <textarea
+                  rows={3}
+                  maxLength={1000}
+                  value={decisionReason}
+                  onChange={(event) => setDecisionReason(event.target.value)}
+                />
+              </label>
+            )}
             <p>
               {pending?.method === "DELETE"
                 ? "Bản nháp này sẽ được xóa. Kiểm tra đúng phiên bản trước khi xác nhận."
                 : "Kiểm tra nội dung, tổng tiền và thời hạn hiệu lực. Thao tác sẽ được ghi nhận trên hồ sơ yêu cầu."}
             </p>
             {error && <p role="alert">{error}</p>}
+            {uncertain && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void reload(draft.submissionConfirmed).catch((cause) =>
+                    setError(message(cause)),
+                  )
+                }
+              >
+                Kiểm tra phiên bản đã lưu
+              </button>
+            )}
             <div className="m1-actions">
               <button
                 type="button"

@@ -15,11 +15,15 @@ import { useSession, getSessionGeneration } from "../../auth/session";
 import { api } from "../../api/client";
 import type { Page } from "../../types/domain";
 import { PriorityBadge } from "../../components/Badges";
+import WorkOrderBoard from "./WorkOrderBoard";
+import { recordAge, requestResponsibility } from "./service-detail-data";
+import { maintenanceDates } from "./calendar-preview";
 import {
   Badge,
   DataState,
   EmptyState,
   EntityPicker,
+  EquipmentIdentity,
   NextStep,
   PageHeading,
   Pagination,
@@ -148,16 +152,31 @@ export function WorkspaceWorkOrdersPage() {
     !profile.roles.some((role) =>
       ["TENANT_ADMIN", "SERVICE_MANAGER", "DISPATCHER"].includes(role),
     );
+  const manager = profile?.roles.some((role) =>
+    ["SERVICE_MANAGER", "TENANT_ADMIN", "DISPATCHER"].includes(role),
+  );
+  const board = manager && query.params.get("view") !== "list";
   const params = new URLSearchParams({
     page: String(query.page),
     pageSize: "20",
   });
-  for (const key of ["q", "status", "priority", "type"])
+  for (const key of [
+    "q",
+    "status",
+    "priority",
+    "type",
+    "technicianId",
+    "customerId",
+    "equipmentId",
+    "scheduledFrom",
+    "scheduledTo",
+    "sort",
+  ])
     if (query.params.get(key)) params.set(key, query.params.get(key)!);
   if (technician) params.set("mine", "true");
   const state = useWorkspaceData<Page<Row>>(
     "workorders",
-    `/work-orders?${params}`,
+    board ? null : `/work-orders?${params}`,
     query.revision,
   );
   const status = query.params.get("status") || "";
@@ -180,7 +199,33 @@ export function WorkspaceWorkOrdersPage() {
             ? "Nhận việc, theo dõi lịch và cập nhật kết quả cho từng thiết bị."
             : "Theo dõi tiến độ, lịch thực hiện và người phụ trách trong cùng một danh sách."
         }
-        actions={<Refresh onClick={query.refresh} />}
+        actions={
+          <>
+            <Refresh onClick={query.refresh} />
+            {manager && (
+              <div
+                className="workshop-view-switch"
+                role="group"
+                aria-label="Cách hiển thị công việc"
+              >
+                <button
+                  type="button"
+                  aria-pressed={board}
+                  onClick={() => query.change({ view: "board" })}
+                >
+                  Bảng công việc
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!board}
+                  onClick={() => query.change({ view: "list" })}
+                >
+                  Danh sách
+                </button>
+              </div>
+            )}
+          </>
+        }
       />
       <div className="ws-help">
         <Info size={17} />
@@ -232,7 +277,19 @@ export function WorkspaceWorkOrdersPage() {
             <option value="NORMAL">Bình thường</option>
             <option value="LOW">Thấp</option>
           </select>
-          {query.params.toString() && (
+          <select
+            aria-label="Thứ tự công việc"
+            value={query.params.get("sort") || "-createdAt"}
+            onChange={(event) => query.change({ sort: event.target.value })}
+          >
+            <option value="-createdAt">Mới trước</option>
+            <option value="createdAt">Cũ trước</option>
+            <option value="-priority">Ưu tiên cao trước</option>
+            <option value="scheduledStart">Lịch dự kiến gần trước</option>
+          </select>
+          {["q", "status", "priority", "type"].some((key) =>
+            query.params.get(key),
+          ) && (
             <button
               className="ws-button ws-button--secondary"
               onClick={() =>
@@ -243,139 +300,154 @@ export function WorkspaceWorkOrdersPage() {
             </button>
           )}
         </div>
-        <DataState {...state} retry={query.refresh}>
-          <div className="ws-table-wrap">
-            <table className="ws-table">
-              <thead>
-                <tr>
-                  <th>LỆNH CÔNG VIỆC</th>
-                  <th>THIẾT BỊ / KHÁCH HÀNG</th>
-                  <th>ƯU TIÊN</th>
-                  <th>PHỤ TRÁCH</th>
-                  <th>LỊCH THỰC HIỆN</th>
-                  <th>TRẠNG THÁI / BƯỚC TIẾP</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {state.data?.items.map((row) => (
-                  <tr key={String(row.id)}>
-                    <td data-label="Lệnh công việc">
-                      <Link
-                        className="ws-text-link"
-                        to={`/app/work-orders/${row.id}`}
-                      >
-                        {value(row.workOrderNo)}
+        {board ? (
+          <WorkOrderBoard
+            filters={query.params}
+            revision={query.revision}
+            refresh={query.refresh}
+          />
+        ) : (
+          <>
+            <DataState {...state} retry={query.refresh}>
+              <div className="ws-table-wrap">
+                <table className="ws-table">
+                  <thead>
+                    <tr>
+                      <th>LỆNH CÔNG VIỆC</th>
+                      <th>THIẾT BỊ / KHÁCH HÀNG</th>
+                      <th>ƯU TIÊN</th>
+                      <th>PHỤ TRÁCH</th>
+                      <th>LỊCH THỰC HIỆN</th>
+                      <th>TRẠNG THÁI / BƯỚC TIẾP</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.data?.items.map((row) => (
+                      <tr key={String(row.id)}>
+                        <td data-label="Lệnh công việc">
+                          <Link
+                            className="ws-text-link"
+                            to={`/app/work-orders/${row.id}`}
+                          >
+                            {value(row.workOrderNo)}
+                          </Link>
+                          <small>{value(row.title, "Công việc dịch vụ")}</small>
+                        </td>
+                        <td data-label="Thiết bị / Khách hàng">
+                          <EquipmentIdentity equipmentId={row.equipmentId} />
+                          <RelatedName
+                            area="organization"
+                            path={
+                              row.customerId
+                                ? `/customers/${row.customerId}`
+                                : null
+                            }
+                            initial={row.customerName}
+                          />
+                          <small>
+                            Địa điểm lệnh:{" "}
+                            <RelatedName
+                              area="organization"
+                              path={
+                                row.customerSiteId
+                                  ? `/sites/${row.customerSiteId}`
+                                  : null
+                              }
+                              fallback="Chưa có địa điểm được ghi nhận"
+                            />
+                          </small>
+                        </td>
+                        <td data-label="Ưu tiên">
+                          <PriorityBadge
+                            priority={String(row.priority ?? "NORMAL")}
+                          />
+                        </td>
+                        <td data-label="Phụ trách">
+                          {row.currentTechnicianId ? (
+                            <RelatedName
+                              area="workorders"
+                              path={`/technicians/${row.currentTechnicianId}`}
+                              initial={
+                                row.currentTechnicianName ??
+                                asRow(row.currentAssignment).technicianName
+                              }
+                              fallback="Mở lịch sử phân công để xem"
+                            />
+                          ) : ["COMPLETED", "CANCELLED"].includes(
+                              String(row.status),
+                            ) ? (
+                            "Xem lịch sử phân công"
+                          ) : (
+                            "Chưa phân công"
+                          )}
+                        </td>
+                        <td data-label="Lịch thực hiện">
+                          <strong>
+                            {formatDate(row.scheduledStart, true)}
+                          </strong>
+                          <small>
+                            {row.scheduledEnd
+                              ? `Đến ${formatDate(row.scheduledEnd, true)}`
+                              : "Lịch hẹn cần được xác nhận"}
+                          </small>
+                        </td>
+                        <td data-label="Trạng thái / Bước tiếp">
+                          <Badge status={row.status} />
+                          <NextStep>
+                            {row.status === "CREATED"
+                              ? "Điều phối phân công"
+                              : row.status === "ASSIGNED"
+                                ? "Kỹ thuật viên nhận việc"
+                                : row.status === "ON_HOLD"
+                                  ? "Kiểm tra lý do tạm dừng"
+                                  : row.status === "COMPLETED"
+                                    ? "Xem báo cáo và đối soát"
+                                    : row.status === "CANCELLED"
+                                      ? "Xem lý do hủy"
+                                      : "Theo dõi tiến độ"}
+                          </NextStep>
+                        </td>
+                        <td data-label="Thao tác">
+                          <Link
+                            className="ws-text-link"
+                            to={`/app/work-orders/${row.id}`}
+                            aria-label={`Xem ${row.workOrderNo}`}
+                          >
+                            <ArrowRight size={17} />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {!state.data?.items.length && (
+                <EmptyState
+                  title="Chưa có công việc phù hợp"
+                  description={
+                    technician
+                      ? "Công việc được phân công sẽ xuất hiện tại đây. Bạn có thể kiểm tra lại bộ lọc hoặc liên hệ điều phối viên."
+                      : "Lệnh công việc được tạo từ yêu cầu dịch vụ hoặc công việc bảo trì. Kiểm tra bộ lọc hoặc tiếp tục từ hồ sơ nguồn."
+                  }
+                  action={
+                    !technician && (
+                      <Link className="ws-button" to="/app/service-requests">
+                        Xem yêu cầu dịch vụ
+                        <ArrowRight size={15} />
                       </Link>
-                      <small>{value(row.title, "Công việc dịch vụ")}</small>
-                    </td>
-                    <td data-label="Thiết bị / Khách hàng">
-                      <strong>
-                        <RelatedName
-                          area="assetM2"
-                          path={
-                            row.equipmentId
-                              ? `/equipment/${row.equipmentId}`
-                              : null
-                          }
-                          initial={row.equipmentName}
-                          fallback="Xem thiết bị trong hồ sơ"
-                        />
-                      </strong>
-                      <RelatedName
-                        area="organization"
-                        path={
-                          row.customerId ? `/customers/${row.customerId}` : null
-                        }
-                        initial={row.customerName}
-                      />
-                    </td>
-                    <td data-label="Ưu tiên">
-                      <PriorityBadge
-                        priority={String(row.priority ?? "NORMAL")}
-                      />
-                    </td>
-                    <td data-label="Phụ trách">
-                      {row.currentTechnicianId ? (
-                        <RelatedName
-                          area="workorders"
-                          path={`/technicians/${row.currentTechnicianId}`}
-                          initial={
-                            row.currentTechnicianName ??
-                            asRow(row.currentAssignment).technicianName
-                          }
-                          fallback="Mở lịch sử phân công để xem"
-                        />
-                      ) : ["COMPLETED", "CANCELLED"].includes(
-                          String(row.status),
-                        ) ? (
-                        "Xem lịch sử phân công"
-                      ) : (
-                        "Chưa phân công"
-                      )}
-                    </td>
-                    <td data-label="Lịch thực hiện">
-                      <strong>{formatDate(row.scheduledStart, true)}</strong>
-                      <small>
-                        {row.scheduledEnd
-                          ? `Đến ${formatDate(row.scheduledEnd, true)}`
-                          : "Lịch hẹn cần được xác nhận"}
-                      </small>
-                    </td>
-                    <td data-label="Trạng thái / Bước tiếp">
-                      <Badge status={row.status} />
-                      <NextStep>
-                        {row.status === "CREATED"
-                          ? "Điều phối phân công"
-                          : row.status === "ASSIGNED"
-                            ? "Kỹ thuật viên nhận việc"
-                            : row.status === "ON_HOLD"
-                              ? "Kiểm tra lý do tạm dừng"
-                              : row.status === "COMPLETED"
-                                ? "Xem báo cáo và đối soát"
-                                : row.status === "CANCELLED"
-                                  ? "Xem lý do hủy"
-                                  : "Theo dõi tiến độ"}
-                      </NextStep>
-                    </td>
-                    <td data-label="Thao tác">
-                      <Link
-                        className="ws-text-link"
-                        to={`/app/work-orders/${row.id}`}
-                        aria-label={`Xem ${row.workOrderNo}`}
-                      >
-                        <ArrowRight size={17} />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!state.data?.items.length && (
-            <EmptyState
-              title="Chưa có công việc phù hợp"
-              description={
-                technician
-                  ? "Công việc được phân công sẽ xuất hiện tại đây. Bạn có thể kiểm tra lại bộ lọc hoặc liên hệ điều phối viên."
-                  : "Lệnh công việc được tạo từ yêu cầu dịch vụ hoặc công việc bảo trì. Kiểm tra bộ lọc hoặc tiếp tục từ hồ sơ nguồn."
-              }
-              action={
-                !technician && (
-                  <Link className="ws-button" to="/app/service-requests">
-                    Xem yêu cầu dịch vụ
-                    <ArrowRight size={15} />
-                  </Link>
-                )
-              }
+                    )
+                  }
+                />
+              )}
+            </DataState>
+            <Pagination
+              page={query.page}
+              total={state.data?.total}
+              onChange={query.turnPage}
             />
-          )}
-        </DataState>
-        <Pagination
-          page={query.page}
-          total={state.data?.total}
-          onChange={query.turnPage}
-        />
+          </>
+        )}
       </section>
     </div>
   );
@@ -387,7 +459,7 @@ export function WorkspaceTechniciansPage() {
     page: String(query.page),
     pageSize: "20",
   });
-  for (const key of ["q", "status"])
+  for (const key of ["q", "status", "branchId", "skillId"])
     if (query.params.get(key)) params.set(key, query.params.get(key)!);
   const state = useWorkspaceData<Page<Row>>(
     "workorders",
@@ -427,6 +499,24 @@ export function WorkspaceTechniciansPage() {
             options={["AVAILABLE", "BUSY", "OFF_DUTY", "INACTIVE"]}
             onChange={(status) => query.change({ status })}
           />
+          <div className="workshop-filter-picker">
+            <EntityPicker
+              label="Chi nhánh"
+              area="organization"
+              path="/branches"
+              selected={query.params.get("branchId") || ""}
+              onChange={(branchId) => query.change({ branchId })}
+            />
+          </div>
+          <div className="workshop-filter-picker">
+            <EntityPicker
+              label="Kỹ năng"
+              area="workorders"
+              path="/skills"
+              selected={query.params.get("skillId") || ""}
+              onChange={(skillId) => query.change({ skillId })}
+            />
+          </div>
         </div>
         <DataState {...state} retry={query.refresh}>
           <div className="ws-table-wrap">
@@ -736,6 +826,16 @@ export function PlanCreate({
     [error, setError] = useState(""),
     [unknown, setUnknown] = useState(false);
   const sending = useRef(false);
+  const [calendar, setCalendar] = useState({
+    first: "",
+    unit: "MONTH",
+    interval: 3,
+  });
+  const preview = maintenanceDates(
+    calendar.first,
+    calendar.unit,
+    calendar.interval,
+  );
   const generation = getSessionGeneration();
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -799,7 +899,18 @@ export function PlanCreate({
           Đóng
         </button>
       </div>
-      <form className="ws-card-body" onSubmit={save}>
+      <form
+        className="ws-card-body"
+        onSubmit={save}
+        onChange={(event) => {
+          const fields = new FormData(event.currentTarget);
+          setCalendar({
+            first: String(fields.get("nextDueDate") ?? ""),
+            unit: String(fields.get("frequencyUnit") ?? "MONTH"),
+            interval: Number(fields.get("frequencyValue")),
+          });
+        }}
+      >
         <fieldset
           disabled={busy || unknown}
           style={{ border: 0, padding: 0, margin: 0 }}
@@ -858,6 +969,20 @@ export function PlanCreate({
             </label>
           </div>
         </fieldset>
+        {preview.length > 0 && (
+          <div className="workshop-next">
+            <h3>Các kỳ đến hạn xem trước</h3>
+            <ol>
+              {preview.map((date) => (
+                <li key={date}>{formatDate(date)}</li>
+              ))}
+            </ol>
+            <p>
+              Giữ ngày gốc; tháng ngắn dùng ngày cuối tháng rồi quay về ngày gốc
+              khi có thể. Đây là hạn bảo trì, không phải lịch hẹn kỹ thuật.
+            </p>
+          </div>
+        )}
         <div className="ws-help">
           <Info size={16} />
           <span>
@@ -1051,7 +1176,7 @@ export function WorkspaceMaintenancePage() {
             onChange={(status) => query.change({ status })}
           />
           <Link className="ws-text-link" to={`${base}/maintenance-history`}>
-            Tra cứu toàn bộ lịch sử
+            Tra cứu lịch sử bảo trì
             <ArrowRight size={13} />
           </Link>
         </div>
@@ -1478,7 +1603,14 @@ export function WorkspaceRequestsPage() {
     page: String(query.page),
     pageSize: "20",
   });
-  for (const key of ["q", "status", "priority"])
+  for (const key of [
+    "q",
+    "status",
+    "priority",
+    "customerId",
+    "equipmentId",
+    "sort",
+  ])
     if (query.params.get(key)) params.set(key, query.params.get(key)!);
   const state = useWorkspaceData<Page<Row>>(
     "requestsLive",
@@ -1559,6 +1691,15 @@ export function WorkspaceRequestsPage() {
             placeholder="Tìm mã hoặc nội dung yêu cầu…"
             submit={(q) => query.change({ q })}
           />
+          <select
+            aria-label="Thứ tự yêu cầu"
+            value={query.params.get("sort") || "-createdAt"}
+            onChange={(event) => query.change({ sort: event.target.value })}
+          >
+            <option value="-createdAt">Mới trước</option>
+            <option value="createdAt">Cũ trước</option>
+            <option value="-priority">Ưu tiên cao trước</option>
+          </select>
           <StatusSelect
             labels={{ ACCEPTED: "Đã tiếp nhận" }}
             current={query.params.get("status") || ""}
@@ -1591,6 +1732,7 @@ export function WorkspaceRequestsPage() {
               <thead>
                 <tr>
                   <th>YÊU CẦU</th>
+                  <th>THIẾT BỊ / ĐỊA ĐIỂM</th>
                   <th>ƯU TIÊN</th>
                   <th>TRẠNG THÁI</th>
                   <th>BƯỚC TIẾP THEO</th>
@@ -1606,6 +1748,25 @@ export function WorkspaceRequestsPage() {
                         {value(row.requestNo)}
                       </Link>
                       <small>{value(row.title)}</small>
+                      <small>{recordAge(row.createdAt)}</small>
+                      {!customer && (
+                        <RelatedName
+                          area="organization"
+                          path={
+                            row.customerId
+                              ? `/customers/${row.customerId}`
+                              : null
+                          }
+                          initial={row.customerName}
+                          fallback="Chưa tải được tên khách hàng"
+                        />
+                      )}
+                    </td>
+                    <td data-label="Thiết bị / Địa điểm">
+                      <EquipmentIdentity
+                        equipmentId={row.equipmentId}
+                        showCurrentSite
+                      />
                     </td>
                     <td data-label="Ưu tiên">
                       <PriorityBadge
@@ -1613,21 +1774,17 @@ export function WorkspaceRequestsPage() {
                       />
                     </td>
                     <td data-label="Trạng thái">
-                      <Badge status={row.status} label={row.status === "ACCEPTED" ? "Đã tiếp nhận" : undefined} />
+                      <Badge
+                        status={row.status}
+                        label={
+                          row.status === "ACCEPTED" ? "Đã tiếp nhận" : undefined
+                        }
+                      />
                     </td>
                     <td data-label="Bước tiếp theo">
                       <NextStep>
-                        {row.status === "AWAITING_INFO"
-                          ? "Khách hàng bổ sung thông tin"
-                          : row.status === "AWAITING_CUSTOMER_APPROVAL"
-                            ? "Quản trị khách hàng xem dự toán"
-                            : row.status === "NEW" || row.status === "REVIEWING"
-                              ? "Bộ phận dịch vụ đánh giá"
-                              : row.status === "PROCESSING"
-                                ? "Theo dõi tiến trình thực hiện"
-                                : row.status === "RESOLVED"
-                                  ? "Xem kết quả và phản hồi"
-                                  : "Xem chi tiết hồ sơ"}
+                        {requestResponsibility(row.status)[0]} ·{" "}
+                        {requestResponsibility(row.status)[1]}
                       </NextStep>
                     </td>
                     <td data-label="Ngày gửi">{formatDate(row.createdAt)}</td>

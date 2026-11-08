@@ -61,6 +61,8 @@ function setup(order, mutation = async () => ({})) {
       }),
     },
     "./ServiceDetailUI": detailUI(tab, h),
+    "./WorkOrderReadiness": { default: "readiness", WorkOrderLocation: "work-location" },
+    "./TechnicianSchedule": { default: "technician-schedule" },
     "./service-detail-data": data,
   });
   let refreshes = 0;

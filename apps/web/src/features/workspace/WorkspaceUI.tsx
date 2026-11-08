@@ -225,6 +225,43 @@ export function RelatedName({
     <span>{name}</span>
   );
 }
+
+export function EquipmentIdentity({
+  equipmentId,
+  showCurrentSite = false,
+}: {
+  equipmentId: unknown;
+  showCurrentSite?: boolean;
+}) {
+  const data = useWorkspaceData<Row>(
+    "assetM2",
+    equipmentId ? `/equipment/${equipmentId}` : null,
+  );
+  if (data.loading) return <span>Đang tải nhận dạng thiết bị…</span>;
+  if (data.error) return <span>Chưa tải được nhận dạng thiết bị</span>;
+  const row = data.data;
+  return (
+    <span className="workshop-equipment-identity">
+      <strong>
+        {value(row?.displayName ?? row?.assetCode, "Chưa có tên thiết bị")}
+      </strong>
+      <small>
+        {value(row?.assetCode, "Chưa có mã")} · Serial{" "}
+        {value(row?.serialNumber, "Chưa có")}
+      </small>
+      {showCurrentSite && (
+        <small>
+          Địa điểm hiện tại:{" "}
+          <RelatedName
+            area="organization"
+            path={row?.customerSiteId ? `/sites/${row.customerSiteId}` : null}
+            fallback="Chưa tải được tên địa điểm"
+          />
+        </small>
+      )}
+    </span>
+  );
+}
 export function NextStep({ children }: { children: ReactNode }) {
   return (
     <span className="ws-next-step">

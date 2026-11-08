@@ -1,4 +1,12 @@
-import { serviceLabels, workOrderNextStep } from "./service-detail-data";
+import {
+  serviceLabels,
+  workOrderNextStep,
+  workOrderSiteId,
+  workOrderActionError,
+  equipmentLifecycleLabel,
+} from "./service-detail-data";
+import WorkOrderReadiness, { WorkOrderLocation } from "./WorkOrderReadiness";
+import TechnicianSchedule from "./TechnicianSchedule";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CalendarDays, CircleAlert, UserRound, Wrench } from "lucide-react";
@@ -301,16 +309,7 @@ export function ManagerOrderActions({
         setFeedback(
           "Chưa xác định thao tác đã được ghi nhận hay chưa. Đã khóa gửi lại; hãy làm mới và kiểm tra lịch sử trước khi thao tác tiếp.",
         );
-      } else
-        setFeedback(
-          cause instanceof ApiError && cause.status === 409
-            ? "Hồ sơ vừa thay đổi. Làm mới để kiểm tra trước khi thao tác tiếp."
-            : cause instanceof ApiError && cause.status === 403
-              ? "Tài khoản không có quyền thực hiện thao tác này."
-              : cause instanceof Error
-                ? cause.message
-                : "Không thể lưu thay đổi.",
-        );
+      } else setFeedback(workOrderActionError(cause));
     } finally {
       lock.current = false;
       if (getSessionGeneration() === generation) setBusy(false);
@@ -379,6 +378,12 @@ export function ManagerOrderActions({
                 </select>
               </label>
               {techs.loading && <p role="status">Đang tải kỹ thuật viên…</p>}
+              {technicianId && (
+                <TechnicianSchedule
+                  technicianId={technicianId}
+                  excludeOrderId={id}
+                />
+              )}
               {techs.error && <p role="alert">{techs.error}</p>}
               {techs.data &&
                 !techs.data.items.some((row) =>
@@ -594,6 +599,13 @@ export default function ServiceManagerWorkOrder() {
             {row.status !== "CANCELLED" && (
               <ServiceProgress status={row.status} />
             )}
+            <WorkOrderReadiness
+              order={row}
+              equipment={equipment.data}
+              parts={parts.data}
+              partsUnavailable={Boolean(parts.error)}
+              revision={revision}
+            />
             <ServiceNotice title={next[0]}>
               <p>{next[1]}</p>
             </ServiceNotice>
@@ -701,21 +713,45 @@ export default function ServiceManagerWorkOrder() {
                                   ),
                                 },
                                 {
-                                  label: "Địa điểm",
+                                  label: "Địa điểm gắn với lệnh công việc",
                                   value: (
                                     <RelatedName
                                       area="organization"
                                       path={
-                                        equipment.data?.customerSiteId
-                                          ? `/sites/${equipment.data.customerSiteId}`
+                                        workOrderSiteId(row)
+                                          ? `/sites/${workOrderSiteId(row)}`
                                           : null
                                       }
-                                      fallback="Chưa tải được địa điểm"
+                                      fallback="Chưa tải được địa điểm của lệnh; không suy ra từ vị trí hiện tại của máy"
                                     />
                                   ),
                                 },
+                                {
+                                  label: "Vòng đời hồ sơ thiết bị hiện tại",
+                                  value: equipmentLifecycleLabel(
+                                    equipment.data?.status,
+                                  ),
+                                },
+                                ...(row.customerSiteId &&
+                                equipment.data?.customerSiteId &&
+                                row.customerSiteId !==
+                                  equipment.data.customerSiteId
+                                  ? [
+                                      {
+                                        label:
+                                          "Địa điểm hiện tại của thiết bị (khác với lệnh)",
+                                        value: (
+                                          <RelatedName
+                                            area="organization"
+                                            path={`/sites/${equipment.data.customerSiteId}`}
+                                          />
+                                        ),
+                                      },
+                                    ]
+                                  : []),
                               ]}
                             />
+                            <WorkOrderLocation order={row} />
                           </DataState>
                         </ServiceCard>
                         <ServiceCard title="Hồ sơ liên quan">
@@ -736,7 +772,7 @@ export default function ServiceManagerWorkOrder() {
                           <ServiceLink
                             to={`/app/equipment/${row.equipmentId}/timeline`}
                           >
-                            Toàn bộ lịch sử thiết bị
+                            Lịch sử thiết bị đã ghi nhận
                           </ServiceLink>
                         </ServiceCard>
                       </aside>
