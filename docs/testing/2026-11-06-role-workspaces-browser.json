@@ -1,0 +1,164 @@
+{
+  "date": "2026-11-06",
+  "environment": "localhost:5173 / local demo accounts",
+  "scope": "login, role heading, navigation; selected page and responsive smoke checks",
+  "roles": [
+    {
+      "role": "CUSTOMER_ADMIN",
+      "heading": "Thiết bị của bạn được chăm sóc ra sao?"
+    },
+    {
+      "role": "CUSTOMER_USER",
+      "heading": "Chúng tôi có thể hỗ trợ gì cho bạn?",
+      "links": [
+        "/dashboard",
+        "/portal/equipment",
+        "/portal/requests",
+        "/portal/equipment-handovers",
+        "/portal/equipment-history",
+        "/portal/locations",
+        "/portal/notifications",
+        "/portal/profile"
+      ]
+    },
+    {
+      "role": "TECHNICIAN",
+      "heading": "Sẵn sàng cho công việc tiếp theo",
+      "links": [
+        "/dashboard",
+        "/app/service-requests",
+        "/app/work-orders",
+        "/app/equipment",
+        "/app/customers",
+        "/app/equipment-history",
+        "/app/inventory/parts",
+        "/app/inventory/warehouses",
+        "/app/notifications",
+        "/app/profile"
+      ]
+    },
+    {
+      "role": "INVENTORY_STAFF",
+      "heading": "Mỗi phụ tùng đều có hành trình rõ ràng",
+      "links": [
+        "/dashboard",
+        "/app/equipment",
+        "/app/inventory/parts",
+        "/app/inventory/warehouses",
+        "/app/inventory/transactions",
+        "/app/notifications",
+        "/app/profile"
+      ]
+    },
+    {
+      "role": "DISPATCHER",
+      "heading": "Sắp xếp công việc, kết nối đội ngũ",
+      "links": [
+        "/dashboard",
+        "/app/service-requests",
+        "/app/work-orders",
+        "/app/technicians",
+        "/app/maintenance",
+        "/app/equipment",
+        "/app/customers",
+        "/app/equipment-history",
+        "/app/notifications",
+        "/app/profile"
+      ]
+    },
+    {
+      "role": "TENANT_ADMIN",
+      "heading": "Doanh nghiệp của bạn hôm nay",
+      "links": [
+        "/dashboard",
+        "/app/service-requests",
+        "/app/work-orders",
+        "/app/technicians",
+        "/app/maintenance",
+        "/app/maintenance-history",
+        "/app/equipment",
+        "/app/customers",
+        "/app/equipment-registrations",
+        "/app/equipment-handovers",
+        "/app/equipment-models",
+        "/app/equipment-history",
+        "/app/inventory/parts",
+        "/app/inventory/warehouses",
+        "/app/inventory/transactions",
+        "/app/organization/branches",
+        "/app/organization/users",
+        "/app/organization/roles",
+        "/app/reports",
+        "/app/notifications",
+        "/app/profile"
+      ]
+    },
+    {
+      "role": "PLATFORM_ADMIN",
+      "heading": "Không gian quản trị nền tảng",
+      "links": [
+        "/dashboard",
+        "/admin/tenants",
+        "/admin/audit-logs",
+        "/admin/profile"
+      ]
+    },
+    {
+      "role": "SERVICE_MANAGER",
+      "heading": "Giữ mọi việc dịch vụ trong tầm nhìn",
+      "links": [
+        "/dashboard",
+        "/app/service-requests",
+        "/app/work-orders",
+        "/app/technicians",
+        "/app/maintenance",
+        "/app/maintenance-history",
+        "/app/equipment",
+        "/app/customers",
+        "/app/equipment-registrations",
+        "/app/equipment-handovers",
+        "/app/equipment-models",
+        "/app/equipment-history",
+        "/app/inventory/parts",
+        "/app/inventory/warehouses",
+        "/app/reports",
+        "/app/notifications",
+        "/app/profile"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "path": "/app/work-orders",
+      "title": "Lệnh công việc"
+    },
+    {
+      "path": "/app/technicians",
+      "title": "Đội ngũ kỹ thuật"
+    },
+    {
+      "path": "/app/equipment-handovers",
+      "title": "Bàn giao thiết bị"
+    },
+    {
+      "path": "/app/maintenance",
+      "title": "Bảo trì định kỳ"
+    },
+    {
+      "path": "/app/maintenance-history",
+      "title": "Lịch sử bảo trì"
+    },
+    {
+      "path": "/app/service-requests",
+      "title": "Yêu cầu dịch vụ"
+    }
+  ],
+  "mobile": {
+    "configuredViewport": 390,
+    "documentClientWidth": 375,
+    "documentScrollWidth": 375,
+    "horizontalOverflow": false
+  },
+  "businessMutations": "NOT_PERFORMED; authentication sessions only",
+  "limits": "Not a full end-to-end UAT of all role workflows; lists mostly empty in local data."
+}

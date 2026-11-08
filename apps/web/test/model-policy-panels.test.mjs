@@ -53,6 +53,7 @@ function setup(fetch, changed = () => {}) {
     '../auth/session': tab.session,
   })
   const panel = tab.load('routes/ModelPolicyPanels.tsx', {
+    '../features/workspace/service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
     react: host.react,
     'react/jsx-runtime': host.jsx,
     '../api/client': tab.client,

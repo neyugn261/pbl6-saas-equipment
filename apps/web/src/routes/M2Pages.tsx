@@ -1,4 +1,22 @@
 import {
+  serviceLabels,
+  equipmentLifecycleLabel,
+  workOrderActionError,
+} from "../features/workspace/service-detail-data";
+import EquipmentPartsHistory from "../features/workspace/EquipmentPartsHistory";
+import { WorkOrderLocation } from "../features/workspace/WorkOrderReadiness";
+import TechnicianOrderContext from "../features/workspace/TechnicianOrderContext";
+import { useFormDraft } from "../features/workspace/use-form-draft";
+import { vietnamInstant } from "../features/workspace/ui-values";
+import {
+  BusinessValues,
+  ServiceSections,
+  ServiceNotice,
+  ServiceHeader,
+  ServiceFacts,
+} from "../features/workspace/ServiceDetailUI";
+import { EntityPicker, RelatedName } from "../features/workspace/WorkspaceUI";
+import {
   MaintenancePolicyDetails,
   WorkOrderChecklist,
   AppliedPolicyPanel,
@@ -9,7 +27,7 @@ import { api, ApiError } from "../api/client";
 import { getSessionGeneration, useSession } from "../auth/session";
 import type { Page } from "../types/domain";
 import { AttachmentsPanel } from "../features/attachments/AttachmentsPanel";
-import { displayName, technicianName } from '../display-names';
+import { displayName, technicianName } from "../display-names";
 
 type Row = Record<string, unknown>;
 type Availability =
@@ -42,24 +60,58 @@ type Dossier = {
 const asText = (value: unknown) =>
   value == null || value === "" ? "—" : String(value);
 const statusLabel: Record<string, string> = {
-  CREATED: 'Mới tạo', ASSIGNED: 'Đã phân công', ACCEPTED: 'Đã nhận',
-  TRAVELLING: 'Đang di chuyển', IN_PROGRESS: 'Đang thực hiện',
-  ON_HOLD: 'Tạm dừng', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy',
-  ACTIVE: 'Đang hoạt động', PAUSED: 'Tạm dừng', INACTIVE: 'Ngừng hoạt động',
-  AVAILABLE: 'Sẵn sàng', BUSY: 'Đang bận', OFF_DUTY: 'Nghỉ ca',
-  PENDING: 'Đang chờ', WORK_ORDER_CREATED: 'Đã tạo lệnh', FAILED: 'Thất bại',
+  ...serviceLabels,
+  CREATED: "Mới tạo",
+  ASSIGNED: "Đã phân công",
+  ACCEPTED: "Đã nhận",
+  TRAVELLING: "Đang di chuyển",
+  IN_PROGRESS: "Đang thực hiện",
+  ON_HOLD: "Tạm dừng",
+  COMPLETED: "Hoàn tất",
+  CANCELLED: "Đã hủy",
+  ACTIVE: "Đang hoạt động",
+  PAUSED: "Tạm dừng",
+  INACTIVE: "Ngừng hoạt động",
+  AVAILABLE: "Sẵn sàng",
+  BUSY: "Đang bận",
+  OFF_DUTY: "Nghỉ ca",
+  PENDING: "Đang chờ",
+  WORK_ORDER_CREATED: "Đã tạo lệnh",
+  FAILED: "Thất bại",
 };
 const historyEventLabel: Record<string, string> = {
-  PLAN_CREATED: 'Tạo kế hoạch', PLAN_UPDATED: 'Cập nhật kế hoạch',
-  PLAN_STATUS_CHANGED: 'Đổi trạng thái kế hoạch', TASK_GENERATED: 'Tạo công việc bảo trì',
-  SCHEDULE_ADVANCED: 'Chuyển kỳ bảo trì', REPLACEMENT_REQUESTED: 'Yêu cầu lệnh thay thế',
-  WORK_ORDER_CREATED: 'Tạo lệnh công việc', WORK_ORDER_CANCELLED: 'Hủy lệnh công việc',
-  WORK_ORDER_COMPLETED: 'Hoàn tất lệnh công việc',
-  SERVICE_REQUEST_STATUS_CHANGED: 'Đổi trạng thái yêu cầu dịch vụ',
+  REGISTERED: "Ghi nhận thiết bị",
+  DETAILS_UPDATED: "Cập nhật thông tin thiết bị",
+  STATUS_CHANGED: "Đổi trạng thái thiết bị",
+  OPERATIONAL_STATUS_CONFIRMED: "Xác nhận tình trạng vận hành",
+  MOVED: "Chuyển địa điểm thiết bị",
+  WARRANTY_ADDED: "Thêm bảo hành",
+  WARRANTY_VOIDED: "Hủy hiệu lực bảo hành",
+  MODEL_CREATED: "Tạo model",
+  MODEL_UPDATED: "Cập nhật model",
+  MODEL_POLICIES_APPLIED: "Áp dụng chính sách model",
+  SERVICE_SETUP_COMPLETED: "Hoàn tất thiết lập dịch vụ",
+  QR_CREATED: "Tạo mã QR",
+  QR_REPRINTED: "Cấp lại mã QR",
+  QR_REVOKED: "Thu hồi mã QR",
+  PLAN_CREATED: "Tạo kế hoạch",
+  PLAN_UPDATED: "Cập nhật kế hoạch",
+  PLAN_STATUS_CHANGED: "Đổi trạng thái kế hoạch",
+  TASK_GENERATED: "Tạo công việc bảo trì",
+  SCHEDULE_ADVANCED: "Chuyển kỳ bảo trì",
+  REPLACEMENT_REQUESTED: "Yêu cầu lệnh thay thế",
+  WORK_ORDER_CREATED: "Tạo lệnh công việc",
+  WORK_ORDER_CANCELLED: "Hủy lệnh công việc",
+  WORK_ORDER_COMPLETED: "Hoàn tất lệnh công việc",
+  SERVICE_REQUEST_STATUS_CHANGED: "Đổi trạng thái yêu cầu dịch vụ",
 };
 const eventLabel = (value: unknown) => {
   const key = asText(value);
-  return key === '—' ? key : (historyEventLabel[key] ?? statusLabel[key] ?? key.replaceAll('_', ' ').toLowerCase());
+  return key === "—"
+    ? key
+    : (historyEventLabel[key] ??
+        statusLabel[key] ??
+        key.replaceAll("_", " ").toLowerCase());
 };
 const operationalLabels: Record<string, string> = {
   UNKNOWN: "Chưa xác nhận tình trạng vận hành",
@@ -168,6 +220,7 @@ function Source<T>({
   section: Section<T>;
   children: (data: T) => React.ReactNode;
 }) {
+  if (!section) return <p role="status">Chưa tải được mục này.</p>;
   if (section.status !== "AVAILABLE")
     return <p role="status">{message[section.status]}</p>;
   return section.data == null ? (
@@ -183,13 +236,37 @@ function Fields({ row, fields }: { row: Row; fields: [string, string][] }) {
       {fields.map(([key, label]) => (
         <div key={key}>
           <dt>{label}</dt>
-          <dd>{key === 'currentTechnicianId'
-            ? row.currentTechnicianId ? technicianName(row.currentTechnicianName, row.currentTechnicianEmployeeCode) : 'Chưa phân công'
-            : key === 'branchId' ? displayName('branch', { name: row.branchName, code: row.branchCode })
-            : key === 'userId' ? displayName('user', { name: row.fullName, code: row.employeeCode })
-            : key === 'equipmentId' ? displayName('equipment', { name: row.equipmentName, code: row.assetCode })
-            : key === 'workOrderId' ? row.workOrderId ? displayName('workOrder', { code: row.workOrderNo }) : 'Chưa tạo lệnh công việc'
-            : /(Date|At)$/.test(key) ? date(row[key]) : asText(row[key])}</dd>
+          <dd>
+            {key === "currentTechnicianId"
+              ? row.currentTechnicianId
+                ? technicianName(
+                    row.currentTechnicianName,
+                    row.currentTechnicianEmployeeCode,
+                  )
+                : "Chưa phân công"
+              : key === "branchId"
+                ? displayName("branch", {
+                    name: row.branchName,
+                    code: row.branchCode,
+                  })
+                : key === "userId"
+                  ? displayName("user", {
+                      name: row.fullName,
+                      code: row.employeeCode,
+                    })
+                  : key === "equipmentId"
+                    ? displayName("equipment", {
+                        name: row.equipmentName,
+                        code: row.assetCode,
+                      })
+                    : key === "workOrderId"
+                      ? row.workOrderId
+                        ? displayName("workOrder", { code: row.workOrderNo })
+                        : "Chưa tạo lệnh công việc"
+                      : /(Date|At|Start|End)$/.test(key)
+                        ? date(row[key])
+                        : (statusLabel[String(row[key])] ?? asText(row[key]))}
+          </dd>
         </div>
       ))}
     </dl>
@@ -197,6 +274,8 @@ function Fields({ row, fields }: { row: Row; fields: [string, string][] }) {
 }
 
 function HistoryRows({ items }: { items: Row[] }) {
+  const { profile } = useSession();
+  const base = profile?.userType === "CUSTOMER" ? "/portal" : "/app";
   return items.length ? (
     <ul className="m1-timeline">
       {items.map((item, index) => (
@@ -209,13 +288,39 @@ function HistoryRows({ items }: { items: Row[] }) {
             · Xảy ra {date(item.occurredAt ?? item.changedAt)} · Ghi nhận{" "}
             {date(item.recordedAt ?? item.createdAt)}
           </span>
+          {Boolean(item.equipmentId) && (
+            <p>
+              Thiết bị:{" "}
+              <RelatedName
+                area="assetM2"
+                path={`/equipment/${item.equipmentId}`}
+                initial={
+                  (item.context as Row | null)?.displayName ??
+                  (item.context as Row | null)?.assetCode
+                }
+                to={`${base}/equipment/${item.equipmentId}`}
+                fallback="Mở hồ sơ thiết bị"
+              />
+            </p>
+          )}
           <p>
-            ID người thực hiện:{" "}
-            {asText(item.actorId ?? item.createdBy ?? item.changedBy)} · Vai
-            trò:{" "}
+            Người thực hiện:{" "}
+            {item.actorType === "SYSTEM"
+              ? "Hệ thống"
+              : displayName("user", {
+                  name:
+                    item.actorName ??
+                    item.createdByName ??
+                    item.changedByName ??
+                    (String(
+                      item.actorId ?? item.createdBy ?? item.changedBy,
+                    ).toLowerCase() === profile?.id?.toLowerCase()
+                      ? profile?.fullName
+                      : null),
+                })}
             {Array.isArray(item.actorRoles) && item.actorRoles.length
-              ? item.actorRoles.join(", ")
-              : "—"}
+              ? ` · ${item.actorRoles.map((role) => serviceLabels[String(role)] ?? "Nhân viên").join(", ")}`
+              : ""}
           </p>
           {Boolean(item.reason ?? item.reasonInternal) && (
             <p>Lý do: {asText(item.reason ?? item.reasonInternal)}</p>
@@ -223,13 +328,39 @@ function HistoryRows({ items }: { items: Row[] }) {
           {Boolean(item.customerNote) && (
             <p>Ghi chú cho khách hàng: {asText(item.customerNote)}</p>
           )}
-          {item.referenceType ? (
+          {item.referenceType === "SERVICE_REQUEST" &&
+            Boolean(item.referenceId) && (
+              <p>
+                <Link
+                  to={`${base === "/portal" ? "/portal/requests" : "/app/service-requests"}/${item.referenceId}`}
+                >
+                  Mở yêu cầu dịch vụ liên quan
+                </Link>
+              </p>
+            )}
+          {profile?.userType === "TENANT_STAFF" &&
+            item.referenceType === "WORK_ORDER" &&
+            Boolean(item.referenceId) && (
+              <p>
+                <Link to={`/app/work-orders/${item.referenceId}`}>
+                  Mở lệnh công việc liên quan
+                </Link>
+              </p>
+            )}
+          {Boolean(item.planId) && (
             <p>
-              {asText(item.referenceType)}: {asText(item.referenceId)}
+              <Link to={`/app/maintenance/${item.planId}?kind=plan`}>
+                Mở kế hoạch liên quan
+              </Link>
             </p>
-          ) : null}
-          {Boolean(item.planId) && <p>ID kế hoạch: {asText(item.planId)}</p>}
-          {Boolean(item.taskId) && <p>ID công việc: {asText(item.taskId)}</p>}
+          )}
+          {Boolean(item.taskId) && (
+            <p>
+              <Link to={`/app/maintenance/${item.taskId}?kind=task`}>
+                Mở công việc bảo trì liên quan
+              </Link>
+            </p>
+          )}
           {item.completeness === "LEGACY_SUMMARY" && (
             <p>Chi tiết cũ có thể chưa đầy đủ.</p>
           )}
@@ -240,13 +371,13 @@ function HistoryRows({ items }: { items: Row[] }) {
           ) && (
             <details>
               <summary>Trước / sau</summary>
-              <pre>{JSON.stringify(item.changes, null, 2)}</pre>
+              <BusinessValues data={item.changes} />
             </details>
           )}
           {Boolean(item.context && typeof item.context === "object") && (
             <details>
               <summary>Bối cảnh ghi nhận</summary>
-              <pre>{JSON.stringify(item.context, null, 2)}</pre>
+              <BusinessValues data={item.context} />
             </details>
           )}
         </li>
@@ -288,12 +419,18 @@ function LinkedRows({
                   item.name ??
                   item.title ??
                   item.taskNo ??
-                  id,
+                  "Xem hồ sơ",
               )}
             </Link>
             <span className="m2-row-meta">
-              <span className={`m2-status m2-status--${String(item.status ?? '').toLowerCase()}`}>{statusLabel[String(item.status)] ?? asText(item.status)}</span>
-              <time>{date(item.nextDueDate ?? item.scheduledDate ?? item.createdAt)}</time>
+              <span
+                className={`m2-status m2-status--${String(item.status ?? "").toLowerCase()}`}
+              >
+                {statusLabel[String(item.status)] ?? asText(item.status)}
+              </span>
+              <time>
+                {date(item.nextDueDate ?? item.scheduledDate ?? item.createdAt)}
+              </time>
             </span>
           </li>
         );
@@ -314,10 +451,12 @@ function EquipmentEditor({
   const [displayName, setDisplayName] = useState(
     String(equipment.displayName ?? ""),
   );
-  const [specs, setSpecs] = useState(
-    equipment.technicalSpecifications
-      ? JSON.stringify(equipment.technicalSpecifications, null, 2)
-      : "",
+  const [specs, setSpecs] = useState<
+    { name: string; value: string; type: string }[]
+  >(() =>
+    Object.entries((equipment.technicalSpecifications ?? {}) as Row).map(
+      ([name, value]) => ({ name, value: String(value), type: typeof value }),
+    ),
   );
   const [commissionedDate, setCommissionedDate] = useState(
     String(equipment.commissionedDate ?? "").slice(0, 10),
@@ -337,33 +476,34 @@ function EquipmentEditor({
       string,
       string | number | boolean
     > | null = null;
-    if (specs.trim()) {
-      try {
-        const parsed: unknown = JSON.parse(specs);
-        if (
-          !parsed ||
-          typeof parsed !== "object" ||
-          Array.isArray(parsed) ||
-          Object.values(parsed).some(
-            (value) => !["string", "number", "boolean"].includes(typeof value),
-          )
-        ) {
-          throw new Error(
-            "Thông số phải là object JSON có giá trị chữ, số hoặc đúng/sai.",
-          );
-        }
-        technicalSpecifications = parsed as Record<
-          string,
-          string | number | boolean
-        >;
-      } catch (cause) {
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Thông số JSON không hợp lệ.",
-        );
+    if (specs.length) {
+      if (
+        specs.some((item) => !item.name.trim()) ||
+        new Set(specs.map((item) => item.name.trim())).size !== specs.length
+      ) {
+        setError("Tên thông số không được trống hoặc trùng nhau.");
         return;
       }
+      if (
+        specs.some(
+          (item) =>
+            item.type === "number" &&
+            (!item.value.trim() || !Number.isFinite(Number(item.value))),
+        )
+      ) {
+        setError("Giá trị số không hợp lệ.");
+        return;
+      }
+      technicalSpecifications = Object.fromEntries(
+        specs.map((item) => [
+          item.name.trim(),
+          item.type === "number"
+            ? Number(item.value)
+            : item.type === "boolean"
+              ? item.value === "true"
+              : item.value,
+        ]),
+      );
     }
     setBusy(true);
     try {
@@ -420,10 +560,97 @@ function EquipmentEditor({
             onChange={(e) => setDisplayName(e.target.value)}
           />
         </label>
-        <label>
-          Thông số kỹ thuật (JSON)
-          <textarea value={specs} onChange={(e) => setSpecs(e.target.value)} />
-        </label>
+        <fieldset className="sd-specs">
+          <legend>Thông số kỹ thuật</legend>
+          {specs.map((item, index) => (
+            <div className="sd-spec-row" key={index}>
+              <label>
+                Tên thông số
+                <input
+                  aria-label={`Tên thông số ${index + 1}`}
+                  value={item.name}
+                  maxLength={100}
+                  onChange={(e) =>
+                    setSpecs(
+                      specs.map((row, i) =>
+                        i === index ? { ...row, name: e.target.value } : row,
+                      ),
+                    )
+                  }
+                />
+              </label>
+              <label>
+                Kiểu dữ liệu
+                <select
+                  value={item.type}
+                  onChange={(e) =>
+                    setSpecs(
+                      specs.map((row, i) =>
+                        i === index
+                          ? {
+                              ...row,
+                              type: e.target.value,
+                              value: e.target.value === "boolean" ? "true" : "",
+                            }
+                          : row,
+                      ),
+                    )
+                  }
+                >
+                  <option value="string">Văn bản</option>
+                  <option value="number">Số</option>
+                  <option value="boolean">Có / Không</option>
+                </select>
+              </label>
+              <label>
+                Giá trị
+                {item.type === "boolean" ? (
+                  <select
+                    value={item.value}
+                    onChange={(e) =>
+                      setSpecs(
+                        specs.map((row, i) =>
+                          i === index ? { ...row, value: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="true">Có</option>
+                    <option value="false">Không</option>
+                  </select>
+                ) : (
+                  <input
+                    type={item.type === "number" ? "number" : "text"}
+                    step="any"
+                    value={item.value}
+                    onChange={(e) =>
+                      setSpecs(
+                        specs.map((row, i) =>
+                          i === index ? { ...row, value: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                )}
+              </label>
+              <button
+                type="button"
+                aria-label={`Xóa thông số ${index + 1}`}
+                onClick={() => setSpecs(specs.filter((_, i) => i !== index))}
+              >
+                Bỏ
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() =>
+              setSpecs([...specs, { name: "", value: "", type: "string" }])
+            }
+          >
+            + Thêm thông số
+          </button>
+        </fieldset>
         <label>
           Ngày đưa vào vận hành
           <input
@@ -496,228 +723,401 @@ export function DossierPage() {
       ["TENANT_ADMIN", "SERVICE_MANAGER"].includes(role),
     );
   return (
-    <div className="m2-page">
-      {id && <AppliedPolicyPanel key={id} equipmentId={id} />}
-      <header>
-        <Link to={`${base}/equipment`}>← Thiết bị</Link>
-        <h1>
-          {asText(
-            dossier?.equipment.displayName ??
-              dossier?.equipment.assetCode ??
-              "Hồ sơ thiết bị",
-          )}
-        </h1>
-        <p>
-          Hồ sơ thiết bị và dữ liệu liên kết · cập nhật {date(dossier?.asOf)}
-        </p>
-        {notice && <p role="status">{notice}</p>}
-        {canManageEquipment && dossier && (
-          <p><Link to={dossier.equipment.registrationId ? `/app/equipment-registrations/${dossier.equipment.registrationId}` : `/app/equipment-registrations/new?equipmentId=${id}`}>{dossier.equipment.registrationStatus === 'COMPLETED' ? 'Xem biên nhận thiết lập dịch vụ' : 'Hoàn thiện hồ sơ bàn giao, bảo hành và bảo trì'}</Link></p>
+    <div className="m2-page sd-page">
+      <ServiceHeader
+        back={`${base}/equipment`}
+        backLabel="Danh sách thiết bị"
+        code={asText(dossier?.equipment.assetCode ?? "HỒ SƠ THIẾT BỊ")}
+        title={asText(
+          dossier?.equipment.displayName ??
+            dossier?.equipment.assetCode ??
+            "Hồ sơ thiết bị",
         )}
-      </header>
+        description={`Thông tin thiết bị, bảo hành và các hoạt động dịch vụ đã ghi nhận · Cập nhật ${date(dossier?.asOf)}`}
+        status={dossier?.equipment.status}
+        statusLabel={equipmentLifecycleLabel(dossier?.equipment.status)}
+      />
+      {notice && <p role="status">{notice}</p>}
+      {canManageEquipment && dossier && (
+        <ServiceNotice
+          title={
+            dossier.profileCompleteness.missingFields.length
+              ? "Hồ sơ cần bổ sung thông tin"
+              : "Hồ sơ dịch vụ của thiết bị"
+          }
+        >
+          <p>
+            Kiểm tra thông tin nhận dạng, phạm vi bảo hành và lịch sử trước khi
+            quyết định xử lý.
+          </p>
+          <div className="registration-actions">
+            <Link to={`/app/service-requests/new?equipmentId=${id}`}>
+              + Tạo yêu cầu dịch vụ
+            </Link>
+            <Link
+              to={
+                dossier.equipment.registrationId
+                  ? `/app/equipment-registrations/${dossier.equipment.registrationId}`
+                  : `/app/equipment-registrations/new?equipmentId=${id}`
+              }
+            >
+              {dossier.equipment.registrationStatus === "COMPLETED"
+                ? "Xem biên nhận thiết lập dịch vụ"
+                : "Hoàn thiện bàn giao & bảo hành"}
+            </Link>
+          </div>
+        </ServiceNotice>
+      )}
       <Result state={state}>
         {dossier && (
           <>
-            <div className="m2-grid">
-              <Card title="Thông tin thiết bị">
-                <Fields
-                  row={dossier.equipment}
-                  fields={[
-                    ["assetCode", "Mã tài sản"],
-                    ["serialNumber", "Serial"],
-                    ["status", "Trạng thái"],
-                    ["commissionedDate", "Ngày đưa vào vận hành"],
-                    ["handoverDate", "Ngày bàn giao"],
-                  ]}
-                />
-                <p>
-                  Thông số kỹ thuật:{" "}
-                  {dossier.equipment.technicalSpecifications
-                    ? JSON.stringify(dossier.equipment.technicalSpecifications)
-                    : "Chưa có"}
-                </p>
-                {dossier.profileCompleteness.missingFields.length > 0 && (
-                  <p>
-                    Hồ sơ còn thiếu:{" "}
-                    {dossier.profileCompleteness.missingFields.join(", ")}
-                  </p>
-                )}
-              </Card>
-              {canManageEquipment && dossier.equipment.status !== "RETIRED" && (
-                <EquipmentEditor
-                  key={`${id}:${revision}`}
-                  equipmentId={id!}
-                  equipment={dossier.equipment}
-                  onSaved={(message) => {
-                    setNotice(message);
-                    setRevision((value) => value + 1);
-                  }}
-                />
-              )}
-              {canManageEquipment && dossier.equipment.status === "RETIRED" && (
-                <p>
-                  Thiết bị đã ngừng sử dụng; không thể chỉnh hồ sơ hoặc xác nhận
-                  tình trạng.
-                </p>
-              )}
-              <Card title="Bảo hành và tình trạng">
-                <p>
-                  Bảo hành theo lịch:{" "}
+            <section
+              className="workshop-equipment-passport"
+              aria-label="Nhận dạng thiết bị"
+            >
+              <div>
+                <span className="workshop-code">
+                  HỒ SƠ THIẾT BỊ / {asText(dossier.equipment.assetCode)}
+                </span>
+                <h2>
                   {asText(
-                    dossier.calendarCoverage && dossier.calendarCoverage.result,
+                    dossier.equipment.displayName ??
+                      dossier.equipment.assetCode,
                   )}
-                </p>
-                <p>
-                  Quyết định bảo hành của từng yêu cầu được lưu riêng khi xét
-                  duyệt.
-                </p>
-                <p>
-                  Tình trạng vận hành:{" "}
-                  {operationalLabels[
-                    String(dossier.operationalCondition.status)
-                  ] ?? asText(dossier.operationalCondition.status)}
-                  {Boolean(dossier.operationalCondition.confirmedAt) && (
-                    <>
-                      {" "}
-                      · Xác nhận{" "}
-                      {date(dossier.operationalCondition.confirmedAt)}
-                    </>
-                  )}
-                </p>
-                <p>
-                  Xác nhận này không bảo đảm tình trạng hiện tại của thiết bị.
-                </p>
-                {dossier.warranties.map((w) => (
-                  <p key={String(w.id)}>
-                    {asText(w.warrantyType)} · {date(w.startDate)} –{" "}
-                    {date(w.endDate)} · {asText(w.status)} ·{" "}
-                    <Link to={`${base}/warranties/${w.id}/history`}>
-                      Lịch sử
-                    </Link>
-                  </p>
-                ))}
-                {profile?.userType !== "CUSTOMER" &&
-                  Boolean(dossier.equipment.modelId) && (
-                    <Link
-                      to={`/app/models/${dossier.equipment.modelId}/history`}
-                    >
-                      Lịch sử Model
-                    </Link>
-                  )}
-              </Card>
-              <Card title="Khách hàng và vị trí">
+                </h2>
+                <p>Serial {asText(dossier.equipment.serialNumber)}</p>
                 <Source section={dossier.customer}>
-                  {(row) => <p>{asText(row.name)}</p>}
+                  {(row) => <strong>{asText(row.name)}</strong>}
                 </Source>
                 <Source section={dossier.site}>
-                  {(row) => <p>Địa điểm: {asText(row.name)}</p>}
+                  {(row) => <p>{asText(row.name)}</p>}
                 </Source>
-                <Source section={dossier.location}>
-                  {(row) => <p>Vị trí: {asText(row.name)}</p>}
-                </Source>
-                <Source section={dossier.contacts}>
-                  {(rows) => (
-                    <>
-                      {rows.map((row) => (
-                        <p key={String(row.id)}>
-                          {asText(row.name)} · {asText(row.phone)}
+              </div>
+              <dl>
+                <div>
+                  <dt>Ngày bàn giao</dt>
+                  <dd>{date(dossier.equipment.handoverDate)}</dd>
+                </div>
+                <div>
+                  <dt>Bảo hành theo lịch</dt>
+                  <dd>
+                    {statusLabel[String(dossier.calendarCoverage?.result)] ??
+                      asText(dossier.calendarCoverage?.result)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Tình trạng vận hành đã ghi nhận</dt>
+                  <dd>
+                    {operationalLabels[
+                      String(dossier.operationalCondition.status)
+                    ] ?? asText(dossier.operationalCondition.status)}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+            <ServiceSections
+              items={[
+                {
+                  key: "profile",
+                  label: "Thông tin & bảo hành",
+                  content: (
+                    <div className="m2-grid">
+                      <Card title="Thông tin thiết bị">
+                        <Fields
+                          row={{
+                            ...dossier.equipment,
+                            lifecycleLabel: equipmentLifecycleLabel(
+                              dossier.equipment.status,
+                            ),
+                          }}
+                          fields={[
+                            ["assetCode", "Mã tài sản"],
+                            ["serialNumber", "Serial"],
+                            ["lifecycleLabel", "Vòng đời hồ sơ thiết bị"],
+                            ["commissionedDate", "Ngày đưa vào vận hành"],
+                            ["handoverDate", "Ngày bàn giao"],
+                          ]}
+                        />
+                        <h3>Thông số kỹ thuật</h3>
+                        <BusinessValues
+                          data={dossier.equipment.technicalSpecifications}
+                        />
+                        {dossier.profileCompleteness.missingFields.length >
+                          0 && (
+                          <p>
+                            Hồ sơ còn thiếu:{" "}
+                            {dossier.profileCompleteness.missingFields
+                              .map((field) => serviceLabels[field] ?? field)
+                              .join(", ")}
+                          </p>
+                        )}
+                      </Card>
+                      {canManageEquipment &&
+                        dossier.equipment.status !== "RETIRED" && (
+                          <details className="sd-edit-disclosure">
+                            <summary>
+                              Chỉnh sửa hồ sơ / xác nhận tình trạng
+                            </summary>
+                            <EquipmentEditor
+                              key={`${id}:${revision}`}
+                              equipmentId={id!}
+                              equipment={dossier.equipment}
+                              onSaved={(message) => {
+                                setNotice(message);
+                                setRevision((value) => value + 1);
+                              }}
+                            />
+                          </details>
+                        )}
+                      {canManageEquipment &&
+                        dossier.equipment.status === "RETIRED" && (
+                          <p>
+                            Thiết bị đã ngừng sử dụng; không thể chỉnh hồ sơ
+                            hoặc xác nhận tình trạng.
+                          </p>
+                        )}
+                      <Card title="Bảo hành và tình trạng">
+                        <p>
+                          Bảo hành theo lịch:{" "}
+                          {asText(
+                            statusLabel[
+                              String(dossier.calendarCoverage?.result)
+                            ] ?? dossier.calendarCoverage?.result,
+                          )}
                         </p>
-                      ))}
-                    </>
-                  )}
-                </Source>
-              </Card>
-              <Card title="Yêu cầu dịch vụ">
-                <Source section={dossier.requests}>
-                  {(page) => (
-                    <>
-                      <LinkedRows
-                        items={page.items}
-                        type="request"
-                        equipmentId={id!}
-                      />
-                      <Link to={`${base}/equipment/${id}/service-requests`}>
-                        Xem tất cả ({page.total})
-                      </Link>
-                    </>
-                  )}
-                </Source>
-              </Card>
-              <Card title="Lệnh công việc">
-                <Source section={dossier.workOrders}>
-                  {(page) => (
-                    <>
-                      <LinkedRows
-                        items={page.items}
-                        type="workorder"
-                        equipmentId={id!}
-                      />
-                      <Link to={`${base}/equipment/${id}/work-orders`}>
-                        Xem tất cả ({page.total})
-                      </Link>
-                    </>
-                  )}
-                </Source>
-              </Card>
-              <Card title="Bảo trì">
-                <Source section={dossier.maintenance}>
-                  {(row) => (
-                    <>
-                      <p>
-                        Lần kế tiếp: {date((row.nextDue as Row | null)?.date)}
-                      </p>
-                      <p>
-                        Công việc đang quá hạn:{" "}
-                        {asText(row.overdueOpenTaskCount)}
-                      </p>
-                      <p>Kế hoạch: {JSON.stringify(row.planCounts ?? {})}</p>
-                    </>
-                  )}
-                </Source>
-                <Source section={dossier.maintenanceHistory}>
-                  {(page) => (
-                    <>
-                      <HistoryRows items={page.items} />
-                      <Link to={`${base}/equipment/${id}/maintenance-history`}>
-                        Xem toàn bộ lịch sử bảo trì ({page.total})
-                      </Link>
-                    </>
-                  )}
-                </Source>
-                {(profile?.userType !== "CUSTOMER" ||
-                  profile.roles.includes("CUSTOMER_ADMIN")) && (
-                  <>
-                    <Link to={`${base}/equipment/${id}/maintenance-plans`}>
-                      Xem kế hoạch
-                    </Link>{" "}
-                    ·{" "}
-                    <Link to={`${base}/equipment/${id}/maintenance-tasks`}>
-                      Xem công việc
-                    </Link>
-                  </>
-                )}
-              </Card>
-              <Card title="Dịch vụ ghi nhận gần nhất">
-                <p>
-                  {dossier.latestRecordedService.entry
-                    ? date(dossier.latestRecordedService.entry.occurredAt)
-                    : "Chưa ghi nhận"}
-                </p>
-                <p>Dữ liệu có thể cập nhật chậm hơn Work Order.</p>
-              </Card>
-              <Card title="Dòng lịch sử">
-                <HistoryRows items={dossier.timelinePreview.items} />
-                <Link to={`${base}/equipment/${id}/timeline`}>
-                  Xem tất cả ({dossier.timelinePreview.total})
-                </Link>
-              </Card>
-            </div>
+                        <p>
+                          Quyết định bảo hành của từng yêu cầu được lưu riêng
+                          khi xét duyệt.
+                        </p>
+                        <p>
+                          Tình trạng vận hành:{" "}
+                          {operationalLabels[
+                            String(dossier.operationalCondition.status)
+                          ] ?? asText(dossier.operationalCondition.status)}
+                          {Boolean(
+                            dossier.operationalCondition.confirmedAt,
+                          ) && (
+                            <>
+                              {" "}
+                              · Xác nhận{" "}
+                              {date(dossier.operationalCondition.confirmedAt)}
+                            </>
+                          )}
+                        </p>
+                        <p>
+                          Xác nhận này không bảo đảm tình trạng hiện tại của
+                          thiết bị.
+                        </p>
+                        {dossier.warranties.map((w) => (
+                          <p key={String(w.id)}>
+                            {statusLabel[String(w.warrantyType)] ??
+                              asText(w.warrantyType)}{" "}
+                            · {date(w.startDate)} – {date(w.endDate)} ·{" "}
+                            {statusLabel[String(w.status)] ?? asText(w.status)}{" "}
+                            ·{" "}
+                            <Link to={`${base}/warranties/${w.id}/history`}>
+                              Lịch sử
+                            </Link>
+                          </p>
+                        ))}
+                        {profile?.userType !== "CUSTOMER" &&
+                          Boolean(dossier.equipment.modelId) && (
+                            <Link
+                              to={`/app/models/${dossier.equipment.modelId}/history`}
+                            >
+                              Lịch sử Model
+                            </Link>
+                          )}
+                      </Card>
+                      <Card title="Khách hàng và vị trí">
+                        <Source section={dossier.customer}>
+                          {(row) => (
+                            <p>
+                              <strong>{asText(row.name)}</strong>
+                              {Boolean(row.address) && (
+                                <>
+                                  <br />
+                                  {asText(row.address)}
+                                </>
+                              )}
+                            </p>
+                          )}
+                        </Source>
+                        <Source section={dossier.site}>
+                          {(row) => <p>Địa điểm: {asText(row.name)}</p>}
+                        </Source>
+                        <Source section={dossier.location}>
+                          {(row) => <p>Vị trí: {asText(row.name)}</p>}
+                        </Source>
+                        <Source section={dossier.contacts}>
+                          {(rows) => (
+                            <>
+                              {rows.map((row) => (
+                                <p key={String(row.id)}>
+                                  <strong>{asText(row.name)}</strong>
+                                  <br />
+                                  {Boolean(row.phone) && (
+                                    <a href={`tel:${row.phone}`}>
+                                      {asText(row.phone)}
+                                    </a>
+                                  )}
+                                  {Boolean(row.email) && (
+                                    <>
+                                      <br />
+                                      <a href={`mailto:${row.email}`}>
+                                        {asText(row.email)}
+                                      </a>
+                                    </>
+                                  )}
+                                </p>
+                              ))}
+                            </>
+                          )}
+                        </Source>
+                      </Card>
+                    </div>
+                  ),
+                },
+                {
+                  key: "policy",
+                  label: "Chính sách áp dụng",
+                  content: id && (
+                    <AppliedPolicyPanel key={id} equipmentId={id} />
+                  ),
+                },
+                {
+                  key: "services",
+                  label: "Dịch vụ & bảo trì",
+                  content: (
+                    <div className="m2-grid">
+                      <Card title="Yêu cầu dịch vụ">
+                        <Source section={dossier.requests}>
+                          {(page) => (
+                            <>
+                              <LinkedRows
+                                items={page.items}
+                                type="request"
+                                equipmentId={id!}
+                              />
+                              <Link
+                                to={`${base}/equipment/${id}/service-requests`}
+                              >
+                                Xem tất cả ({page.total})
+                              </Link>
+                            </>
+                          )}
+                        </Source>
+                      </Card>
+                      <Card title="Lệnh công việc">
+                        <Source section={dossier.workOrders}>
+                          {(page) => (
+                            <>
+                              <LinkedRows
+                                items={page.items}
+                                type="workorder"
+                                equipmentId={id!}
+                              />
+                              <Link to={`${base}/equipment/${id}/work-orders`}>
+                                Xem tất cả ({page.total})
+                              </Link>
+                            </>
+                          )}
+                        </Source>
+                      </Card>
+                      <Card title="Bảo trì">
+                        <Source section={dossier.maintenance}>
+                          {(row) => (
+                            <>
+                              <p>
+                                Lần kế tiếp:{" "}
+                                {date((row.nextDue as Row | null)?.date)}
+                              </p>
+                              <p>
+                                Công việc đang quá hạn:{" "}
+                                {asText(row.overdueOpenTaskCount)}
+                              </p>
+                              <h3>Tình trạng kế hoạch</h3>
+                              <BusinessValues data={row.planCounts ?? {}} />
+                            </>
+                          )}
+                        </Source>
+                        <Source section={dossier.maintenanceHistory}>
+                          {(page) => (
+                            <>
+                              <HistoryRows items={page.items} />
+                              <Link
+                                to={`${base}/equipment/${id}/maintenance-history`}
+                              >
+                                Xem toàn bộ lịch sử bảo trì ({page.total})
+                              </Link>
+                            </>
+                          )}
+                        </Source>
+                        {(profile?.userType !== "CUSTOMER" ||
+                          profile.roles.includes("CUSTOMER_ADMIN")) && (
+                          <>
+                            <Link
+                              to={`${base}/equipment/${id}/maintenance-plans`}
+                            >
+                              Xem kế hoạch
+                            </Link>{" "}
+                            ·{" "}
+                            <Link
+                              to={`${base}/equipment/${id}/maintenance-tasks`}
+                            >
+                              Xem công việc
+                            </Link>
+                          </>
+                        )}
+                      </Card>
+                      <Card title="Dịch vụ ghi nhận gần nhất">
+                        <p>
+                          {dossier.latestRecordedService.entry
+                            ? date(
+                                dossier.latestRecordedService.entry.occurredAt,
+                              )
+                            : "Chưa ghi nhận"}
+                        </p>
+                        <p>Dữ liệu có thể cập nhật chậm hơn Work Order.</p>
+                      </Card>
+                    </div>
+                  ),
+                },
+                {
+                  key: "history",
+                  label: "Lịch sử đã ghi nhận",
+                  content: (
+                    <div className="sd-stack">
+                      <ServiceNotice title="Phạm vi lịch sử được tổng hợp">
+                        <p>
+                          Gồm thay đổi hồ sơ thiết bị, trạng thái yêu cầu và kết
+                          quả công việc đã đồng bộ. Phân công, nhật ký kỹ thuật
+                          và trao đổi chi tiết nằm trong hồ sơ nguồn theo quyền
+                          của bạn. Dữ liệu cũ có thể chưa đầy đủ; các nguồn có
+                          thể cập nhật vào những thời điểm khác nhau.
+                        </p>
+                      </ServiceNotice>
+                      <Card title="Dòng lịch sử">
+                        <HistoryRows items={dossier.timelinePreview.items} />
+                        <Link to={`${base}/equipment/${id}/timeline`}>
+                          Xem tất cả ({dossier.timelinePreview.total})
+                        </Link>
+                      </Card>
+                    </div>
+                  ),
+                },
+                {
+                  key: "service-parts",
+                  label: "Phụ tùng đã sử dụng",
+                  content: id ? (
+                    <EquipmentPartsHistory key={id} equipmentId={id} />
+                  ) : null,
+                },
+              ]}
+            />
           </>
         )}
       </Result>
-      {state.value && id && (
-        <AttachmentsPanel kind="WORK_ORDER" workOrderId={id} />
-      )}
     </div>
   );
 }
@@ -743,18 +1143,60 @@ export function EquipmentFeedPage({
   return (
     <div className="m2-page">
       <Link to={`${base}/equipment/${id}`}>← Hồ sơ thiết bị</Link>
-      <h1>{kind}</h1>
+      <h1>
+        {
+          {
+            "service-requests": "Yêu cầu dịch vụ của thiết bị",
+            "work-orders": "Lệnh công việc của thiết bị",
+            "maintenance-plans": "Kế hoạch bảo trì của thiết bị",
+            "maintenance-tasks": "Công việc bảo trì của thiết bị",
+          }[kind]
+        }
+      </h1>
+      <p>
+        Tra cứu hồ sơ liên quan theo từng thiết bị; chọn một dòng để xem đầy đủ
+        thông tin.
+      </p>
       {kind !== "maintenance-plans" && kind !== "maintenance-tasks" && (
         <label>
           Lọc trạng thái{" "}
-          <input
+          <select
             value={status}
             onChange={(event) => {
               setStatus(event.target.value);
               setPage(1);
             }}
-            placeholder="Trạng thái"
-          />
+          >
+            <option value="">Tất cả trạng thái</option>
+            {(kind === "work-orders"
+              ? [
+                  "CREATED",
+                  "ASSIGNED",
+                  "ACCEPTED",
+                  "TRAVELLING",
+                  "IN_PROGRESS",
+                  "ON_HOLD",
+                  "COMPLETED",
+                  "CANCELLED",
+                ]
+              : [
+                  "NEW",
+                  "REVIEWING",
+                  "AWAITING_INFO",
+                  "ACCEPTED",
+                  "AWAITING_CUSTOMER_APPROVAL",
+                  "PROCESSING",
+                  "RESOLVED",
+                  "CLOSED",
+                  "REJECTED",
+                  "CANCELLED",
+                ]
+            ).map((key) => (
+              <option key={key} value={key}>
+                {statusLabel[key] ?? key}
+              </option>
+            ))}
+          </select>
         </label>
       )}
       <Result state={state}>
@@ -865,22 +1307,64 @@ export function HistoryFeedPage({ equipmentId }: { equipmentId?: string }) {
           .filter(
             ([key]) =>
               !(equipmentId && key === "equipmentId") &&
-              !(profile?.userType === "CUSTOMER" && key === "actorId"),
+              !(profile?.userType === "CUSTOMER" && key === "actorId") &&
+              !(
+                profile?.roles.includes("SERVICE_MANAGER") &&
+                ["actorId", "referenceId", "referenceType"].includes(key)
+              ),
           )
-          .map(([key, label]) => (
-            <label key={key}>
-              {label}
-              <input
-                value={draft[key]}
-                onChange={(event) =>
+          .map(([key, label]) =>
+            ["equipmentId", "customerId", "siteId"].includes(key) ? (
+              <EntityPicker
+                key={key}
+                label={
+                  key === "equipmentId"
+                    ? "Thiết bị"
+                    : key === "customerId"
+                      ? "Khách hàng"
+                      : "Địa điểm"
+                }
+                area={key === "equipmentId" ? "assetM2" : "organization"}
+                path={
+                  key === "equipmentId"
+                    ? "/equipment"
+                    : key === "customerId"
+                      ? "/customers"
+                      : draft.customerId
+                        ? `/customers/${draft.customerId}/sites`
+                        : null
+                }
+                selected={draft[key]}
+                onChange={(id) =>
                   setDraft((current) => ({
                     ...current,
-                    [key]: event.target.value,
+                    [key]: id,
+                    ...(key === "customerId" ? { siteId: "" } : {}),
                   }))
                 }
               />
-            </label>
-          ))}
+            ) : (
+              <label key={key}>
+                {label}
+                <select
+                  value={draft[key]}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      [key]: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Tất cả</option>
+                  {Object.entries(historyEventLabel).map(([code, label]) => (
+                    <option key={code} value={code}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ),
+          )}
         {(["from", "to"] as const).map((key) => (
           <label key={key}>
             {key === "from" ? "Từ" : "Đến"}
@@ -1104,44 +1588,156 @@ function WorkOrderControls({
   const [end, setEnd] = useState("");
   const [reason, setReason] = useState("");
   const [cancelRequest, setCancelRequest] = useState(false);
-  const [report, setReport] = useState({ problemDescription: '', rootCause: '', solution: '', result: 'RESOLVED', customerSummary: '' });
+  const [report, setReport, reportDraft] = useFormDraft(`work-report:${id}`, {
+    problemDescription: "",
+    rootCause: "",
+    solution: "",
+    result: "RESOLVED",
+    customerSummary: "",
+    remainingWork: "",
+    submissionPending: false,
+  });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const technicians = useRemote<Page<Row>>(`wo-technicians:${actions.includes('assign')}`, () =>
-    actions.includes('assign') ? api.workorders('/technicians?page=1&pageSize=100') : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 100 }),
+  const performing = useRef(false);
+  const technicians = useRemote<Page<Row>>(
+    `wo-technicians:${actions.includes("assign")}`,
+    () =>
+      actions.includes("assign")
+        ? api.workorders("/technicians?page=1&pageSize=100")
+        : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 100 }),
   );
   async function perform(path: string, method: string, body?: unknown) {
-    if (getSessionGeneration() !== sessionGeneration) return;
-    setBusy(true); setError('');
+    if (
+      getSessionGeneration() !== sessionGeneration ||
+      performing.current ||
+      report.submissionPending
+    )
+      return;
+    performing.current = true;
+    if (path === "/complete")
+      reportDraft.save({ ...report, submissionPending: true });
+    setBusy(true);
+    setError("");
     try {
       await api.workorders(`/work-orders/${id}${path}`, { method, body });
-      if (getSessionGeneration() === sessionGeneration) refresh();
+      if (getSessionGeneration() === sessionGeneration) {
+        if (path === "/complete") reportDraft.clear();
+        refresh();
+      }
     } catch (cause) {
       if (getSessionGeneration() !== sessionGeneration) return;
-      setError(cause instanceof ApiError ? `${cause.status} · ${cause.code} · ${cause.message}` : String(cause));
-      refresh();
-    } finally { setBusy(false); }
+      if (
+        cause instanceof ApiError &&
+        cause.status < 500 &&
+        ![401, 408].includes(cause.status)
+      )
+        reportDraft.save({ ...report, submissionPending: false });
+      setError(
+        cause instanceof ApiError ? workOrderActionError(cause) : String(cause),
+      );
+      if (cause instanceof ApiError && cause.status === 409) refresh();
+    } finally {
+      performing.current = false;
+      setBusy(false);
+    }
   }
-  const transitions: { action: string; path: string; label: string; body?: unknown }[] = [
-    { action: 'accept', path: '/accept', label: 'Nhận lệnh', body: {} },
-    { action: 'reject', path: '/reject', label: 'Từ chối phân công', body: { reason } },
-    { action: 'start-travel', path: '/start-travel', label: 'Bắt đầu di chuyển', body: {} },
-    { action: 'start', path: '/start', label: 'Bắt đầu công việc', body: {} },
-    { action: 'hold', path: '/hold', label: 'Tạm dừng', body: { reason } },
-    { action: 'resume', path: '/resume', label: 'Tiếp tục công việc', body: {} },
-    { action: 'complete', path: '/complete', label: 'Hoàn tất và gửi báo cáo', body: report },
-    { action: 'cancel', path: '/cancel', label: 'Hủy Work Order', body: { reason, cancelServiceRequest: cancelRequest } },
+  const transitions: {
+    action: string;
+    path: string;
+    label: string;
+    body?: unknown;
+  }[] = [
+    { action: "accept", path: "/accept", label: "Nhận lệnh", body: {} },
+    {
+      action: "reject",
+      path: "/reject",
+      label: "Từ chối phân công",
+      body: { reason },
+    },
+    {
+      action: "start-travel",
+      path: "/start-travel",
+      label: "Bắt đầu di chuyển",
+      body: {},
+    },
+    { action: "start", path: "/start", label: "Bắt đầu công việc", body: {} },
+    { action: "hold", path: "/hold", label: "Tạm dừng", body: { reason } },
+    {
+      action: "resume",
+      path: "/resume",
+      label: "Tiếp tục công việc",
+      body: {},
+    },
+    {
+      action: "complete",
+      path: "/complete",
+      label: "Hoàn tất và gửi báo cáo",
+      body: {
+        problemDescription: report.problemDescription,
+        rootCause: report.rootCause,
+        solution: report.solution,
+        result: report.result,
+        customerSummary: [
+          report.customerSummary,
+          report.result !== "RESOLVED" && report.remainingWork
+            ? `Phần còn lại / phối hợp tiếp: ${report.remainingWork}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      },
+    },
+    {
+      action: "cancel",
+      path: "/cancel",
+      label: "Hủy Work Order",
+      body: { reason, cancelServiceRequest: cancelRequest },
+    },
   ];
-  if (!actions.some((action) => ['assign', 'update', 'cancel', 'accept', 'reject', 'start-travel', 'start', 'hold', 'resume', 'complete'].includes(action))) return null;
+  if (
+    !actions.some((action) =>
+      [
+        "assign",
+        "update",
+        "cancel",
+        "accept",
+        "reject",
+        "start-travel",
+        "start",
+        "hold",
+        "resume",
+        "complete",
+      ].includes(action),
+    )
+  )
+    return null;
   return (
     <Card title="Thao tác Work Order">
+      {report.submissionPending && (
+        <p role="alert">
+          Lần gửi báo cáo trước chưa xác định kết quả. Đọc lại hồ sơ trước khi
+          thao tác thêm; bản nháp vẫn được giữ.
+        </p>
+      )}
+      {report.submissionPending && (
+        <button type="button" disabled={busy} onClick={refresh}>
+          Kiểm tra trạng thái lệnh
+        </button>
+      )}
       {error && (
         <p className="m1-error" role="alert">
           {error}
         </p>
       )}
       {actions.includes("assign") && (
-        <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); void perform('/assign', 'POST', { technicianId }); }}>
+        <form
+          className="m2-editor"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void perform("/assign", "POST", { technicianId });
+          }}
+        >
           <label>
             Kỹ thuật viên{" "}
             <select
@@ -1163,11 +1759,30 @@ function WorkOrderControls({
             </select>
           </label>
           {technicians.error && <p role="alert">{technicians.error}</p>}
-          <button disabled={busy || technicians.loading}>{order.currentTechnicianId ? 'Phân công lại' : 'Phân công'}</button>
+          <button disabled={busy || technicians.loading}>
+            {order.currentTechnicianId ? "Phân công lại" : "Phân công"}
+          </button>
         </form>
       )}
       {actions.includes("update") && (
-        <form className="m2-editor" onSubmit={(event) => { event.preventDefault(); if (!start && !end) { setError('Nhập ít nhất một mốc thời gian.'); return; } if (start && end && new Date(end) <= new Date(start)) { setError('Giờ kết thúc phải sau giờ bắt đầu.'); return; } void perform('', 'PATCH', { ...(start ? { scheduledStart: new Date(start).toISOString() } : {}), ...(end ? { scheduledEnd: new Date(end).toISOString() } : {}) }); }}>
+        <form
+          className="m2-editor"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!start && !end) {
+              setError("Nhập ít nhất một mốc thời gian.");
+              return;
+            }
+            if (start && end && new Date(end) <= new Date(start)) {
+              setError("Giờ kết thúc phải sau giờ bắt đầu.");
+              return;
+            }
+            void perform("", "PATCH", {
+              ...(start ? { scheduledStart: vietnamInstant(start) } : {}),
+              ...(end ? { scheduledEnd: vietnamInstant(end) } : {}),
+            });
+          }}
+        >
           <label>
             Bắt đầu dự kiến{" "}
             <input
@@ -1191,23 +1806,124 @@ function WorkOrderControls({
       {actions.some((action) =>
         ["reject", "hold", "cancel"].includes(action),
       ) && (
-        <label>Lý do thao tác
-      <input maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} />
-    </label>
+        <label>
+          Lý do thao tác
+          <input
+            maxLength={2000}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </label>
       )}
       {actions.includes("complete") && (
-        <fieldset className="m2-editor">
-      <legend>Báo cáo dịch vụ bắt buộc khi hoàn tất</legend>
-      <label>Mô tả sự cố<input required maxLength={5000} value={report.problemDescription} onChange={(event) => setReport({ ...report, problemDescription: event.target.value })} /></label>
-      <label>Nguyên nhân<input maxLength={5000} value={report.rootCause} onChange={(event) => setReport({ ...report, rootCause: event.target.value })} /></label>
-      <label>Giải pháp<input required maxLength={5000} value={report.solution} onChange={(event) => setReport({ ...report, solution: event.target.value })} /></label>
-      <label>Kết quả<select value={report.result} onChange={(event) => setReport({ ...report, result: event.target.value })}><option value="RESOLVED">Đã xử lý</option><option value="PARTIALLY_RESOLVED">Xử lý một phần</option><option value="UNRESOLVED">Chưa xử lý được</option></select></label>
-      <label>Tóm tắt hiển thị khách hàng<input required maxLength={2000} value={report.customerSummary} onChange={(event) => setReport({ ...report, customerSummary: event.target.value })} /></label>
-    </fieldset>
+        <fieldset
+          className="m2-editor"
+          disabled={busy || report.submissionPending}
+        >
+          <legend>Báo cáo dịch vụ bắt buộc khi hoàn tất</legend>
+          <p role="status">
+            {reportDraft.saved === false
+              ? "Nháp chưa lưu được trên trình duyệt; sao chép nội dung trước khi rời."
+              : "Nháp được giữ trong tab này theo tài khoản và lệnh, tối đa 12 giờ. Chưa gửi cho khách."}
+          </p>
+          <label>
+            Mô tả sự cố
+            <textarea
+              rows={4}
+              required
+              maxLength={5000}
+              value={report.problemDescription}
+              onChange={(event) =>
+                setReport({ ...report, problemDescription: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Nguyên nhân
+            <textarea
+              rows={3}
+              maxLength={5000}
+              value={report.rootCause}
+              onChange={(event) =>
+                setReport({ ...report, rootCause: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Giải pháp
+            <textarea
+              rows={4}
+              required
+              maxLength={5000}
+              value={report.solution}
+              onChange={(event) =>
+                setReport({ ...report, solution: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Kết quả
+            <select
+              value={report.result}
+              onChange={(event) =>
+                setReport({ ...report, result: event.target.value })
+              }
+            >
+              <option value="RESOLVED">Đã xử lý</option>
+              <option value="PARTIALLY_RESOLVED">Xử lý một phần</option>
+              <option value="UNRESOLVED">Chưa xử lý được</option>
+            </select>
+          </label>
+          <label>
+            Tóm tắt hiển thị khách hàng
+            <textarea
+              rows={4}
+              required
+              maxLength={1500}
+              value={report.customerSummary}
+              onChange={(event) =>
+                setReport({ ...report, customerSummary: event.target.value })
+              }
+            />
+          </label>
+          {report.result !== "RESOLVED" && (
+            <label>
+              Phần chưa giải quyết / bước cần phối hợp
+              <textarea
+                required
+                rows={3}
+                maxLength={400}
+                value={report.remainingWork}
+                onChange={(event) =>
+                  setReport({ ...report, remainingWork: event.target.value })
+                }
+              />
+            </label>
+          )}
+          <details>
+            <summary>Xem trước nội dung khách sẽ đọc</summary>
+            <h3>{serviceLabels[report.result]}</h3>
+            <p>{report.customerSummary || "Chưa có tóm tắt."}</p>
+            {report.result !== "RESOLVED" && (
+              <p>
+                Phần còn lại:{" "}
+                {report.remainingWork || "Cần bổ sung trước khi gửi."}
+              </p>
+            )}
+            <p>
+              Nguyên nhân và ghi chú nội bộ không tự trở thành nội dung công bố
+              cho khách.
+            </p>
+          </details>
+        </fieldset>
       )}
       {actions.includes("cancel") && Boolean(order.serviceRequestId) && (
         <label>
-          <input type="checkbox" checked={cancelRequest} onChange={(event) => setCancelRequest(event.target.checked)} />{" "}
+          <input
+            type="checkbox"
+            checked={cancelRequest}
+            onChange={(event) => setCancelRequest(event.target.checked)}
+          />{" "}
           Đồng thời hủy Service Request
         </label>
       )}
@@ -1218,15 +1934,42 @@ function WorkOrderControls({
         </p>
       )}
       <div className="m1-actions">
-      {transitions.filter(({ action }) => actions.includes(action)).map(({ action, path, label, body }) => (
-        <button key={action} disabled={busy || (['reject', 'hold', 'cancel'].includes(action) && !reason.trim()) || (action === 'complete' && (!report.problemDescription.trim() || !report.solution.trim() || !report.customerSummary.trim()))}
-          onClick={() => void perform(path, 'POST', action === 'cancel' || action === 'reject' || action === 'hold'
-            ? { ...(body as Record<string, unknown>), reason: reason.trim() }
-            : body)}>
-          {busy ? 'Đang xử lý…' : label}
-        </button>
-      ))}
-    </div>
+        {transitions
+          .filter(({ action }) => actions.includes(action))
+          .map(({ action, path, label, body }) => (
+            <button
+              key={action}
+              disabled={
+                busy ||
+                report.submissionPending ||
+                (["reject", "hold", "cancel"].includes(action) &&
+                  !reason.trim()) ||
+                (action === "complete" &&
+                  (!report.problemDescription.trim() ||
+                    !report.solution.trim() ||
+                    !report.customerSummary.trim() ||
+                    (report.result !== "RESOLVED" &&
+                      !report.remainingWork.trim())))
+              }
+              onClick={() =>
+                void perform(
+                  path,
+                  "POST",
+                  action === "cancel" ||
+                    action === "reject" ||
+                    action === "hold"
+                    ? {
+                        ...(body as Record<string, unknown>),
+                        reason: reason.trim(),
+                      }
+                    : body,
+                )
+              }
+            >
+              {busy ? "Đang xử lý…" : label}
+            </button>
+          ))}
+      </div>
     </Card>
   );
 }
@@ -1245,9 +1988,18 @@ export function WorkOrderPage() {
         : Promise.resolve({ status: "NOT_FOUND", data: null }),
   );
   return (
-    <div className="m2-page">
-      <Link to="/app/work-orders">← Lệnh công việc</Link>
-      <h1>{asText(state.value?.workOrderNo ?? "Chi tiết lệnh công việc")}</h1>
+    <div className="m2-page sd-page">
+      <ServiceHeader
+        back="/app/work-orders"
+        backLabel="Công việc của tôi"
+        code={asText(state.value?.workOrderNo ?? "LỆNH CÔNG VIỆC")}
+        title={asText(state.value?.title ?? "Chi tiết công việc")}
+        description="Nhận đúng thiết bị và địa điểm, thực hiện checklist, ghi nhận kết quả và bằng chứng."
+        status={state.value?.status}
+      />
+      {state.value && (
+        <TechnicianOrderContext order={state.value} revision={revision} />
+      )}
       <Result state={state}>
         {state.value && (
           <Card title="Lệnh công việc">
@@ -1265,12 +2017,14 @@ export function WorkOrderPage() {
             />
             <p>{asText(state.value.description)}</p>
             <p>Khung giờ dự kiến chưa phải lịch hẹn đã xác nhận.</p>
-            {Array.isArray(state.value.allowedActions) && (
+            <WorkOrderLocation order={state.value} />
+            <ServiceNotice title="Thực hiện theo công việc được giao">
               <p>
-                Thao tác hợp lệ:{" "}
-                {state.value.allowedActions.join(", ") || "Không có"}
+                Các thao tác được phép nằm dưới hồ sơ. Khi báo cáo kết quả một
+                phần hoặc chưa xử lý được, ghi rõ phần còn lại và nội dung cần
+                phối hợp cho khách hàng.
               </p>
-            )}
+            </ServiceNotice>
             {Boolean(state.value.serviceRequestId) && (
               <Link
                 to={`/app/service-requests/${state.value.serviceRequestId}`}
@@ -1289,7 +2043,12 @@ export function WorkOrderPage() {
         />
       )}
       {state.value && id && (
-        <WorkOrderControls key={id} order={state.value} id={id} refresh={() => setRevision((value) => value + 1)} />
+        <WorkOrderControls
+          key={id}
+          order={state.value}
+          id={id}
+          refresh={() => setRevision((value) => value + 1)}
+        />
       )}
       <Result state={detail}>
         {detail.value && (
@@ -1307,7 +2066,10 @@ export function WorkOrderPage() {
                                 <Link
                                   to={`/app/technicians/${item.technicianId}`}
                                 >
-                                  {technicianName(item.technicianName, item.technicianEmployeeCode)}
+                                  {technicianName(
+                                    item.technicianName,
+                                    item.technicianEmployeeCode,
+                                  )}
                                 </Link>{" "}
                                 · {asText(item.status)}
                               </span>
@@ -1339,7 +2101,10 @@ export function WorkOrderPage() {
                             <li key={String(item.id)}>
                               <strong>{asText(item.eventType)}</strong> ·{" "}
                               {date(item.createdAt)}
-                              <p>Người thực hiện: {displayName('user', { name: item.actorName })}</p>
+                              <p>
+                                Người thực hiện:{" "}
+                                {displayName("user", { name: item.actorName })}
+                              </p>
                               {Boolean(item.note) && <p>{asText(item.note)}</p>}
                             </li>
                           ))}
@@ -1407,30 +2172,31 @@ export function RequestDossierExtras({
               <>
                 <p>
                   Bảo hành khi xét duyệt:{" "}
-                  {asText((data.warrantyCheck as Row | null)?.result)}
+                  {statusLabel[
+                    String((data.warrantyCheck as Row | null)?.result)
+                  ] ?? asText((data.warrantyCheck as Row | null)?.result)}
                 </p>
                 <p>
                   Bảo hành theo lịch hiện tại:{" "}
-                  {asText((data.calendarCoverageNow as Row | null)?.result)}
+                  {statusLabel[
+                    String((data.calendarCoverageNow as Row | null)?.result)
+                  ] ?? asText((data.calendarCoverageNow as Row | null)?.result)}
                 </p>
                 <p>
                   Hai giá trị có thể khác nhau vì quyết định yêu cầu được lưu
                   tại thời điểm xét duyệt.
                 </p>
                 <p>
-                  Đang chờ: {asText((data.request as Row | null)?.waitingFor)}
-                </p>
-                <p>
-                  Thao tác hợp lệ:{" "}
-                  {Array.isArray((data.request as Row | null)?.allowedActions)
-                    ? ((data.request as Row).allowedActions as string[]).join(
-                        ", ",
-                      )
-                    : "—"}
+                  Đang chờ:{" "}
+                  {serviceLabels[
+                    String((data.request as Row | null)?.waitingFor)
+                  ] ?? "Không có bước chờ"}
                 </p>
                 <p>
                   Kết quả:{" "}
-                  {asText((data.request as Row | null)?.resolutionResult)}
+                  {serviceLabels[
+                    String((data.request as Row | null)?.resolutionResult)
+                  ] ?? asText((data.request as Row | null)?.resolutionResult)}
                 </p>
                 <p>
                   Tóm tắt cho khách hàng:{" "}
@@ -1445,7 +2211,8 @@ export function RequestDossierExtras({
                           <li key={String(estimate.id)}>
                             <span>
                               Bản {asText(estimate.revisionNo)} ·{" "}
-                              {asText(estimate.status)}
+                              {serviceLabels[String(estimate.status)] ??
+                                asText(estimate.status)}
                             </span>
                             <span>
                               {asText(estimate.totalAmount)}{" "}
@@ -1619,33 +2386,52 @@ function MaintenancePlanForm({
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (getSessionGeneration() !== sessionGeneration) return;
-    setError(''); setBusy(true);
+    setError("");
+    setBusy(true);
     try {
-      const body = plan ? { name, frequencyUnit, frequencyValue, nextDueDate } : { equipmentId, name, frequencyUnit, frequencyValue, nextDueDate };
-      await api.maintenance(plan ? `/maintenance-plans/${plan.id}` : '/maintenance-plans', { method: plan ? 'PATCH' : 'POST', body });
+      const body = plan
+        ? { name, frequencyUnit, frequencyValue, nextDueDate }
+        : { equipmentId, name, frequencyUnit, frequencyValue, nextDueDate };
+      await api.maintenance(
+        plan ? `/maintenance-plans/${plan.id}` : "/maintenance-plans",
+        { method: plan ? "PATCH" : "POST", body },
+      );
       if (getSessionGeneration() !== sessionGeneration) return;
       onSaved();
     } catch (cause) {
       if (getSessionGeneration() !== sessionGeneration) return;
-      setError(cause instanceof ApiError ? `${cause.status} · ${cause.message}` : String(cause));
+      setError(
+        cause instanceof ApiError
+          ? `${cause.status} · ${cause.message}`
+          : String(cause),
+      );
       onRefresh();
+    } finally {
+      setBusy(false);
     }
-    finally { setBusy(false); }
   }
   async function status(value: string) {
     if (getSessionGeneration() !== sessionGeneration) return;
-    setError(''); setBusy(true);
+    setError("");
+    setBusy(true);
     try {
-      await api.maintenance(`/maintenance-plans/${plan?.id}`, { method: 'PATCH', body: { status: value } });
+      await api.maintenance(`/maintenance-plans/${plan?.id}`, {
+        method: "PATCH",
+        body: { status: value },
+      });
       if (getSessionGeneration() !== sessionGeneration) return;
       onSaved();
-    }
-    catch (cause) {
+    } catch (cause) {
       if (getSessionGeneration() !== sessionGeneration) return;
-      setError(cause instanceof ApiError ? `${cause.status} · ${cause.message}` : String(cause));
+      setError(
+        cause instanceof ApiError
+          ? `${cause.status} · ${cause.message}`
+          : String(cause),
+      );
       onRefresh();
+    } finally {
+      setBusy(false);
     }
-    finally { setBusy(false); }
   }
   return (
     <Card title={plan ? "Cập nhật kế hoạch" : "Tạo kế hoạch bảo trì"}>
@@ -1656,8 +2442,9 @@ function MaintenancePlanForm({
       )}
       {plan && (
         <p>
-          Trạng thái hiện tại: {asText(plan.status)}. Ngày đến hạn do backend
-          tính theo lịch đã chốt.
+          Trạng thái hiện tại:{" "}
+          {statusLabel[String(plan.status)] ?? asText(plan.status)}. Ngày đến
+          hạn được tính theo lịch đã chốt.
         </p>
       )}
       {plan?.status === "ACTIVE" && (
@@ -1671,7 +2458,14 @@ function MaintenancePlanForm({
         </button>
       )}
       {plan && plan.status !== "INACTIVE" && (
-        <button disabled={busy} onClick={() => { if (window.confirm('Ngừng kế hoạch này?')) void status('INACTIVE'); }}>Ngừng kế hoạch</button>
+        <button
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm("Ngừng kế hoạch này?")) void status("INACTIVE");
+          }}
+        >
+          Ngừng kế hoạch
+        </button>
       )}
       {plan?.status !== "INACTIVE" && (
         <form className="m2-editor" onSubmit={save}>
@@ -1696,15 +2490,37 @@ function MaintenancePlanForm({
           </label>
           <label>
             Chu kỳ{" "}
-            <select value={frequencyUnit} onChange={(event) => setFrequencyUnit(event.target.value)}><option value="DAY">Ngày</option><option value="WEEK">Tuần</option><option value="MONTH">Tháng</option><option value="YEAR">Năm</option></select>
+            <select
+              value={frequencyUnit}
+              onChange={(event) => setFrequencyUnit(event.target.value)}
+            >
+              <option value="DAY">Ngày</option>
+              <option value="WEEK">Tuần</option>
+              <option value="MONTH">Tháng</option>
+              <option value="YEAR">Năm</option>
+            </select>
           </label>
           <label>
             Số chu kỳ{" "}
-            <input required type="number" min={1} max={10000} value={frequencyValue} onChange={(event) => setFrequencyValue(Number(event.target.value))} />
+            <input
+              required
+              type="number"
+              min={1}
+              max={10000}
+              value={frequencyValue}
+              onChange={(event) =>
+                setFrequencyValue(Number(event.target.value))
+              }
+            />
           </label>
           <label>
             Ngày đến hạn{" "}
-            <input required type="date" value={nextDueDate} onChange={(event) => setNextDueDate(event.target.value)} />
+            <input
+              required
+              type="date"
+              value={nextDueDate}
+              onChange={(event) => setNextDueDate(event.target.value)}
+            />
           </label>
           <button disabled={busy}>{busy ? "Đang lưu…" : "Lưu kế hoạch"}</button>
         </form>
@@ -1740,10 +2556,22 @@ export function MaintenancePage() {
     <div className="m2-page">
       <h1>Bảo trì định kỳ</h1>
       {profile?.roles.includes("SERVICE_MANAGER") && (
-        <button className="m2-create-toggle" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Đóng biểu mẫu' : '+ Tạo kế hoạch bảo trì'}</button>
+        <button
+          className="m2-create-toggle"
+          type="button"
+          onClick={() => setShowCreate((value) => !value)}
+        >
+          {showCreate ? "Đóng biểu mẫu" : "+ Tạo kế hoạch bảo trì"}
+        </button>
       )}
       {showCreate && (
-        <MaintenancePlanForm onSaved={() => { setRevision((value) => value + 1); setShowCreate(false); }} onRefresh={() => setRevision((value) => value + 1)} />
+        <MaintenancePlanForm
+          onSaved={() => {
+            setRevision((value) => value + 1);
+            setShowCreate(false);
+          }}
+          onRefresh={() => setRevision((value) => value + 1)}
+        />
       )}
       <Link
         to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/maintenance-history`}
@@ -1865,11 +2693,20 @@ export function MaintenanceRecordPage() {
   const state = useRemote<Row>(`${path}:${revision}`, () =>
     api.maintenance(path),
   );
-  const equipmentLabel = useRemote<Row | null>(`maintenance-equipment:${state.value?.equipmentId}:${revision}`, () =>
-    state.value?.equipmentId ? api.assetM2(`/equipment/${state.value.equipmentId}`) : Promise.resolve(null));
-  const workOrderLabel = useRemote<Row | null>(`maintenance-order:${state.value?.workOrderId}:${revision}`, () =>
-    state.value?.workOrderId && profile?.userType === 'TENANT_STAFF'
-      ? api.workorders(`/work-orders/${state.value.workOrderId}`) : Promise.resolve(null));
+  const equipmentLabel = useRemote<Row | null>(
+    `maintenance-equipment:${state.value?.equipmentId}:${revision}`,
+    () =>
+      state.value?.equipmentId
+        ? api.assetM2(`/equipment/${state.value.equipmentId}`)
+        : Promise.resolve(null),
+  );
+  const workOrderLabel = useRemote<Row | null>(
+    `maintenance-order:${state.value?.workOrderId}:${revision}`,
+    () =>
+      state.value?.workOrderId && profile?.userType === "TENANT_STAFF"
+        ? api.workorders(`/work-orders/${state.value.workOrderId}`)
+        : Promise.resolve(null),
+  );
   const historyParams = new URLSearchParams({
     page: String(historyPageNo),
     pageSize: "20",
@@ -1895,7 +2732,10 @@ export function MaintenanceRecordPage() {
     journey.replacements.some((row: Row) => row.status === "PENDING");
   useEffect(() => {
     if (!pendingReplacement) return;
-    const timer = window.setInterval(() => setRevision((value) => value + 1), 3000);
+    const timer = window.setInterval(
+      () => setRevision((value) => value + 1),
+      3000,
+    );
     return () => window.clearInterval(timer);
   }, [pendingReplacement]);
   useEffect(() => {
@@ -1945,155 +2785,269 @@ export function MaintenanceRecordPage() {
       >
         ← Bảo trì
       </Link>
-      <h1>{kind === "task" ? "Công việc bảo trì" : "Kế hoạch bảo trì"}</h1>
-      <Result state={state}>
-        {state.value && (
-          <Card title="Thông tin">
-            <Fields
-              row={{ ...state.value, equipmentName: equipmentLabel.value?.displayName ?? (equipmentLabel.value?.model as Row | undefined)?.name, assetCode: equipmentLabel.value?.assetCode, workOrderNo: workOrderLabel.value?.workOrderNo }}
-              fields={[
-                ["name", "Tên"],
-                ["status", "Trạng thái"],
-                ["equipmentId", "Thiết bị"],
-                ["nextDueDate", "Lần kế tiếp"],
-                ["scheduledDate", "Hạn thực hiện"],
-                ["workOrderId", "Lệnh công việc"],
-              ]}
-            />
-            <p>
-              Ngày dự kiến chưa phải lịch hẹn đã xác nhận. Công việc hoàn tất
-              không tự xác nhận tình trạng vận hành của thiết bị.
-            </p>
-          </Card>
+      <ServiceHeader
+        back={
+          pathname.startsWith("/portal")
+            ? "/portal/maintenance"
+            : "/app/maintenance"
+        }
+        backLabel="Bảo trì định kỳ"
+        code={kind === "task" ? "CÔNG VIỆC BẢO TRÌ" : "KẾ HOẠCH BẢO TRÌ"}
+        title={asText(
+          state.value?.name ??
+            (kind === "task"
+              ? "Chi tiết công việc bảo trì"
+              : "Chi tiết kế hoạch bảo trì"),
         )}
-      </Result>
-      {state.value && <MaintenancePolicyDetails record={state.value} />}
-      {kind === "plan" &&
-        state.value &&
-        profile?.roles.includes("SERVICE_MANAGER") && (
-          <MaintenancePlanForm key={String(state.value.id)} plan={state.value} onSaved={() => setRevision((value) => value + 1)} onRefresh={() => setRevision((value) => value + 1)} />
-        )}
-      {journey && (
-        <Card title="Hành trình công việc">
-          <button type="button" onClick={() => setRevision((value) => value + 1)}>
-            Làm mới
-          </button>
-          <p>Đang chờ: {asText(journey.waitingFor)}</p>
-          <p>
-            Lệnh công việc:{" "}
-            {Array.isArray(journey.workOrders)
-              ? journey.workOrders
-                  .map((order: Row) => asText(order.workOrderId))
-                  .join(", ")
-              : "—"}
-          </p>
-          <p>
-            Yêu cầu thay thế:{" "}
-            {Array.isArray(journey.replacements)
-              ? journey.replacements.length
-              : "—"}
-          </p>
-          {Array.isArray(journey.replacements) &&
-            journey.replacements.map((item: Row) => (
-              <p key={String(item.requestId)}>
-                {asText(item.status)} · Work Order dự kiến{" "}
-                {asText(item.replacementWorkOrderId)}
-              </p>
-            ))}
-          {Array.isArray(journey.allowedActions) &&
-            journey.allowedActions.includes("request-replacement") && (
+        description="Theo dõi chu kỳ, kỳ đến hạn và lịch sử thực hiện của thiết bị."
+        status={state.value?.status}
+      />
+      <ServiceNotice
+        title={
+          kind === "plan"
+            ? "Lịch bảo trì giữ ngày gốc"
+            : "Theo dõi công việc đến hạn"
+        }
+      >
+        <p>
+          {kind === "plan"
+            ? "Hoàn thành muộn không làm dời kỳ kế tiếp. Sửa lịch chỉ tác động kỳ chưa sinh; các công việc đã tạo được giữ nguyên."
+            : "Kiểm tra lệnh công việc liên quan để theo dõi phân công, thực hiện và báo cáo. Ngày dự kiến chưa phải lịch hẹn xác nhận."}
+        </p>
+      </ServiceNotice>
+      <ServiceSections
+        items={[
+          {
+            key: "overview",
+            label: "Thông tin & điều chỉnh",
+            content: (
               <>
-                <button
-                  disabled={busy || !replacementConsumerReady}
-                  onClick={replace}
-                >
-                  Yêu cầu lệnh công việc thay thế
-                </button>
-                {!replacementConsumerReady && (
-                  <p>Đang chờ Work Order Service hỗ trợ tạo lệnh thay thế.</p>
+                <Result state={state}>
+                  {state.value && (
+                    <Card title="Thông tin">
+                      <Fields
+                        row={{
+                          ...state.value,
+                          equipmentName:
+                            equipmentLabel.value?.displayName ??
+                            (equipmentLabel.value?.model as Row | undefined)
+                              ?.name,
+                          assetCode: equipmentLabel.value?.assetCode,
+                          workOrderNo: workOrderLabel.value?.workOrderNo,
+                        }}
+                        fields={[
+                          ["name", "Tên"],
+                          ["status", "Trạng thái"],
+                          ["equipmentId", "Thiết bị"],
+                          ["nextDueDate", "Lần kế tiếp"],
+                          ["frequencyValue", "Chu kỳ"],
+                          ["frequencyUnit", "Đơn vị chu kỳ"],
+                          ["lastCompletedAt", "Hoàn tất gần nhất"],
+                          ["scheduledDate", "Hạn thực hiện"],
+                          ["workOrderId", "Lệnh công việc"],
+                        ]}
+                      />
+                      <p>
+                        Ngày dự kiến chưa phải lịch hẹn đã xác nhận. Công việc
+                        hoàn tất không tự xác nhận tình trạng vận hành của thiết
+                        bị.
+                      </p>
+                    </Card>
+                  )}
+                </Result>
+                {state.value && (
+                  <MaintenancePolicyDetails record={state.value} />
+                )}
+                {kind === "plan" &&
+                  state.value &&
+                  profile?.roles.includes("SERVICE_MANAGER") && (
+                    <details className="sd-edit-disclosure">
+                      <summary>
+                        Điều chỉnh kế hoạch / thay đổi trạng thái
+                      </summary>
+                      <MaintenancePlanForm
+                        key={String(state.value.id)}
+                        plan={state.value}
+                        onSaved={() => setRevision((value) => value + 1)}
+                        onRefresh={() => setRevision((value) => value + 1)}
+                      />
+                    </details>
+                  )}
+                {journey && (
+                  <Card title="Hành trình công việc">
+                    <button
+                      type="button"
+                      onClick={() => setRevision((value) => value + 1)}
+                    >
+                      Làm mới
+                    </button>
+                    <p>
+                      Đang chờ:{" "}
+                      {statusLabel[String(journey.waitingFor)] ??
+                        (journey.waitingFor
+                          ? "Xử lý lệnh công việc liên quan"
+                          : "Không có bước chờ")}
+                    </p>
+                    <p>
+                      Lệnh công việc:{" "}
+                      {Array.isArray(journey.workOrders)
+                        ? journey.workOrders.map(
+                            (order: Row, index: number) => (
+                              <Link
+                                key={String(order.workOrderId)}
+                                to={`/app/work-orders/${order.workOrderId}`}
+                              >
+                                {asText(
+                                  order.workOrderNo ?? `Mở lệnh ${index + 1}`,
+                                )}{" "}
+                              </Link>
+                            ),
+                          )
+                        : "—"}
+                    </p>
+                    <p>
+                      Yêu cầu thay thế:{" "}
+                      {Array.isArray(journey.replacements)
+                        ? journey.replacements.length
+                        : "—"}
+                    </p>
+                    {Array.isArray(journey.replacements) &&
+                      journey.replacements.map((item: Row) => (
+                        <p key={String(item.requestId)}>
+                          {statusLabel[String(item.status)] ??
+                            asText(item.status)}{" "}
+                          ·{" "}
+                          {item.status === "LINKED" &&
+                          item.replacementWorkOrderId ? (
+                            <Link
+                              to={`/app/work-orders/${item.replacementWorkOrderId}`}
+                            >
+                              Mở lệnh thay thế
+                            </Link>
+                          ) : (
+                            "Đang chờ xác nhận tạo lệnh thay thế"
+                          )}
+                        </p>
+                      ))}
+                    {Array.isArray(journey.allowedActions) &&
+                      journey.allowedActions.includes(
+                        "request-replacement",
+                      ) && (
+                        <>
+                          <button
+                            disabled={busy || !replacementConsumerReady}
+                            onClick={replace}
+                          >
+                            Yêu cầu lệnh công việc thay thế
+                          </button>
+                          {!replacementConsumerReady && (
+                            <p>
+                              Đang chờ Work Order Service hỗ trợ tạo lệnh thay
+                              thế.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    {actionError && (
+                      <p role="alert" className="m1-error">
+                        {actionError}
+                      </p>
+                    )}
+                    {actionResult && <p role="status">{actionResult}</p>}
+                  </Card>
                 )}
               </>
-            )}
-          {actionError && (
-            <p role="alert" className="m1-error">
-              {actionError}
-            </p>
-          )}
-          {actionResult && <p role="status">{actionResult}</p>}
-        </Card>
-      )}
-      <Card title="Lịch sử">
-        <form
-          className="m2-filters"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setHistoryFilter(historyDraft);
-            setHistoryPageNo(1);
-          }}
-        >
-          <label>
-            Loại sự kiện
-            <input
-              value={historyDraft.eventType}
-              onChange={(event) =>
-                setHistoryDraft((current) => ({
-                  ...current,
-                  eventType: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label>
-            Từ
-            <input
-              type="datetime-local"
-              value={historyDraft.from}
-              onChange={(event) =>
-                setHistoryDraft((current) => ({
-                  ...current,
-                  from: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label>
-            Đến
-            <input
-              type="datetime-local"
-              value={historyDraft.to}
-              onChange={(event) =>
-                setHistoryDraft((current) => ({
-                  ...current,
-                  to: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <button type="submit">Áp dụng bộ lọc</button>
-        </form>
-        <Result state={history}>
-          {historyPage && (
-            <>
-              <HistoryRows items={historyPage.items} />
-              <p>
-                Trang {historyPageNo} · Tổng {historyPage.total}
-              </p>
-              <button
-                disabled={historyPageNo === 1}
-                onClick={() => setHistoryPageNo((value) => value - 1)}
-              >
-                Trước
-              </button>
-              <button
-                disabled={historyPageNo * 20 >= historyPage.total}
-                onClick={() => setHistoryPageNo((value) => value + 1)}
-              >
-                Sau
-              </button>
-            </>
-          )}
-        </Result>
-      </Card>
+            ),
+          },
+          {
+            key: "history",
+            label: "Lịch sử bảo trì",
+            content: (
+              <Card title="Lịch sử">
+                <form
+                  className="m2-filters"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setHistoryFilter(historyDraft);
+                    setHistoryPageNo(1);
+                  }}
+                >
+                  <label>
+                    Loại sự kiện
+                    <select
+                      value={historyDraft.eventType}
+                      onChange={(event) =>
+                        setHistoryDraft((current) => ({
+                          ...current,
+                          eventType: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Tất cả sự kiện</option>
+                      {Object.entries(historyEventLabel).map(
+                        ([code, label]) => (
+                          <option key={code} value={code}>
+                            {label}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                  <label>
+                    Từ
+                    <input
+                      type="datetime-local"
+                      value={historyDraft.from}
+                      onChange={(event) =>
+                        setHistoryDraft((current) => ({
+                          ...current,
+                          from: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Đến
+                    <input
+                      type="datetime-local"
+                      value={historyDraft.to}
+                      onChange={(event) =>
+                        setHistoryDraft((current) => ({
+                          ...current,
+                          to: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <button type="submit">Áp dụng bộ lọc</button>
+                </form>
+                <Result state={history}>
+                  {historyPage && (
+                    <>
+                      <HistoryRows items={historyPage.items} />
+                      <p>
+                        Trang {historyPageNo} · Tổng {historyPage.total}
+                      </p>
+                      <button
+                        disabled={historyPageNo === 1}
+                        onClick={() => setHistoryPageNo((value) => value - 1)}
+                      >
+                        Trước
+                      </button>
+                      <button
+                        disabled={historyPageNo * 20 >= historyPage.total}
+                        onClick={() => setHistoryPageNo((value) => value + 1)}
+                      >
+                        Sau
+                      </button>
+                    </>
+                  )}
+                </Result>
+              </Card>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -2131,7 +3085,11 @@ export function TechniciansPage() {
                     {technicianName(row.fullName, row.employeeCode)}
                   </Link>
                   <span>
-                    <span className={`m2-status m2-status--${String(row.status ?? '').toLowerCase()}`}>{statusLabel[String(row.status)] ?? asText(row.status)}</span>
+                    <span
+                      className={`m2-status m2-status--${String(row.status ?? "").toLowerCase()}`}
+                    >
+                      {statusLabel[String(row.status)] ?? asText(row.status)}
+                    </span>
                   </span>
                 </li>
               ))}
@@ -2157,16 +3115,36 @@ export function TechniciansPage() {
 
 export function TechnicianPage() {
   const { id } = useParams();
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState("");
+  const orders = useRemote<Page<Row>>(
+    `technician-orders:${id}:${page}:${status}`,
+    () =>
+      api.workorders(
+        `/work-orders?technicianId=${id}&page=${page}&pageSize=20${status ? `&status=${status}` : ""}`,
+      ),
+  );
   const state = useRemote<Row>(`technician:${id}`, () =>
     api.workorders(`/technicians/${id}`),
   );
   return (
     <div className="m2-page">
       <Link to="/app/technicians">← Kỹ thuật viên</Link>
-      <h1>Hồ sơ kỹ thuật viên</h1>
+      <ServiceHeader
+        back="/app/technicians"
+        backLabel="Đội ngũ kỹ thuật"
+        code="HỒ SƠ KỸ THUẬT VIÊN"
+        title={
+          state.value
+            ? technicianName(state.value.fullName, state.value.employeeCode)
+            : "Hồ sơ kỹ thuật viên"
+        }
+        description="Thông tin hỗ trợ điều phối và liên hệ trong quá trình thực hiện dịch vụ."
+        status={state.value?.status}
+      />
       <Result state={state}>
         {state.value && (
-          <Card title="Thông tin">
+          <Card title="Thông tin kỹ thuật viên">
             <Fields
               row={state.value}
               fields={[
@@ -2176,17 +3154,97 @@ export function TechnicianPage() {
                 ["userId", "Tài khoản"],
               ]}
             />
+            <ServiceFacts
+              items={[
+                { label: "Email", value: asText(state.value.email) },
+                { label: "Điện thoại", value: asText(state.value.phone) },
+              ]}
+            />
             <p>
               Kỹ năng:{" "}
               {Array.isArray(state.value.skills)
                 ? state.value.skills
-                    .map((skill: Row) => asText(skill.name ?? skill.code ?? 'Kỹ năng không xác định'))
+                    .map((skill: Row) =>
+                      asText(
+                        skill.name ?? skill.code ?? "Kỹ năng không xác định",
+                      ),
+                    )
                     .join(", ")
                 : "—"}
             </p>
           </Card>
         )}
       </Result>
+      <Card title="Lệnh công việc gắn với kỹ thuật viên">
+        <p>
+          Danh sách theo người được gắn với lệnh hiện tại; lịch sử phân công đầy
+          đủ nằm trong từng lệnh.
+        </p>
+        <label>
+          Lọc trạng thái{" "}
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Tất cả trạng thái</option>
+            {[
+              "ASSIGNED",
+              "ACCEPTED",
+              "TRAVELLING",
+              "IN_PROGRESS",
+              "ON_HOLD",
+              "COMPLETED",
+              "CANCELLED",
+            ].map((key) => (
+              <option key={key} value={key}>
+                {statusLabel[key]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Result state={orders}>
+          {orders.value && (
+            <>
+              <ul className="m2-linked-list">
+                {orders.value.items.map((row) => (
+                  <li key={String(row.id)}>
+                    <Link to={`/app/work-orders/${row.id}`}>
+                      {asText(row.workOrderNo)} · {asText(row.title)}
+                    </Link>
+                    <span>
+                      {statusLabel[String(row.status)] ?? asText(row.status)} ·{" "}
+                      {date(row.scheduledStart)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {!orders.value.items.length && (
+                <p>Chưa có lệnh phù hợp bộ lọc.</p>
+              )}
+              <div className="registration-pagination">
+                <button
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Trước
+                </button>
+                <span>
+                  Trang {page} · {orders.value.total} lệnh
+                </span>
+                <button
+                  disabled={page * 20 >= orders.value.total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Sau
+                </button>
+              </div>
+            </>
+          )}
+        </Result>
+      </Card>
     </div>
   );
 }

@@ -17,6 +17,7 @@ const statusLabels: Record<string, string> = {
   INACTIVE: 'Không hoạt động',
   SUSPENDED: 'Tạm khóa',
   DISABLED: 'Đã vô hiệu hóa',
+  INVITED: 'Chờ kích hoạt',
   IN_WARRANTY: 'Còn bảo hành',
   OUT_OF_WARRANTY: 'Hết bảo hành',
   NO_WARRANTY: 'Không có bảo hành',
@@ -26,9 +27,9 @@ const positive = new Set(['ACTIVE', 'ACCEPTED', 'RESOLVED', 'CLOSED', 'IN_WARRAN
 const warning = new Set(['NEW', 'REVIEWING', 'AWAITING_INFO', 'AWAITING_CUSTOMER_APPROVAL', 'PROCESSING', 'IN_SERVICE'])
 const negative = new Set(['REJECTED', 'COST_REJECTED', 'CANCELLED', 'OUT_OF_SERVICE', 'RETIRED', 'SUSPENDED', 'DISABLED', 'OUT_OF_WARRANTY'])
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
   const tone = positive.has(status) ? 'positive' : warning.has(status) ? 'warning' : negative.has(status) ? 'negative' : 'neutral'
-  return <span className={`status-badge status-badge--${tone}`}><span className="status-badge__dot" />{statusLabels[status] ?? status}</span>
+  return <span className={`status-badge status-badge--${tone}`}><span className="status-badge__dot" />{label ?? statusLabels[status] ?? status}</span>
 }
 
 const priorityLabels: Record<string, string> = {

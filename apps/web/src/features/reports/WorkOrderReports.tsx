@@ -1,3 +1,4 @@
+import { statusNames } from '../workspace/workspace-data'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ApiError, api } from '../../api/client'
 import { getSessionGeneration } from '../../auth/session'
@@ -37,7 +38,7 @@ function addDay(value: string) {
 function apiError(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Phiên đăng nhập hết hạn. Đăng nhập lại để xem báo cáo.'
-    if (error.status === 403) return 'Tài khoản không có quyền report:read.'
+    if (error.status === 403) return 'Tài khoản chưa có quyền xem báo cáo dịch vụ.'
     if (error.status === 400) return `Khoảng ngày không hợp lệ: ${error.message}`
     if (error.status === 503) return 'Dịch vụ báo cáo Work Order tạm thời không khả dụng.'
     return `${error.status} · ${error.message}`
@@ -54,8 +55,8 @@ function useCurrentMonth() {
 export function WorkOrderReportsPage() {
   return (
     <div className="m2-page">
-      <h1>Báo cáo Work Order</h1>
-      <p>Chỉ số tổng hợp từ API báo cáo Work Order; không suy ra số liệu từ danh sách phân trang.</p>
+      <h1>Báo cáo dịch vụ</h1>
+      <p>Theo dõi khối lượng và trạng thái công việc theo khoảng thời gian. Số lệnh hoàn tất chưa thể hiện tỷ lệ sửa chữa thành công hoặc mức hài lòng của khách hàng.</p>
       <WorkOrderSummaryPanel />
     </div>
   )
@@ -108,10 +109,10 @@ export function WorkOrderSummaryPanel() {
 
   return (
     <section className="m1-card m1-section-card">
-      <div className="m1-section-header"><h2>Tổng hợp Work Order</h2></div>
+      <div className="m1-section-header"><h2>Khối lượng công việc đã ghi nhận</h2></div>
       <div className="m1-section-body">
         <form className="m2-editor" onSubmit={apply}>
-          <label>Từ ngày (Asia/Ho_Chi_Minh)
+          <label>Từ ngày (giờ Việt Nam)
             <input type="date" required value={from} onChange={(event) => setFrom(event.target.value)} />
           </label>
           <label>Đến ngày, bao gồm cả ngày này
@@ -123,7 +124,7 @@ export function WorkOrderSummaryPanel() {
         {error && <p role="alert" className="m1-error">{error}</p>}
         {!loading && !error && data && (
           <>
-            <p>Khoảng UTC: {data.from} – {data.to}; múi giờ hiển thị: {data.timezone}.</p>
+            <p>Từ {new Date(data.from).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} đến {new Date(new Date(data.to).getTime() - 1).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} · Giờ Việt Nam (UTC+7).</p>
             <div className="m1-summary-strip">
               <div><strong>{data.createdCount}</strong><span>WO được tạo trong kỳ</span></div>
               <div><strong>{data.completedCount}</strong><span>WO hoàn tất trong kỳ</span></div>
@@ -133,7 +134,7 @@ export function WorkOrderSummaryPanel() {
             <h3>Trạng thái hiện tại của nhóm Work Order được tạo trong kỳ</h3>
             <ul className="m2-linked-list">
               {statuses.map((status) => (
-                <li key={status}><strong>{status.replaceAll('_', ' ')}</strong><span>{data.createdByStatus[status]}</span></li>
+                <li key={status}><strong>{statusNames[status]}</strong><span className="sd-report-bar"><meter min={0} max={Math.max(1,data.createdCount)} value={data.createdByStatus[status]} aria-label={statusNames[status]}/><b>{data.createdByStatus[status]}</b></span></li>
               ))}
             </ul>
             <p>WO hoàn tất trong kỳ là chỉ số độc lập; có thể bao gồm WO được tạo trước khoảng thời gian đang xem.</p>

@@ -90,7 +90,7 @@ export function NotificationInbox() {
 
   return (
     <div className="m2-page">
-      <h1>Thông báo</h1>
+      <h1>Thông báo</h1><p>Theo dõi cập nhật liên quan đến công việc, yêu cầu dịch vụ và bàn giao thiết bị.</p>
       <label>Lọc
         <select value={filter} onChange={(event) => { setFilter(event.target.value as ReadFilter); setPage(1) }}>
           <option value="ALL">Tất cả</option>
@@ -98,11 +98,11 @@ export function NotificationInbox() {
           <option value="READ">Đã đọc</option>
         </select>
       </label>
-      {error && <p className="m1-error" role="alert">{error}</p>}
+      {error && <section className="m1-card sd-notification-state" role="alert"><h2>Chưa thể hiển thị thông báo</h2><p>{error}</p><button onClick={() => setRevision(v => v + 1)}>Thử tải lại</button></section>}
       {actionError?.generation === sessionGeneration && <p className="m1-error" role="alert">{actionError.message}</p>}
       {loading ? <p role="status">Đang tải thông báo…</p>
         : error ? null
-        : result && result.items.length === 0 ? <p>Không có thông báo phù hợp.</p>
+        : result && result.items.length === 0 ? <section className="m1-card sd-notification-state"><h2>Chưa có thông báo phù hợp</h2><p>Các cập nhật sẽ xuất hiện tại đây khi có sự kiện trong phạm vi tài khoản. Thử chọn “Tất cả” để xem các thông báo đã đọc.</p></section>
           : <ul className="m2-linked-list">
               {result?.items.map((item) => {
                 const path = resourcePath(item, customer)

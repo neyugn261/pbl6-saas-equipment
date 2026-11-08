@@ -1,46 +1,47 @@
-import { useRef, useState } from 'react'
-import { api } from '../api/client'
-import { useSession } from '../auth/session'
-import { useDirectory, errorText, modelSetupError } from './registration-data'
-import { LoadState } from './registration-shared'
-import type { PolicyItem } from './ModelPolicyPage'
+import { serviceLabels } from "../features/workspace/service-detail-data";
+import { useRef, useState } from "react";
+import { api } from "../api/client";
+import { useSession } from "../auth/session";
+import { useDirectory, errorText, modelSetupError } from "./registration-data";
+import { LoadState } from "./registration-shared";
+import type { PolicyItem } from "./ModelPolicyPage";
 type Snapshot = {
-  handoverDate?: string
+  handoverDate?: string;
   warranty: {
-    revisionId?: string
-    revision: number
+    revisionId?: string;
+    revision: number;
     body: {
-      mode: string
-      name: string
-      terms: string
-      reason: string
-      durationMonths: number
-      coveredCauses: string[]
-      exclusions: { code: string; text: string }[]
-    }
-    startDate: string
-    endDate: string
-  }
+      mode: string;
+      name: string;
+      terms: string;
+      reason: string;
+      durationMonths: number;
+      coveredCauses: string[];
+      exclusions: { code: string; text: string }[];
+    };
+    startDate: string;
+    endDate: string;
+  };
   maintenance: {
-    revisionId?: string
-    revision: number
+    revisionId?: string;
+    revision: number;
     body: {
-      mode: string
-      name: string
-      terms: string
-      reason: string
+      mode: string;
+      name: string;
+      terms: string;
+      reason: string;
       rules: {
-        id: string
-        name: string
-        frequencyValue: number
-        frequencyUnit: string
-        firstOccurrence: number
-        checklist: PolicyItem[]
-      }[]
-    }
-    firstDueDates: { itemId: string; date: string }[]
-  }
-}
+        id: string;
+        name: string;
+        frequencyValue: number;
+        frequencyUnit: string;
+        firstOccurrence: number;
+        checklist: PolicyItem[];
+      }[];
+    };
+    firstDueDates: { itemId: string; date: string }[];
+  };
+};
 export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
   return (
     <div className="live-columns">
@@ -48,7 +49,7 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
         <h3>Bảo hành · v{snapshot.warranty.revision}</h3>
         <p>{snapshot.warranty.body.name}</p>
         <p>
-          {snapshot.warranty.body.mode === 'NONE'
+          {snapshot.warranty.body.mode === "NONE"
             ? snapshot.warranty.body.reason
             : `${snapshot.warranty.body.durationMonths} tháng · ${snapshot.warranty.startDate} → ${snapshot.warranty.endDate}`}
         </p>
@@ -60,19 +61,19 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
       <section>
         <h3>Bảo trì · v{snapshot.maintenance.revision}</h3>
         <p>{snapshot.maintenance.body.terms}</p>
-        {snapshot.maintenance.body.mode === 'NONE' ? (
+        {snapshot.maintenance.body.mode === "NONE" ? (
           <p>{snapshot.maintenance.body.reason}</p>
         ) : (
           snapshot.maintenance.body.rules.map((r) => (
             <div key={r.id}>
               <h4>
-                {r.name} · mỗi {r.frequencyValue}{' '}
-                {{ DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng', YEAR: 'năm' }[
+                {r.name} · mỗi {r.frequencyValue}{" "}
+                {{ DAY: "ngày", WEEK: "tuần", MONTH: "tháng", YEAR: "năm" }[
                   r.frequencyUnit
                 ] ?? r.frequencyUnit}
               </h4>
               <p>
-                Kỳ đầu:{' '}
+                Kỳ đầu:{" "}
                 {
                   snapshot.maintenance.firstDueDates.find(
                     (d) => d.itemId === r.id,
@@ -82,7 +83,8 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
               <ul>
                 {r.checklist.map((i) => (
                   <li key={i.id}>
-                    <strong>{i.title}</strong> · {i.action}
+                    <strong>{i.title}</strong> ·{" "}
+                    {serviceLabels[i.action] ?? i.action}
                     <p>{i.instructions}</p>
                   </li>
                 ))}
@@ -92,7 +94,7 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
         )}
       </section>
     </div>
-  )
+  );
 }
 export function HandoverPolicyPanel({
   id,
@@ -104,49 +106,49 @@ export function HandoverPolicyPanel({
   showCompleteButton = true,
   readOnly = false,
 }: {
-  id: string
-  version: number
-  status: string
-  snapshot?: Snapshot | null
-  changed: () => void | Promise<void>
-  onBusyChange?: (busy: boolean) => void
-  showCompleteButton?: boolean
-  readOnly?: boolean
+  id: string;
+  version: number;
+  status: string;
+  snapshot?: Snapshot | null;
+  changed: () => void | Promise<void>;
+  onBusyChange?: (busy: boolean) => void;
+  showCompleteButton?: boolean;
+  readOnly?: boolean;
 }) {
-  const { profile } = useSession()
+  const { profile } = useSession();
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState(''),
-    [months, setMonths] = useState(''),
-    [reason, setReason] = useState('')
+    [error, setError] = useState(""),
+    [months, setMonths] = useState(""),
+    [reason, setReason] = useState("");
   const [scheduleOverrides, setScheduleOverrides] = useState<
     Record<
       string,
       { itemId: string; frequencyValue: number; firstOccurrence: number }
     >
-  >({})
-  const pending = useRef(false)
-  const canManage = profile?.roles.includes('SERVICE_MANAGER')
+  >({});
+  const pending = useRef(false);
+  const canManage = profile?.roles.includes("SERVICE_MANAGER");
   async function run(path?: string, body?: unknown) {
-    if (pending.current) return false
-    pending.current = true
-    setBusy(true)
-    onBusyChange?.(true)
-    setError('')
+    if (pending.current) return false;
+    pending.current = true;
+    setBusy(true);
+    onBusyChange?.(true);
+    setError("");
     try {
       if (path)
         await api.assetM2(`/equipment-registrations/${id}/${path}`, {
-          method: 'POST',
+          method: "POST",
           body,
-        })
-      await changed()
-      return true
+        });
+      await changed();
+      return true;
     } catch (e) {
-      setError(modelSetupError(e))
-      return false
+      setError(modelSetupError(e));
+      return false;
     } finally {
-      pending.current = false
-      setBusy(false)
-      onBusyChange?.(false)
+      pending.current = false;
+      setBusy(false);
+      onBusyChange?.(false);
     }
   }
   return (
@@ -165,18 +167,18 @@ export function HandoverPolicyPanel({
           lịch cùng hạng mục bảo trì theo ngày bàn giao.
         </p>
       )}
-      {!canManage && status === 'DRAFT' && (
+      {!canManage && status === "DRAFT" && (
         <p>
           Service Manager áp dụng chính sách và xác nhận bàn giao. Bạn có thể
           lưu hồ sơ để tiếp tục sau.
         </p>
       )}
-      {!readOnly && status === 'DRAFT' && (
+      {!readOnly && status === "DRAFT" && (
         <button type="button" disabled={busy} onClick={() => void run()}>
           Tải lại kết quả đã lưu
         </button>
       )}
-      {!readOnly && status === 'DRAFT' && canManage && (
+      {!readOnly && status === "DRAFT" && canManage && (
         <>
           <p>
             Chính sách được chọn sẽ áp dụng cho thiết bị khi xác nhận hoàn tất
@@ -186,22 +188,22 @@ export function HandoverPolicyPanel({
             type="button"
             disabled={busy}
             onClick={async () => {
-              if (await run('model-policies', { expectedVersion: version })) {
-                setMonths('')
-                setReason('')
-                setScheduleOverrides({})
+              if (await run("model-policies", { expectedVersion: version })) {
+                setMonths("");
+                setReason("");
+                setScheduleOverrides({});
               }
             }}
           >
             {busy
-              ? 'Đang lấy chính sách…'
+              ? "Đang lấy chính sách…"
               : snapshot
-                ? 'Lấy lại chính sách hiện hành từ Model'
-                : 'Áp dụng chính sách Model'}
+                ? "Lấy lại chính sách hiện hành từ Model"
+                : "Áp dụng chính sách Model"}
           </button>
           {snapshot &&
-            (snapshot.warranty.body.mode === 'APPLY' ||
-              snapshot.maintenance.body.mode === 'APPLY') && (
+            (snapshot.warranty.body.mode === "APPLY" ||
+              snapshot.maintenance.body.mode === "APPLY") && (
               <details className="registration-policy-overrides">
                 <summary>
                   Điều chỉnh ngoại lệ cho thiết bị này (tùy chọn)
@@ -213,18 +215,18 @@ export function HandoverPolicyPanel({
                 <form
                   className="live-form"
                   onSubmit={(e) => {
-                    e.preventDefault()
+                    e.preventDefault();
                     if (!months && !Object.keys(scheduleOverrides).length) {
                       setError(
-                        'Chọn thời hạn hoặc lịch cần điều chỉnh trước khi lưu ngoại lệ.',
-                      )
-                      return
+                        "Chọn thời hạn hoặc lịch cần điều chỉnh trước khi lưu ngoại lệ.",
+                      );
+                      return;
                     }
-                    void run('model-policies', {
+                    void run("model-policies", {
                       expectedVersion: version,
                       warrantyRevisionId: snapshot.warranty.revisionId,
                       maintenanceRevisionId: snapshot.maintenance.revisionId,
-                      ...(snapshot.warranty.body.mode === 'APPLY'
+                      ...(snapshot.warranty.body.mode === "APPLY"
                         ? {
                             durationMonths: months
                               ? Number(months)
@@ -240,11 +242,11 @@ export function HandoverPolicyPanel({
                           },
                       ),
                       reason,
-                    })
+                    });
                   }}
                 >
                   <fieldset disabled={busy}>
-                    {snapshot.warranty.body.mode === 'APPLY' && (
+                    {snapshot.warranty.body.mode === "APPLY" && (
                       <label>
                         Thời hạn bảo hành riêng (tháng)
                         <input
@@ -331,24 +333,24 @@ export function HandoverPolicyPanel({
             <button
               type="button"
               disabled={busy}
-              onClick={() => void run('submit', { expectedVersion: version })}
+              onClick={() => void run("submit", { expectedVersion: version })}
             >
               Xác nhận chính sách và hoàn tất bàn giao
             </button>
           )}
         </>
       )}
-      {!readOnly && status === 'PENDING_MAINTENANCE' && canManage && (
+      {!readOnly && status === "PENDING_MAINTENANCE" && canManage && (
         <button
           type="button"
           disabled={busy}
-          onClick={() => void run('resume', {})}
+          onClick={() => void run("resume", {})}
         >
           Đối soát và tiếp tục cùng hồ sơ
         </button>
       )}
     </section>
-  )
+  );
 }
 
 export function AppliedPolicyPanel({ equipmentId }: { equipmentId: string }) {
@@ -450,74 +452,115 @@ export function WorkOrderChecklist({
           <p>Công việc này không có checklist bắt buộc.</p>
         ) : (
           <>
-            <form
-              className="live-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (busy) return;
-                setBusy(true);
-                setError("");
-                void api
-                  .workorders(`/work-orders/${id}/checklist`, {
-                    method: "POST",
-                    body: { expectedVersion: data.value!.version, results },
-                  })
-                  .then(() => {
-                    setEdited(null);
-                    refresh((v) => v + 1);
-                    changed();
-                  })
-                  .catch((e) => setError(errorText(e)))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              <fieldset disabled={busy || !data.value.canEdit}>
-                {data.value.items.map((item) => (
-                  <section key={item.id}>
-                    <h3>
-                      {item.title}
-                      {item.required ? " *" : ""}
-                    </h3>
-                    <p>
-                      {item.action} · {item.instructions}
-                    </p>
-                    <label>
-                      Kết quả
-                      <select
-                        value={
-                          results.find((r) => r.itemId === item.id)?.status ??
-                          "NOT_DONE"
-                        }
-                        onChange={(e) =>
-                          update(item.id, { status: e.target.value })
-                        }
-                      >
-                        <option value="NOT_DONE">Chưa thực hiện</option>
-                        <option value="DONE">Đã thực hiện</option>
-                        {item.allowNotApplicable && (
-                          <option value="NOT_APPLICABLE">
-                            Không áp dụng (có lý do)
-                          </option>
-                        )}
-                      </select>
-                    </label>
-                    <label>
-                      Ghi chú nội bộ / lý do không áp dụng
-                      <textarea
-                        maxLength={2000}
-                        value={
-                          results.find((r) => r.itemId === item.id)?.note ?? ""
-                        }
-                        onChange={(e) =>
-                          update(item.id, { note: e.target.value })
-                        }
-                      />
-                    </label>
-                  </section>
-                ))}
-                <button>Lưu kết quả checklist</button>
-              </fieldset>
-            </form>
+            {!data.value.canEdit ? (
+              <div className="sd-checklist-readonly">
+                <p>
+                  Tiến độ:{" "}
+                  {
+                    data.value.items.filter((item) =>
+                      ["DONE", "NOT_APPLICABLE"].includes(
+                        results.find((row) => row.itemId === item.id)?.status ??
+                          "",
+                      ),
+                    ).length
+                  }
+                  /{data.value.items.length} mục đã có kết quả. Xem ghi chú để
+                  đối chiếu các mục không áp dụng.
+                </p>
+                <ol className="sd-history">
+                  {data.value.items.map((item) => {
+                    const result = results.find(
+                      (row) => row.itemId === item.id,
+                    );
+                    return (
+                      <li key={item.id}>
+                        <strong>{item.title}</strong>
+                        <span className="ws-badge ws-badge--blue">
+                          {serviceLabels[result?.status ?? "NOT_DONE"]}
+                        </span>
+                        <p>
+                          {serviceLabels[item.action] ?? item.action} ·{" "}
+                          {item.required ? "Bắt buộc" : "Khuyến nghị"}
+                        </p>
+                        <p>{item.instructions}</p>
+                        {result?.note && <p>Ghi chú: {result.note}</p>}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            ) : (
+              <form
+                className="live-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (busy) return;
+                  setBusy(true);
+                  setError("");
+                  void api
+                    .workorders(`/work-orders/${id}/checklist`, {
+                      method: "POST",
+                      body: { expectedVersion: data.value!.version, results },
+                    })
+                    .then(() => {
+                      setEdited(null);
+                      refresh((v) => v + 1);
+                      changed();
+                    })
+                    .catch((e) => setError(errorText(e)))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <fieldset disabled={busy || !data.value.canEdit}>
+                  {data.value.items.map((item) => (
+                    <section key={item.id}>
+                      <h3>
+                        {item.title}
+                        {item.required ? " *" : ""}
+                      </h3>
+                      <p>
+                        {serviceLabels[item.action] ?? item.action} ·{" "}
+                        {item.instructions}
+                      </p>
+                      <label>
+                        Kết quả
+                        <select
+                          value={
+                            results.find((r) => r.itemId === item.id)?.status ??
+                            "NOT_DONE"
+                          }
+                          onChange={(e) =>
+                            update(item.id, { status: e.target.value })
+                          }
+                        >
+                          <option value="NOT_DONE">Chưa thực hiện</option>
+                          <option value="DONE">Đã thực hiện</option>
+                          {item.allowNotApplicable && (
+                            <option value="NOT_APPLICABLE">
+                              Không áp dụng (có lý do)
+                            </option>
+                          )}
+                        </select>
+                      </label>
+                      <label>
+                        Ghi chú nội bộ / lý do không áp dụng
+                        <textarea
+                          maxLength={2000}
+                          value={
+                            results.find((r) => r.itemId === item.id)?.note ??
+                            ""
+                          }
+                          onChange={(e) =>
+                            update(item.id, { note: e.target.value })
+                          }
+                        />
+                      </label>
+                    </section>
+                  ))}
+                  <button>Lưu kết quả checklist</button>
+                </fieldset>
+              </form>
+            )}
             <button
               disabled={busy}
               onClick={() => {
@@ -629,7 +672,9 @@ export function WarrantyAssessmentPanel({
                   "MISUSE",
                   "WEAR_AND_TEAR",
                 ].map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c} value={c}>
+                    {serviceLabels[c] ?? c}
+                  </option>
                 ))}
               </select>
             </label>
@@ -682,7 +727,8 @@ export function MaintenancePolicyDetails({
       <ul>
         {items.map((item) => (
           <li key={item.id}>
-            <strong>{item.title}</strong> · {item.action}
+            <strong>{item.title}</strong> ·{" "}
+            {serviceLabels[item.action] ?? item.action}
             <p>{item.instructions}</p>
           </li>
         ))}

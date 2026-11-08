@@ -1,0 +1,349 @@
+.studio-shell {
+  min-height: 100vh;
+}
+.studio-ribbon {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 4%;
+  background: #293b33;
+  color: #eef1e8;
+  font-size: 12px;
+  border-bottom: 3px solid #b86842;
+}
+.studio-ribbon a {
+  color: #fff;
+  margin-left: auto;
+}
+.studio-shell .workshop-top {
+  flex-wrap: wrap;
+}
+.studio-shell .workshop-main {
+  max-width: 1500px;
+  margin: auto;
+}
+.studio-shell .workshop-navigation {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.studio-shell .workshop-navigation button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  padding: 12px 10px;
+  color: var(--shop-muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+.studio-shell .workshop-navigation button[aria-pressed="true"] {
+  border-color: var(--shop-accent);
+  color: var(--shop-accent);
+}
+.studio-review-controls {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  border: 1px dashed #b1b9ad;
+  padding: 14px 18px;
+  margin: 0 0 28px;
+  background: #e7ebe2;
+}
+.studio-review-controls p {
+  font-size: 12px;
+  color: var(--shop-muted);
+  max-width: 650px;
+  margin: 0;
+}
+.studio-shell label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--shop-muted);
+}
+.studio-shell :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--shop-line);
+  border-radius: 3px;
+  background: var(--shop-paper);
+  color: var(--shop-ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.studio-shell input[type="checkbox"] {
+  accent-color: var(--shop-accent);
+  width: 17px;
+  height: 17px;
+}
+.studio-shell :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--shop-accent);
+  outline-offset: 3px;
+}
+.studio-shell button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.studio-shell .workshop-top label {
+  margin-left: auto;
+  min-width: 250px;
+}
+.studio-surface {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.studio-two {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.studio-two > * {
+  min-width: 0;
+}
+.studio-grid,
+.workshop-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.studio-form {
+  display: grid;
+  gap: 18px;
+}
+.studio-card {
+  margin-top: 20px;
+  overflow: hidden;
+}
+.studio-card h2 {
+  font-size: 19px;
+  margin: 0;
+}
+.studio-card-body {
+  padding: 24px;
+}
+.studio-card-body > *:first-child {
+  margin-top: 0;
+}
+.studio-card-body h3 {
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 20px 0 10px;
+}
+.studio-card-body p,
+.studio-card-body li {
+  line-height: 1.75;
+}
+.studio-card-body > .ws-label {
+  margin: 16px 0;
+}
+.studio-card-body .studio-grid {
+  margin: 16px 0;
+}
+.studio-shell .studio-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0;
+}
+.studio-machine {
+  display: grid;
+  gap: 7px;
+  background: var(--shop-paper);
+  padding: 20px 24px;
+  border-left: 3px solid var(--shop-accent);
+  margin-bottom: 24px;
+}
+.studio-machine strong {
+  font-size: 21px;
+}
+.studio-machine > span:last-child {
+  color: var(--shop-muted);
+}
+.studio-confirm {
+  padding: 22px;
+  border: 1px solid #c9ad94;
+  border-left: 3px solid var(--shop-accent);
+  background: #f5f0e7;
+  margin-top: 18px;
+}
+.studio-receipt {
+  padding: 26px;
+  border: 1px solid #9cae9d;
+  background: #e7ede5;
+  margin-top: 25px;
+}
+.studio-receipt h2 {
+  font-size: 23px;
+}
+.studio-shell .studio-surface button:not(.ws-button):not(.ws-text-link),
+.studio-review-controls button {
+  padding: 9px 13px;
+  border: 1px solid var(--shop-line);
+  background: var(--shop-paper);
+  color: var(--shop-ink);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.studio-calendar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 1fr);
+  overflow: auto;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 270px;
+  margin: 20px 0;
+}
+.studio-calendar section {
+  background: #e9ede6;
+  padding: 12px;
+}
+.studio-calendar button {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  width: 100%;
+  margin: 10px 0;
+  border-left: 3px solid var(--shop-accent) !important;
+}
+.studio-calendar small {
+  color: var(--shop-muted);
+}
+.studio-date-preview {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+.studio-date-preview li {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  background: #e9ede6;
+  border-left: 2px solid var(--shop-accent);
+}
+.studio-documents {
+  list-style: none;
+  padding: 0;
+}
+.studio-documents li {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--shop-line);
+  padding: 18px 0;
+}
+.studio-documents button {
+  justify-self: start;
+}
+.studio-card-body .ws-table button {
+  text-align: left;
+}
+.studio-shell .ws-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.studio-shell .ws-tabs button[aria-pressed="true"] {
+  background: var(--shop-soft) !important;
+  border-bottom: 3px solid var(--shop-accent) !important;
+}
+.studio-shell .workshop-signals button {
+  display: grid;
+  gap: 8px;
+}
+.studio-shell .workshop-signals strong {
+  font-size: 26px;
+}
+.workshop-extra-fields {
+  padding: 18px;
+  border: 1px solid var(--shop-line);
+  background: var(--shop-paper);
+}
+.workshop-extra-fields > label {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+}
+.workshop-extra-fields summary {
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--shop-accent);
+}
+.workshop-estimate-review {
+  padding: 18px 0;
+}
+.workshop-compare > section {
+  min-width: 0;
+  padding: 16px;
+  background: #eef0e9;
+  border-left: 2px solid var(--shop-accent);
+}
+.workshop-compare li {
+  margin: 8px 0;
+}
+@media (max-width: 1050px) {
+  .studio-two {
+    grid-template-columns: 1fr;
+  }
+  .studio-review-controls {
+    align-items: start;
+    flex-direction: column;
+  }
+}
+@media (max-width: 640px) {
+  .studio-shell .workshop-main {
+    padding: 20px 16px;
+  }
+  .studio-grid,
+  .workshop-compare {
+    grid-template-columns: 1fr;
+  }
+  .studio-card-body {
+    padding: 18px;
+  }
+  .studio-shell .workshop-top label {
+    min-width: 0;
+    width: 100%;
+  }
+  .studio-ribbon {
+    gap: 8px;
+  }
+  .studio-ribbon a {
+    margin-left: 0;
+  }
+}
+@media print {
+  .studio-review-controls,
+  .studio-shell .workshop-navigation,
+  .studio-shell .workshop-top,
+  .studio-shell button {
+    display: none !important;
+  }
+  .studio-ribbon {
+    display: block;
+    color: #000;
+    background: white;
+    border: 2px solid #000;
+  }
+  .studio-shell .workshop-main {
+    padding: 0;
+  }
+  .studio-two {
+    display: block;
+  }
+  .studio-card,
+  .studio-receipt {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+  .studio-shell .workshop-main > header p {
+    display: none;
+  }
+}

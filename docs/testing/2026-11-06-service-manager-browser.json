@@ -1,0 +1,218 @@
+{
+  "date": "2026-11-06",
+  "role": "SERVICE_MANAGER",
+  "mode": "Read-only browser smoke checks and opening forms; no business records created or updated.",
+  "desktopViewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "mobileViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "desktop": [
+    {
+      "route": "/app/maintenance",
+      "title": "Bảo trì định kỳ",
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/technicians",
+      "title": "Đội ngũ kỹ thuật",
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/equipment-handovers",
+      "title": "Bàn giao thiết bị",
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/equipment-registrations",
+      "title": "Hồ sơ ghi nhận bàn giao",
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/equipment-models",
+      "title": "Danh mục model thiết bị",
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/customers",
+      "title": "Khách hàng",
+      "notificationForbidden": false
+    },
+    {
+      "route": "/dashboard",
+      "title": "Giữ mọi việc dịch vụ trong tầm nhìn",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/service-requests/new",
+      "title": "Bạn cần hỗ trợ thiết bị nào?",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/equipment-handovers/new",
+      "title": "Tạo yêu cầu bàn giao",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/equipment-history",
+      "title": "Lịch sử thiết bị",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/inventory/parts",
+      "title": "Danh mục phụ tùng",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/inventory/warehouses",
+      "title": "Kho và tồn kho",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/reports",
+      "title": "Báo cáo dịch vụ",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/notifications",
+      "title": "Thông báo",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": true
+    },
+    {
+      "route": "/app/profile",
+      "title": "Hồ sơ tài khoản",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    },
+    {
+      "route": "/app/equipment-models/00000000-0000-4000-8000-000000001001",
+      "title": "Máy siêu âm Demo",
+      "width": 1425,
+      "contentWidth": 1425,
+      "notificationForbidden": false
+    }
+  ],
+  "mobile": [
+    {
+      "route": "/app/service-requests/47de7a80-f0fb-4fbd-8157-5e34b3437d55",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Test",
+      "width": 375
+    },
+    {
+      "route": "/app/service-requests/new",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Bạn cần hỗ trợ thiết bị nào?",
+      "width": 375
+    },
+    {
+      "route": "/app/equipment/00000000-0000-4000-8000-000000001101",
+      "alerts": [],
+      "contentWidth": 390,
+      "title": "Hồ sơ thiết bị",
+      "width": 390
+    },
+    {
+      "route": "/app/customers/00000000-0000-4000-8000-000000000101",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Bệnh viện Đa khoa Demo",
+      "width": 375
+    },
+    {
+      "route": "/app/equipment-history",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Lịch sử thiết bị",
+      "width": 375
+    },
+    {
+      "route": "/app/equipment-handovers/new",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Tạo yêu cầu bàn giao",
+      "width": 375
+    },
+    {
+      "route": "/app/equipment-models/00000000-0000-4000-8000-000000001001",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Máy siêu âm Demo",
+      "width": 375
+    },
+    {
+      "route": "/app/reports",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Báo cáo dịch vụ",
+      "width": 375
+    },
+    {
+      "route": "/app/inventory/warehouses",
+      "alerts": [],
+      "contentWidth": 390,
+      "title": "Kho và tồn kho",
+      "width": 390
+    },
+    {
+      "route": "/app/maintenance",
+      "alerts": [],
+      "contentWidth": 375,
+      "title": "Bảo trì định kỳ",
+      "width": 375
+    },
+    {
+      "route": "/app/equipment/00000000-0000-4000-8000-000000001101",
+      "phase": "loaded-after-refresh",
+      "contentWidth": 375,
+      "title": "DEMO-ASSET-01",
+      "width": 375
+    }
+  ],
+  "workOrder": {
+    "path": "/app/work-orders/c9d5b4a3-1840-49ef-9dc8-536b68fab8a8",
+    "verified": [
+      "Overview",
+      "Schedule form opened without save",
+      "Assignment empty state",
+      "Parts empty state",
+      "History shows current actor name",
+      "Fresh reload after final source update"
+    ],
+    "mobileWidth": 375,
+    "mobileScrollWidth": 375
+  },
+  "limitations": [
+    "Local has no technicians, plans/tasks, handovers or parts for populated browser UAT.",
+    "Notification reads return a permission error.",
+    "Early mobile snapshots may show loading; equipment was measured again after its detail sections appeared."
+  ],
+  "screenshots": [
+    "tmp/ui-sm-work-order-overview.png",
+    "tmp/ui-sm-work-order-desktop.png",
+    "tmp/ui-sm-work-order-mobile.png",
+    "tmp/ui-sm-customer-desktop.png"
+  ]
+}
