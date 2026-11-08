@@ -60,7 +60,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     return this.db.$transaction(
       async (tx) => {
         const plans = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM maintenance_plans WHERE status = 'ACTIVE' AND next_due_date <= ${today}::date
+        SELECT id FROM maintenance_plans WHERE status = 'ACTIVE'
+        AND (next_due_date <= ${today}::date OR end_date < ${today}::date)
         AND (${tenantId}::uuid IS NULL OR tenant_id = ${tenantId}::uuid)
         ORDER BY next_due_date, id LIMIT 100 FOR UPDATE SKIP LOCKED`;
         let created = 0;
@@ -68,6 +69,22 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
           const plan = await tx.maintenancePlan.findUniqueOrThrow({
             where: { id },
           });
+          if (plan.endDate && plan.endDate < today) {
+            await tx.maintenancePlan.update({
+              where: { id },
+              data: { status: 'INACTIVE' },
+            });
+            await recordHistory(
+              tx,
+              plan,
+              'PLAN_TERM_ENDED',
+              changes(
+                { status: plan.status },
+                { status: 'INACTIVE' },
+              ),
+            );
+            continue; // Existing Tasks and Work Orders keep their original lifecycle.
+          }
           const snapshot = await tx.equipmentSnapshot.findUnique({
             where: {
               tenantId_equipmentId: {
@@ -90,6 +107,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
             today,
           );
           if (!window) continue;
+          if (plan.endDate && window.scheduledDate > plan.endDate) continue;
           const previous = await tx.maintenanceTask.findUnique({
             where: {
               maintenancePlanId_scheduledDate: {

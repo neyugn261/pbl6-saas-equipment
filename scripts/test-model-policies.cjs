@@ -1553,6 +1553,8 @@ async function main() {
     case: "independent anniversary Tasks; assignment removal blocks old technician, preserves audit; replacement replay keeps frozen checklist with fresh results; NONE differs from missing configuration",
     status: "PASS",
   });
+  await require('./test-maintenance-terms.cjs')({ call, A, M, manager, customerToken, other,
+    warranty, item, registration, dbs, scheduler, tenantId, drain, evidence, root, ports, tenantCode: tenantCodeA, password });
   console.log(
     JSON.stringify(
       {

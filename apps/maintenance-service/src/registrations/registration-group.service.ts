@@ -9,6 +9,8 @@ import { ServiceHttpClient } from '@pbl6/service-kit';
 import {
   validMaintenanceProfile,
   validWarrantyPolicy,
+  maintenanceEndDate,
+  warrantyEnd,
   type MaintenanceProfileBody,
 } from '@pbl6/event-contracts';
 import { createHash } from 'node:crypto';
@@ -44,7 +46,7 @@ interface Source {
     modelId: string;
     handoverDate: string;
     hash: string;
-    warranty: { body: unknown };
+    warranty: { body: unknown; endDate?: string };
     maintenance: {
       revisionId: string;
       revision: number;
@@ -159,12 +161,43 @@ export class RegistrationGroupService {
       });
       const plans: { itemId: string; planId: string }[] = [];
       for (const rule of snap.maintenance.body.rules) {
+        // Resolve from the frozen applied warranty, never from a later Model revision.
+        const warrantyBody = snap.warranty.body;
+        if (!validWarrantyPolicy(warrantyBody))
+          throw new BadGatewayException('Invalid warranty source');
+        const appliedWarrantyEnd =
+          warrantyBody.mode === 'APPLY'
+            ? warrantyEnd(snap.handoverDate, warrantyBody.durationMonths)
+            : undefined;
+        if (
+          rule.term?.mode === 'WARRANTY_END' &&
+          snap.warranty.endDate !== appliedWarrantyEnd
+        )
+          throw new BadGatewayException(
+            'Applied warranty dates do not match the frozen policy',
+          );
+        let endDate: string | null;
+        try {
+          endDate = maintenanceEndDate(
+            snap.handoverDate,
+            rule.term,
+            appliedWarrantyEnd,
+          );
+        } catch {
+          throw new BadGatewayException(
+            'Invalid frozen maintenance term or missing applied warranty',
+          );
+        }
         const anchor = calendarDate(snap.handoverDate),
           first = occurrence(
             anchor,
             rule.frequencyUnit,
             rule.frequencyValue,
             rule.firstOccurrence,
+          );
+        if (endDate && dateText(first) > endDate)
+          throw new BadGatewayException(
+            'First maintenance occurrence exceeds the frozen term',
           );
         const plan = await this.repo.create(
           tenantId,
@@ -181,6 +214,12 @@ export class RegistrationGroupService {
           p.userId,
           p.roles,
           tx,
+          undefined,
+          {
+            termMode: rule.term?.mode ?? 'UNLIMITED',
+            termYears: rule.term?.mode === 'YEARS' ? rule.term.years : null,
+            endDate: endDate ? calendarDate(endDate) : null,
+          },
         );
         await tx.maintenancePlan.update({
           where: { id: plan.id },

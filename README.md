@@ -472,3 +472,8 @@ theo nguyên nhân của từng sự cố. Xem [hướng dẫn thao tác](docs/u
 [runbook](docs/planning/model-service-policies-rollout.md) và
 [kết quả nghiệm thu local](docs/testing/model-service-policies-acceptance.md).
 Luồng tích hợp thật chạy bằng `pnpm test:model-policies` với DB test riêng và RabbitMQ.
+
+Mỗi lịch bảo trì của Model có thể áp dụng **trong X năm**, **vĩnh viễn**, hoặc
+**hết cùng với bảo hành**. Preview bàn giao hiển thị ngày kết thúc; scheduler
+ngừng sinh kỳ sau hạn và giữ công việc đã tạo. Plan cũ giữ lịch không giới hạn.
+Xem [ADR 0020](docs/decisions/0020-maintenance-terms.md).

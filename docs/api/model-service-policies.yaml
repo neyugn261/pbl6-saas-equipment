@@ -387,6 +387,10 @@ paths:
                         date:
                           type: string
                           format: date
+                        endDate:
+                          type: [string, 'null']
+                          format: date
+                          description: Inclusive end resolved for an explicit term; null for UNLIMITED. Absent on legacy snapshots.
                       required:
                       - itemId
                       - date
@@ -415,6 +419,12 @@ paths:
       - name: handoverDate
         in: query
         required: true
+        schema:
+          type: string
+          format: date
+      - name: warrantyEndDate
+        in: query
+        description: Required for WARRANTY_END rules; Asset supplies the frozen applied warranty end during registration preview.
         schema:
           type: string
           format: date
@@ -793,6 +803,25 @@ components:
       - itemId
       - title
       - status
+    MaintenanceTerm:
+      description: Legacy omission means UNLIMITED. YEARS includes the anniversary day; WARRANTY_END uses the applied inclusive warranty end.
+      oneOf:
+      - type: object
+        additionalProperties: false
+        required: [mode]
+        properties:
+          mode: { const: UNLIMITED }
+      - type: object
+        additionalProperties: false
+        required: [mode, years]
+        properties:
+          mode: { const: YEARS }
+          years: { type: integer, minimum: 1, maximum: 100 }
+      - type: object
+        additionalProperties: false
+        required: [mode]
+        properties:
+          mode: { const: WARRANTY_END }
     ScheduleRule:
       type: object
       additionalProperties: false
@@ -816,6 +845,8 @@ components:
           type: integer
           minimum: 1
           maximum: 100
+        term:
+          $ref: '#/components/schemas/MaintenanceTerm'
         checklist:
           type: array
           maxItems: 60
@@ -967,6 +998,10 @@ components:
         handoverDate:
           type: string
           format: date
+        warrantyEndDate:
+          type: string
+          format: date
+          description: Applied warranty end, required when a rule uses WARRANTY_END. Preview does not persist this caller-supplied value; setup revalidates the Asset snapshot.
         overrides:
           type: array
           maxItems: 8
@@ -1244,6 +1279,9 @@ components:
                   itemId: *id001
                   date:
                     type: string
+                    format: date
+                  endDate:
+                    type: [string, 'null']
                     format: date
                 required:
                 - itemId

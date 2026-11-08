@@ -5,6 +5,10 @@ import { useSession } from "../auth/session";
 import { useDirectory, errorText, modelSetupError } from "./registration-data";
 import { LoadState } from "./registration-shared";
 import type { PolicyItem } from "./ModelPolicyPage";
+import {
+  maintenanceTermLabel,
+  type MaintenanceTerm,
+} from "../features/workspace/maintenance-term";
 type Snapshot = {
   handoverDate?: string;
   warranty: {
@@ -36,10 +40,11 @@ type Snapshot = {
         frequencyValue: number;
         frequencyUnit: string;
         firstOccurrence: number;
+        term?: MaintenanceTerm;
         checklist: PolicyItem[];
       }[];
     };
-    firstDueDates: { itemId: string; date: string }[];
+    firstDueDates: { itemId: string; date: string; endDate?: string | null }[];
   };
 };
 export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
@@ -72,6 +77,18 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
                   r.frequencyUnit
                 ] ?? r.frequencyUnit}
               </h4>
+              <p>Thời hạn: {maintenanceTermLabel(r.term)}</p>
+              {snapshot.maintenance.firstDueDates.find((d) => d.itemId === r.id)
+                ?.endDate && (
+                <p>
+                  Ngày kết thúc:{" "}
+                  {
+                    snapshot.maintenance.firstDueDates.find(
+                      (d) => d.itemId === r.id,
+                    )?.endDate
+                  }
+                </p>
+              )}
               <p>
                 Kỳ đầu:{" "}
                 {
@@ -724,6 +741,27 @@ export function MaintenancePolicyDetails({
     <section className="m1-card">
       <h2>Nội dung bảo trì đã áp dụng</h2>
       <p>{String(record.instructionTitle ?? record.name ?? "")}</p>
+      {typeof record.termMode === "string" && (
+        <>
+          <p>
+            Thời hạn:{" "}
+            {maintenanceTermLabel(
+              record.termMode === "YEARS"
+                ? { mode: "YEARS", years: Number(record.termYears) }
+                : { mode: record.termMode as "UNLIMITED" | "WARRANTY_END" },
+            )}
+          </p>
+          {Boolean(record.endDate) && (
+            <p>Ngày kết thúc: {String(record.endDate)}</p>
+          )}
+          {record.hasNextOccurrence === false && (
+            <p>
+              Hiện không có kỳ bảo trì mới được lên lịch trong thời hạn. Các
+              công việc đã tạo vẫn được giữ lại.
+            </p>
+          )}
+        </>
+      )}
       <ul>
         {items.map((item) => (
           <li key={item.id}>

@@ -170,6 +170,17 @@ An assignment counts as active while it is ACCEPTED (ASSIGNED is not yet
 accepted). No working calendar, leave or dispatch optimisation in the MVP.
 
 
+## ADR 0020 — Maintenance term expiry
+
+Each Model schedule can run for a fixed number of years, indefinitely, or until
+the frozen applied warranty end. The last day is inclusive. The scheduler
+changes ACTIVE → INACTIVE after that date and records PLAN_TERM_ENDED once;
+expired programmes do not create catch-up tasks after downtime. PAUSED plans
+cannot resume past their fixed end. Schedule edits do not extend coverage.
+Already generated Tasks and Work Orders keep their original state machines.
+Legacy Plans and policy snapshots without a term retain unlimited scheduling.
+See [ADR 0020](../decisions/0020-maintenance-terms.md).
+
 ## ADR 0018 — Model policies, setup and incident coverage
 
 Policy revisions: DRAFT → PUBLISHED → RETIRED. Only drafts can change content.
