@@ -35,12 +35,26 @@ type Choice = {
   frequencyValue?: number
   nextDueDate?: string
 }
+type DeliveryMethod = 'STORE' | 'CUSTOMER_SITE'
+type ConfirmationDetails = {
+  condition: string
+  notes?: string
+  expiresAt: string
+}
 type Registration = {
+  deliveryMethod: DeliveryMethod | null
+  handoverDetails: ConfirmationDetails | null
+  handoverId: string | null
+  maintenanceProvisioning: 'PENDING' | 'READY' | null
   policyPreview?: Parameters<typeof HandoverPolicyPanel>[0]['snapshot']
   maintenancePlanIds?: string[]
   id: string
   equipmentId: string
-  status: 'DRAFT' | 'PENDING_MAINTENANCE' | 'COMPLETED'
+  status:
+    | 'DRAFT'
+    | 'PENDING_MAINTENANCE'
+    | 'PENDING_CUSTOMER_CONFIRMATION'
+    | 'COMPLETED'
   version: number
   warranty: Choice
   maintenance: Choice
@@ -67,6 +81,10 @@ type Equipment = {
   status: string
 }
 type FormState = {
+  deliveryMethod: DeliveryMethod | ''
+  condition: string
+  notes: string
+  expiresAt: string
   customerId: string
   siteId: string
   locationId: string
@@ -87,7 +105,8 @@ const statusNames = {
   NOT_RECORDED: 'Chưa ghi nhận thiết lập',
   DRAFT: 'Hồ sơ chưa hoàn tất',
   PENDING_MAINTENANCE: 'Chờ xác nhận bảo trì',
-  COMPLETED: 'Đã hoàn tất thiết lập',
+  PENDING_CUSTOMER_CONFIRMATION: 'Chờ khách hàng xác nhận',
+  COMPLETED: 'Đã hoàn tất bàn giao',
 }
 function formEquipment(eq: Equipment) {
   return {
@@ -120,6 +139,29 @@ const today = () =>
     new Date(),
   )
 
+function isFutureDeadline(value: string) {
+  return new Date(value).getTime() > Date.now()
+}
+function localDeadline(iso: string) {
+  const d = new Date(iso)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16)
+}
+function formConfirmation(row: Registration) {
+  return {
+    deliveryMethod: row.deliveryMethod || ('' as const),
+    condition: row.handoverDetails?.condition || '',
+    notes: row.handoverDetails?.notes || '',
+    expiresAt: row.handoverDetails
+      ? localDeadline(row.handoverDetails.expiresAt)
+      : localDeadline(new Date(Date.now() + 30 * 86400000).toISOString()),
+  }
+}
+function resultStep(row: Registration) {
+  return row.deliveryMethod === 'CUSTOMER_SITE' ? 5 : 4
+}
+
 export function RegistrationListPage() {
   const [status, setStatus] = useState(''),
     [page, setPage] = useState(1)
@@ -148,13 +190,18 @@ export function RegistrationListPage() {
             }}
           >
             <option value="">Tất cả</option>
-            {(['DRAFT', 'PENDING_MAINTENANCE', 'COMPLETED'] as const).map(
-              (s) => (
-                <option key={s} value={s}>
-                  {statusNames[s]}
-                </option>
-              ),
-            )}
+            {(
+              [
+                'DRAFT',
+                'PENDING_MAINTENANCE',
+                'PENDING_CUSTOMER_CONFIRMATION',
+                'COMPLETED',
+              ] as const
+            ).map((s) => (
+              <option key={s} value={s}>
+                {statusNames[s]}
+              </option>
+            ))}
           </select>
         </label>
         <LoadState {...state} />
@@ -216,6 +263,13 @@ export function EquipmentRegistrationPage() {
     { profile } = useSession()
   const query = new URLSearchParams(location.search)
   const [form, setForm] = useState<FormState>(() => ({
+    deliveryMethod:
+      query.get('handoverRequired') === 'true' ? 'CUSTOMER_SITE' : '',
+    condition: '',
+    notes: '',
+    expiresAt: localDeadline(
+      new Date(Date.now() + 30 * 86400000).toISOString(),
+    ),
     customerId: query.get('customerId') || '',
     siteId: query.get('siteId') || '',
     locationId: '',
@@ -249,6 +303,7 @@ export function EquipmentRegistrationPage() {
   const canMaintain = profile?.roles.includes('SERVICE_MANAGER') === true
   const frozen =
     record?.status === 'PENDING_MAINTENANCE' ||
+    record?.status === 'PENDING_CUSTOMER_CONFIRMATION' ||
     record?.status === 'COMPLETED' ||
     uncertain ||
     needsReload
@@ -310,6 +365,7 @@ export function EquipmentRegistrationPage() {
               setForm((prev) => ({
                 ...prev,
                 ...formEquipment(eq),
+                ...formConfirmation(row),
                 warranty: row.warranty,
                 maintenance: row.maintenance,
               }))
@@ -323,7 +379,7 @@ export function EquipmentRegistrationPage() {
                     : current.policyPreview
                       ? 2
                       : 0
-                  : 4,
+                  : resultStep(row),
               )
             }
           },
@@ -376,6 +432,38 @@ export function EquipmentRegistrationPage() {
     }
   }, [id, location.search, location.state, markerKey, navigate])
 
+  const pollingId =
+    record &&
+    (record.status === 'PENDING_CUSTOMER_CONFIRMATION' ||
+      record.maintenanceProvisioning === 'PENDING')
+      ? record.id
+      : null
+  useEffect(() => {
+    if (!pollingId) return
+    let active = true
+    const timer = window.setInterval(() => {
+      api
+        .assetM2<Registration>(`/equipment-registrations/${pollingId}`)
+        .then((row) => {
+          if (!active) return
+          setRecord(row)
+          if (row.status === 'DRAFT') {
+            setStep(1)
+            setError(
+              'Hồ sơ chưa được xác nhận. Xem lần gửi trước, sửa và gửi lại.',
+            )
+          }
+        })
+        .catch(() => {
+          /* Keep the last confirmed state; manual reload remains available. */
+        })
+    }, 10000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [pollingId])
+
   async function selectExisting(equipmentId: string) {
     const sequence = ++selectedSequence.current
     field('equipmentId', equipmentId)
@@ -404,6 +492,16 @@ export function EquipmentRegistrationPage() {
     if (part === 0 && (!form.customerId || !form.siteId))
       return 'Chọn khách hàng và địa điểm đặt thiết bị.'
     if (part === 1) {
+      if (!record && !form.deliveryMethod)
+        return 'Chọn hình thức bàn giao tại cửa hàng hoặc tại cơ sở khách hàng.'
+      if (
+        final &&
+        form.deliveryMethod === 'CUSTOMER_SITE' &&
+        (!form.condition.trim() ||
+          !form.expiresAt ||
+          !isFutureDeadline(form.expiresAt))
+      )
+        return 'Nhập tình trạng bàn giao và hạn xác nhận trong tương lai.'
       if (datesDirty)
         return 'Lưu các ngày thực tế vừa chỉnh trước khi tiếp tục.'
       if (
@@ -493,7 +591,6 @@ export function EquipmentRegistrationPage() {
               : {
                   mode: 'NEW',
                   data: {
-                    ...(new URLSearchParams(location.search).get('handoverRequired') === 'true' ? { handoverRequired: true } : {}),
                     customerId: form.customerId,
                     customerSiteId: form.siteId,
                     ...(form.locationId ? { locationId: form.locationId } : {}),
@@ -518,6 +615,19 @@ export function EquipmentRegistrationPage() {
             key: crypto.randomUUID(),
             body: {
               equipment,
+              ...(form.deliveryMethod
+                ? { deliveryMethod: form.deliveryMethod }
+                : {}),
+              ...(form.deliveryMethod === 'CUSTOMER_SITE' &&
+              form.condition.trim()
+                ? {
+                    handoverDetails: {
+                      condition: form.condition.trim(),
+                      notes: form.notes.trim(),
+                      expiresAt: new Date(form.expiresAt).toISOString(),
+                    },
+                  }
+                : {}),
               warranty: form.warranty,
               maintenance: form.maintenance,
             },
@@ -540,6 +650,35 @@ export function EquipmentRegistrationPage() {
         pending.current = null
       }
       if (getSessionGeneration() !== operationGeneration) return
+      if (
+        saved.status === 'DRAFT' &&
+        saved.deliveryMethod === 'CUSTOMER_SITE' &&
+        form.condition.trim()
+      ) {
+        const details = {
+          condition: form.condition.trim(),
+          notes: form.notes.trim(),
+          expiresAt: new Date(form.expiresAt).toISOString(),
+        }
+        const old = saved.handoverDetails
+        if (
+          !old ||
+          old.condition !== details.condition ||
+          (old.notes || '') !== details.notes ||
+          new Date(old.expiresAt).getTime() !==
+            new Date(details.expiresAt).getTime()
+        )
+          saved = await api.assetM2<Registration>(
+            `/equipment-registrations/${saved.id}`,
+            {
+              method: 'PATCH',
+              body: {
+                expectedVersion: saved.version,
+                handoverDetails: details,
+              },
+            },
+          )
+      }
       // Pin server-resolved Model policies once, without replacing an existing preview.
       if (applyPolicies && saved.status === 'DRAFT' && !saved.policyPreview) {
         const preview = await api.assetM2<
@@ -560,12 +699,12 @@ export function EquipmentRegistrationPage() {
         )
       if (getSessionGeneration() !== operationGeneration) return
       setRecord(saved)
-      setStep(complete ? 4 : targetStep)
+      setStep(complete ? resultStep(saved) : targetStep)
       setRevision((v) => v + 1)
       sessionStorage.removeItem(markerKey)
       navigate(`/app/equipment-registrations/${saved.id}`, {
         replace: true,
-        state: { registrationStep: complete ? 4 : targetStep },
+        state: { registrationStep: complete ? resultStep(saved) : targetStep },
       })
     } catch (e) {
       if (getSessionGeneration() !== operationGeneration) return
@@ -625,13 +764,14 @@ export function EquipmentRegistrationPage() {
       setForm((prev) => ({
         ...prev,
         ...formEquipment(eq),
+        ...formConfirmation(row),
         warranty: row.warranty,
         maintenance: row.maintenance,
       }))
       setNeedsReload(false)
       setDatesDirty(false)
       setError('')
-      setStep(row.status === 'DRAFT' ? step : 4)
+      setStep(row.status === 'DRAFT' ? Math.min(step, 4) : resultStep(row))
     } catch (e) {
       setError(errorText(e))
     } finally {
@@ -658,8 +798,24 @@ export function EquipmentRegistrationPage() {
   const dirty =
     !frozen &&
     (record
-      ? JSON.stringify([form.warranty, form.maintenance]) !==
-        JSON.stringify([record.warranty, record.maintenance])
+      ? JSON.stringify([
+          form.warranty,
+          form.maintenance,
+          form.condition,
+          form.notes,
+          form.deliveryMethod === 'CUSTOMER_SITE' && record.handoverDetails
+            ? form.expiresAt
+            : '',
+        ]) !==
+        JSON.stringify([
+          record.warranty,
+          record.maintenance,
+          record.handoverDetails?.condition || '',
+          record.handoverDetails?.notes || '',
+          record.handoverDetails
+            ? localDeadline(record.handoverDetails.expiresAt)
+            : '',
+        ])
       : Boolean(
           form.assetCode ||
           form.serialNumber ||
@@ -701,7 +857,12 @@ export function EquipmentRegistrationPage() {
     }
   }, [dirty, busy, datesDirty])
   async function goToStep(target: number) {
-    if (busy || (frozen && target !== 4)) return
+    if (
+      busy ||
+      (frozen && target !== 4 && target !== 5) ||
+      (target === 5 && record?.status === 'DRAFT')
+    )
+      return
     if (target > step) {
       for (const part of [0, 1]) {
         if (part >= target) continue
@@ -730,7 +891,7 @@ export function EquipmentRegistrationPage() {
       api.assetM2<Equipment>(`/equipment/${record.equipmentId}`),
     ])
     setRecord(currentPolicyPreview(row, eq))
-    if (row.status !== 'DRAFT') setStep(4)
+    if (row.status !== 'DRAFT') setStep(resultStep(row))
     setRevision((v) => v + 1)
   }
   const quickPath =
@@ -828,14 +989,43 @@ export function EquipmentRegistrationPage() {
                   )}
                 </>
               )}
+              {record.status === 'DRAFT' && record.handoverId && (
+                <p>
+                  Khách chưa xác nhận hồ sơ này.{' '}
+                  <Link to={`/app/equipment-handovers/${record.handoverId}`}>
+                    Xem lý do / lần gửi trước
+                  </Link>
+                  . Sửa thông tin, xem lại chính sách rồi gửi phiên bản mới.
+                </p>
+              )}
               {record.status === 'COMPLETED' && (
                 <>
                   <p>
-                    Đã xác nhận các lựa chọn thiết lập. Tình trạng bảo hành và
-                    kế hoạch hiện hành được theo dõi trong hồ sơ.
+                    {record.deliveryMethod === 'STORE'
+                      ? 'Nhân viên đã hoàn tất bàn giao tại cửa hàng. Bảo hành tính từ ngày bàn giao thực tế.'
+                      : record.deliveryMethod === 'CUSTOMER_SITE'
+                        ? 'Khách hàng đã xác nhận hồ sơ bàn giao tại cơ sở.'
+                        : 'Đã xác nhận các lựa chọn thiết lập.'}
                   </p>
+                  {record.maintenanceProvisioning === 'PENDING' && (
+                    <p>
+                      Hồ sơ đã hoàn tất. Hệ thống đang tạo lịch bảo trì từ nội
+                      dung khách đã xác nhận.{' '}
+                      {record.allowedActions.includes('resume') && (
+                        <button disabled={busy} onClick={() => void resume()}>
+                          Kiểm tra và tiếp tục thiết lập bảo trì
+                        </button>
+                      )}
+                    </p>
+                  )}
                   <div className="registration-actions">
-                    <Link to={`/app/equipment-handovers/new?equipmentId=${record.equipmentId}`}>Tạo yêu cầu khách xác nhận bàn giao</Link>
+                    {!record.deliveryMethod && (
+                      <Link
+                        to={`/app/equipment-handovers/new?equipmentId=${record.equipmentId}`}
+                      >
+                        Tạo yêu cầu khách xác nhận bàn giao
+                      </Link>
+                    )}
                     <Link
                       className="m1-button"
                       to={`/app/equipment/${record.equipmentId}`}
@@ -924,13 +1114,28 @@ export function EquipmentRegistrationPage() {
               { index: 0, name: 'Khách hàng' },
               { index: 1, name: 'Thiết bị' },
               { index: 2, name: 'Chính sách Model' },
-              { index: 4, name: 'Xác nhận' },
+              { index: 4, name: 'Kiểm tra và gửi' },
+              ...(form.deliveryMethod === 'CUSTOMER_SITE'
+                ? [
+                    {
+                      index: 5,
+                      name:
+                        record?.status === 'COMPLETED'
+                          ? 'Khách đã xác nhận'
+                          : 'Chờ khách xác nhận',
+                    },
+                  ]
+                : []),
             ].map(({ index, name }, position) => (
               <button
                 type="button"
                 key={name}
                 aria-current={step === index ? 'step' : undefined}
-                disabled={busy || (frozen && index !== 4)}
+                disabled={
+                  busy ||
+                  (frozen && index !== 4 && index !== 5) ||
+                  (index === 5 && (!record || record.status === 'DRAFT'))
+                }
                 onClick={() => void goToStep(index)}
               >
                 {position + 1}. {name}
@@ -949,7 +1154,7 @@ export function EquipmentRegistrationPage() {
           <section className="m1-card registration-step" aria-busy={busy}>
             <fieldset
               className="registration-content"
-              disabled={frozen || busy}
+              disabled={(frozen && step !== 5) || busy}
             >
               {step === 0 && (
                 <>
@@ -976,7 +1181,8 @@ export function EquipmentRegistrationPage() {
                     />
                   ) : (
                     <p>
-                      Khách hàng: {customer.value?.name || 'Khách hàng không xác định'}. Đổi
+                      Khách hàng:{' '}
+                      {customer.value?.name || 'Khách hàng không xác định'}. Đổi
                       chủ sở hữu không thuộc luồng này.
                     </p>
                   )}
@@ -1155,29 +1361,109 @@ export function EquipmentRegistrationPage() {
                         />
                       </label>
                     ))}
+                    <label>
+                      Hình thức bàn giao *
+                      <select
+                        aria-label="Hình thức bàn giao"
+                        value={form.deliveryMethod}
+                        disabled={frozen || busy || Boolean(record)}
+                        onChange={(e) => {
+                          field(
+                            'deliveryMethod',
+                            e.target.value as DeliveryMethod,
+                          )
+                          if (e.target.value === 'STORE') {
+                            if (
+                              (record || form.source === 'EXISTING') &&
+                              (form.installationDate || form.commissionedDate)
+                            )
+                              setDatesDirty(true)
+                            field('installationDate', '')
+                            field('commissionedDate', '')
+                          }
+                        }}
+                      >
+                        <option value="">
+                          {record && !record.deliveryMethod
+                            ? 'Hồ sơ cũ (giữ luồng hiện tại)'
+                            : 'Chọn hình thức bàn giao'}
+                        </option>
+                        <option value="STORE">Bàn giao tại cửa hàng</option>
+                        <option value="CUSTOMER_SITE">
+                          Bàn giao tại cơ sở khách hàng
+                        </option>
+                      </select>
+                    </label>
+                    <p className="registration-wide">
+                      {form.deliveryMethod === 'STORE'
+                        ? 'Bảo hành tính từ ngày bàn giao thực tế. Không cần lắp đặt hoặc khách xác nhận. Địa điểm đặt thiết bị vẫn là địa điểm của khách hàng.'
+                        : 'Bảo hành và lịch bảo trì tính từ ngày bàn giao thực tế. Hồ sơ chỉ hoàn tất khi khách xác nhận; ngày lắp đặt và vận hành chưa có thì để trống.'}
+                    </p>
                     {(
                       [
                         ['handoverDate', 'Ngày bàn giao thực tế'],
                         ['installationDate', 'Ngày lắp đặt'],
                         ['commissionedDate', 'Ngày đưa vào sử dụng'],
                       ] as const
-                    ).map(([key, label]) => (
-                      <label key={key}>
-                        {label}
-                        <input
-                          type="date"
-                          value={form[key]}
-                          max={today()}
+                    )
+                      .filter(
+                        ([key]) =>
+                          key === 'handoverDate' ||
+                          form.deliveryMethod === 'CUSTOMER_SITE' ||
+                          (record && !record.deliveryMethod),
+                      )
+                      .map(([key, label]) => (
+                        <label key={key}>
+                          {label}
+                          <input
+                            type="date"
+                            value={form[key]}
+                            max={today()}
+                            disabled={frozen || busy}
+                            onChange={(e) => {
+                              field(key, e.target.value)
+                              if (record || form.source === 'EXISTING')
+                                setDatesDirty(true)
+                            }}
+                          />
+                        </label>
+                      ))}
+                  </div>
+                  {form.deliveryMethod === 'CUSTOMER_SITE' && (
+                    <div className="registration-fields">
+                      <label>
+                        Tình trạng khi bàn giao *
+                        <textarea
+                          maxLength={2000}
+                          value={form.condition}
                           disabled={frozen || busy}
-                          onChange={(e) => {
-                            field(key, e.target.value)
-                            if (record || form.source === 'EXISTING')
-                              setDatesDirty(true)
-                          }}
+                          onChange={(e) => field('condition', e.target.value)}
                         />
                       </label>
-                    ))}
-                  </div>
+                      <label>
+                        Ghi chú cho khách hàng
+                        <textarea
+                          maxLength={4000}
+                          value={form.notes}
+                          disabled={frozen || busy}
+                          onChange={(e) => field('notes', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Hạn khách xác nhận *
+                        <input
+                          type="datetime-local"
+                          value={form.expiresAt}
+                          disabled={frozen || busy}
+                          onChange={(e) => field('expiresAt', e.target.value)}
+                        />
+                      </label>
+                      <p>
+                        Hạn xác nhận tối đa 90 ngày. Quá hạn hồ sơ không tự hoàn
+                        tất; nhân viên cần kiểm tra và gửi lại.
+                      </p>
+                    </div>
+                  )}
                   {currentEquipmentId && (
                     <button
                       type="button"
@@ -1313,12 +1599,46 @@ export function EquipmentRegistrationPage() {
                     )}
                   </section>
                 )}
+              {step === 5 && record && (
+                <>
+                  <h2>
+                    {record.status === 'COMPLETED'
+                      ? 'Khách hàng đã xác nhận'
+                      : 'Chờ khách hàng xác nhận bàn giao'}
+                  </h2>
+                  <p>
+                    {record.status === 'COMPLETED'
+                      ? 'Hồ sơ bàn giao đã hoàn tất. Ngày bắt đầu chính sách là ngày bàn giao thực tế đã xác nhận.'
+                      : 'Nội dung đã gửi được khóa. Khách hàng cần kiểm tra ngày bàn giao, lắp đặt, vận hành và chính sách trong cổng khách hàng để xác nhận hoặc từ chối.'}
+                  </p>
+                  {record.handoverId && (
+                    <Link
+                      className="m1-button"
+                      to={`/app/equipment-handovers/${record.handoverId}`}
+                    >
+                      Xem yêu cầu xác nhận và lịch sử
+                    </Link>
+                  )}
+                  <button disabled={busy} onClick={() => void reloadStored()}>
+                    Cập nhật trạng thái
+                  </button>
+                  {record.status !== 'COMPLETED' && (
+                    <p>
+                      Chưa kích hoạt thiết bị hoặc tạo lịch bảo trì trước khi
+                      khách xác nhận. Thời điểm bấm xác nhận không thay đổi ngày
+                      bắt đầu bảo hành.
+                    </p>
+                  )}
+                </>
+              )}
               {step === 4 && (
                 <>
                   <h2>Kiểm tra thông tin ghi nhận</h2>
                   <dl className="registration-summary">
                     <dt>Khách hàng</dt>
-                    <dd>{customer.value?.name || 'Khách hàng không xác định'}</dd>
+                    <dd>
+                      {customer.value?.name || 'Khách hàng không xác định'}
+                    </dd>
                     <dt>Địa điểm</dt>
                     <dd>
                       {sites.value?.find((row) => row.id === form.siteId)
@@ -1328,6 +1648,14 @@ export function EquipmentRegistrationPage() {
                     <dd>
                       {form.displayName || form.assetCode} · serial{' '}
                       {form.serialNumber}
+                    </dd>
+                    <dt>Hình thức</dt>
+                    <dd>
+                      {form.deliveryMethod === 'STORE'
+                        ? 'Tại cửa hàng · nhân viên hoàn tất'
+                        : form.deliveryMethod === 'CUSTOMER_SITE'
+                          ? 'Tại cơ sở khách hàng · cần khách xác nhận'
+                          : 'Hồ sơ cũ'}
                     </dd>
                     <dt>Bàn giao</dt>
                     <dd>{form.handoverDate || 'Chưa xác nhận'}</dd>
@@ -1396,7 +1724,9 @@ export function EquipmentRegistrationPage() {
                   disabled={busy || quick !== null || !record?.policyPreview}
                   onClick={() => void persist(true)}
                 >
-                  Hoàn tất ghi nhận
+                  {form.deliveryMethod === 'CUSTOMER_SITE'
+                    ? 'Gửi khách xác nhận'
+                    : 'Hoàn tất ghi nhận'}
                 </button>
               )}
             </footer>

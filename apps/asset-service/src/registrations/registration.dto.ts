@@ -23,9 +23,20 @@ const present = (_: unknown, value: unknown) => value !== undefined;
 export const REGISTRATION_STATUSES = [
   'DRAFT',
   'PENDING_MAINTENANCE',
+  'PENDING_CUSTOMER_CONFIRMATION',
   'COMPLETED',
 ] as const;
+export type DeliveryMethod = 'STORE' | 'CUSTOMER_SITE';
+export class HandoverDetailsDto {
+  @IsString() @Matches(/\S/) @MaxLength(2000) condition: string;
+  @ValidateIf(present) @IsString() @MaxLength(4000) notes?: string;
+  @IsISO8601({ strict: true }) expiresAt: string;
+}
 export class CreateRegistrationDto {
+  @ValidateIf(present)
+  @IsIn(['STORE', 'CUSTOMER_SITE'])
+  deliveryMethod?: DeliveryMethod;
+  @ValidateIf(present) @IsObject() handoverDetails?: Record<string, unknown>;
   @IsObject() equipment: Record<string, unknown>;
   @ValidateIf(present) @IsObject() warranty?: Record<string, unknown>;
   @ValidateIf(present) @IsObject() maintenance?: Record<string, unknown>;
@@ -34,6 +45,7 @@ export class VersionDto {
   @IsInt() @Min(1) expectedVersion: number;
 }
 export class PatchRegistrationDto extends VersionDto {
+  @ValidateIf(present) @IsObject() handoverDetails?: Record<string, unknown>;
   @ValidateIf(present) @IsObject() warranty?: Record<string, unknown>;
   @ValidateIf(present) @IsObject() maintenance?: Record<string, unknown>;
 }

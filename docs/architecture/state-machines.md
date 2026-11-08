@@ -207,3 +207,13 @@ WO checklist results belong to the current accepted assignment. Each save checks
 expectedVersion and records actor/assignment/history. A terminal WO cannot change
 results. Required items must be DONE or allowed NOT_APPLICABLE with reason before
 the report/status/outbox transaction can commit. Replacement never inherits results.
+
+
+## ADR 0021 — Registration delivery methods
+
+STORE: DRAFT → PENDING_MAINTENANCE → COMPLETED (or directly COMPLETED for NONE).
+CUSTOMER_SITE: DRAFT → PENDING_CUSTOMER_CONFIRMATION → COMPLETED; reject/cancel/expire
+returns DRAFT with a new preview required. Each resubmission creates a new immutable
+handover occurrence. Acceptance completes Asset atomically; maintenanceProvisioning
+moves PENDING → READY when the idempotent group receipt arrives. No automatic acceptance
+on expiry. deliveryMethod null preserves the legacy states. See [ADR 0021](../decisions/0021-registration-delivery-methods.md).

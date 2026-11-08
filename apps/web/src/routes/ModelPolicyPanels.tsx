@@ -386,10 +386,10 @@ export function AppliedPolicyPanel({ equipmentId }: { equipmentId: string }) {
     <section className="m1-card">
       <h2>Chính sách dịch vụ đã áp dụng</h2>
       <LoadState {...data} />
+      {data.value?.state === "AWAITING_CUSTOMER" && <p role="status">Hồ sơ đang chờ khách xác nhận. Các điều khoản dưới đây là nội dung đã gửi; bảo hành và lịch bảo trì chưa được áp dụng.</p>}
       {data.value?.state === "SETUP_PENDING" && (
         <p role="status">
-          Bàn giao đang chờ hoàn tất chương trình bảo trì. Điều khoản dưới đây
-          đã được xác nhận.
+          Hệ thống đang hoàn tất thiết lập lịch bảo trì. Điều khoản dưới đây đã được xác nhận.
         </p>
       )}
       {data.value?.snapshot ? (

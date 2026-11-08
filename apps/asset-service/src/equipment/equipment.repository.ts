@@ -59,7 +59,7 @@ export type EquipmentDetailRow = Equipment & {
     updatedAt: Date;
   };
   qrCodes: { id: string }[];
-  registration?: { id: string; status: string } | null;
+  registration?: { id: string; status: string; deliveryMethod?: string | null; maintenanceProvisioning?: string | null } | null;
 };
 
 @Injectable()
@@ -136,7 +136,7 @@ export class EquipmentRepository {
       this.prisma.equipment.findMany({
         where,
         orderBy,
-        include: { registration: { select: { id: true, status: true } } },
+        include: { registration: { select: { id: true, status: true, deliveryMethod: true, maintenanceProvisioning: true } } },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
@@ -156,7 +156,7 @@ export class EquipmentRepository {
       where: { ...scopeWhere(scope), id },
       include: {
         model: true,
-        registration: { select: { id: true, status: true } },
+        registration: { select: { id: true, status: true, deliveryMethod: true, maintenanceProvisioning: true } },
         qrCodes: { where: { revokedAt: null }, select: { id: true }, take: 1 },
       },
     }) as Promise<EquipmentDetailRow | null>;
@@ -282,6 +282,25 @@ export class EquipmentRepository {
         where: { ...scopeWhere(scope), id },
       });
       if (!before) throw missing();
+      const registration = await tx.equipmentRegistration.findFirst({ where: { tenantId: scope.tenantId, equipmentId: id } });
+      if (registration?.deliveryMethod) {
+        if ([input.handoverDate, input.installationDate, input.commissionedDate].some(day => day && day > todayInVietnam()))
+          throw new ConflictException({ code: 'INVALID_ACTUAL_DATE', message: 'Actual equipment dates cannot be in the future' });
+        const dateChanged = ['handoverDate', 'installationDate', 'commissionedDate'].some(key => {
+          const k = key as 'handoverDate' | 'installationDate' | 'commissionedDate';
+          return input[k] !== undefined && input[k] !== dateString(before[k]);
+        });
+        if ((registration.status === 'PENDING_CUSTOMER_CONFIRMATION' && Object.keys(input).some(key => {
+          const k = key as keyof PatchEquipmentDto;
+          const old = before[k as keyof typeof before];
+          return input[k] !== (old instanceof Date ? dateString(old) : old);
+        })) || (registration.status !== 'DRAFT' && dateChanged))
+          throw new ConflictException({ code: 'REGISTRATION_INPUT_FROZEN', message: 'Submitted registration information is frozen; cancel a pending handover before correcting it' });
+        if (registration.status !== 'COMPLETED' && input.status === 'ACTIVE')
+          throw new ConflictException({ code: 'REGISTRATION_NOT_COMPLETED', message: 'Complete the handover registration first' });
+        if (registration.deliveryMethod === 'STORE' && (input.installationDate || input.commissionedDate))
+          throw new ConflictException({ code: 'STORE_HANDOVER_DATES', message: 'Store handovers do not include installation or commissioning' });
+      }
       if (before.status === 'RETIRED') {
         throw new ConflictException({
           code: 'EQUIPMENT_RETIRED',

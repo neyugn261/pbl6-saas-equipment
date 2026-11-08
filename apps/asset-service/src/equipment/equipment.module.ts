@@ -1,3 +1,4 @@
+import { RegistrationHandoverService } from '../registrations/registration-handover.service';
 import { AppliedPoliciesController } from '../model-policies/applied-policies.controller';
 import { ModelSetupService } from '../model-policies/model-setup.service';
 import { RegistrationService } from '../registrations/registration.service';
@@ -57,6 +58,7 @@ import { DossierService } from '../dossier/dossier.service';
     HandoverService, HandoverRepository, HandoverAuthorization, HandoverWorker,
     EquipmentRepository,
     RegistrationService,
+    RegistrationHandoverService,
     ModelSetupService,
     EquipmentService,
     WarrantyRepository,

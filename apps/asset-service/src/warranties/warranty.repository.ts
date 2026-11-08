@@ -58,6 +58,9 @@ export class WarrantyRepository {
           message: 'Retired equipment cannot receive a new warranty',
         });
       }
+      if (!policy && await tx.equipmentRegistration.findFirst({ where: { tenantId: scope.tenantId, equipmentId,
+        deliveryMethod: { not: null }, status: { not: 'COMPLETED' } } }))
+        throw new ConflictException({ code: 'REGISTRATION_NOT_COMPLETED', message: 'Apply warranty through the handover registration first' });
       const overlap = await tx.warranty.findFirst({
         where: {
           tenantId: scope.tenantId,

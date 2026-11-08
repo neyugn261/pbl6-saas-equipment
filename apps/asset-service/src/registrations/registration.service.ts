@@ -32,6 +32,8 @@ import {
 import { auditContext, json } from '../history/audit';
 import {
   equipmentSource,
+  dto,
+  HandoverDetailsDto,
   warrantyChoice,
   maintenanceChoice,
   invalidInput,
@@ -138,6 +140,10 @@ export class RegistrationService {
       id: row.id,
       equipmentId: row.equipmentId,
       status: row.status,
+      deliveryMethod: row.deliveryMethod,
+      handoverDetails: row.handoverDetails,
+      handoverId: row.handoverId,
+      maintenanceProvisioning: row.maintenanceProvisioning,
       version: row.version,
       warranty: this.storedWarranty(row),
       maintenance: this.storedMaintenance(row),
@@ -154,7 +160,9 @@ export class RegistrationService {
       allowedActions:
         row.status === 'DRAFT'
           ? ['edit', ...(canSubmit ? ['submit'] : [])]
-          : row.status === 'PENDING_MAINTENANCE' && canSubmit
+          : (row.status === 'PENDING_MAINTENANCE' ||
+                row.maintenanceProvisioning === 'PENDING') &&
+              canSubmit
             ? ['resume']
             : [],
     };
@@ -223,7 +231,30 @@ export class RegistrationService {
       normalized.maintenance,
     );
     const tenantId = dataScope(p).tenantId;
-    const hash = inputHash({ equipment: source, warranty, maintenance });
+    const deliveryMethod = normalized.deliveryMethod;
+    const details =
+      normalized.handoverDetails === undefined
+        ? undefined
+        : dto(HandoverDetailsDto, normalized.handoverDetails);
+    if (details && deliveryMethod !== 'CUSTOMER_SITE')
+      invalidInput('Only customer-site handovers have confirmation details');
+    if (
+      deliveryMethod === 'STORE' &&
+      source.mode === 'NEW' &&
+      (source.data.installationDate ||
+        source.data.commissionedDate ||
+        source.data.handoverRequired)
+    )
+      invalidInput(
+        'Store handovers do not have installation, commissioning or customer acceptance',
+      );
+    const hash = inputHash({
+      equipment: source,
+      warranty,
+      maintenance,
+      ...(deliveryMethod ? { deliveryMethod } : {}),
+      ...(details ? { handoverDetails: details } : {}),
+    });
     // Replay precedes dependency validation: a formerly active model can now be inactive.
     const prior = await this.db.equipmentRegistration.findUnique({
       where: {
@@ -271,7 +302,12 @@ export class RegistrationService {
           ? await this.equipmentRepo.createWithHistory(
               tenantId,
               p.userId,
-              source.data,
+              deliveryMethod
+                ? {
+                    ...source.data,
+                    handoverRequired: deliveryMethod === 'CUSTOMER_SITE',
+                  }
+                : source.data,
               p.roles,
               tx,
             )
@@ -286,10 +322,33 @@ export class RegistrationService {
           message: 'Open the existing registration',
           details: { registrationId: existing.id },
         });
+      if (deliveryMethod) {
+        if (
+          eq.status === 'IN_SERVICE' ||
+          (deliveryMethod === 'STORE' && eq.handoverRequired)
+        )
+          throw referenceError('EQUIPMENT_HANDOVER_CONFLICT');
+        if (
+          deliveryMethod === 'STORE' &&
+          (eq.installationDate || eq.commissionedDate)
+        )
+          invalidInput(
+            'Store handovers do not include installation or commissioning',
+          );
+        await tx.equipment.update({
+          where: { id: eq.id },
+          data: {
+            status: 'OUT_OF_SERVICE',
+            handoverRequired: deliveryMethod === 'CUSTOMER_SITE',
+          },
+        });
+      }
       const created = await tx.equipmentRegistration.create({
         data: {
           tenantId,
           equipmentId: eq.id,
+          deliveryMethod,
+          handoverDetails: details ? json(details) : Prisma.DbNull,
           createActorId: p.userId,
           createKey: key,
           createRequestHash: hash,
@@ -334,12 +393,25 @@ export class RegistrationService {
       );
   }
   async patch(p: Principal, id: string, input: PatchRegistrationDto) {
-    if (input.warranty === undefined && input.maintenance === undefined)
+    if (
+      input.warranty === undefined &&
+      input.maintenance === undefined &&
+      input.handoverDetails === undefined
+    )
       invalidInput('Provide at least one decision');
     const row = await this.db.$transaction(async (tx) => {
       const { row, eq } = await this.locked(p, id, tx);
       this.assertDraft(row, input.expectedVersion);
       if (eq.status === 'RETIRED') throw referenceError('EQUIPMENT_RETIRED');
+      if (
+        input.handoverDetails !== undefined &&
+        row.deliveryMethod !== 'CUSTOMER_SITE'
+      )
+        invalidInput('Only customer-site handovers have confirmation details');
+      const details =
+        input.handoverDetails === undefined
+          ? undefined
+          : dto(HandoverDetailsDto, input.handoverDetails);
       const validated = this.choices(p, input.warranty, input.maintenance);
       const warranty =
         input.warranty === undefined
@@ -353,7 +425,10 @@ export class RegistrationService {
         where: { id },
         data: {
           ...this.choiceData(warranty, maintenance),
-          policyPreview: Prisma.DbNull,
+          ...(details ? { handoverDetails: json(details) } : {}),
+          ...(input.warranty !== undefined || input.maintenance !== undefined
+            ? { policyPreview: Prisma.DbNull }
+            : {}),
           version: { increment: 1 },
           updatedBy: p.userId,
         },
@@ -385,11 +460,21 @@ export class RegistrationService {
       site.siteStatus !== 'ACTIVE'
     )
       throw referenceError('CUSTOMER_SITE_INACTIVE');
+    this.checkDates(
+      {
+        handoverDate: eq.handoverDate?.toISOString().slice(0, 10),
+        installationDate: eq.installationDate?.toISOString().slice(0, 10),
+        commissionedDate: eq.commissionedDate?.toISOString().slice(0, 10),
+      },
+      true,
+    );
     if (preflight.policyPreview)
       return this.view(
-        await this.modelSetup.submit(p, id, expectedVersion, eq),
+        await this.modelSetup.submit(p, id, expectedVersion, eq, customer.name),
         p,
       );
+    if (preflight.deliveryMethod)
+      invalidInput('Apply Model policies before submitting this handover');
     if (preflight.maintenanceDecision === 'NONE') {
       const client = this.client();
       for (const status of ['ACTIVE', 'PAUSED']) {

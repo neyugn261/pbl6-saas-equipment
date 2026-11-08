@@ -89,6 +89,8 @@ const historyEventLabel: Record<string, string> = {
   WARRANTY_VOIDED: "Hủy hiệu lực bảo hành",
   MODEL_CREATED: "Tạo model",
   MODEL_UPDATED: "Cập nhật model",
+  REGISTRATION_CUSTOMER_CONFIRMED: "Khách xác nhận bàn giao",
+  REGISTRATION_STAFF_COMPLETED: "Nhân viên hoàn tất bàn giao tại cửa hàng",
   MODEL_POLICIES_APPLIED: "Áp dụng chính sách model",
   SERVICE_SETUP_COMPLETED: "Hoàn tất thiết lập dịch vụ",
   QR_CREATED: "Tạo mã QR",

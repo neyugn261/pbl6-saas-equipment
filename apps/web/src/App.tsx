@@ -764,6 +764,7 @@ function EquipmentPage() {
                   <option value="NOT_RECORDED">Chưa ghi nhận</option>
                   <option value="DRAFT">Chưa hoàn tất</option>
                   <option value="PENDING_MAINTENANCE">Chờ bảo trì</option>
+                  <option value="PENDING_CUSTOMER_CONFIRMATION">Chờ khách xác nhận</option>
                   <option value="COMPLETED">Đã hoàn tất</option>
                 </select>
               )}
@@ -831,7 +832,7 @@ function EquipmentPage() {
                                 : item.registrationStatus ===
                                     "PENDING_MAINTENANCE"
                                   ? "Chờ bảo trì"
-                                  : item.registrationStatus === "DRAFT"
+                                  : item.registrationStatus === "PENDING_CUSTOMER_CONFIRMATION" ? "Chờ khách xác nhận" : item.registrationStatus === "DRAFT"
                                     ? "Tiếp tục hồ sơ"
                                     : "Hoàn thiện bàn giao"}
                             </Link>

@@ -1,3 +1,4 @@
+import { RegistrationMaintenanceConsumer } from './registration-maintenance.consumer';
 import {
   Injectable,
   Logger,
@@ -17,6 +18,7 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
     private readonly db: PrismaService,
     private readonly config: ConfigService,
     private readonly history: HistoryConsumer,
+    private readonly registrations: RegistrationMaintenanceConsumer,
   ) {}
   async onModuleInit() {
     const url = this.config.get<string>('RABBITMQ_URL');
@@ -32,6 +34,7 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
       events: [Events.ServiceRequestStatusChanged, Events.WorkOrderCompletedV2],
       handler: (e) => this.history.handle(e),
     });
+    this.bus.subscribe({ queue: 'asset-service.registration-maintenance', events: [Events.RegistrationMaintenanceReady], handler: e => this.registrations.handle(e) });
     await this.bus.start();
     this.relay = new OutboxRelay({
       db: this.db,

@@ -529,6 +529,7 @@ paths:
                   state:
                     type: string
                     enum:
+                    - AWAITING_CUSTOMER
                     - SETUP_PENDING
                     - APPLIED
                   snapshot:

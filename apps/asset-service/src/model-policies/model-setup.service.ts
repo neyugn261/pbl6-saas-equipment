@@ -1,3 +1,4 @@
+import { RegistrationHandoverService } from '../registrations/registration-handover.service';
 import {
   Injectable,
   BadRequestException,
@@ -23,27 +24,8 @@ import { WarrantyRepository } from '../warranties/warranty.repository';
 import { todayInVietnam } from '../equipment/equipment.repository';
 import { inputHash } from './policy-hash';
 import { auditContext } from '../history/audit';
-export interface ModelSetupSnapshot {
-  schema: 'model-setup.v1';
-  modelId: string;
-  handoverDate: string;
-  warranty: {
-    revisionId: string;
-    revision: number;
-    body: WarrantyPolicyBody;
-    startDate: string;
-    endDate: string;
-  };
-  maintenance: {
-    revisionId: string;
-    revision: number;
-    body: MaintenanceProfileBody;
-    sourceHash: string;
-    firstDueDates: { itemId: string; date: string; endDate?: string | null }[];
-  };
-  overrideReason: string;
-  hash: string;
-}
+import { type ModelSetupSnapshot } from '@pbl6/event-contracts';
+export { type ModelSetupSnapshot } from '@pbl6/event-contracts';
 const bad = (code: string, message: string) =>
   new ConflictException({ code, message });
 @Injectable()
@@ -52,6 +34,7 @@ export class ModelSetupService {
     private readonly db: PrismaService,
     private readonly config: ConfigService,
     private readonly warranties: WarrantyRepository,
+    private readonly handovers: RegistrationHandoverService,
   ) {}
   private assertEnabled() {
     if (this.config.get<string>('MODEL_POLICIES_ENABLED') === 'false')
@@ -271,6 +254,7 @@ export class ModelSetupService {
     id: string,
     version: number,
     preflight: Equipment,
+    customerName = '',
   ) {
     this.assertEnabled();
     const initial = await this.registration(p, id),
@@ -351,6 +335,9 @@ export class ModelSetupService {
           'POLICY_REFERENCE_CHANGED',
           'Refresh equipment and policy preview',
         );
+      if (row.deliveryMethod === 'CUSTOMER_SITE') {
+        return this.handovers.submit(tx, row, eq, p, customerName);
+      }
       let warrantyId: string | null = null;
       if (snapshot.warranty.body.mode === 'APPLY')
         warrantyId = (
@@ -414,9 +401,26 @@ export class ModelSetupService {
           reasonInternal: snapshot.overrideReason || null,
         },
       });
+      if (row.deliveryMethod === 'STORE' && !needsPlan) {
+        await tx.equipment.update({
+          where: { id: eq.id },
+          data: { status: 'ACTIVE' },
+        });
+        await tx.equipmentHistory.create({
+          data: {
+            tenantId: eq.tenantId,
+            equipmentId: eq.id,
+            eventType: 'REGISTRATION_STAFF_COMPLETED',
+            referenceType: 'EQUIPMENT_REGISTRATION',
+            referenceId: id,
+            ...auditContext(eq, p.userId, p.roles),
+            changes: { deliveryMethod: 'STORE' },
+          },
+        });
+      }
       return updated;
     });
-    return saved.status === 'COMPLETED' ? saved : this.resume(p, id);
+    return saved.status === 'PENDING_MAINTENANCE' ? this.resume(p, id) : saved;
   }
   async disclosure(p: Principal, id: string) {
     const scope = dataScope(p),
@@ -442,7 +446,12 @@ export class ModelSetupService {
     return {
       legacy: !source,
       state:
-        row?.status === 'PENDING_MAINTENANCE' ? 'SETUP_PENDING' : 'APPLIED',
+        row?.status === 'PENDING_CUSTOMER_CONFIRMATION'
+          ? 'AWAITING_CUSTOMER'
+          : row?.status === 'PENDING_MAINTENANCE' ||
+              row?.maintenanceProvisioning === 'PENDING'
+            ? 'SETUP_PENDING'
+            : 'APPLIED',
       snapshot: source
         ? {
             warranty: {
@@ -468,7 +477,11 @@ export class ModelSetupService {
   }
   async projection(p: Principal, id: string) {
     const row = await this.registration(p, id);
-    if (row.status === 'DRAFT' || !row.policyPreview)
+    if (
+      row.status === 'DRAFT' ||
+      row.status === 'PENDING_CUSTOMER_CONFIRMATION' ||
+      !row.policyPreview
+    )
       throw bad('REGISTRATION_NOT_SUBMITTED', 'Submit the draft first');
     return {
       registrationId: id,
@@ -480,8 +493,12 @@ export class ModelSetupService {
   }
   async resume(p: Principal, id: string) {
     const row = await this.registration(p, id);
-    if (row.status === 'COMPLETED') return row;
-    if (row.status !== 'PENDING_MAINTENANCE')
+    if (row.status === 'COMPLETED' && row.maintenanceProvisioning !== 'PENDING')
+      return row;
+    if (
+      row.status !== 'PENDING_MAINTENANCE' &&
+      row.maintenanceProvisioning !== 'PENDING'
+    )
       throw bad('REGISTRATION_NOT_SUBMITTED', 'Submit the draft first');
     const snapshot = row.policyPreview as unknown as ModelSetupSnapshot;
     try {
@@ -505,11 +522,14 @@ export class ModelSetupService {
       )
         throw new Error('Invalid group receipt');
       await this.db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM equipments WHERE id=${row.equipmentId}::uuid AND tenant_id=${row.tenantId}::uuid FOR UPDATE`;
         const changed = await tx.equipmentRegistration.updateMany({
           where: {
             id,
             tenantId: row.tenantId,
-            status: 'PENDING_MAINTENANCE',
+            ...(row.deliveryMethod === 'CUSTOMER_SITE'
+              ? { status: 'COMPLETED', maintenanceProvisioning: 'PENDING' }
+              : { status: 'PENDING_MAINTENANCE' }),
             maintenanceInputHash: receipt.inputHash,
           },
           data: {
@@ -517,14 +537,20 @@ export class ModelSetupService {
             maintenancePlanIds: receipt.plans.map((r) => r.planId),
             maintenancePlanId:
               receipt.plans.length === 1 ? receipt.plans[0].planId : null,
-            completedBy: p.userId,
-            completedAt: new Date(),
+            ...(row.deliveryMethod === 'CUSTOMER_SITE'
+              ? { maintenanceProvisioning: 'READY' }
+              : { completedBy: p.userId, completedAt: new Date() }),
             lastErrorCode: null,
             lastAttemptAt: new Date(),
             version: { increment: 1 },
           },
         });
         if (changed.count) {
+          if (row.deliveryMethod === 'STORE')
+            await tx.equipment.update({
+              where: { id: row.equipmentId },
+              data: { status: 'ACTIVE' },
+            });
           const equipment = await tx.equipment.findUniqueOrThrow({
             where: { id: row.equipmentId },
           });
@@ -532,7 +558,10 @@ export class ModelSetupService {
             data: {
               tenantId: row.tenantId,
               equipmentId: row.equipmentId,
-              eventType: 'SERVICE_SETUP_COMPLETED',
+              eventType:
+                row.deliveryMethod === 'STORE'
+                  ? 'REGISTRATION_STAFF_COMPLETED'
+                  : 'SERVICE_SETUP_COMPLETED',
               referenceType: 'EQUIPMENT_REGISTRATION',
               referenceId: id,
               ...auditContext(equipment, p.userId, p.roles),
@@ -545,7 +574,13 @@ export class ModelSetupService {
       });
     } catch {
       await this.db.equipmentRegistration.updateMany({
-        where: { id, tenantId: row.tenantId, status: 'PENDING_MAINTENANCE' },
+        where: {
+          id,
+          tenantId: row.tenantId,
+          ...(row.deliveryMethod === 'CUSTOMER_SITE'
+            ? { status: 'COMPLETED', maintenanceProvisioning: 'PENDING' }
+            : { status: 'PENDING_MAINTENANCE' }),
+        },
         data: {
           lastErrorCode: 'MAINTENANCE_GROUP_UNCONFIRMED',
           lastAttemptAt: new Date(),

@@ -1,3 +1,4 @@
+import { RegistrationGroupService } from '../registrations/registration-group.service';
 import {
   Injectable,
   Logger,
@@ -19,6 +20,7 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly equipment: EquipmentEventsConsumer,
     private readonly workOrders: WorkOrderEventsConsumer,
+    private readonly registrations: RegistrationGroupService,
   ) {}
   async onModuleInit() {
     const url = this.config.get<string>('RABBITMQ_URL');
@@ -43,6 +45,8 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
       ],
       handler: (e) => this.workOrders.handle(e),
     });
+    this.bus.subscribe({ queue: 'maintenance-service.registration-confirmations', events: [Events.EquipmentRegistrationConfirmed],
+      handler: e => this.registrations.confirmed(e) });
     await this.bus.start();
     this.relay = new OutboxRelay({
       db: this.db,

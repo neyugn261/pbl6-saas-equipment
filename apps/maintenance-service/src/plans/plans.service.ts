@@ -88,6 +88,7 @@ export class PlansService {
         'EQUIPMENT_NOT_FOUND',
         'Equipment reference cannot be validated',
       );
+    if (ref.serviceSetupPending) throw invalid('REGISTRATION_NOT_COMPLETED', 'Complete the handover and its service setup before adding a plan');
     if (ref.status === 'RETIRED')
       throw invalid(
         'EQUIPMENT_RETIRED',

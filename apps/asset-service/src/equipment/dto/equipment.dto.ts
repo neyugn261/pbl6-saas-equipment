@@ -125,7 +125,7 @@ export class PatchEquipmentDto {
 
 export class ListEquipmentQueryDto extends PaginationQueryDto {
   @IsOptional()
-  @IsIn(['NOT_RECORDED', 'DRAFT', 'PENDING_MAINTENANCE', 'COMPLETED'])
+  @IsIn(['NOT_RECORDED', 'DRAFT', 'PENDING_MAINTENANCE', 'PENDING_CUSTOMER_CONFIRMATION', 'COMPLETED'])
   registrationStatus?: string;
   @IsOptional()
   @IsIn(['UNKNOWN', 'OPERATIONAL', 'DEGRADED', 'NOT_OPERATIONAL'])

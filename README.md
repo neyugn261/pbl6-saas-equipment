@@ -477,3 +477,13 @@ Mỗi lịch bảo trì của Model có thể áp dụng **trong X năm**, **vĩ
 **hết cùng với bảo hành**. Preview bàn giao hiển thị ngày kết thúc; scheduler
 ngừng sinh kỳ sau hạn và giữ công việc đã tạo. Plan cũ giữ lịch không giới hạn.
 Xem [ADR 0020](docs/decisions/0020-maintenance-terms.md).
+
+
+### Hình thức bàn giao và khách xác nhận (09/11/2026)
+
+Hồ sơ Web mới chọn bàn giao tại cửa hàng (nhân viên hoàn tất, 4 bước) hoặc tại cơ sở
+khách (bước 5 chờ Customer Admin xác nhận). Bảo hành và lịch bảo trì tính từ ngày bàn
+giao thực tế; chưa tạo lịch trước khi khách xác nhận. Xem [hướng dẫn](docs/user-guide/equipment-delivery-methods.md)
+và [ADR 0021](docs/decisions/0021-registration-delivery-methods.md). Chạy `pnpm db:migrate`
+trước khi khởi động phiên bản mới và triển khai cả Asset/Maintenance cùng event contracts.
+Kiểm thử: `pnpm test:model-policies`; UAT trình duyệt: thêm `HANDOVER_METHODS_BROWSER=true`.
