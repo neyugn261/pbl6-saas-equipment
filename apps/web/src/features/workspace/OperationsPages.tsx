@@ -1226,7 +1226,16 @@ export function WorkspaceMaintenancePage() {
                         : "Theo kế hoạch định kỳ"}
                     </td>
                     <td data-label="Ngày đến hạn">
-                      {formatDate(row.nextDueDate ?? row.scheduledDate)}
+                      {tab === "plans" && row.hasNextOccurrence === false
+                        ? "Không còn kỳ mới trong thời hạn"
+                        : formatDate(row.nextDueDate ?? row.scheduledDate)}
+                      {tab === "plans" && (
+                        <small>
+                          {row.endDate
+                            ? `Bảo trì đến ${formatDate(row.endDate)}`
+                            : "Bảo trì vĩnh viễn"}
+                        </small>
+                      )}
                     </td>
                     <td data-label="Trạng thái">
                       <Badge status={row.status} />
@@ -1285,6 +1294,7 @@ const historyNames: Record<string, string> = {
   PLAN_CREATED: "Tạo kế hoạch bảo trì",
   PLAN_UPDATED: "Cập nhật kế hoạch",
   PLAN_STATUS_CHANGED: "Thay đổi trạng thái kế hoạch",
+  PLAN_TERM_ENDED: "Hết thời hạn bảo trì",
   TASK_GENERATED: "Sinh công việc bảo trì",
   SCHEDULE_ADVANCED: "Chuyển kỳ bảo trì tiếp theo",
   WORK_ORDER_CREATED: "Tạo lệnh thực hiện",
@@ -1300,6 +1310,9 @@ const fieldNames: Record<string, string> = {
   frequencyValue: "Số chu kỳ",
   frequencyUnit: "Đơn vị chu kỳ",
   nextDueDate: "Kỳ đến hạn tiếp theo",
+  endDate: "Ngày kết thúc bảo trì",
+  termMode: "Cách kết thúc bảo trì",
+  termYears: "Số năm bảo trì",
   anchorDate: "Ngày gốc",
   scheduledDate: "Ngày đến hạn",
   lastCompletedAt: "Lần hoàn tất gần nhất",
@@ -1309,7 +1322,15 @@ function changeValue(input: unknown) {
   if (typeof input === "string")
     return (
       statusNames[input] ??
-      { DAY: "Ngày", WEEK: "Tuần", MONTH: "Tháng", YEAR: "Năm" }[input] ??
+      {
+        DAY: "Ngày",
+        WEEK: "Tuần",
+        MONTH: "Tháng",
+        YEAR: "Năm",
+        UNLIMITED: "Vĩnh viễn",
+        YEARS: "Theo số năm",
+        WARRANTY_END: "Hết cùng bảo hành",
+      }[input] ??
       input
     );
   if (typeof input === "object") return "Có cập nhật trong hồ sơ liên quan";

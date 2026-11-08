@@ -156,6 +156,147 @@ describe('Maintenance API, scheduler and inbox on PostgreSQL (explicit fake Asse
       status: 'ACTIVE',
     }));
   });
+  it('includes the last valid day, then expires once without touching existing Tasks or WO links', async () => {
+    const { plan, task } = await taskFixture();
+    const source = wo(task.id);
+    await workOrders.handle(env(Events.WorkOrderCreated, source));
+    await db.maintenancePlan.update({
+      where: { id: plan.id },
+      data: {
+        termMode: 'YEARS',
+        termYears: 1,
+        endDate: calendarDate('2027-01-31'),
+      },
+    });
+    expect(await tick('2027-01-31')).toBe(1);
+    expect(
+      await db.maintenanceTask.count({
+        where: {
+          maintenancePlanId: plan.id,
+          scheduledDate: calendarDate('2027-01-31'),
+        },
+      }),
+    ).toBe(1);
+    expect(await tick('2027-02-01')).toBe(0);
+    expect(await tick('2028-01-31')).toBe(0);
+    expect(
+      await db.maintenancePlan.findUniqueOrThrow({ where: { id: plan.id } }),
+    ).toMatchObject({ status: 'INACTIVE', termMode: 'YEARS', termYears: 1 });
+    expect(
+      await db.maintenanceTask.findUniqueOrThrow({ where: { id: task.id } }),
+    ).toMatchObject({
+      status: 'WORK_ORDER_CREATED',
+      workOrderId: source.workOrderId,
+    });
+    expect(
+      await db.maintenanceHistory.count({
+        where: { planId: plan.id, eventType: 'PLAN_TERM_ENDED' },
+      }),
+    ).toBe(1);
+    expect(await db.maintenanceHistory.findFirstOrThrow({
+      where: { planId: plan.id, eventType: 'PLAN_TERM_ENDED' },
+    })).toMatchObject({
+      changes: { status: { before: 'ACTIVE', after: 'INACTIVE' } },
+      context: { endDate: '2027-01-31' },
+    });
+    expect(
+      await db.maintenanceTask.count({ where: { maintenancePlanId: plan.id } }),
+    ).toBe(2);
+    expect(
+      await db.outboxEvent.count({
+        where: { tenantId, eventType: 'MaintenanceTaskDue' },
+      }),
+    ).toBe(2);
+  });
+  it('expires a Plan after downtime even if its next due date is far in the future', async () => {
+    const plan = (await create({ nextDueDate: '2026-12-31' }).expect(201)).body;
+    await db.maintenancePlan.update({
+      where: { id: plan.id },
+      data: {
+        termMode: 'WARRANTY_END',
+        endDate: calendarDate('2026-07-30'),
+      },
+    });
+    expect(await tick('2026-08-01')).toBe(0);
+    expect(
+      (await db.maintenancePlan.findUniqueOrThrow({ where: { id: plan.id } }))
+        .status,
+    ).toBe('INACTIVE');
+    expect(
+      await db.maintenanceTask.count({ where: { maintenancePlanId: plan.id } }),
+    ).toBe(0);
+  });
+  it('enforces consistent finite and unlimited term tuples in PostgreSQL', async () => {
+    const plan = (await create().expect(201)).body;
+    for (const data of [
+      { termMode: 'YEARS', termYears: null, endDate: calendarDate('2028-01-31') },
+      { termMode: 'WARRANTY_END', endDate: null },
+      { termMode: 'UNLIMITED', termYears: 2 },
+    ]) await expect(db.maintenancePlan.update({ where: { id: plan.id }, data })).rejects.toThrow();
+    expect(await db.maintenancePlan.findUniqueOrThrow({ where: { id: plan.id } }))
+      .toMatchObject({ termMode: 'UNLIMITED', termYears: null, endDate: null });
+  });
+  it('keeps applied expiry when changing the schedule and blocks resuming past expiry', async () => {
+    const plan = (await create().expect(201)).body;
+    await db.maintenancePlan.update({
+      where: { id: plan.id },
+      data: {
+        termMode: 'YEARS',
+        termYears: 2,
+        endDate: calendarDate('2090-01-31'),
+      },
+    });
+    const patch = (body: object) =>
+      request(app.getHttpServer())
+        .patch(`/maintenance-plans/${plan.id}`)
+        .set(headers())
+        .send(body);
+    await patch({ nextDueDate: '2090-02-01' }).expect(409);
+    await patch({ nextDueDate: '2089-01-31' }).expect(200);
+    expect(
+      (await db.maintenancePlan.findUniqueOrThrow({ where: { id: plan.id } }))
+        .endDate,
+    ).toEqual(calendarDate('2090-01-31'));
+    await patch({ status: 'PAUSED' }).expect(200);
+    await db.maintenancePlan.update({
+      where: { id: plan.id },
+      data: { endDate: calendarDate('2020-01-31') },
+    });
+    await patch({ status: 'ACTIVE' }).expect(409);
+    await patch({ endDate: '2099-01-31', termMode: 'UNLIMITED' }).expect(400);
+  });
+  it('summary excludes an exhausted finite schedule while keeping its task attention', async () => {
+    const { plan, task } = await taskFixture();
+    await db.maintenancePlan.update({
+      where: { id: plan.id },
+      data: {
+        termMode: 'YEARS',
+        termYears: 1,
+        endDate: calendarDate('2090-01-31'),
+        nextDueDate: calendarDate('2090-02-01'),
+      },
+    });
+    const result = await request(app.getHttpServer())
+      .get(`/maintenance-summary?equipmentId=${equipmentId}`)
+      .set(headers())
+      .expect(200);
+    expect(result.body).toMatchObject({
+      nextDue: null,
+      duePlansAwaitingScheduler: 0,
+      attentionTotal: 1,
+    });
+    expect(result.body.attentionPreview[0].id).toBe(task.id);
+    const detail = await request(app.getHttpServer())
+      .get(`/maintenance-plans/${plan.id}`)
+      .set(headers(customerToken()))
+      .expect(200);
+    expect(detail.body).toMatchObject({
+      termMode: 'YEARS',
+      termYears: 1,
+      endDate: '2090-01-31',
+      hasNextOccurrence: false,
+    });
+  });
   afterAll(async () => {
     if (db) {
       const where = { tenantId: { in: tenants } };

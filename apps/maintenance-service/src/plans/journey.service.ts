@@ -181,6 +181,17 @@ export class JourneyService {
       maintenancePlan: where,
     };
     const today = calendarDate(vietnamToday());
+    const eligible = {
+      ...where,
+      status: 'ACTIVE',
+      OR: [
+        { endDate: null },
+        {
+          endDate: { gte: today },
+          nextDueDate: { lte: this.db.maintenancePlan.fields.endDate },
+        },
+      ],
+    };
     const [plans, next, groups, overdueTasks, attention, overduePlans] =
       await Promise.all([
         this.db.maintenancePlan.groupBy({
@@ -189,7 +200,7 @@ export class JourneyService {
           _count: true,
         }),
         this.db.maintenancePlan.findFirst({
-          where: { ...where, status: 'ACTIVE' },
+          where: eligible,
           orderBy: [{ nextDueDate: 'asc' }, { id: 'asc' }],
         }),
         this.db.maintenanceTask.groupBy({
@@ -211,7 +222,7 @@ export class JourneyService {
           take: 5,
         }),
         this.db.maintenancePlan.count({
-          where: { ...where, status: 'ACTIVE', nextDueDate: { lte: today } },
+          where: { ...eligible, nextDueDate: { lte: today } },
         }),
       ]);
     return {

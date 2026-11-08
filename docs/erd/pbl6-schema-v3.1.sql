@@ -2003,3 +2003,15 @@ ALTER TABLE service_requests ADD COLUMN resolution_checklist JSONB;
 -- service-request-service / 0008_assessment_history_reference
 -- AddForeignKey
 ALTER TABLE "warranty_assessment_history" ADD CONSTRAINT "warranty_assessment_history_tenant_id_request_id_fkey" FOREIGN KEY ("tenant_id", "request_id") REFERENCES "service_requests"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+
+-- ADR 0020: per-rule service term; existing Plans remain unlimited.
+\connect maintenance_db
+ALTER TABLE maintenance_plans
+  ADD COLUMN term_mode VARCHAR(20) NOT NULL DEFAULT 'UNLIMITED',
+  ADD COLUMN term_years INTEGER,
+  ADD COLUMN end_date DATE;
+ALTER TABLE maintenance_plans ADD CONSTRAINT maintenance_plan_term_check CHECK (
+  (term_mode = 'UNLIMITED' AND term_years IS NULL AND end_date IS NULL)
+  OR (term_mode = 'YEARS' AND term_years IS NOT NULL AND term_years BETWEEN 1 AND 100 AND end_date IS NOT NULL)
+  OR (term_mode = 'WARRANTY_END' AND term_years IS NULL AND end_date IS NOT NULL)
+);

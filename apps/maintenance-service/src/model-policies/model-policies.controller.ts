@@ -9,6 +9,10 @@ import { ScheduleOverrideDto } from './schedule-override.dto';
 import { Matches, IsISO8601 } from 'class-validator';
 class PolicyCalendarDto {
   @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsISO8601({ strict: true })
+  warrantyEndDate?: string;
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(8)
   @ValidateNested({ each: true })
@@ -81,6 +85,7 @@ export class ModelPoliciesController {
       id,
       input.handoverDate,
       input.overrides,
+      input.warrantyEndDate,
     );
   }
   @Get(':id/preview') preview(
@@ -89,7 +94,14 @@ export class ModelPoliciesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query() q: PolicyCalendarDto,
   ) {
-    return this.service.preview(p, modelId, id, q.handoverDate);
+    return this.service.preview(
+      p,
+      modelId,
+      id,
+      q.handoverDate,
+      undefined,
+      q.warrantyEndDate,
+    );
   }
   @Post() @RequirePermissions('maintenance:manage') create(
     @CurrentUser() p: Principal,

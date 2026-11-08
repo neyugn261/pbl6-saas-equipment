@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { dataScope, type Principal } from '@pbl6/auth';
 import { toPage } from '@pbl6/service-kit';
 import { ASSET_CLIENT, type AssetClient } from '../asset/asset.client';
-import { dateText } from '../common/calendar';
+import { dateText, vietnamToday } from '../common/calendar';
 import { invalid, sameId } from '../common/errors';
 import type {
   MaintenancePlan,
@@ -28,6 +28,14 @@ export function planResponse(row: MaintenancePlan) {
     checklist: row.checklist,
     frequencyUnit: row.frequencyUnit,
     frequencyValue: row.frequencyValue,
+    termMode: row.termMode,
+    termYears: row.termYears,
+    endDate: row.endDate ? dateText(row.endDate) : null,
+    hasNextOccurrence:
+      row.status === 'ACTIVE' &&
+      (!row.endDate ||
+        (dateText(row.endDate) >= vietnamToday() &&
+          row.nextDueDate <= row.endDate)),
     nextDueDate: dateText(row.nextDueDate),
     status: row.status,
     lastCompletedAt: row.lastCompletedAt?.toISOString() ?? null,

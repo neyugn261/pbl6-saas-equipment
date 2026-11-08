@@ -174,3 +174,15 @@ Public/internal endpoints and schemas: [OpenAPI supplement](../../docs/api/model
 [rollout / rollback](../../docs/planning/model-service-policies-rollout.md).
 Run the real multi-service suite from the root with `pnpm test:model-policies`,
 using dedicated `*_TEST_DATABASE_URL` databases and RabbitMQ.
+
+## Thời hạn bảo trì theo Model
+
+Mỗi rule có `term`: `YEARS` + `years` (1–100), `UNLIMITED`, hoặc `WARRANTY_END`.
+Asset preview/bàn giao đóng băng ngày kết thúc; Maintenance kiểm tra source,
+lưu trên Plan và giới hạn scheduler. Ngày cuối inclusive; sau hạn Plan ACTIVE
+thành INACTIVE, ghi PLAN_TERM_ENDED, giữ Task/WO đã tạo. Policy/Plan cũ vẫn vô hạn.
+Xem [ADR 0020](../../docs/decisions/0020-maintenance-terms.md).
+
+Áp migration mới bằng `pnpm --filter maintenance-service db:migrate` trước khi
+khởi động bản mới. Kiểm tra bằng `pnpm --filter maintenance-service test:db`
+và `pnpm test:model-policies` trên các DB test riêng.

@@ -75,6 +75,7 @@ export class PlansRepository {
       setupInputHash: string;
       setupLinkedAt: Date;
     },
+    term?: { termMode: string; termYears: number | null; endDate: Date | null },
   ) {
     const write = async (tx: Tx) => {
       await lockEquipment(tx, tenantId, equipment.id);
@@ -144,6 +145,7 @@ export class PlansRepository {
         data: {
           ...(fixtureId ? { id: fixtureId } : {}),
           ...setup,
+          ...term,
           tenantId,
           equipmentId: equipment.id,
           customerId: snapshot.customerId,
@@ -170,6 +172,9 @@ export class PlansRepository {
             frequencyValue: row.frequencyValue,
             anchorDate: dateText(row.anchorDate),
             nextDueDate: dateText(row.nextDueDate),
+            termMode: row.termMode,
+            termYears: row.termYears,
+            endDate: row.endDate ? dateText(row.endDate) : null,
             status: row.status,
           },
         ),
@@ -218,6 +223,16 @@ export class PlansRepository {
         : input.nextDueDate
           ? calendarDate(input.nextDueDate)
           : before.nextDueDate;
+      if (
+        (resuming || scheduleChanged) &&
+        before.endDate &&
+        (nextDueDate > before.endDate ||
+          calendarDate(vietnamToday()) > before.endDate)
+      )
+        throw conflict(
+          'MAINTENANCE_TERM_ENDED',
+          'Lịch mới phải nằm trong thời hạn bảo trì đã áp dụng.',
+        );
       const anchorDate =
         scheduleChanged || resuming ? nextDueDate : before.anchorDate;
       occurrence(

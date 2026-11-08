@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { dataScope, scopeWhere, type Principal } from '@pbl6/auth';
-import { ServiceHttpClient } from '@pbl6/service-kit';
+import { ServiceHttpClient, UpstreamError } from '@pbl6/service-kit';
 import {
   policyUuid,
   validWarrantyPolicy,
@@ -39,7 +39,7 @@ export interface ModelSetupSnapshot {
     revision: number;
     body: MaintenanceProfileBody;
     sourceHash: string;
-    firstDueDates: { itemId: string; date: string }[];
+    firstDueDates: { itemId: string; date: string; endDate?: string | null }[];
   };
   overrideReason: string;
   hash: string;
@@ -159,20 +159,46 @@ export class ModelSetupService {
       ...(w.body as unknown as WarrantyPolicyBody),
       ...(input.durationMonths ? { durationMonths: input.durationMonths } : {}),
     };
-    const calendar = await this.client().request<{
-      body: MaintenanceProfileBody;
-      dates: { itemId: string; date: string }[];
-    }>(
-      'POST',
-      `/equipment-models/${eq.modelId}/maintenance-profiles/${m.id}/preview`,
-      {
-        accessToken: p.accessToken,
-        body: {
-          handoverDate: day,
-          overrides: input.maintenanceOverrides ?? [],
+    if (
+      body.mode !== 'APPLY' &&
+      m.body.rules.some((r) => r.term?.mode === 'WARRANTY_END')
+    )
+      throw new BadRequestException({
+        code: 'MAINTENANCE_WARRANTY_REQUIRED',
+        message:
+          'Lịch bảo trì chọn hết cùng bảo hành cần có bảo hành áp dụng. Hãy chọn số năm hoặc vĩnh viễn trên Model.',
+      });
+    const calendar = await this.client()
+      .request<{
+        body: MaintenanceProfileBody;
+        dates: { itemId: string; date: string; endDate?: string | null }[];
+      }>(
+        'POST',
+        `/equipment-models/${eq.modelId}/maintenance-profiles/${m.id}/preview`,
+        {
+          accessToken: p.accessToken,
+          body: {
+            handoverDate: day,
+            ...(body.mode === 'APPLY'
+              ? { warrantyEndDate: warrantyEnd(day, body.durationMonths) }
+              : {}),
+            overrides: input.maintenanceOverrides ?? [],
+          },
         },
-      },
-    );
+      )
+      .catch((error: unknown) => {
+        if (
+          error instanceof UpstreamError &&
+          error.status === 400 &&
+          ['INVALID_SCHEDULE', 'MAINTENANCE_FIRST_DUE_AFTER_END'].includes(
+            error.code ?? '',
+          ) &&
+          error.body &&
+          typeof error.body === 'object'
+        )
+          throw new BadRequestException(error.body);
+        throw error;
+      });
     const snapshot: ModelSetupSnapshot = {
       schema: 'model-setup.v1',
       modelId: eq.modelId,

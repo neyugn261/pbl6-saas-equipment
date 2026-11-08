@@ -7,6 +7,7 @@ import { useSession } from "../auth/session";
 import { useDirectory, errorText } from "./registration-data";
 import { LoadState } from "./registration-shared";
 import "./live-administration.css";
+import type { MaintenanceTerm } from "../features/workspace/maintenance-term";
 export interface PolicyItem {
   id: string;
   title: string;
@@ -21,6 +22,7 @@ interface Rule {
   frequencyUnit: string;
   frequencyValue: number;
   firstOccurrence: number;
+  term?: MaintenanceTerm;
   checklist: PolicyItem[];
 }
 interface Body {
@@ -377,6 +379,61 @@ function PolicyEditor({
                       />
                     </label>
                   </div>
+                  <div className="live-toolbar">
+                    <label>
+                      Thời hạn bảo trì
+                      <select
+                        aria-label="Thời hạn bảo trì"
+                        value={rule.term?.mode ?? "UNLIMITED"}
+                        onChange={(e) =>
+                          updateRule(index, {
+                            term:
+                              e.target.value === "YEARS"
+                                ? { mode: "YEARS", years: 2 }
+                                : {
+                                    mode: e.target.value as
+                                      "UNLIMITED" | "WARRANTY_END",
+                                  },
+                          })
+                        }
+                      >
+                        <option value="YEARS">Trong số năm xác định</option>
+                        <option value="UNLIMITED">Vĩnh viễn</option>
+                        <option value="WARRANTY_END">
+                          Hết cùng với bảo hành
+                        </option>
+                      </select>
+                    </label>
+                    {rule.term?.mode === "YEARS" && (
+                      <label>
+                        Số năm bảo trì từ ngày bàn giao
+                        <input
+                          aria-label="Số năm bảo trì từ ngày bàn giao"
+                          required
+                          type="number"
+                          min={1}
+                          max={100}
+                          step={1}
+                          value={rule.term.years}
+                          onChange={(e) =>
+                            updateRule(index, {
+                              term: {
+                                mode: "YEARS",
+                                years: Number(e.target.value),
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p>
+                    {rule.term?.mode === "YEARS"
+                      ? "Bảo trì đến hết ngày kỷ niệm số năm đã chọn, kể cả kỳ đến hạn đúng ngày đó."
+                      : rule.term?.mode === "WARRANTY_END"
+                        ? "Ngày kết thúc lấy từ bảo hành áp dụng khi bàn giao, kể cả ngoại lệ riêng. Thiết bị phải có bảo hành."
+                        : "Lịch tiếp tục lặp cho đến khi tạm dừng hoặc ngừng kế hoạch."}
+                  </p>
                   {rule.checklist.map((item, j) => (
                     <fieldset key={item.id} className="m1-card">
                       <legend>Hạng mục {j + 1}</legend>
@@ -536,6 +593,7 @@ function PolicyEditor({
                         frequencyUnit: "MONTH",
                         frequencyValue: 3,
                         firstOccurrence: 1,
+                        term: { mode: "UNLIMITED" },
                         checklist: [newItem()],
                       },
                     ],

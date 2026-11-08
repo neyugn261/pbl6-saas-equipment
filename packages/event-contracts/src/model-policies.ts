@@ -25,12 +25,18 @@ export interface WarrantyPolicyBody {
   coveredCauses: PolicyCause[];
   exclusions: { code: PolicyCause; text: string }[];
 }
+export type MaintenanceTerm =
+  | { mode: 'UNLIMITED' }
+  | { mode: 'YEARS'; years: number }
+  | { mode: 'WARRANTY_END' };
 export interface MaintenanceRule {
   id: string;
   name: string;
   frequencyUnit: 'DAY' | 'WEEK' | 'MONTH' | 'YEAR';
   frequencyValue: number;
   firstOccurrence: number;
+  /** Absent on immutable legacy policies: retains unlimited scheduling. */
+  term?: MaintenanceTerm;
   checklist: ChecklistItem[];
 }
 export interface MaintenanceProfileBody {
@@ -68,6 +74,14 @@ const unique = (ids: string[]) =>
   new Set(
     ids.map((id) => (typeof id === 'string' ? id.toLowerCase() : 'INVALID')),
   ).size === ids.length;
+export function validMaintenanceTerm(v: unknown): v is MaintenanceTerm {
+  if (!record(v)) return false;
+  if (v.mode === 'YEARS')
+    return keys(v, ['mode', 'years']) && integer(v.years, 100);
+  return (
+    keys(v, ['mode']) && ['UNLIMITED', 'WARRANTY_END'].includes(String(v.mode))
+  );
+}
 export function validChecklist(v: unknown): v is ChecklistItem[] {
   return (
     Array.isArray(v) &&
@@ -156,6 +170,7 @@ export function validMaintenanceProfile(
           'frequencyUnit',
           'frequencyValue',
           'firstOccurrence',
+          'term',
           'checklist',
         ]) &&
         policyUuid(r.id) &&
@@ -163,6 +178,7 @@ export function validMaintenanceProfile(
         ['DAY', 'WEEK', 'MONTH', 'YEAR'].includes(String(r.frequencyUnit)) &&
         integer(r.frequencyValue, 1000) &&
         integer(r.firstOccurrence, 100) &&
+        (r.term === undefined || validMaintenanceTerm(r.term)) &&
         validChecklist(r.checklist) &&
         r.checklist.length > 0,
     )
@@ -189,6 +205,30 @@ export function warrantyEnd(day: string, months: number): string {
   const end = new Date(addPolicyMonths(day, months) + 'T00:00:00Z');
   end.setUTCDate(end.getUTCDate() - 1);
   return end.toISOString().slice(0, 10);
+}
+
+/** Inclusive last service day. A YEARS term includes its anniversary visit. */
+export function maintenanceEndDate(
+  handoverDate: string,
+  term?: MaintenanceTerm,
+  warrantyEndDate?: string,
+): string | null {
+  if (!term) return null; // Preserve legacy snapshots and pending setup hashes.
+  if (!validMaintenanceTerm(term)) throw new Error('Invalid maintenance term');
+  if (term.mode === 'UNLIMITED') return null;
+  if (term.mode === 'YEARS')
+    return addPolicyMonths(handoverDate, term.years * 12);
+  if (!warrantyEndDate)
+    throw new Error('WARRANTY_END requires an applied warranty');
+  const day = new Date(warrantyEndDate + 'T00:00:00Z');
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(warrantyEndDate) ||
+    !Number.isFinite(+day) ||
+    day.toISOString().slice(0, 10) !== warrantyEndDate ||
+    warrantyEndDate < handoverDate
+  )
+    throw new Error('Invalid applied warranty end date');
+  return warrantyEndDate;
 }
 
 export interface CustomerChecklistResult {

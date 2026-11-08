@@ -276,6 +276,10 @@ components:
         description: { type: [string, "null"] }
         frequencyUnit: { $ref: "#/components/schemas/FrequencyUnit" }
         frequencyValue: { type: integer, minimum: 1 }
+        termMode: { type: string, enum: [UNLIMITED, YEARS, WARRANTY_END], description: Frozen at Model policy setup; legacy/direct Plans default to UNLIMITED. }
+        termYears: { type: [integer, 'null'], minimum: 1, maximum: 100 }
+        endDate: { type: [string, 'null'], format: date, description: Inclusive service end; cannot be extended through schedule PATCH. }
+        hasNextOccurrence: { type: boolean, description: ACTIVE with a scheduled date within the term and not past expiry. }
         nextDueDate: { type: string, format: date }
         customerId:
           {

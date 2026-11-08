@@ -8,6 +8,7 @@ import {
 import { requireTenantId, type Principal } from '@pbl6/auth';
 import {
   validMaintenanceProfile,
+  maintenanceEndDate,
   type MaintenanceProfileBody,
 } from '@pbl6/event-contracts';
 import { PrismaService } from '../prisma/prisma.service';
@@ -85,6 +86,7 @@ export class ModelPoliciesService {
       frequencyValue: number;
       firstOccurrence: number;
     }[] = [],
+    warrantyEndDate?: string,
   ) {
     const row = await this.get(p, modelId, id);
     if (!validMaintenanceProfile(row.body))
@@ -122,22 +124,32 @@ export class ModelPoliciesService {
     try {
       return {
         body,
-        dates: body.rules.map((rule) => ({
-          itemId: rule.id,
-          date: dateText(
+        dates: body.rules.map((rule) => {
+          const endDate = maintenanceEndDate(day, rule.term, warrantyEndDate);
+          const date = dateText(
             occurrence(
               calendarDate(day),
               rule.frequencyUnit,
               rule.frequencyValue,
               rule.firstOccurrence,
             ),
-          ),
-        })),
+          );
+          if (endDate && date > endDate)
+            throw new BadRequestException({
+              code: 'MAINTENANCE_FIRST_DUE_AFTER_END',
+              message: `Kỳ đầu của lịch "${rule.name}" (${date}) nằm sau ngày kết thúc bảo trì (${endDate}). Hãy điều chỉnh chu kỳ hoặc thời hạn trên Model.`,
+            });
+          return { itemId: rule.id, date, ...(rule.term ? { endDate } : {}) };
+        }),
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
       throw new BadRequestException({
         code: 'INVALID_SCHEDULE',
-        message: 'Invalid calendar range',
+        message:
+          error instanceof Error && error.message.includes('applied warranty')
+            ? 'Lịch bảo trì chọn hết cùng bảo hành cần có chính sách bảo hành áp dụng cho thiết bị.'
+            : 'Ngày hoặc thời hạn bảo trì không hợp lệ.',
       });
     }
   }

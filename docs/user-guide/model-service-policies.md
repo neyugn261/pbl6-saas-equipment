@@ -10,6 +10,11 @@ bảo trì; Tenant Admin có thể quản lý phần bảo hành theo quyền hi
   hành vừa bị loại trừ. Chọn **Không áp dụng** phải ghi lý do.
 - Thêm các lịch bảo trì độc lập, ví dụ mỗi 3 tháng kiểm tra và mỗi năm thay vật tư.
   Mỗi lịch có kỳ đầu tính theo số chu kỳ, checklist, hướng dẫn và yêu cầu bắt buộc.
+  Chọn **Thời hạn bảo trì** riêng cho từng lịch: **Trong số năm xác định**
+  (nhập 1–100 năm từ ngày bàn giao), **Vĩnh viễn**, hoặc **Hết cùng với bảo hành**.
+  Số năm gồm kỳ đến hạn đúng ngày kỷ niệm cuối; ngày 29/02 được chuyển về
+  ngày cuối tháng nếu năm kết thúc không nhuận. Vĩnh viễn vẫn có thể chủ động
+  tạm dừng hoặc ngừng kế hoạch. Bản chính sách cũ chưa có mục này giữ lịch vô hạn.
   Các lịch có thể cùng đến hạn; tránh khai báo trùng công việc. REPLACE không tự
   xuất kho; kỹ thuật viên vẫn dùng quy trình phụ tùng thực tế.
 - Lưu bản nháp, kiểm tra rồi công bố riêng từng phần. Phần nào đã lưu/công bố sẽ
@@ -31,6 +36,11 @@ lại. Ngoại lệ giữ phiên bản đã chọn, không sửa chính sách ng
 ngoại lệ đã lưu ở phần còn lại. Muốn chọn default mới, dùng **Lấy lại chính sách
 hiện hành từ Model**. Quay lại/xem tiếp các bước không tự đổi phiên bản đã chọn.
 Khi đổi ngày bàn giao, phải lấy lại preview để tính đúng lịch trước khi xác nhận.
+Preview hiển thị thời hạn và ngày kết thúc của từng lịch. **Hết cùng với bảo
+hành** lấy ngày của bản bảo hành thực tế áp dụng, gồm ngoại lệ riêng cho máy;
+chọn không bảo hành sẽ bị chặn. Nếu kỳ đầu nằm sau ngày kết thúc, hãy sửa
+chu kỳ, kỳ đầu hoặc thời hạn. Sửa Model/gia hạn bảo hành sau khi bàn giao không
+tự thay cam kết bảo trì của máy đã xác nhận.
 
 Model chưa đủ cấu hình sẽ chặn hoàn tất. **Xem / cấu hình chính sách Model** mở
 trình chỉnh sửa trong cùng tab. Hồ sơ bàn giao đã được lưu; dùng **Quay lại hồ sơ
@@ -49,6 +59,10 @@ Hồ sơ đã hoàn tất hoặc đang chờ từ luồng cũ giữ nguyên đi�
 soát cũ; chúng hiển thị để xem, không được tự đổi sang chính sách Model mới.
 Nếu hệ thống ngừng hoặc dữ liệu được ghi nhận muộn, scheduler giữ lịch gốc và
 xử lý kỳ gần nhất đã đến hạn, không tạo dồn mọi kỳ đã bỏ lỡ.
+Với Plan hữu hạn, ngày kết thúc là ngày cuối còn được sinh kỳ. Sau hạn hệ thống
+ngừng sinh mới, chuyển Plan đang hoạt động sang Ngừng hoạt động và ghi lịch sử.
+Gói đã hết hạn không sinh task bù khi hệ thống chạy lại. Task/WO đã tạo vẫn
+được giữ để xử lý và tra cứu; pause/resume hay sửa chu kỳ không kéo dài thời hạn.
 
 ## Tiếp nhận sự cố bảo hành
 

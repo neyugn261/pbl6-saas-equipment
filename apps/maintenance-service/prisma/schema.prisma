@@ -36,6 +36,9 @@ model MaintenancePlan {
   description     String?
   frequencyUnit   String                 @map("frequency_unit") @db.VarChar(20)
   frequencyValue  Int                    @map("frequency_value")
+  termMode        String                 @default("UNLIMITED") @map("term_mode") @db.VarChar(20)
+  termYears       Int?                   @map("term_years")
+  endDate         DateTime?              @map("end_date") @db.Date
   lastCompletedAt DateTime?              @map("last_completed_at") @db.Timestamptz(6)
   nextDueDate     DateTime               @map("next_due_date") @db.Date
   status          String                 @default("ACTIVE") @db.VarChar(30)
