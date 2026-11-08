@@ -75,7 +75,18 @@ class GatewayClient {
         final code = value is Map && value['code'] is String
             ? value['code'] as String
             : 'HTTP_ERROR';
-        throw ApiException(code, status: response.statusCode);
+        final details = value is Map ? value['details'] : null;
+        final id = details is Map ? details['attachmentId'] : null;
+        throw ApiException(
+          code,
+          status: response.statusCode,
+          attachmentId:
+              code == 'UPLOAD_ALREADY_ATTACHED' &&
+                  id is String &&
+                  RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id)
+              ? id
+              : null,
+        );
       }
       return value;
     } on TimeoutException {

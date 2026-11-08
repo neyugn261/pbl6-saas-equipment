@@ -1,5 +1,23 @@
 # PBL6 Technician — Flutter Android
 
+**Giai đoạn 5 — lịch, hồ sơ và tùy chọn:** giữ bộ lọc/trang/ngày qua refresh,
+lỗi/retry, foreground và quay lại từ chi tiết. Lịch Ngày/Tuần/Tháng có lưới,
+số việc theo ngày, agenda, lịch sử cá nhân và nhóm chưa xếp lịch. Hồ sơ đọc
+Identity hiện hành; thêm sáng/tối/theo hệ thống có lưu trên máy, hướng dẫn,
+phiên bản APK thực tế và xác nhận logout với chính sách nháp. Material picker
+dùng tiếng Việt. Lịch vẫn theo ngày bắt đầu dự kiến, không phải overlap hay
+lịch hẹn khách đã xác nhận.
+[Nghiệm thu giai đoạn 5](../../docs/testing/mobile-stage-5.md).
+
+**Giai đoạn 4 — camera và tải tệp bền vững:** lưu ảnh/PDF riêng trên máy trước
+khi gửi, có preview và nút gửi chủ động. Android khôi phục ảnh nếu app bị đóng
+khi camera mở; file và khóa prepare/finalize giữ qua restart, không tự gửi
+lại mutation. Có dừng/tiếp tục/hủy, đối soát kết quả chưa rõ và kiểm tra lại
+phân công/tác giả report. Tệp WO chưa gửi được xử lý trước complete, tệp report
+đính kèm sau complete. Metadata mã hóa, bytes trong vùng riêng của app, loại
+khỏi backup Android. Không thêm quét QR cho Technician.
+[Nghiệm thu và bằng chứng giai đoạn 4](../../docs/testing/mobile-stage-4.md).
+
 **Giai đoạn 3 — phụ tùng chỉ đọc:** tab Phụ tùng trong WO đã nối Inventory thật.
 Hiển thị tên/mã/đơn vị và kho tại lúc cấp, số đã cấp, đã trả, đã xác nhận dùng,
 chưa đối soát, lịch sử trả kho và đính chính xác nhận. Số lượng giữ dạng decimal
@@ -147,13 +165,14 @@ flutter build apk --debug
 
 APK: `build/app/outputs/flutter-apk/app-debug.apk`.
 
-M3 baseline check on 01/11/2026: `dart analyze lib test` found no issues;
+Historical M3 baseline check on 01/11/2026: `dart analyze lib test` found no issues;
 `flutter test --no-pub` passed 102 tests with two opt-in backend suites skipped;
 `flutter build apk --debug --no-pub` produced an APK. Plain `flutter analyze`
 stopped before analysis because Windows Developer Mode is required for plugin
 symlinks on this machine. No Android device was connected for a live run, and
 the K8 attachment backend is not implemented yet, so these checks do not count
-as mobile file-upload acceptance.
+as mobile file-upload acceptance. K8 đã có trên develop; nghiệm thu upload
+hiện tại được ghi trong tài liệu giai đoạn 4 ở trên.
 Để cài bản đã build lên thiết bị cụ thể:
 
 ```bash

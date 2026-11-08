@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../../ui/theme.dart';
+import '../preferences/app_preferences.dart';
 import '../workspace/live_workspace.dart';
 import '../workspace/workspace_store.dart';
+import '../workspace/upload_picker.dart';
 import 'session_models.dart';
 import 'session_controller.dart';
 
@@ -14,10 +17,14 @@ class TechnicianApp extends StatefulWidget {
     required this.session,
     this.disposeSession = false,
     this.workspaceStore,
+    this.uploads,
+    this.preferences,
   });
   final SessionController session;
   final bool disposeSession;
   final WorkspaceStore Function(SessionUser user)? workspaceStore;
+  final UploadRuntime? uploads;
+  final AppPreferences? preferences;
 
   @override
   State<TechnicianApp> createState() => _TechnicianAppState();
@@ -25,6 +32,8 @@ class TechnicianApp extends StatefulWidget {
 
 class _TechnicianAppState extends State<TechnicianApp>
     with WidgetsBindingObserver {
+  late final AppPreferences preferences =
+      widget.preferences ?? AppPreferences(MemoryPreferencesStore());
   final _workspaceNavigator = GlobalKey<NavigatorState>();
   @override
   void initState() {
@@ -43,34 +52,43 @@ class _TechnicianAppState extends State<TechnicianApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (widget.preferences == null) preferences.dispose();
     if (widget.disposeSession) widget.session.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'PBL6 Technician',
-    debugShowCheckedModeBanner: false,
-    theme: technicianTheme(),
-    home: AnimatedBuilder(
-      animation: widget.session,
-      builder: (context, _) => switch (widget.session.phase) {
-        SessionPhase.loading => const Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Đang kiểm tra phiên…'),
-              ],
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: preferences,
+    builder: (context, _) => MaterialApp(
+      title: 'PBL6 Technician',
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [Locale('vi')],
+      locale: const Locale('vi'),
+      debugShowCheckedModeBanner: false,
+      theme: technicianTheme(),
+      darkTheme: technicianTheme(brightness: Brightness.dark),
+      themeMode: preferences.themeMode,
+      home: AnimatedBuilder(
+        animation: widget.session,
+        builder: (context, _) => switch (widget.session.phase) {
+          SessionPhase.loading => const Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Đang kiểm tra phiên…'),
+                ],
+              ),
             ),
           ),
-        ),
-        SessionPhase.signedOut => _LoginPage(session: widget.session),
-        SessionPhase.authenticated => _workspace(),
-        SessionPhase.unavailable => _RecoveryPage(session: widget.session),
-      },
+          SessionPhase.signedOut => _LoginPage(session: widget.session),
+          SessionPhase.authenticated => _workspace(),
+          SessionPhase.unavailable => _RecoveryPage(session: widget.session),
+        },
+      ),
     ),
   );
 
@@ -94,7 +112,9 @@ class _TechnicianAppState extends State<TechnicianApp>
                 '${user.tenantId}/${user.id}/${user.roles.join(',')}',
               ),
               session: widget.session,
+              preferences: preferences,
               store: widget.workspaceStore?.call(user),
+              uploads: widget.uploads?.forUser(user),
             );
           },
         ),

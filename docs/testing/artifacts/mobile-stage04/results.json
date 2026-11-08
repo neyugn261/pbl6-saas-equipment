@@ -1,0 +1,38 @@
+{
+  "status": "PASS",
+  "baseCommit": "36f0257b1188e819a28226d3fce5f0a3b9dbb284",
+  "testedApkSha256": "4d07ba976d52b2ba7186e264639038d3a3f06bf17ef8ae4b482a67ea35304718",
+  "device": "emulator-5556",
+  "cases": [
+    "real Identity and private MinIO",
+    "process killed while external camera open",
+    "lost picker result restored to original owner and WO",
+    "recovered preview never auto-uploaded",
+    "server committed but complete response lost",
+    "receipt survived application restart",
+    "same prepare key reconciles existing metadata without second PUT or finalize",
+    "PDF uploaded to completed service report",
+    "pause keeps file and receipt",
+    "explicit cancel aborts server intent without extra attachment",
+    "no API bearer sent to storage"
+  ],
+  "network": {
+    "prepareRequests": 4,
+    "distinctPrepareKeys": 3,
+    "completeRequests": 2,
+    "puts": 3,
+    "aborts": 1,
+    "bearerToStorage": false
+  },
+  "screenshots": [
+    "camera-process-recovered.png",
+    "paused-keeps-receipt.png",
+    "recovered-preview.png",
+    "uncertain-finalize.png",
+    "restart-keeps-receipt.png",
+    "confirmed-without-duplicate.png",
+    "report-pdf-preview.png",
+    "abort-confirmed.png",
+    "report-pdf-confirmed.png"
+  ]
+}

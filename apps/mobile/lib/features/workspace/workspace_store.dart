@@ -152,4 +152,28 @@ class WorkspaceRecords {
       throw const ApiException('WORKSPACE_STORAGE_FAILED');
     }
   });
+
+  Future<void> putUpload(
+    String orderId,
+    LocalRecord value, {
+    bool allowAbsent = false,
+  }) => _ordered(() async {
+    try {
+      final record =
+          await store.read(orderId) ?? <String, dynamic>{'schemaVersion': 1};
+      final current = record['pendingUpload'];
+      if (current == null
+          ? !allowAbsent
+          : current is! LocalRecord ||
+                current['prepareKey'] != value['prepareKey']) {
+        throw const ApiException('SESSION_CHANGED');
+      }
+      record['pendingUpload'] = value;
+      await store.write(orderId, record);
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('WORKSPACE_STORAGE_FAILED');
+    }
+  });
 }

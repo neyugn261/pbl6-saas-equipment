@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "baseCommit": "66592bfaf45f28f732f1a894f916c861924e29b6",
+  "testedApkSha256": "f748cb4855775edc66015a488f7ab69ce4d6c8df9cafbe494b93563682a9118d",
+  "device": "emulator-5556",
+  "version": {
+    "name": "1.0.0",
+    "build": "1"
+  },
+  "businessDay": "2026-11-07",
+  "cases": [
+    "real Identity login",
+    "history and query survive refresh",
+    "return from WO preserves filters",
+    "foreground preserves filters",
+    "dark appearance persisted across process restart",
+    "version read from installed Android package",
+    "help accessible",
+    "month grid/day focus and historical count",
+    "calendar selection survives refresh and detail",
+    "week and day agenda",
+    "system appearance follows Android night mode",
+    "cancel logout keeps session",
+    "logout confirmation explains local drafts",
+    "appearance preserved on login"
+  ],
+  "screenshots": [
+    "dark-appearance.png",
+    "dark-login-after-logout.png",
+    "day-agenda.png",
+    "help.png",
+    "history-filter-refresh.png",
+    "installed-version.png",
+    "logout-drafts-policy.png",
+    "month-day-history.png",
+    "restart-dark-home.png",
+    "system-dark.png",
+    "system-light.png",
+    "week-agenda.png"
+  ]
+}

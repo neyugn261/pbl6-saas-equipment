@@ -84,6 +84,9 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('logout')));
     await tester.pumpAndSettle();
+    expect(find.text('Đăng xuất khỏi ứng dụng?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-logout')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('login')), findsOneWidget);
     expect(find.text('Xin chào, Demo Technician'), findsNothing);
   });

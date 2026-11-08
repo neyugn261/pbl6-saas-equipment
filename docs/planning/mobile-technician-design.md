@@ -358,3 +358,18 @@ Xem [bằng chứng và cách chạy N5/N6](../testing/mobile-n5-n6.md).
 
 Theo lựa chọn của người dùng, giữ phạm vi mobile. N6 phía Android được kiểm
 thử riêng; bước web tạo/phân công WO còn chờ Hatsady, chưa chốt 9/9 toàn nhóm.
+
+## 16. Cập nhật sau giai đoạn 0–5
+
+Checklist/nháp, Notification thật, phụ tùng chỉ đọc và vòng đời camera/upload
+đã có nghiệm thu riêng trong `docs/testing/mobile-stage-*.md`. Giai đoạn 5
+hoàn thiện lịch/giữ bộ lọc, hồ sơ Identity hiện hành, giao diện có lưu cục bộ,
+Material tiếng Việt, hướng dẫn và phiên bản APK thật:
+[mobile-stage-5](../testing/mobile-stage-5.md).
+
+Các gap Attachments/Notification/Parts ở mục 11 là ghi nhận khi thiết kế M2,
+không còn là kết luận hiện hành. Theo phạm vi người dùng chọn ở giai đoạn 4,
+không bổ sung camera quét QR cho Technician; camera dùng ảnh bằng chứng.
+Lịch giữ semantics ngày bắt đầu, chưa mở reschedule/overlap. Hồ sơ vẫn chỉ đọc,
+không thêm self-service password/status khi thiếu contract. Bản nháp giữ theo
+tài khoản khi logout; giao diện là tùy chọn chung của thiết bị.

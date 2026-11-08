@@ -131,6 +131,9 @@ flutter build apk --debug --no-pub
 
 ## Chuyển giai đoạn
 
+Giai đoạn 4 đã được triển khai và nghiệm thu sau bản này:
+[camera và vòng đời upload](mobile-stage-4.md).
+
 **Đủ chuyển sang giai đoạn 4** về độ bền vòng đời ảnh/upload. Đây không phải
 kết luận phát hành toàn M3. Điện thoại vật
 lý/iOS chưa nghiệm thu; lỗi đồng bộ SR/WO ghi ở giai đoạn 0–1 vẫn là đầu việc

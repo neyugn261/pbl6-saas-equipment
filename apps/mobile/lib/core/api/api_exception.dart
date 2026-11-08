@@ -1,9 +1,30 @@
 class ApiException implements Exception {
-  const ApiException(this.code, {this.status});
+  const ApiException(this.code, {this.status, this.attachmentId});
   final String code;
   final int? status;
+  final String? attachmentId;
 
   String get userMessage => switch (code) {
+    'UPLOAD_PAUSED' =>
+      'Đã dừng và giữ tệp trên máy. Chọn tiếp tục khi sẵn sàng.',
+    'UPLOAD_EXPIRED' =>
+      'Lần tải đã hết hạn. Hủy lần tải cũ trước khi chọn lại tệp.',
+    'UPLOAD_ABORTED' => 'Lần tải đã được hủy trên máy chủ.',
+    'UPLOAD_IN_PROGRESS' =>
+      'Máy chủ đang xác minh tệp. Chờ một lát rồi kiểm tra lại cùng lần tải.',
+    'UPLOAD_VERIFICATION_FAILED' => 'Tệp không khớp loại, kích thước hoặc mã kiểm tra. Hủy lần tải rồi chọn tệp hợp lệ.',
+    'ATTACHMENT_LOCAL_FILE_MISSING' => 'Tệp trên máy bị mất hoặc đã thay đổi. Không gửi lại dữ liệu khác bằng lần tải cũ.',
+    'ATTACHMENT_PARENT_CHANGED' => 'Trạng thái hoặc phân công đã đổi. Tệp nháp được giữ, không gửi cho phân công mới.',
+    'ATTACHMENT_TOO_LARGE' => 'Chọn tệp từ 1 byte đến 10 MiB.',
+    'ATTACHMENT_TYPE_UNSUPPORTED' =>
+      'Chỉ hỗ trợ ảnh JPEG, PNG hoặc PDF hợp lệ.',
+    'ATTACHMENT_LIMIT_REACHED' =>
+      'Đã đủ 10 tệp hoặc lần tải đang giữ chỗ cho mục này.',
+    'PICKER_BUSY' =>
+      'Lần chọn tệp trước chưa kết thúc. Thử khôi phục trước khi chọn tiếp.',
+    'PICKER_DENIED' => 'Không có quyền truy cập ảnh hoặc camera. Kiểm tra quyền ứng dụng rồi thử lại.',
+    'PICKER_INTERRUPTED' =>
+      'Lần chọn tệp bị gián đoạn. Chọn lại nếu tệp chưa được khôi phục.',
     'WORKSPACE_STORAGE_FAILED' => 'Không đọc hoặc lưu được dữ liệu cục bộ. Kiểm tra kết quả trên máy chủ trước khi gửi tiếp.',
     'CHECKLIST_INCOMPLETE' =>
       'Hoàn tất và lưu các mục checklist bắt buộc trước khi gửi báo cáo.',
