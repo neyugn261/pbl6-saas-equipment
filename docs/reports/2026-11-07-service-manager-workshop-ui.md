@@ -2,6 +2,8 @@
 
 Ngày: 07/11/2026. Nhánh: `codex/service-manager-field-desk`.
 
+> Cập nhật phát hành 08/11: phần UI này và các cải tiến tiếp theo đã merge qua PR #65 (`develop@fbfab28`). Xem [bàn giao tổng hợp](2026-11-08-workshop-ui-handoff.md) để nhận việc theo trạng thái mới nhất; các mục dưới là báo cáo của lượt 07/11.
+
 ## Thiết kế đã chốt
 
 Workshop là phong cách chủ đạo: nền xám ấm, bề mặt sáng, cam đất cho thao tác và lựa chọn, đường viền rõ, góc bo nhỏ. Field Desk tổ chức việc cần xử lý; Casebook tổ chức hồ sơ nhận dạng và lịch sử. Dùng một bộ màu và typography xuyên suốt Service Manager.

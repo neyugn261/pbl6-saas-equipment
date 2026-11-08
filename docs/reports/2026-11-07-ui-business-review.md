@@ -2,6 +2,8 @@
 
 Ngày: 07/11/2026. Baseline: working tree nhánh `codex/service-manager-field-desk`, gồm phần Workshop UI chưa commit.
 
+> Đây là baseline tại thời điểm rà soát 07/11, không phải trạng thái Git hiện tại. Các đợt sửa tiếp theo đã merge qua PR #65 (`develop@fbfab28`); xem [bàn giao hiện hành](2026-11-08-workshop-ui-handoff.md) và [nghiệm thu V2](2026-11-08-workshop-ui-v2-acceptance.md) trước khi nhận lại một phát hiện.
+
 ## 1. Phạm vi và kết luận
 
 Đối chiếu giao diện Service Manager đang mở, code web, state machine và các nhánh xử lý liên quan của Asset, Service Request, Work Order, Maintenance, Inventory. Đây là đánh giá source và giao diện; không phải nghiệm thu lại toàn bộ luồng trên backend thật. Trang `/tmp/workshop-preview/index.html` dùng fixture QA chỉ đọc và không chứng minh các luồng ghi/tích hợp đang hoạt động.

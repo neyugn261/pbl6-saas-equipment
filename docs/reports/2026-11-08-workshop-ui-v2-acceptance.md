@@ -8,7 +8,9 @@ Ngày: 08/11/2026. Phạm vi: web. Căn cứ: `2026-11-08-ui-product-completenes
 
 Đã sửa sáu nhóm lỗi F01–F06 và thêm studio tương tác cho 12 hành trình/8 vai trò. Những trường hoặc quyết định cần API mới có bản thiết kế riêng, không đưa nút lưu giả vào web vận hành. Kiểm thử frontend đạt; lượt này không chạy nghiệm thu ghi dữ liệu trên backend thật.
 
-Không sửa `apps/mobile`, backend, schema, migration, event, quyền server. Không commit/push/merge. Các thay đổi local từ lượt trước được giữ lại; Git diff hiện tại chứa cả những lượt đó, không được hiểu toàn bộ là phát sinh trong riêng lượt này.
+Trong lượt triển khai UI V2 không sửa `apps/mobile`, backend, schema, migration, event hoặc quyền server. Ở thời điểm viết bản nghiệm thu đầu tiên, các thay đổi chưa được commit; sau đó đã được lưu tại `fbee7ef` và merge vào `develop` qua [PR #65](https://github.com/neyugn261/pbl6-saas-equipment/pull/65), merge commit `fbfab28`. PR còn bao gồm checkpoint UI trước đó và commit sửa Prisma generate khi chạy Notification dev/debug; không hiểu toàn bộ diff của PR là riêng lượt UI V2.
+
+CI GitHub của PR #65 không khởi chạy vì tài khoản chủ repository bị khóa do billing. Người dùng đã xác nhận ngoại lệ merge dựa trên kiểm tra local; không ghi nhận CI đã đạt. Sau merge, local `develop` và `origin/develop` cùng ở `fbfab28`, working tree sạch, kiểm tra lại 101 test web đạt. Bàn giao hiện hành: [2026-11-08-workshop-ui-handoff.md](2026-11-08-workshop-ui-handoff.md).
 
 ## 2. Mở bản thiết kế
 

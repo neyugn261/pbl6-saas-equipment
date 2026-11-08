@@ -7,6 +7,8 @@ hoàn thành UI/backend hoặc nghiệm thu các chức năng được đề xu�
 Phần đã triển khai và contract còn thiếu được cập nhật riêng tại
 [bàn giao UI/backend](2026-11-06-ui-backend-contract-gaps.md).
 
+Trạng thái triển khai mới nhất và phân công tiếp theo: [bàn giao Workshop ngày 08/11/2026](../reports/2026-11-08-workshop-ui-handoff.md). Tài liệu này giữ vai trò định hướng thiết kế; không dùng danh sách đề xuất để kết luận mọi API hoặc màn hình còn thiếu.
+
 ## 1. Mục tiêu và nguyên tắc
 
 Mỗi người dùng cần biết: việc cần xử lý, hồ sơ liên quan, người đang chịu trách

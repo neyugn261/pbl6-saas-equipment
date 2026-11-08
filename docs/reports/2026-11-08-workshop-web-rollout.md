@@ -2,6 +2,8 @@
 
 Ngày: 08/11/2026 (Asia/Bangkok). Tiếp tục đợt rà soát ngày 07/11.
 
+> Đã merge cùng UI V2 qua PR #65 (`develop@fbfab28`). Trạng thái hoàn thành/API cần bổ sung và phân công tiếp theo được tổng hợp tại [bàn giao Workshop](2026-11-08-workshop-ui-handoff.md); nội dung dưới ghi phạm vi của đợt rollout này.
+
 ## 1. Phạm vi
 
 Áp dụng thiết kế Workshop đã thống nhất cho các vai trò web, đồng thời sửa cách trình bày các nghiệp vụ ưu tiên trong [báo cáo rà soát](2026-11-07-ui-business-review.md).

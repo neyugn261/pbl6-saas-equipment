@@ -421,6 +421,7 @@ pnpm identity:seed:dev
 
 ## 9. Tài liệu liên quan
 
+- [Bàn giao Workshop UI ngày 08/11/2026](docs/reports/2026-11-08-workshop-ui-handoff.md) — phần đã merge, API đã có/còn thiếu, phân công tiếp theo và tiêu chí nghiệm thu
 - [docs/planning/m2-khuong.md](docs/planning/m2-khuong.md) — kế hoạch M2 của Khương: checklist Work Order, thứ tự PR, phụ thuộc và bằng chứng tiến độ
 - [AGENTS.md](AGENTS.md) — phạm vi nghiệp vụ, kiến trúc, quy tắc phát triển
 - [CONTRIBUTING.md](CONTRIBUTING.md) — ownership, branch/PR, migration, Definition of Done
