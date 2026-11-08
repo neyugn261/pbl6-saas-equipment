@@ -89,8 +89,9 @@ riêng khi phát triển.
 
 Các trang settings/audit cũ thông báo chưa hỗ trợ và không còn nằm trong menu.
 Không dựng số liệu, log hoặc nút lưu giả cho các chức năng chưa có API.
-Các file bản mẫu được giữ làm tài liệu giao diện, không được import vào route
-hay provider của ứng dụng. CSS bản mẫu vẫn được dùng lại để giữ thiết kế.
+Các file bản mẫu cũ được giữ làm tài liệu giao diện, không được import vào route
+vận hành hay provider dữ liệu thật. Studio DEV ở mục dưới là route review tách biệt.
+CSS bản mẫu vẫn được dùng lại để giữ thiết kế.
 
 ## Ghi nhận thiết bị sau bàn giao (ADR 0012)
 
@@ -164,3 +165,8 @@ Tách tải nhóm route và panel chưa mở; panel đã mở giữ editor. Mụ
 
 Báo cáo triển khai, kiểm thử và nhận xét khắt khe:
 [2026-11-08-workshop-ui-v2-acceptance.md](../../docs/reports/2026-11-08-workshop-ui-v2-acceptance.md).
+
+Code và các báo cáo trên đã merge qua [PR #65](https://github.com/neyugn261/pbl6-saas-equipment/pull/65),
+`develop@fbfab28`. Xem [bàn giao tổng hợp và API cần hoàn thiện](../../docs/reports/2026-11-08-workshop-ui-handoff.md)
+để nhận việc theo owner, thứ tự ưu tiên và tiêu chí nghiệm thu. Tài liệu frontend hiện hành:
+[FRONTEND_IMPLEMENTATION.md](../../docs/FRONTEND_IMPLEMENTATION.md).

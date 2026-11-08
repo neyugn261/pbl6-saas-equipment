@@ -3,6 +3,8 @@
 Ngày 06/11/2026. Đi cùng [bản đồ màn hình theo 8 vai trò](2026-11-06-web-experience-by-role.md).
 Các đề xuất trong phần 3 chưa được triển khai chỉ vì đã xuất hiện trong tài liệu.
 
+> Cập nhật 08/11/2026: đây là ảnh chụp kế hoạch ngày 06/11, không phải danh sách việc còn thiếu hiện hành. UI Workshop/API đã có các đợt triển khai tiếp theo, merge tại `develop@fbfab28` (PR #65). Dùng [bàn giao ngày 08/11](../reports/2026-11-08-workshop-ui-handoff.md) để phân biệt API đã có, trường/hành vi còn thiếu và việc nối UI. Không triển khai lại lịch sử thiết bị, attachment, xác nhận dùng vật tư, estimate revision hoặc inventory reservation vốn đã có. Phần mobile trong kế hoạch cũ không thuộc bàn giao web lần này.
+
 ## 1. Phần UI đã nối API thật trong đợt này
 
 | Khu vực | Dữ liệu và hành vi thực tế |

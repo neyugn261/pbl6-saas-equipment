@@ -2,6 +2,8 @@
 
 Ngày: 08/11/2026. Phạm vi: web; không sửa hay đánh giá lại Flutter/mobile.
 
+> Đây là rà soát trước lượt triển khai UI V2. Các lỗi F01–F06 đã được xử lý trong [báo cáo nghiệm thu V2](2026-11-08-workshop-ui-v2-acceptance.md), merge qua PR #65. Danh sách công việc tiếp theo hiện hành: [bàn giao Workshop](2026-11-08-workshop-ui-handoff.md). Không dùng các phát hiện lịch sử dưới đây để kết luận lỗi vẫn còn nguyên.
+
 ## 1. Kết luận
 
 **UI hiện có nền thiết kế nhất quán và nhiều nghiệp vụ cốt lõi, nhưng chưa đủ để chốt thiết kế sản phẩm cho toàn bộ người dùng.** Cần hoàn thiện nội dung, bước ra quyết định, xử lý ngoại lệ và hành vi của form. Có cả thiếu sót thiết kế lẫn lỗi trạng thái UI cụ thể.
