@@ -7,6 +7,7 @@ Object.assign(process.env, testJwtEnv(), {
   NODE_ENV: 'test',
   ASSET_SERVICE_URL: 'http://localhost:3002',
   WORKORDER_SERVICE_URL: 'http://localhost:3004',
+  ORGANIZATION_SERVICE_URL: 'http://organization.test',
   SERVICE_REQUEST_DATABASE_URL:
     'postgresql://unused:unused@localhost:5432/unused_test_db',
 });

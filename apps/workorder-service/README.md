@@ -1,5 +1,7 @@
 # Work Order Service — M2 + M3 attachments/reporting
 
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
+
 M3-A1: Khương đã chốt attachment lifecycle/persistence và Q5 reporting contract.
 [Bàn giao A1](../../docs/planning/m3-khuong-a1.md),
 [ADR 0013](../../docs/decisions/0013-workorder-attachment-lifecycle.md).
@@ -311,3 +313,7 @@ Public/internal endpoints and schemas: [OpenAPI supplement](../../docs/api/model
 [rollout / rollback](../../docs/planning/model-service-policies-rollout.md).
 Run the real multi-service suite from the root with `pnpm test:model-policies`,
 using dedicated `*_TEST_DATABASE_URL` databases and RabbitMQ.
+
+## Branch service management (ADR 0022)
+
+See [design](../../docs/decisions/0022-branch-service-management.md) and [runbook](../../docs/user-guide/branch-service-management.md). SERVICE_MANAGER handles both reception and dispatch; existing Dispatcher accounts remain compatible. Apply additive migrations before starting this version. Organization supplies the active primary branch live; tenant-wide customer/equipment master data and maintenance plans remain shared.

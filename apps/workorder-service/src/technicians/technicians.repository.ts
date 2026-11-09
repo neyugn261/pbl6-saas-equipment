@@ -46,6 +46,7 @@ export class TechniciansRepository {
   async list(tenantId: string, query: ListTechniciansDto) {
     const where: Prisma.TechnicianWhereInput = {
       tenantId,
+      userId: query.userId,
       branchId: query.branchId,
       status: query.status,
       ...(query.q

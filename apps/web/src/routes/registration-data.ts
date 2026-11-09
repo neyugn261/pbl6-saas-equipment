@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client'
 import { getSessionGeneration } from '../auth/session'
 
 export type DirectoryRow = {
+  defaultServicingBranchId?: string | null
   id: string
   name: string
   code?: string
@@ -76,5 +77,7 @@ export function modelSetupError(error: unknown): string {
     if (error.code === 'MODEL_POLICIES_DISABLED')
       return 'Việc áp dụng chính sách mới đang tạm dừng. Bạn có thể lưu nháp và tiếp tục sau.'
   }
-  return error instanceof ApiError ? errorText(error) : 'Chưa xác nhận được kết quả lưu. Tải lại kết quả đã lưu hoặc đối soát hồ sơ trước khi thử lại.'
+  return error instanceof ApiError
+    ? errorText(error)
+    : 'Chưa xác nhận được kết quả lưu. Tải lại kết quả đã lưu hoặc đối soát hồ sơ trước khi thử lại.'
 }

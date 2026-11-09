@@ -37,6 +37,8 @@ model DocumentSequence {
 /// The warranty_* columns are the decision snapshot frozen at review time;
 /// warranty_check_result: IN_WARRANTY | OUT_OF_WARRANTY | NO_WARRANTY.
 model ServiceRequest {
+  /// NULL means unallocated legacy/central queue, never unrestricted branch access.
+  branchId                String?                      @map("branch_id") @db.Uuid
   assessmentHistory       WarrantyAssessmentHistory[]
   resolutionChecklist     Json?                        @map("resolution_checklist")
   warrantyPolicySnapshot  Json?                        @map("warranty_policy_snapshot")
@@ -90,6 +92,7 @@ model ServiceRequest {
   @@index([tenantId, customerId], map: "idx_service_requests_tenant_customer")
   @@index([tenantId, equipmentId], map: "idx_service_requests_tenant_equipment")
   @@index([tenantId, createdAt(sort: Desc)], map: "idx_service_requests_created")
+  @@index([tenantId, branchId])
   @@map("service_requests")
 }
 

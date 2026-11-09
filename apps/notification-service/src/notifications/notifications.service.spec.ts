@@ -1,7 +1,6 @@
 import {
   ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+  NotFoundException } from '@nestjs/common';
 import type { Principal } from '@pbl6/auth';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationReadStatus } from './notification-query.dto';
@@ -18,6 +17,7 @@ function principal(
 ): Principal {
   return {
     userId: USER,
+    branchId: USER,
     sessionId: '10000000-0000-4000-8000-000000000005',
     tenantId: TENANT,
     userType,
@@ -113,6 +113,10 @@ describe('NotificationsService', () => {
           userId: USER,
           channel: 'IN_APP',
           customerId: null,
+          OR: [
+            { branchId: USER },
+            { type: { startsWith: 'EquipmentHandoverChanged.' } },
+          ],
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: 0,
@@ -147,6 +151,10 @@ describe('NotificationsService', () => {
       userId: USER,
       channel: 'IN_APP',
       customerId: null,
+      OR: [
+        { branchId: USER },
+        { type: { startsWith: 'EquipmentHandoverChanged.' } },
+      ],
       readAt: null,
     });
     expect(db.notification.count.mock.calls[0][0].where).toEqual({
@@ -154,6 +162,10 @@ describe('NotificationsService', () => {
       userId: USER,
       channel: 'IN_APP',
       customerId: null,
+      OR: [
+        { branchId: USER },
+        { type: { startsWith: 'EquipmentHandoverChanged.' } },
+      ],
       readAt: null,
     });
     expect(db.notification.findMany.mock.calls[0][0].skip).toBe(10);
@@ -208,13 +220,16 @@ describe('NotificationsService', () => {
         membershipSourceChangedAt: CREATED_AT,
       }),
     ],
-    ['wrong tenant projection', snapshot({ tenantId: '10000000-0000-4000-8000-000000000010' })],
+    ['wrong tenant projection', snapshot({ tenantId: '10000000-0000-4000-8000-000000000010' }),
+    ],
   ])('fails closed for %s', async (_label, projected) => {
     const { db, service } = setup();
     db.recipientSnapshot.findUnique.mockResolvedValue(projected);
 
     await expect(
-      service.unreadCount(principal(_label === 'revoked membership' || _label === 'membership moved' ? 'CUSTOMER' : 'TENANT_STAFF')),
+      service.unreadCount(principal(_label === 'revoked membership' || _label === 'membership moved' ? 'CUSTOMER' : 'TENANT_STAFF',
+        ),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(db.notification.count).not.toHaveBeenCalled();
   });
@@ -223,9 +238,9 @@ describe('NotificationsService', () => {
     const { db, service } = setup();
     db.notification.findFirst.mockResolvedValue(null);
 
-    await expect(service.markRead(principal(), NOTIFICATION)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.markRead(principal(), NOTIFICATION),
+    ).rejects.toBeInstanceOf(
+      NotFoundException);
     expect(db.notification.updateMany).not.toHaveBeenCalled();
   });
 

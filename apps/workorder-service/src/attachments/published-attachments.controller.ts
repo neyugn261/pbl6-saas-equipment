@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Controller,
   Get,
@@ -18,6 +19,7 @@ import { CompleteAttachmentDto } from './attachment.dto';
 import { AttachmentErrorInterceptor } from './attachment-error.interceptor';
 import { PublishedAttachmentsService } from './published-attachments.service';
 
+@BranchScoped()
 @Controller('internal/service-request-attachments')
 @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
 @RequirePermissions('service_request:read')

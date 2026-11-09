@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { fixtureBranchContext } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -73,6 +75,8 @@ describe('Work Order week 2 — workflows, transactions and SR cancellation', ()
   };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(branch))
       .overrideProvider(REFERENCES)
       .useValue(refs)
       .compile();
@@ -124,6 +128,7 @@ describe('Work Order week 2 — workflows, transactions and SR cancellation', ()
   function source(status = 'ACCEPTED') {
     const row = {
       id: randomUUID(),
+      branchId: branch,
       status,
       equipmentId: equipment,
       customerId: customer,
@@ -495,6 +500,7 @@ describe('Work Order week 2 — workflows, transactions and SR cancellation', ()
       tenantId: tenant,
       userType: 'TENANT_STAFF',
       roles: ['TECHNICIAN'],
+      primaryBranchId: branch,
       status: 'ACTIVE',
     });
     refs.branch.mockResolvedValueOnce({ id: branch, status: 'ACTIVE' });
@@ -590,6 +596,7 @@ describe('Work Order week 2 — workflows, transactions and SR cancellation', ()
     });
     const maintenance = await db.workOrder.create({
       data: {
+        branchId: branch,
         tenantId: tenant,
         workOrderNo: 'WO-MAINT',
         maintenanceTaskId: randomUUID(),

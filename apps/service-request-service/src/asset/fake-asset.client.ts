@@ -5,6 +5,7 @@ import type {
 } from './asset-client';
 
 export class FakeAssetClient implements AssetClient {
+  constructor(private readonly defaultBranchId?: string) {}
   readonly equipment = new Map<string, EquipmentReference>();
   readonly warranties = new Map<string, WarrantyStatus>();
 
@@ -12,7 +13,14 @@ export class FakeAssetClient implements AssetClient {
     id: string,
     _accessToken: string,
   ): Promise<EquipmentReference | null> {
-    return this.equipment.get(id) ?? null;
+    const row = this.equipment.get(id);
+    return row
+      ? {
+          ...row,
+          defaultServicingBranchId:
+            row.defaultServicingBranchId ?? this.defaultBranchId,
+        }
+      : null;
   }
 
   async getWarrantyStatus(

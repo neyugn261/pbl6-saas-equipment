@@ -7,6 +7,7 @@ export interface AppEnv extends JwtEnv {
   SERVICE_REQUEST_DATABASE_URL: string;
   ASSET_SERVICE_URL: string;
   WORKORDER_SERVICE_URL: string;
+  ORGANIZATION_SERVICE_URL: string;
   RABBITMQ_URL?: string;
 }
 
@@ -26,6 +27,10 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
   }
   return env.done({
     NODE_ENV: nodeEnv,
+    ORGANIZATION_SERVICE_URL: env.url('ORGANIZATION_SERVICE_URL', [
+      'http:',
+      'https:',
+    ]),
     PORT: env.port(PORT_VARIABLE, DEFAULT_PORT),
     SERVICE_REQUEST_DATABASE_URL: env.postgresUrl(
       'SERVICE_REQUEST_DATABASE_URL',

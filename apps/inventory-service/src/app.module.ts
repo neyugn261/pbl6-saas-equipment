@@ -27,6 +27,8 @@ import { EventsService } from './events/events.service';
     PrismaModule,
     AuthModule.forRootAsync({
       inject: [ConfigService],
+      branchServiceUrl: (config: ConfigService) =>
+        config.getOrThrow<string>('ORGANIZATION_SERVICE_URL'),
       useFactory: jwtOptionsFromConfig,
     }),
     HealthModule.forRootAsync({
@@ -42,7 +44,9 @@ import { EventsService } from './events/events.service';
   ],
   providers: [
     { provide: DisplayNameLookup, inject: [ConfigService], useFactory: (config: ConfigService) =>
-      new DisplayNameLookup({ organization: config.get<string>('ORGANIZATION_SERVICE_URL') }) },
+      new DisplayNameLookup({ organization: config.get<string>('ORGANIZATION_SERVICE_URL'),
+        }),
+    },
     InventoryRepository,
     InventoryService,
     ReferencesClient,

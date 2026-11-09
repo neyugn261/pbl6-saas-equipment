@@ -1,4 +1,5 @@
-import { validModelSetupSnapshot, hashCheck, type EquipmentRegistrationConfirmedV1, type RegistrationMaintenanceReadyV1 } from './equipment-registration';
+import { validModelSetupSnapshot, hashCheck, type EquipmentRegistrationConfirmedV1, type RegistrationMaintenanceReadyV1,
+} from './equipment-registration';
 import {
   validChecklist,
   validCustomerChecklist,
@@ -116,6 +117,7 @@ export interface NotificationRecipientBootstrapCompletedV1 {
 }
 
 export interface ServiceRequestCreatedV1 {
+  branchId?: string | null;
   serviceRequestId: string;
   requestNo: string;
   customerId: string;
@@ -126,6 +128,7 @@ export interface ServiceRequestCreatedV1 {
 }
 
 export interface ServiceRequestStatusChangedV1 {
+  branchId?: string | null;
   serviceRequestId: string;
   requestNo: string;
   customerId: string;
@@ -156,6 +159,7 @@ interface WorkOrderOrigin {
 }
 
 export interface WorkOrderCreatedV1 extends WorkOrderOrigin {
+  branchId?: string | null;
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
@@ -165,6 +169,7 @@ export interface WorkOrderCreatedV1 extends WorkOrderOrigin {
 }
 
 export interface WorkOrderAssignedV1 {
+  branchId?: string | null;
   workOrderId: string;
   workOrderNo: string;
   technicianId: string;
@@ -175,6 +180,7 @@ export interface WorkOrderAssignedV1 {
 }
 
 export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
+  branchId?: string | null;
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
@@ -194,6 +200,7 @@ export interface WorkOrderCompletedV2 extends WorkOrderCompletedV1 {
 }
 
 export interface WorkOrderCancelledV1 extends WorkOrderOrigin {
+  branchId?: string | null;
   workOrderId: string;
   workOrderNo: string;
   equipmentId: string;
@@ -243,6 +250,7 @@ export interface MaintenanceWorkOrderReplacementRequestedV1 extends MaintenanceT
 }
 
 export interface LowStockDetectedV1 {
+  branchId?: string | null;
   stockId: string;
   partId: string;
   partSku: string;
@@ -255,25 +263,45 @@ export interface LowStockDetectedV1 {
 export interface EquipmentHandoverChangedV1 {
   handoverId: string; equipmentId: string; customerId: string; createdBy: string;
   handoverNo: string; assetCode: string; version: number;
-  status: 'PENDING_CUSTOMER_CONFIRMATION' | 'ACTIVATED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+  status:
+    | 'PENDING_CUSTOMER_CONFIRMATION' | 'ACTIVATED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+}
+export interface CustomerSiteRoutingChangedV1 {
+  siteId: string;
+  branchId: string | null;
+  revision: number;
 }
 export const Events = {
+  CustomerSiteRoutingChanged: define<CustomerSiteRoutingChangedV1>({
+    type: 'CustomerSiteRoutingChanged',
+    version: 1,
+    producer: 'organization-service',
+    aggregateType: 'CustomerSite',
+    fields: {
+      siteId: is.uuid,
+      branchId: is.nullable(is.uuid),
+      revision: (value) => Number.isSafeInteger(value) && Number(value) >= 0,
+    },
+  }),
   EquipmentRegistrationConfirmed: define<EquipmentRegistrationConfirmedV1>({
     type: 'EquipmentRegistrationConfirmed', version: 1, aggregateType: 'EquipmentRegistration', producer: 'asset-service',
     fields: { registrationId: is.uuid, equipmentId: is.uuid, customerId: is.uuid, customerSiteId: is.uuid,
-      snapshotVersion: v => Number.isSafeInteger(v) && Number(v) >= 0, submittedBy: is.uuid, confirmedBy: is.uuid,
-      confirmedAt: is.isoDateTime, snapshot: validModelSetupSnapshot },
+      snapshotVersion: (v) => Number.isSafeInteger(v) && Number(v) >= 0, submittedBy: is.uuid, confirmedBy: is.uuid,
+      confirmedAt: is.isoDateTime, snapshot: validModelSetupSnapshot,
+    },
   }),
   RegistrationMaintenanceReady: define<RegistrationMaintenanceReadyV1>({
     type: 'RegistrationMaintenanceReady', version: 1, aggregateType: 'EquipmentRegistration', producer: 'maintenance-service',
     fields: { registrationId: is.uuid, equipmentId: is.uuid, inputHash: hashCheck,
-      plans: is.arrayOf(is.object({ itemId: is.uuid, planId: is.uuid }), 8) },
+      plans: is.arrayOf(is.object({ itemId: is.uuid, planId: is.uuid }), 8),
+    },
   }),
   EquipmentHandoverChanged: define<EquipmentHandoverChangedV1>({
     type: 'EquipmentHandoverChanged', version: 1, aggregateType: 'EquipmentHandover', producer: 'asset-service',
     fields: { handoverId: is.uuid, equipmentId: is.uuid, customerId: is.uuid, createdBy: is.uuid,
-      handoverNo: is.string(50), assetCode: is.string(100), version: value => Number.isSafeInteger(value) && Number(value) > 0,
-      status: is.oneOf(['PENDING_CUSTOMER_CONFIRMATION', 'ACTIVATED', 'REJECTED', 'CANCELLED', 'EXPIRED']), },
+      handoverNo: is.string(50), assetCode: is.string(100), version: (value) => Number.isSafeInteger(value) && Number(value) > 0,
+      status: is.oneOf(['PENDING_CUSTOMER_CONFIRMATION', 'ACTIVATED', 'REJECTED', 'CANCELLED', 'EXPIRED',
+      ]), },
   }),
   EquipmentMoved: define<EquipmentMovedV1>({
     type: 'EquipmentMoved',
@@ -395,6 +423,23 @@ export const Events = {
     aggregateType: 'ServiceRequest',
     producer: 'service-request-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
+      serviceRequestId: is.uuid,
+      requestNo: is.string(50),
+      customerId: is.uuid,
+      equipmentId: is.uuid,
+      requesterId: is.uuid,
+      type: is.oneOf(SERVICE_REQUEST_TYPES),
+      priority: is.oneOf(PRIORITIES),
+    },
+  }),
+  ServiceRequestBranchAssigned: define<ServiceRequestCreatedV1>({
+    type: 'ServiceRequestBranchAssigned',
+    version: 1,
+    aggregateType: 'ServiceRequest',
+    producer: 'service-request-service',
+    fields: {
+      branchId: is.uuid,
       serviceRequestId: is.uuid,
       requestNo: is.string(50),
       customerId: is.uuid,
@@ -410,6 +455,7 @@ export const Events = {
     aggregateType: 'ServiceRequest',
     producer: 'service-request-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       serviceRequestId: is.uuid,
       requestNo: is.string(50),
       customerId: is.uuid,
@@ -426,6 +472,7 @@ export const Events = {
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       workOrderId: is.uuid,
       workOrderNo: is.string(50),
       serviceRequestId: is.nullable(is.uuid),
@@ -442,6 +489,7 @@ export const Events = {
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       workOrderId: is.uuid,
       workOrderNo: is.string(50),
       technicianId: is.uuid,
@@ -456,6 +504,7 @@ export const Events = {
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       workOrderId: is.uuid,
       workOrderNo: is.string(50),
       serviceRequestId: is.nullable(is.uuid),
@@ -473,6 +522,7 @@ export const Events = {
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       workOrderId: is.uuid,
       workOrderNo: is.string(50),
       serviceRequestId: is.nullable(is.uuid),
@@ -493,6 +543,7 @@ export const Events = {
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       workOrderId: is.uuid,
       workOrderNo: is.string(50),
       serviceRequestId: is.nullable(is.uuid),
@@ -508,6 +559,7 @@ export const Events = {
     aggregateType: 'WorkOrder',
     producer: 'workorder-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       workOrderId: is.uuid,
       workOrderNo: is.string(50),
       serviceRequestId: is.nullable(is.uuid),
@@ -578,6 +630,7 @@ export const Events = {
     aggregateType: 'Stock',
     producer: 'inventory-service',
     fields: {
+      branchId: (value) => value === undefined || is.nullable(is.uuid)(value),
       stockId: is.uuid,
       partId: is.uuid,
       partSku: is.string(100),

@@ -3,6 +3,10 @@ info:
   title: PBL6 Asset Service
   version: 0.4.0-local
   description: |
+    ADR 0022: SERVICE_MANAGER handles reception and dispatch. Branch-bound staff
+    routes resolve the active primary branch live from Organization; errors fail closed.
+    Customer/Equipment and maintenance plans remain tenant/customer scoped.
+    DISPATCHER is retained for existing accounts; new assignment/invitation is rejected.
     M1/M2 local contract for review — owner: Minh. ADR 0010 dossier and filtered
     history endpoints are specified in equipment-dossier.yaml (same service).
     ADR 0015 adds /equipment/{equipmentId}/service-parts and the serviceParts dossier

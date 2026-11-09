@@ -8,6 +8,8 @@ import type { Principal } from './principal';
  */
 export interface DataScope {
   tenantId: string;
+  /** Set only for branch-bound business data; scopeWhere remains tenant/customer-only. */
+  branchId?: string;
   /** NULL = no customer restriction (staff). */
   customerId: string | null;
 }
@@ -66,11 +68,11 @@ export function isInScope(
  * Throws 404 for a row outside the caller's scope (or missing). 404, not 403,
  * so ids of other tenants and customers cannot be probed.
  */
-export function assertInScope<T extends { tenantId: string; customerId?: string | null }>(
+export function assertInScope<T extends { tenantId: string; customerId?: string | null },
+>(
   scope: DataScope,
   row: T | null | undefined,
-  code = 'NOT_FOUND',
-): T {
+  code = 'NOT_FOUND'): T {
   if (!row || !isInScope(scope, row)) {
     throw new NotFoundException({ code, message: 'Resource not found' });
   }

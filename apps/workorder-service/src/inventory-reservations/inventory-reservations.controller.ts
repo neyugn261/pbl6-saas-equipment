@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Body,
   Controller,
@@ -21,6 +22,7 @@ import {
 } from './dto';
 import { InventoryReservationsService } from './inventory-reservations.service';
 
+@BranchScoped()
 @Controller('internal/work-orders/:workOrderId/inventory-reservations')
 @AllowUserTypes('TENANT_STAFF')
 @RequirePermissions('inventory:issue', 'work_order:read')

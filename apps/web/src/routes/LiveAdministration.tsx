@@ -1,3 +1,4 @@
+import { StaffBranchAssignment } from '../features/workspace/BranchManagement'
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
@@ -5,7 +6,8 @@ import { useSession, getSessionGeneration, type Profile } from '../auth/session'
 import { StatusBadge } from '../components/Badges'
 import { useDirectory, errorText } from './registration-data'
 import type { Page } from '../types/domain'
-import { roleNames as workspaceRoleNames, type WorkspaceRole } from '../features/workspace/role-workspace'
+import { roleNames as workspaceRoleNames, type WorkspaceRole,
+} from '../features/workspace/role-workspace'
 import './live-administration.css'
 
 type Tenant = {
@@ -441,9 +443,9 @@ export function TenantDetailPage() {
           <section className="m1-card">
             <h2>Mời Tenant Admin</h2>
             <p>
-              Quản trị viên nhận hướng dẫn kích hoạt qua email của hệ
-              thống. Nếu doanh nghiệp vừa tạo chưa đồng bộ, hãy thử lại lời mời
-              sau ít giây.
+              Quản trị viên nhận hướng dẫn kích hoạt qua email của hệ thống. Nếu
+              doanh nghiệp vừa tạo chưa đồng bộ, hãy thử lại lời mời sau ít
+              giây.
             </p>
             <TenantAdminInvite
               key={id}
@@ -691,6 +693,7 @@ export function UsersPage() {
     [status, setStatus] = useState(''),
     [revision, refresh] = useState(0),
     [editing, setEditing] = useState<User | null>(null),
+    [branchUser, setBranchUser] = useState<User | null>(null),
     action = useMutation()
   const data = useDirectory<Page<User>>(
     'identity',
@@ -708,6 +711,18 @@ export function UsersPage() {
       }
     >
       <Feedback action={action} />
+      {branchUser && (
+        <section>
+          <button onClick={() => setBranchUser(null)}>
+            Đóng chi nhánh của {branchUser.fullName}
+          </button>
+          <StaffBranchAssignment
+            key={branchUser.id}
+            userId={branchUser.id}
+            technician={branchUser.roles.includes('TECHNICIAN')}
+          />
+        </section>
+      )}
       {editing && (
         <UserRoles
           key={editing.id}
@@ -745,7 +760,8 @@ export function UsersPage() {
           >
             <option value="">Tất cả trạng thái</option>
             {['INVITED', 'ACTIVE', 'SUSPENDED', 'DISABLED'].map((s) => (
-              <option key={s} value={s}>{{ INVITED: 'Chờ kích hoạt', ACTIVE: 'Hoạt động', SUSPENDED: 'Tạm khóa', DISABLED: 'Vô hiệu hóa' }[s] ?? s}</option>
+              <option key={s} value={s}>{{ INVITED: 'Chờ kích hoạt', ACTIVE: 'Hoạt động', SUSPENDED: 'Tạm khóa', DISABLED: 'Vô hiệu hóa',
+                }[s] ?? s}</option>
             ))}
           </select>
         </form>
@@ -775,19 +791,29 @@ export function UsersPage() {
                           <strong>{row.fullName}</strong>
                           <small>{row.email}</small>
                         </td>
-                        <td>{row.roles.map(role => workspaceRoleNames[role as WorkspaceRole] ?? role).join(', ') || 'Chưa gán vai trò'}</td>
+                        <td>{row.roles.map(
+                              (role) => workspaceRoleNames[role as WorkspaceRole] ?? role,
+                            ).join(', ') || 'Chưa gán vai trò'}</td>
                         <td>
                           <StatusBadge status={row.status} />
                         </td>
                         <td>
                           {manageable && (
                             <div className="live-toolbar">
-                              {profile?.userType !== 'CUSTOMER' && <button
+                              {profile?.roles.includes('TENANT_ADMIN') &&
+                                row.userType === 'TENANT_STAFF' && (
+                                  <button onClick={() => setBranchUser(row)}>
+                                    Chi nhánh chính
+                                  </button>
+                                )}
+                              {profile?.userType !== 'CUSTOMER' && (
+                                <button
                                 disabled={action.busy}
                                 onClick={() => setEditing(row)}
                               >
                                 Gán vai trò
-                              </button>}
+                              </button>
+                              )}
                               {['ACTIVE', 'SUSPENDED'].includes(row.status) && (
                                 <button
                                   disabled={action.busy}
@@ -845,7 +871,10 @@ function UserRoles({
 }) {
   const { profile } = useSession()
   const customer = profile?.userType === 'CUSTOMER'
-  const data = useDirectory<{ items: Role[] }>('identity', customer ? null : '/roles'),
+  const data = useDirectory<{ items: Role[] }>(
+      'identity',
+      customer ? null : '/roles',
+    ),
     action = useMutation(),
     [roles, setRoles] = useState(user.roles)
   return (
@@ -867,11 +896,22 @@ function UserRoles({
         }}
       >
         <fieldset disabled={action.busy || (!customer && !data.value)}>
-          {(customer ? [{ code: 'CUSTOMER_USER', name: 'Người dùng khách hàng', userType: 'CUSTOMER' }] : data.value?.items ?? [])
+          {(customer
+            ? [
+                {
+                  code: 'CUSTOMER_USER',
+                  name: 'Người dùng khách hàng',
+                  userType: 'CUSTOMER',
+                },
+              ]
+            : (data.value?.items ?? [])
+          )
             .filter(
               (role) =>
                 role.userType === user.userType &&
-                !['TENANT_ADMIN', 'PLATFORM_ADMIN'].includes(role.code),
+                !['TENANT_ADMIN', 'PLATFORM_ADMIN'].includes(role.code) &&
+                (role.code !== 'DISPATCHER' ||
+                  user.roles.includes('DISPATCHER')),
             )
             .map((role) => (
               <label className="live-check" key={role.code}>
@@ -946,7 +986,13 @@ export function ProfilePage() {
             <dt>Điện thoại</dt>
             <dd>{data.value.phone || 'Chưa có'}</dd>
             <dt>Vai trò</dt>
-            <dd>{data.value.roles.map(role => workspaceRoleNames[role as WorkspaceRole] ?? role).join(', ')}</dd>
+            <dd>
+              {data.value.roles
+                .map(
+                  (role) => workspaceRoleNames[role as WorkspaceRole] ?? role,
+                )
+                .join(', ')}
+            </dd>
             <dt>Trạng thái</dt>
             <dd>
               <StatusBadge status={data.value.status} />

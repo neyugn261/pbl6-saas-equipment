@@ -1,3 +1,4 @@
+import { staffBranchId } from '@pbl6/auth';
 import { Injectable } from '@nestjs/common';
 import { dataScope, type Principal } from '@pbl6/auth';
 import { toPage, type PaginationQueryDto } from '@pbl6/service-kit';
@@ -38,6 +39,8 @@ export class PublishedAttachmentsRepository {
       Prisma.sql`w.service_request_id = ${serviceRequestId}::uuid`,
       Prisma.sql`w.maintenance_task_id IS NULL`,
     ];
+    const branchId = staffBranchId(p);
+    if (branchId) conditions.push(Prisma.sql`w.branch_id = ${branchId}::uuid`);
     if (scope.customerId !== null)
       conditions.push(Prisma.sql`w.customer_id = ${scope.customerId}::uuid`);
     if (p.userType === 'TENANT_STAFF' && isTechnicianOnly(p))

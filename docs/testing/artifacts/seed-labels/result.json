@@ -1,0 +1,182 @@
+{
+  "tenantCode": "MP",
+  "checks": [
+    {
+      "port": 3000,
+      "health": 200
+    },
+    {
+      "port": 3001,
+      "health": 200
+    },
+    {
+      "port": 3002,
+      "health": 200
+    },
+    {
+      "port": 3003,
+      "health": 200
+    },
+    {
+      "port": 3004,
+      "health": 200
+    },
+    {
+      "port": 3005,
+      "health": 200
+    },
+    {
+      "port": 3006,
+      "health": 200
+    },
+    {
+      "port": 3007,
+      "health": 200
+    },
+    {
+      "port": 3008,
+      "health": 200
+    }
+  ],
+  "logins": [
+    {
+      "email": "platform.admin@pbl6.local",
+      "role": "PLATFORM_ADMIN",
+      "ok": true
+    },
+    {
+      "email": "tenant.admin@demo.local",
+      "role": "TENANT_ADMIN",
+      "ok": true
+    },
+    {
+      "email": "service.manager@demo.local",
+      "role": "SERVICE_MANAGER",
+      "ok": true
+    },
+    {
+      "email": "service.manager.dn@demo.local",
+      "role": "SERVICE_MANAGER",
+      "ok": true
+    },
+    {
+      "email": "inventory@demo.local",
+      "role": "INVENTORY_STAFF",
+      "ok": true
+    },
+    {
+      "email": "inventory.dn@demo.local",
+      "role": "INVENTORY_STAFF",
+      "ok": true
+    },
+    {
+      "email": "technician@demo.local",
+      "role": "TECHNICIAN",
+      "ok": true
+    },
+    {
+      "email": "technician.hcm02@demo.local",
+      "role": "TECHNICIAN",
+      "ok": true
+    },
+    {
+      "email": "technician.dn01@demo.local",
+      "role": "TECHNICIAN",
+      "ok": true
+    },
+    {
+      "email": "technician.dn02@demo.local",
+      "role": "TECHNICIAN",
+      "ok": true
+    },
+    {
+      "email": "customer.admin@demo.local",
+      "role": "CUSTOMER_ADMIN",
+      "ok": true
+    },
+    {
+      "email": "customer.user@demo.local",
+      "role": "CUSTOMER_USER",
+      "ok": true
+    },
+    {
+      "email": "factory.admin@demo.local",
+      "role": "CUSTOMER_ADMIN",
+      "ok": true
+    },
+    {
+      "email": "factory.user@demo.local",
+      "role": "CUSTOMER_USER",
+      "ok": true
+    }
+  ],
+  "pages": [
+    {
+      "page": "manager-hcm",
+      "titles": [
+        "Hình ảnh siêu âm bị nhiễu",
+        "Áp suất bơm không ổn định",
+        "Máy siêu âm không lên nguồn"
+      ],
+      "ownScopeOnly": true,
+      "oldScenarioLabels": false
+    },
+    {
+      "page": "manager-dn",
+      "titles": [
+        "Máy bơm phát tiếng ồn",
+        "Máy siêu âm khởi động chậm",
+        "Máy bơm mất nguồn"
+      ],
+      "ownScopeOnly": true,
+      "oldScenarioLabels": false
+    },
+    {
+      "page": "admin-requests",
+      "titles": [
+        "Hình ảnh siêu âm bị nhiễu",
+        "Áp suất bơm không ổn định",
+        "Máy siêu âm không lên nguồn",
+        "Máy bơm phát tiếng ồn",
+        "Máy siêu âm khởi động chậm",
+        "Máy bơm mất nguồn"
+      ],
+      "ownScopeOnly": true,
+      "oldScenarioLabels": false
+    },
+    {
+      "page": "equipment",
+      "assetCodes": [
+        "SA-001",
+        "SA-002",
+        "MB-001",
+        "MB-002",
+        "SA-003",
+        "MB-003"
+      ]
+    },
+    {
+      "page": "customers",
+      "names": [
+        "Bệnh viện Đa khoa An Phúc",
+        "Công ty Cơ khí Hòa Long"
+      ],
+      "codes": [
+        "BV-AP",
+        "CK-HL"
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "preservation": {
+    "userCount": 14,
+    "passwordsAndRoles": true,
+    "branchAssignments": true,
+    "requestStatesAndLinks": true,
+    "workOrderStatesAndAssignments": true,
+    "stock": true,
+    "warrantyDates": true,
+    "maintenance": true,
+    "resetPerformed": false
+  }
+}

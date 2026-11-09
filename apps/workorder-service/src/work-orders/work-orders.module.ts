@@ -5,6 +5,7 @@ import { WorkOrdersService } from './work-orders.service';
 import { WorkOrderWorkflowRepository } from './workflow.repository';
 import { WorkOrderWorkflowService } from './workflow.service';
 import { WorkOrderWorkflowController } from './workflow.controller';
+import { OrderBranchController } from './order-branch.controller';
 import {
   InternalWorkOrdersController,
   WorkOrdersController,
@@ -18,6 +19,7 @@ import {
     WorkOrderWorkflowService,
   ],
   controllers: [
+    OrderBranchController,
     WorkOrdersController,
     InternalWorkOrdersController,
     WorkOrderWorkflowController,

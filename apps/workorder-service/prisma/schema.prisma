@@ -88,6 +88,8 @@ model TechnicianSkill {
 /// type: REPAIR | WARRANTY | MAINTENANCE | INSPECTION. priority: LOW | NORMAL | HIGH | URGENT.
 /// status: CREATED | ASSIGNED | ACCEPTED | TRAVELLING | IN_PROGRESS | ON_HOLD | COMPLETED | CANCELLED.
 model WorkOrder {
+  /// NULL means unallocated legacy/central queue, never unrestricted branch access.
+  branchId                        String?                         @map("branch_id") @db.Uuid
   checklistHistory                WorkOrderChecklistHistory[]
   checklist                       Json?
   checklistResults                Json?                           @map("checklist_results")
@@ -143,6 +145,7 @@ model WorkOrder {
   @@index([tenantId, status], map: "idx_work_orders_tenant_status")
   @@index([tenantId, scheduledStart], map: "idx_work_orders_tenant_schedule")
   @@index([tenantId, equipmentId], map: "idx_work_orders_equipment")
+  @@index([tenantId, branchId])
   @@map("work_orders")
 }
 
@@ -435,4 +438,14 @@ model WorkOrderChecklistHistory {
 
   @@unique([tenantId, workOrderId, version])
   @@map("work_order_checklist_history")
+}
+
+model SiteBranchSnapshot {
+  tenantId String  @map("tenant_id") @db.Uuid
+  siteId   String  @map("site_id") @db.Uuid
+  branchId String? @map("branch_id") @db.Uuid
+  revision Int
+
+  @@id([tenantId, siteId])
+  @@map("site_branch_snapshots")
 }

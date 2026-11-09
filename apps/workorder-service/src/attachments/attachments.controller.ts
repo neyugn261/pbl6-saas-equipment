@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Body,
   Controller,
@@ -35,6 +36,7 @@ function idempotencyKey(value: unknown) {
     throw badInput('Idempotency-Key must be a UUID');
   return value.toLowerCase();
 }
+@BranchScoped()
 @Controller()
 @UseInterceptors(AttachmentErrorInterceptor)
 @AllowUserTypes('TENANT_STAFF')

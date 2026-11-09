@@ -73,6 +73,8 @@ export class CreateServiceRequestDto {
 }
 
 export class ListServiceRequestsDto extends PaginationQueryDto {
+  @IsOptional() @IsUUID() branchId?: string;
+  @IsOptional() @IsIn(['true', 'false']) unallocated?: string;
   @IsOptional()
   @IsString()
   @MaxLength(100)

@@ -10,13 +10,15 @@ interface WorkOrderCounts {
 export class ReportsRepository {
   constructor(private readonly db: PrismaService) {}
 
-  async summary(tenantId: string, from: string, to: string) {
+  async summary(tenantId: string, from: string, to: string,
+    branchId: string | null = null,
+  ) {
     // One SQL statement = one MVCC snapshot for all three independent counts.
     // Parameterized canonical UTC strings retain the DB's microsecond precision.
     const [row] = await this.db.$queryRaw<WorkOrderCounts[]>`
       WITH created AS (
         SELECT status FROM work_orders
-        WHERE tenant_id = ${tenantId}::uuid
+        WHERE tenant_id = ${tenantId}::uuid AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)
           AND created_at >= ${from}::timestamptz AND created_at < ${to}::timestamptz
       ), status_counts AS (
         SELECT status, count(*) AS total FROM created GROUP BY status
@@ -25,7 +27,7 @@ export class ReportsRepository {
         (SELECT count(*) FROM created) AS "createdCount",
         COALESCE((SELECT jsonb_object_agg(status, total) FROM status_counts), '{}'::jsonb) AS "createdByStatus",
         (SELECT count(*) FROM work_orders
-          WHERE tenant_id = ${tenantId}::uuid AND status = 'COMPLETED'
+          WHERE tenant_id = ${tenantId}::uuid AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid) AND status = 'COMPLETED'
             AND completed_at >= ${from}::timestamptz AND completed_at < ${to}::timestamptz
         ) AS "completedCount"
     `;

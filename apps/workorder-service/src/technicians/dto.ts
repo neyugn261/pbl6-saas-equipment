@@ -20,6 +20,7 @@ export const TECHNICIAN_STATUSES = [
   'INACTIVE',
 ];
 export class ListTechniciansDto extends PaginationQueryDto {
+  @ValidateIf((_o, v) => v !== undefined) @IsUUID() userId?: string;
   @ValidateIf((_o, v) => v !== undefined)
   @IsString()
   @MaxLength(100)

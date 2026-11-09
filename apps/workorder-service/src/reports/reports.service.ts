@@ -1,3 +1,4 @@
+import { staffBranchId } from '@pbl6/auth';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { requireTenantId, type Principal } from '@pbl6/auth';
 import { WO_STATUSES } from '../work-orders/dto';
@@ -18,7 +19,9 @@ export class ReportsService {
     const tenantId = requireTenantId(p);
     const range = reportRange(query.from, query.to);
     try {
-      const row = await this.repo.summary(tenantId, range.from, range.to);
+      const row = await this.repo.summary(tenantId, range.from, range.to,
+        staffBranchId(p),
+      );
       return {
         ...range,
         timezone: 'Asia/Ho_Chi_Minh',

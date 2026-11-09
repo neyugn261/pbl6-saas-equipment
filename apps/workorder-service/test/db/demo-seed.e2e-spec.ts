@@ -59,8 +59,8 @@ describe('K7 demo seed — real owned PostgreSQL, explicit reference doubles', (
     expect(first.technicianId).toBe(DEMO_WO.technicianId);
     expect(first.skillIds).toEqual(DEMO_WO.skills.map((s) => s.id));
     expect(await db.technician.count()).toBe(1);
-    expect(await db.skill.count()).toBe(2);
-    expect(await db.technicianSkill.count()).toBe(2);
+    expect(await db.skill.count()).toBe(3);
+    expect(await db.technicianSkill.count()).toBe(3);
     expect(await db.workOrder.count()).toBe(0);
     expect(await db.outboxEvent.count()).toBe(0);
     expect(refs.user).toHaveBeenCalledWith(userId, manager.accessToken);
@@ -75,7 +75,7 @@ describe('K7 demo seed — real owned PostgreSQL, explicit reference doubles', (
     const results = await Promise.all([run(), run()]);
     expect(results[0]).toEqual(results[1]);
     expect(await db.technician.count()).toBe(1);
-    expect(await db.skill.count()).toBe(2);
+    expect(await db.skill.count()).toBe(3);
   });
   it.each(['BUSY', 'OFF_DUTY', 'INACTIVE'])(
     'adopts an existing profile and preserves %s, branch, code, skill levels and additional skills',
@@ -121,7 +121,7 @@ describe('K7 demo seed — real owned PostgreSQL, explicit reference doubles', (
       expect(
         (await db.skill.findUniqueOrThrow({ where: { id: skill.id } })).name,
       ).toBe('Customized name');
-      expect(await db.technicianSkill.count()).toBe(3);
+      expect(await db.technicianSkill.count()).toBe(4);
       expect(
         (
           await db.technicianSkill.findUniqueOrThrow({

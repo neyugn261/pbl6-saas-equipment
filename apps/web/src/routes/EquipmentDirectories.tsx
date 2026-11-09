@@ -1,3 +1,4 @@
+import { SiteBranchRouting } from "../features/workspace/BranchManagement";
 import {
   ServiceSections,
   ServiceFacts,
@@ -279,6 +280,14 @@ export function CustomerWorkspacePage() {
                           ? "Đang hoạt động"
                           : "Ngừng hoạt động"}
                       </p>
+                      {profile?.roles.includes("TENANT_ADMIN") && (
+                        <SiteBranchRouting
+                          key={`${row.id}:${revision}`}
+                          siteId={row.id}
+                          branchId={row.defaultServicingBranchId}
+                          onSaved={() => setRevision((v) => v + 1)}
+                        />
+                      )}
                       {manage && (
                         <div className="registration-actions">
                           <button

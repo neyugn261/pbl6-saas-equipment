@@ -22,7 +22,9 @@ const order = {
 };
 const cases = [
   [Events.EquipmentHandoverChanged, { handoverId: id, equipmentId: id, customerId: id, createdBy: id,
-    handoverNo: 'BG-test', assetCode: 'P-test', version: 2, status: 'PENDING_CUSTOMER_CONFIRMATION' }],
+    handoverNo: 'BG-test', assetCode: 'P-test', version: 2, status: 'PENDING_CUSTOMER_CONFIRMATION',
+    },
+  ],
   [
     Events.ServiceRequestCreated,
     { ...request, requesterId: id, type: 'REPAIR', priority: 'NORMAL' },
@@ -95,6 +97,7 @@ describe('Notification source contract readiness', () => {
     ).toEqual([
       'EquipmentHandoverChanged.v1',
       'ServiceRequestCreated.v1',
+      'ServiceRequestBranchAssigned.v1',
       'ServiceRequestStatusChanged.v1',
       'WorkOrderCreated.v1',
       'WorkOrderAssigned.v1',

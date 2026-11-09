@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Body,
   Controller,
@@ -21,6 +22,7 @@ import {
 } from './dto';
 import { WorkOrdersService } from './work-orders.service';
 
+@BranchScoped()
 @Controller('work-orders')
 @AllowUserTypes('TENANT_STAFF')
 export class WorkOrdersController {
@@ -55,6 +57,7 @@ export class WorkOrdersController {
     return this.service.patch(p, id, input);
   }
 }
+@BranchScoped()
 @Controller('internal/work-orders')
 @AllowUserTypes('TENANT_STAFF')
 export class InternalWorkOrdersController {

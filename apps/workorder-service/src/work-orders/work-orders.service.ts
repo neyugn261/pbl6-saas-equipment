@@ -30,10 +30,15 @@ export class WorkOrdersService {
   async detail(p: Principal, id: string) {
     return (await this.display(p, [await this.repo.detail(p, id)]))[0];
   }
-  private async display<T extends { currentAssignment: { technicianUserId: string; technicianEmployeeCode: string | null } | null }>(p: Principal, rows: T[]) {
-    const users = await this.names?.lookup('users', rows.map(row => row.currentAssignment?.technicianUserId), p);
-    return rows.map(row => ({ ...row,
-      currentTechnicianName: row.currentAssignment ? users?.get(row.currentAssignment.technicianUserId.toLowerCase())?.name ?? null : null,
+  private async display<T extends { currentAssignment: { technicianUserId: string; technicianEmployeeCode: string | null;
+      } | null;
+    },
+  >(p: Principal, rows: T[]) {
+    const users = await this.names?.lookup('users', rows.map((row) => row.currentAssignment?.technicianUserId), p,
+    );
+    return rows.map((row) => ({ ...row,
+      currentTechnicianName: row.currentAssignment ? (users?.get(row.currentAssignment.technicianUserId.toLowerCase())?.name ?? null)
+        : null,
       currentTechnicianEmployeeCode: row.currentAssignment?.technicianEmployeeCode ?? null,
     }));
   }
@@ -85,6 +90,7 @@ export class WorkOrdersService {
     return {
       id: row.id,
       workOrderNo: row.workOrderNo,
+      branchId: row.branchId,
       status: row.status,
       equipmentId: row.equipmentId,
       customerId: row.customerId,

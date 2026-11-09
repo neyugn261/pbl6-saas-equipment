@@ -1,5 +1,7 @@
 # Organization Service
 
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
+
 Tenants, branches, customers, sites, locations, contacts, customer memberships. Publishes `TenantCreated`, `TenantStatusChanged`, `CustomerMembershipChanged`.
 
 - Owner: Member A ([CONTRIBUTING.md](../../CONTRIBUTING.md))
@@ -70,15 +72,7 @@ pnpm db:seed:dev      # demo data (refuses NODE_ENV=production), idempotent
 
 ## Dev seed
 
-`pnpm db:seed:dev` writes tenant DEMO, 2 branches, 2 customers, 3 sites, a
-location tree and contacts with the fixed ids of
-[fixtures.md](../../docs/api/fixtures.md). Run Identity's
-`db:migrate` and `db:seed:dev` first and keep Identity running: the seed logs
-the demo accounts in (`IDENTITY_SERVICE_URL`, `SEED_DEMO_PASSWORD`) to read
-their ids, then links the two customer accounts to DEMO-CUST-01 and assigns
-the four staff accounts to branch HCM. Without Identity it seeds everything
-else and prints a warning. `TenantCreated` and `CustomerMembershipChanged`
-are written to the outbox for the rows it creates, as the API would.
+`pnpm db:seed:dev` writes tenant MP, two branches, two customers, four sites, eight locations and four contacts from the shared catalog. With Identity running it resolves user IDs through login, links four customer accounts to their two customers, and assigns eight staff to their primary HCM/DN branch. Existing routing and memberships are preserved. New tenant/membership/site routing rows publish their normal outbox events. [Fixtures](../../docs/api/fixtures.md).
 
 Order on a fresh machine: `pnpm db:migrate` (root) → identity `db:seed:dev` →
 start identity → organization `db:seed:dev` → start organization (publishes
@@ -92,3 +86,7 @@ the outbox).
 | Deleting a customer or site does not check equipment in Asset | Asset may keep equipment pointing at a deleted customer/site; Organization lookups for it answer 404 | Accepted for MVP (cross-service data); Asset can react if a `CustomerDeleted` event is added later |
 | A SUSPENDED / DISABLED tenant is not checked by this service | Its staff can still write until their access token expires (≤ 15 min); Identity refuses the next refresh | Accepted in ADR 0004 |
 | Membership endpoints of a Customer Admin call Identity `GET /internal/users/{id}` with a CUSTOMER token | Identity still accepts TENANT_STAFF tokens only, so a Customer Admin gets 502 on a real setup. The e2e suites use a fake that follows ADR 0008 D1: a Customer Admin finds CUSTOMER accounts of its own customer and CUSTOMER_USER accounts it invited that are not linked yet; anything else is 422 `USER_NOT_FOUND` | Identity ships D1 (N2), then a real smoke test of the Customer Admin flow |
+
+## Branch service management (ADR 0022)
+
+See [design](../../docs/decisions/0022-branch-service-management.md) and [runbook](../../docs/user-guide/branch-service-management.md). SERVICE_MANAGER handles both reception and dispatch; existing Dispatcher accounts remain compatible. Apply additive migrations before starting this version. Organization supplies the active primary branch live; tenant-wide customer/equipment master data and maintenance plans remain shared.

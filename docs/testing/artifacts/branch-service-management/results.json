@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "tenantId": "726cffc5-3015-4cb1-b5fa-08204c1c4761",
+  "branchA": "d4644541-3952-43e9-8bc2-867a8d7a70fc",
+  "branchB": "b298e939-8941-46e7-993a-a2b475b34c51",
+  "assertions": [
+    "Manager branch notice and foreign-request error on real backend",
+    "Admin assigns a primary branch through live Organization API",
+    "Admin allocates an unrouted request; queue refreshes from backend",
+    "390x844 allocation screen has no horizontal overflow",
+    "Out-of-warranty estimate send/approve and cross-branch estimate rejection",
+    "Site routing ignores stale revision and rejects conflicting/forged producer",
+    "Retired Dispatcher onboarding rejected; inactive branch and Organization outage fail closed",
+    "Real Identity/Gateway: tenant and customer isolation",
+    "Primary branch resolved live; missing membership fails closed",
+    "One Service Manager reviews, accepts, creates and assigns WO",
+    "Request and WO list/detail/write/attachment boundaries across branches",
+    "Admin unallocated queue, optimistic allocation and site routing",
+    "Technician membership and cross-branch assignment rejection",
+    "Inventory stock/ledger/mutations/idempotent replay/recovery branch boundaries",
+    "End-to-end execution, return, report and customer confirmation",
+    "Real RabbitMQ: site routing, scheduled maintenance WO and recipient bootstrap",
+    "Notification list/read and reports match branch scope",
+    "Membership changes apply without refreshing JWT; new routing preserves case history"
+  ],
+  "planId": "523cd79c-b385-470d-ad6c-5366ad69f4f0"
+}

@@ -1,5 +1,7 @@
 # Asset Service
 
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
+
 Equipment models, equipment, warranties and warranty check, QR codes, equipment history.
 
 - Owner: Member B ([CONTRIBUTING.md](../../CONTRIBUTING.md))
@@ -125,13 +127,7 @@ unique keys, concurrent writes, history, and warranty date boundaries. The
 `test:db` applies Asset's migrations to the dedicated test database before the
 suite runs.
 
-The dev seed owns only `asset_db`; run Organization's demo seed separately for
-the referenced customers, sites and locations. Fixed Asset IDs are listed in
-[fixtures.md](../../docs/api/fixtures.md). DEMO-ASSET-01 is covered through
-2099-12-31, DEMO-ASSET-02 expired on 2021-12-31, and DEMO-ASSET-03 belongs to
-the second customer and has no warranty. The seed has no user actor and never
-reads another service database. These fixed periods are suitable for current
-demo dates; update the fixture plan before 2100.
+The dev seed owns only `asset_db`: two models, six equipment and five warranties (four current, one expired; one equipment has none). Initial dates are relative to the first seed day and never shifted on rerun. The root `demo:seed` command also creates six QR codes, published model policy defaults and completed registration history through APIs. [Fixtures](../../docs/api/fixtures.md).
 
 ## Initial equipment registration (ADR 0012)
 

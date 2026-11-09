@@ -1,3 +1,4 @@
+import { staffBranchId } from '@pbl6/auth';
 import {
   BadRequestException,
   ForbiddenException,
@@ -148,6 +149,14 @@ export class NotificationsService {
       userId: principal.userId,
       channel: 'IN_APP',
       customerId: null,
+      ...(staffBranchId(principal)
+        ? {
+            OR: [
+              { branchId: staffBranchId(principal) },
+              { type: { startsWith: 'EquipmentHandoverChanged.' } },
+            ],
+          }
+        : {}),
     };
   }
 

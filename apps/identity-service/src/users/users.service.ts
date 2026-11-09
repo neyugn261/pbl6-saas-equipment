@@ -90,6 +90,11 @@ export class UsersService {
         message: 'Customer Admin may invite Customer Users only',
       });
     }
+    if (dto.roles?.includes('DISPATCHER'))
+      throw new ForbiddenException({
+        code: 'ROLE_RETIRED',
+        message: 'Use SERVICE_MANAGER for service reception and dispatch',
+      });
     this.validateRoleAssignment(principal, dto.roles ?? [], dto.userType);
 
     return this.createInvitation(principal.userId, tenantId, dto);
@@ -308,6 +313,14 @@ export class UsersService {
     }
 
     this.assertMayChangeExistingRoles(principal, user);
+    if (
+      dto.roles.includes('DISPATCHER') &&
+      !user.roles.some((r) => r.role.code === 'DISPATCHER')
+    )
+      throw new ForbiddenException({
+        code: 'ROLE_RETIRED',
+        message: 'Use SERVICE_MANAGER for service reception and dispatch',
+      });
     this.validateRoleAssignment(principal, dto.roles, user.userType);
 
     await this.usersRepo.setRoles(userId, dto.roles, principal.userId);

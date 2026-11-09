@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import { ChecklistInputDto } from './workflow.dto';
 import {
   Body,
@@ -24,6 +25,7 @@ import {
   WorkLogDto,
 } from './workflow.dto';
 
+@BranchScoped()
 @Controller('work-orders/:id')
 @AllowUserTypes('TENANT_STAFF')
 export class WorkOrderWorkflowController {

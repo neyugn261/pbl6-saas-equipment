@@ -5,6 +5,7 @@ export interface AppEnv extends JwtEnv {
   NODE_ENV: NodeEnv;
   PORT: number;
   NOTIFICATION_DATABASE_URL: string;
+  ORGANIZATION_SERVICE_URL: string;
   RABBITMQ_URL?: string;
 }
 
@@ -20,6 +21,10 @@ export function validateEnv(raw: Record<string, unknown>): AppEnv {
   }
   return env.done({
     NODE_ENV: nodeEnv,
+    ORGANIZATION_SERVICE_URL: env.url('ORGANIZATION_SERVICE_URL', [
+      'http:',
+      'https:',
+    ]),
     PORT: env.port(PORT_VARIABLE, DEFAULT_PORT),
     NOTIFICATION_DATABASE_URL: env.postgresUrl('NOTIFICATION_DATABASE_URL'),
     ...(rabbitMqUrl ? { RABBITMQ_URL: rabbitMqUrl } : {}),

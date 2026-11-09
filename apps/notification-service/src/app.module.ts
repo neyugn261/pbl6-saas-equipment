@@ -22,6 +22,8 @@ import { PrismaService } from './prisma/prisma.service';
     NotificationModule,
     AuthModule.forRootAsync({
       inject: [ConfigService],
+      branchServiceUrl: (config: ConfigService) =>
+        config.getOrThrow<string>('ORGANIZATION_SERVICE_URL'),
       useFactory: (config: ConfigService) => jwtOptionsFromConfig(config),
     }),
     HealthModule.forRootAsync({

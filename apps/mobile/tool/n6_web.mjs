@@ -20,11 +20,11 @@ async function call(method,route,token,body,status=200) {
  const data=await response.json().catch(()=>({}));
  assert.equal(response.status,status,`${method} ${route}: ${response.status} ${data.code??''}`);return data;
 }
-async function loginApi(email) {return (await call('POST','/api/identity/auth/login',null,{tenantCode:'DEMO',email,password:state.password})).accessToken;}
+async function loginApi(email) {return (await call('POST','/api/identity/auth/login',null,{tenantCode:state.tenantCode ?? 'MP',email,password:state.password})).accessToken;}
 async function loginWeb(email) {
  const context=await browser.newContext();const page=await context.newPage();
  page.on('dialog',dialog=>dialog.accept());
- await page.goto(state.web+'/login');await page.getByLabel('Mã doanh nghiệp',{exact:true}).fill('DEMO');
+ await page.goto(state.web+'/login');await page.getByLabel('Mã doanh nghiệp',{exact:true}).fill(state.tenantCode ?? 'MP');
  await page.getByLabel('Email',{exact:true}).fill(email);await page.getByLabel('Mật khẩu',{exact:true}).fill(state.password);
  await page.getByRole('button',{name:'Đăng nhập',exact:true}).click();
  await page.waitForURL(url=>!url.pathname.includes('login'));

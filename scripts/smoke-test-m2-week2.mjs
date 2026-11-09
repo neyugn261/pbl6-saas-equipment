@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import catalog from "./demo/catalog.cjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
@@ -6,7 +7,7 @@ const gateway = (process.env.GATEWAY_URL ?? "http://localhost:3000").replace(
   /\/$/,
   "",
 );
-const tenantCode = process.env.TENANT_CODE ?? "DEMO";
+const tenantCode = process.env.TENANT_CODE ?? catalog.tenant.code;
 const password = process.env.SEED_DEMO_PASSWORD;
 if (!password) throw new Error("SEED_DEMO_PASSWORD is required");
 const evidence = [];
@@ -51,9 +52,6 @@ async function main() {
   const manager = await login(
     process.env.MANAGER_EMAIL ?? "service.manager@demo.local",
   );
-  const dispatcher = await login(
-    process.env.DISPATCHER_EMAIL ?? "dispatcher@demo.local",
-  );
   const technician = await login(
     process.env.TECHNICIAN_EMAIL ?? "technician@demo.local",
   );
@@ -68,20 +66,19 @@ async function main() {
     const user = await call("GET", "/api/identity/auth/me", {
       token: technician,
     });
-    const branches = await call(
+    const { branch } = await call(
       "GET",
-      "/api/organization/branches?pageSize=100",
-      { token: manager },
+      "/api/organization/staff/me/branch",
+      { token: technician },
     );
-    const branch = branches.items.find((b) => b.status === "ACTIVE");
-    assert.ok(branch, "Seed an active branch");
+    assert.ok(branch, "Assign an active primary branch to the demo technician first");
     profile = await call("POST", "/api/workorders/technicians", {
       token: manager,
       status: 201,
       body: {
         userId: user.id,
         branchId: branch.id,
-        employeeCode: "DEMO-TECH-01",
+        employeeCode: catalog.technicians[0].employeeCode,
       },
     });
   }
@@ -139,7 +136,7 @@ async function main() {
     });
   async function execute(result, customerAction) {
     const { sr, wo } = await create();
-    await act(wo, "assign", dispatcher, { technicianId: profile.id });
+    await act(wo, "assign", manager, { technicianId: profile.id });
     const jobs = await call("GET", "/api/workorders/work-orders?mine=true", {
       token: technician,
     });
@@ -151,7 +148,7 @@ async function main() {
     await act(wo, "resume", technician);
     const internal = "INTERNAL-" + randomUUID();
     await call("POST", `/api/workorders/work-orders/${wo.id}/logs`, {
-      token: dispatcher,
+      token: manager,
       body: { note: internal },
       status: 201,
     });
@@ -212,7 +209,7 @@ async function main() {
   await execute("UNRESOLVED");
   for (const cancelServiceRequest of [false, true]) {
     const { sr, wo } = await create();
-    await act(wo, "assign", dispatcher, { technicianId: profile.id });
+    await act(wo, "assign", manager, { technicianId: profile.id });
     await act(wo, "accept", technician);
     if (cancelServiceRequest) await act(wo, "start", technician);
     await call("POST", `/api/service-requests/${sr.id}/cancel`, {

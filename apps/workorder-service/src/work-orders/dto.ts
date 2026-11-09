@@ -63,6 +63,8 @@ export class PatchWorkOrderDto {
   scheduledEnd?: string | null;
 }
 export class ListWorkOrdersDto extends PaginationQueryDto {
+  @IsOptional() @IsUUID() branchId?: string;
+  @IsOptional() @IsIn(['true', 'false']) unallocated?: string;
   @ValidateIf((_o, v) => v !== undefined)
   @IsString()
   @MaxLength(100)

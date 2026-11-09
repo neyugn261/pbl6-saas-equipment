@@ -1,3 +1,4 @@
+const catalog = require('../../../scripts/demo/catalog.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
@@ -41,7 +42,7 @@ async function call(base, method, route, token, body, expected = 200) {
 }
 async function login(base, route, email) {
   const result = await call(base, 'POST', route, undefined, {
-    tenantCode: 'DEMO',
+    tenantCode: catalog.tenant.code,
     email,
     password: process.env.SEED_DEMO_PASSWORD,
   });

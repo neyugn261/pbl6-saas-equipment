@@ -1,5 +1,7 @@
 # Service Request Service
 
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
+
 Service requests, warranty review, comments, cost estimates (state machine: `docs/architecture/state-machines.md`). Publishes `ServiceRequestCreated`, `ServiceRequestStatusChanged`.
 
 - Owner: Member C ([CONTRIBUTING.md](../../CONTRIBUTING.md))
@@ -152,3 +154,7 @@ Public/internal endpoints and schemas: [OpenAPI supplement](../../docs/api/model
 [rollout / rollback](../../docs/planning/model-service-policies-rollout.md).
 Run the real multi-service suite from the root with `pnpm test:model-policies`,
 using dedicated `*_TEST_DATABASE_URL` databases and RabbitMQ.
+
+## Branch service management (ADR 0022)
+
+See [design](../../docs/decisions/0022-branch-service-management.md) and [runbook](../../docs/user-guide/branch-service-management.md). SERVICE_MANAGER handles both reception and dispatch; existing Dispatcher accounts remain compatible. Apply additive migrations before starting this version. Organization supplies the active primary branch live; tenant-wide customer/equipment master data and maintenance plans remain shared.

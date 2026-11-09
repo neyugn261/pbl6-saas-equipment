@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -38,6 +40,8 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
   };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(FIXTURE_BRANCH))
       .overrideProvider(REFERENCES)
       .useValue(refs)
       .compile();
@@ -47,6 +51,38 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
     db = app.get(PrismaService);
     consumer = app.get(MaintenanceEventsConsumer);
   });
+  async function handleWithRouting(
+    event: Parameters<MaintenanceEventsConsumer['handle']>[0],
+  ) {
+    const p = event.payload as {
+      customerSiteId?: string | null;
+      maintenanceTaskId?: string;
+    };
+    if (event.tenantId && p.customerSiteId)
+      await db.siteBranchSnapshot.createMany({
+        data: [
+          {
+            tenantId: event.tenantId,
+            siteId: p.customerSiteId,
+            branchId: FIXTURE_BRANCH,
+            revision: 1,
+          },
+        ],
+        skipDuplicates: true,
+      });
+    const result = await consumer.handle(event);
+    // Legacy tasks with no site are explicitly allocated in this lifecycle fixture.
+    if (event.tenantId && !p.customerSiteId && p.maintenanceTaskId)
+      await db.workOrder.updateMany({
+        where: {
+          tenantId: event.tenantId,
+          maintenanceTaskId: p.maintenanceTaskId,
+          branchId: null,
+        },
+        data: { branchId: FIXTURE_BRANCH },
+      });
+    return result;
+  }
   afterAll(async () => {
     await app?.close();
   });
@@ -94,7 +130,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
       correlationId: 'replacement-db',
       payload,
     };
-    await consumer.handle(due);
+    await handleWithRouting(due);
     const previous = await db.workOrder.findFirstOrThrow({
       where: { maintenanceTaskId: payload.maintenanceTaskId },
     });
@@ -127,12 +163,12 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
     kind: typeof Error | typeof InvalidEventError = InvalidEventError,
   ) {
     const before = await counts();
-    await expect(consumer.handle(event)).rejects.toBeInstanceOf(kind);
+    await expect(handleWithRouting(event)).rejects.toBeInstanceOf(kind);
     expect(await counts()).toEqual(before);
   }
   it('creates the supplied WO ID with durable request/predecessor, null system actor and atomic Created outbox', async () => {
     const { event } = await fixture();
-    expect(await consumer.handle(event)).toBe('processed');
+    expect(await handleWithRouting(event)).toBe('processed');
     const row = await db.workOrder.findUniqueOrThrow({
       where: { id: event.payload.replacementWorkOrderId },
     });
@@ -206,26 +242,26 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
       if (value) other.payload[key] = value.toUpperCase();
     }
     await Promise.all([
-      consumer.handle(event),
-      consumer.handle(event),
-      consumer.handle(other),
+      handleWithRouting(event),
+      handleWithRouting(event),
+      handleWithRouting(other),
     ]);
     expect(await db.workOrder.count()).toBe(2);
     expect(
       await db.outboxEvent.count({ where: { eventType: 'WorkOrderCreated' } }),
     ).toBe(2);
     expect((await db.documentSequence.findFirstOrThrow()).lastValue).toBe(2n);
-    expect(await consumer.handle(event)).toBe('duplicate');
+    expect(await handleWithRouting(event)).toBe('duplicate');
   });
   it('supports null site/correlation and a completed target remains an idempotent replay', async () => {
     const { event } = await fixture(true, null);
     event.correlationId = null;
-    await consumer.handle(event);
+    await handleWithRouting(event);
     await db.workOrder.update({
       where: { id: event.payload.replacementWorkOrderId },
       data: { status: 'COMPLETED' },
     });
-    await consumer.handle(clone(event));
+    await handleWithRouting(clone(event));
     expect(await db.workOrder.count()).toBe(2);
     expect(
       await db.workOrderStatusHistory.count({
@@ -242,14 +278,14 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
   });
   it('keeps replay idempotent after cancellation/rescheduling, and allows the next explicit link only', async () => {
     const { event, due } = await fixture();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     await request(app.getHttpServer())
       .patch(`/work-orders/${event.payload.replacementWorkOrderId}`)
       .auth(manager, { type: 'bearer' })
       .send({ scheduledStart: '2030-01-01T08:00:00+07:00' })
       .expect(200);
     await cancel(event.payload.replacementWorkOrderId);
-    await consumer.handle(clone(event));
+    await handleWithRouting(clone(event));
     const next = clone(event);
     next.payload = {
       ...event.payload,
@@ -257,9 +293,9 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
       previousWorkOrderId: event.payload.replacementWorkOrderId,
       replacementWorkOrderId: randomUUID(),
     };
-    await consumer.handle(next);
-    await consumer.handle(clone(event));
-    await consumer.handle({ ...due, eventId: randomUUID() });
+    await handleWithRouting(next);
+    await handleWithRouting(clone(event));
+    await handleWithRouting({ ...due, eventId: randomUUID() });
     expect(await db.workOrder.count()).toBe(3);
     expect(
       await db.workOrder.count({ where: { status: { not: 'CANCELLED' } } }),
@@ -276,8 +312,8 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
     other.payload.requestId = randomUUID();
     other.payload.replacementWorkOrderId = randomUUID();
     const results = await Promise.allSettled([
-      consumer.handle(event),
-      consumer.handle(other),
+      handleWithRouting(event),
+      handleWithRouting(other),
     ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
@@ -286,7 +322,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
   });
   it('rejects reuse of a request ID for another predecessor after cancellation', async () => {
     const { event } = await fixture();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     await cancel(event.payload.replacementWorkOrderId);
     const reused = clone(event);
     reused.payload.previousWorkOrderId = event.payload.replacementWorkOrderId;
@@ -349,7 +385,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
     event.payload.previousWorkOrderId = randomUUID();
     await rejected(event, Error);
     event.payload.previousWorkOrderId = realId;
-    expect(await consumer.handle(event)).toBe('processed');
+    expect(await handleWithRouting(event)).toBe('processed');
   });
   it.each(['CREATED', 'COMPLETED'])(
     'does not replace a %s predecessor',
@@ -366,6 +402,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
     const { event } = await fixture();
     await db.workOrder.create({
       data: {
+        branchId: FIXTURE_BRANCH,
         tenantId,
         equipmentId,
         customerId,
@@ -380,7 +417,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
   });
   it('rejects target ID collisions and changed replay identity', async () => {
     const { event } = await fixture();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     const changed = clone(event);
     changed.payload.requestId = randomUUID();
     await rejected(changed);
@@ -411,7 +448,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
       });
     });
     await ready;
-    const replacing = consumer.handle(event);
+    const replacing = handleWithRouting(event);
     release();
     await cancelling;
     await replacing;
@@ -424,14 +461,14 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
       "ALTER TABLE outbox_events ADD CONSTRAINT replacement_reject_created CHECK (event_type <> 'WorkOrderCreated') NOT VALID",
     );
     try {
-      await expect(consumer.handle(event)).rejects.toThrow();
+      await expect(handleWithRouting(event)).rejects.toThrow();
       expect(await counts()).toEqual(before);
     } finally {
       await db.$executeRawUnsafe(
         'ALTER TABLE outbox_events DROP CONSTRAINT replacement_reject_created',
       );
     }
-    expect(await consumer.handle(event)).toBe('processed');
+    expect(await handleWithRouting(event)).toBe('processed');
     expect(
       (
         await db.workOrder.findUniqueOrThrow({
@@ -442,7 +479,7 @@ describe('Explicit Maintenance replacement — real PostgreSQL and business idem
   });
   it('enforces durable request and predecessor uniqueness at the DB boundary', async () => {
     const { event } = await fixture();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     await cancel(event.payload.replacementWorkOrderId);
     const row = await db.workOrder.findUniqueOrThrow({
       where: { id: event.payload.replacementWorkOrderId },

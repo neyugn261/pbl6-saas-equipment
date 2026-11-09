@@ -4,9 +4,12 @@ import { CustomersModule } from '../customers/customers.module';
 import { SitesModule } from '../sites/sites.module';
 import { InternalController } from './internal.controller';
 import { OrganizationDisplayNamesController } from './display-names.controller';
+import { StaffContextController } from './staff-context.controller';
 
 @Module({
   imports: [BranchesModule, CustomersModule, SitesModule],
-  controllers: [InternalController, OrganizationDisplayNamesController],
+  controllers: [InternalController, OrganizationDisplayNamesController,
+    StaffContextController,
+  ],
 })
 export class InternalModule {}

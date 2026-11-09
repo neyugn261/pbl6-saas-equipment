@@ -1,3 +1,4 @@
+import { branchDataScope, branchWhere, assertBranchAccess } from '@pbl6/auth';
 import { coveredIncident, estimateAllowed } from './warranty-coverage';
 import {
   validWarrantyPolicy,
@@ -16,11 +17,8 @@ import {
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import {
-  assertInScope,
-  dataScope,
-  type PermissionCode,
-  type Principal,
-} from '@pbl6/auth';
+  assertInScope, type PermissionCode,
+  type Principal } from '@pbl6/auth';
 import { Events, enqueueEvent } from '@pbl6/event-contracts';
 import { getCorrelationId } from '@pbl6/service-kit';
 import type { Page } from '@pbl6/service-kit';
@@ -81,6 +79,7 @@ function publicRequest(request: ServiceRequest) {
   return {
     id: request.id,
     requestNo: request.requestNo,
+    branchId: request.branchId,
     customerId: request.customerId,
     equipmentId: request.equipmentId,
     requesterId: request.requesterId,
@@ -221,7 +220,7 @@ export class ServiceRequestsService {
     principal: Principal,
     query: ListServiceRequestsDto,
   ): Promise<Page<ReturnType<typeof publicRequest>>> {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const statuses = query.status?.split(',').map((status) => status.trim());
     if (
       statuses?.some(
@@ -234,7 +233,16 @@ export class ServiceRequestsService {
       });
     }
 
+    if (query.branchId) assertBranchAccess(principal, query.branchId);
     const where: Prisma.ServiceRequestWhereInput = {
+      ...branchWhere(principal),
+      ...(principal.userType === 'TENANT_STAFF' && query.branchId
+        ? { branchId: query.branchId }
+        : {}),
+      ...(principal.roles.includes('TENANT_ADMIN') &&
+      query.unallocated === 'true'
+        ? { branchId: null }
+        : {}),
       tenantId: scope.tenantId,
       ...(scope.customerId ? { customerId: scope.customerId } : {}),
       ...(scope.customerId === null && query.customerId
@@ -312,7 +320,7 @@ export class ServiceRequestsService {
   }
 
   async create(principal: Principal, input: CreateServiceRequestDto) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const isCustomer = principal.userType === 'CUSTOMER';
     const equipment = await this.assets.getEquipment(
       input.equipmentId,
@@ -364,6 +372,18 @@ export class ServiceRequestsService {
       });
     }
 
+    const routedBranch = equipment.defaultServicingBranchId ?? null;
+    if (
+      !routedBranch &&
+      principal.userType === 'TENANT_STAFF' &&
+      !principal.roles.includes('TENANT_ADMIN')
+    )
+      throw new UnprocessableEntityException({
+        code: 'BRANCH_ROUTING_REQUIRED',
+        message:
+          'Ask Tenant Admin to configure the customer site servicing branch',
+      });
+    assertBranchAccess(principal, routedBranch);
     const year = new Intl.DateTimeFormat('en', {
       timeZone: 'Asia/Ho_Chi_Minh',
       year: 'numeric',
@@ -385,6 +405,7 @@ export class ServiceRequestsService {
         data: {
           tenantId: scope.tenantId,
           requestNo,
+          branchId: routedBranch,
           customerId,
           equipmentId: equipment.id,
           requesterId: principal.userId,
@@ -409,6 +430,7 @@ export class ServiceRequestsService {
         correlationId: getCorrelationId(),
         payload: {
           serviceRequestId: created.id,
+          branchId: created.branchId,
           requestNo: created.requestNo,
           customerId: created.customerId,
           equipmentId: created.equipmentId,
@@ -501,7 +523,7 @@ export class ServiceRequestsService {
     requestId: string,
     input: CostEstimateInputDto,
   ) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const values = this.validateEstimateInput(input);
     const estimate = await this.prisma.$transaction(async (tx) => {
       const request = await this.lockRequest(tx, scope, requestId);
@@ -564,7 +586,7 @@ export class ServiceRequestsService {
     estimateId: string,
     input: CostEstimateInputDto,
   ) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const values = this.validateEstimateInput(input);
     const estimate = await this.prisma.$transaction(async (tx) => {
       const current = await this.lockEstimate(tx, scope, estimateId);
@@ -593,7 +615,7 @@ export class ServiceRequestsService {
     principal: Principal,
     estimateId: string,
   ): Promise<void> {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     await this.prisma.$transaction(async (tx) => {
       const current = await this.lockEstimate(tx, scope, estimateId);
       if (current.status !== 'DRAFT') {
@@ -604,7 +626,7 @@ export class ServiceRequestsService {
   }
 
   async sendEstimate(principal: Principal, estimateId: string) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const updated = await this.prisma.$transaction(async (tx) => {
       const current = await this.lockEstimate(tx, scope, estimateId);
       if (current.status !== 'DRAFT') {
@@ -668,7 +690,7 @@ export class ServiceRequestsService {
   }
 
   async reviseEstimate(principal: Principal, estimateId: string) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const result = await this.prisma.$transaction(async (tx) => {
       const current = await this.lockEstimate(tx, scope, estimateId);
       if (current.status !== 'SENT') {
@@ -725,7 +747,7 @@ export class ServiceRequestsService {
   }
 
   async approveEstimate(principal: Principal, estimateId: string) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const result = await this.prisma.$transaction(async (tx) => {
       const current = await this.lockEstimate(tx, scope, estimateId);
       if (current.status !== 'SENT') {
@@ -778,7 +800,7 @@ export class ServiceRequestsService {
     estimateId: string,
     input: OptionalReasonDto,
   ) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const result = await this.prisma.$transaction(async (tx) => {
       const current = await this.lockEstimate(tx, scope, estimateId);
       if (current.status !== 'SENT') {
@@ -867,13 +889,14 @@ export class ServiceRequestsService {
 
   private async lockEstimate(
     tx: Tx,
-    scope: ReturnType<typeof dataScope>,
+    scope: ReturnType<typeof branchDataScope>,
     estimateId: string,
   ): Promise<EstimateWithItems> {
     const reference = await tx.costEstimate.findFirst({
       where: {
         id: estimateId,
         tenantId: scope.tenantId,
+        ...(scope.branchId ? { request: { branchId: scope.branchId } } : {}),
         ...(scope.customerId ? { status: { not: 'DRAFT' } } : {}),
       },
       select: { requestId: true },
@@ -1018,7 +1041,7 @@ export class ServiceRequestsService {
     principal: Principal,
     requestId: string,
   ): Promise<boolean> {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const candidate = await this.prisma.costEstimate.findFirst({
       where: {
         tenantId: scope.tenantId,
@@ -1097,7 +1120,7 @@ export class ServiceRequestsService {
         message: 'At least one field must be provided',
       });
     }
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const updated = await this.prisma.$transaction(async (tx) => {
       const request = await this.lockRequest(tx, scope, requestId);
       if (!['NEW', 'AWAITING_INFO'].includes(request.status)) {
@@ -1172,7 +1195,7 @@ export class ServiceRequestsService {
   }
 
   async review(principal: Principal, requestId: string) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const initial = await this.findRequest(principal, requestId);
     if (initial.status !== 'NEW') {
       throw invalidTransition(initial.status, 'review');
@@ -1252,6 +1275,7 @@ export class ServiceRequestsService {
     return {
       id: request.id,
       requestNo: request.requestNo,
+      branchId: request.branchId,
       status: request.status,
       title: request.title,
       customerId: request.customerId,
@@ -1274,7 +1298,7 @@ export class ServiceRequestsService {
   }
 
   async warrantyCheck(principal: Principal, requestId: string) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const current = await this.findRequest(principal, requestId);
     if (current.status !== 'REVIEWING') {
       throw invalidTransition(current.status, 'warranty-check');
@@ -1358,7 +1382,11 @@ export class ServiceRequestsService {
     input: WarrantyAssessmentDto,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const row = await this.lockRequest(tx, dataScope(principal), requestId);
+      const row = await this.lockRequest(
+        tx,
+        branchDataScope(principal),
+        requestId,
+      );
       if (!['REVIEWING', 'COST_REJECTED'].includes(row.status))
         throw invalidTransition(row.status, 'assess-warranty');
       if (row.assessmentVersion !== input.expectedVersion)
@@ -1595,7 +1623,7 @@ export class ServiceRequestsService {
         message: 'Missing permission to write internal comments',
       });
     }
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     return this.prisma.$transaction(async (tx) => {
       const request = await this.lockRequest(tx, scope, requestId);
       const comment = await tx.requestComment.create({
@@ -1655,7 +1683,7 @@ export class ServiceRequestsService {
     reason: string | null = null,
     validate?: (request: ServiceRequest) => void,
   ) {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     return this.prisma.$transaction(async (tx) => {
       const current = await this.lockRequest(tx, scope, requestId);
       if (action === 'cancel' && current.status === 'PROCESSING') {
@@ -1720,11 +1748,12 @@ export class ServiceRequestsService {
     principal: Principal,
     requestId: string,
   ): Promise<ServiceRequest> {
-    const scope = dataScope(principal);
+    const scope = branchDataScope(principal);
     const request = await this.prisma.serviceRequest.findFirst({
       where: {
         id: requestId,
         tenantId: scope.tenantId,
+        ...(scope.branchId ? { branchId: scope.branchId } : {}),
         ...(scope.customerId ? { customerId: scope.customerId } : {}),
       },
     });
@@ -1733,7 +1762,7 @@ export class ServiceRequestsService {
 
   private async lockRequest(
     tx: Tx,
-    scope: ReturnType<typeof dataScope>,
+    scope: ReturnType<typeof branchDataScope>,
     requestId: string,
   ): Promise<ServiceRequest> {
     await tx.$queryRawUnsafe(
@@ -1749,6 +1778,7 @@ export class ServiceRequestsService {
       where: {
         id: requestId,
         tenantId: scope.tenantId,
+        ...(scope.branchId ? { branchId: scope.branchId } : {}),
         ...(scope.customerId ? { customerId: scope.customerId } : {}),
       },
     });
@@ -1769,6 +1799,7 @@ export class ServiceRequestsService {
       correlationId: getCorrelationId(),
       payload: {
         serviceRequestId: request.id,
+        branchId: request.branchId,
         requestNo: request.requestNo,
         customerId: request.customerId,
         equipmentId: request.equipmentId,

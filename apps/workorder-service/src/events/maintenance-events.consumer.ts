@@ -156,8 +156,24 @@ export class MaintenanceEventsConsumer {
             return;
           }
         }
+        const siteRoute = payload.customerSiteId
+          ? await tx.siteBranchSnapshot.findUnique({
+              where: {
+                tenantId_siteId: { tenantId, siteId: payload.customerSiteId },
+              },
+            })
+          : null;
+        const previousRoute = replacement
+          ? await tx.workOrder.findUnique({
+              where: { id: replacement.previousWorkOrderId },
+              select: { branchId: true },
+            })
+          : null;
         const order = await tx.workOrder.create({
           data: {
+            branchId: replacement
+              ? (previousRoute?.branchId ?? null)
+              : (siteRoute?.branchId ?? null),
             ...(replacement
               ? {
                   id: replacement.replacementWorkOrderId,
@@ -203,6 +219,7 @@ export class MaintenanceEventsConsumer {
           payload: {
             workOrderId: order.id,
             workOrderNo: order.workOrderNo,
+            branchId: order.branchId,
             serviceRequestId: null,
             maintenanceTaskId: order.maintenanceTaskId,
             equipmentId: order.equipmentId,

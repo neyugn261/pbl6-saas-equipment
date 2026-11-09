@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -48,7 +50,9 @@ describe('M3-A5 report summary — HTTP and PostgreSQL', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    }).overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(FIXTURE_BRANCH))
+      .compile();
     app = module.createNestApplication({ logger: false });
     configureApp(app, { logger: new Logger('reports-db') });
     await app.init();
@@ -62,6 +66,7 @@ describe('M3-A5 report summary — HTTP and PostgreSQL', () => {
     overrides: Partial<Prisma.WorkOrderCreateManyInput> = {},
   ): Prisma.WorkOrderCreateManyInput => ({
     id: randomUUID(),
+    branchId: FIXTURE_BRANCH,
     tenantId,
     workOrderNo: `WO-Q5-${randomUUID()}`,
     serviceRequestId: randomUUID(),

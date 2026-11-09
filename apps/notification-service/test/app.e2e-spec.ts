@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { signTestAccessToken, testJwtEnv } from '@pbl6/testing';
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext, signTestAccessToken, testJwtEnv } from '@pbl6/testing';
 import { configureApp } from '@pbl6/service-kit';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -17,6 +18,7 @@ const row = {
   tenantId: TENANT,
   userId: USER,
   customerId: null,
+  branchId: FIXTURE_BRANCH,
   sourceEventId: '10000000-0000-4000-8000-000000000004',
   type: 'ServiceRequestStatusChanged.v1',
   title: 'Request updated',
@@ -102,6 +104,8 @@ describe('Notification API (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext())
       .overrideProvider(PrismaService)
       .useValue(prisma)
       .compile();

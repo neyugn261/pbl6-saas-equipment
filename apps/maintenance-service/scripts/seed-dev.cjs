@@ -15,7 +15,7 @@ const { PlansRepository } = require('../dist/plans/plans.repository');
 const { PrismaService } = require('../dist/prisma/prisma.service');
 const { ASSET_CLIENT } = require('../dist/asset/asset.client');
 const { vietnamToday } = require('../dist/common/calendar');
-const planId = '00000000-0000-4000-8000-000000003001';
+const catalog = require('../../../scripts/demo/catalog.cjs');
 async function main() {
   let token = process.env.MAINTENANCE_SEED_ACCESS_TOKEN;
   if (!token) {
@@ -29,7 +29,7 @@ async function main() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          tenantCode: 'DEMO',
+          tenantCode: catalog.tenant.code,
           email: 'service.manager@demo.local',
           password: process.env.SEED_DEMO_PASSWORD,
         }),
@@ -53,56 +53,56 @@ async function main() {
     logger: ['error', 'warn'],
   });
   try {
-    const db = app.get(PrismaService),
-      existing = await db.maintenancePlan.findUnique({ where: { id: planId } });
-    if (existing) {
-      assert.equal(
-        existing.tenantId,
-        principal.tenantId,
-        'Fixed fixture ID already belongs to another tenant',
+    const db = app.get(PrismaService);
+    const fixtures = process.env.MAINTENANCE_SEED_EQUIPMENT_ID
+      ? [
+          {
+            ...catalog.plans[0],
+          equipmentId: process.env.MAINTENANCE_SEED_EQUIPMENT_ID,
+          ...(process.env.MAINTENANCE_SEED_PLAN_ID ? { id: process.env.MAINTENANCE_SEED_PLAN_ID } : {}),
+          },
+        ]
+      : catalog.plans;
+    for (const fixture of fixtures) {
+      const existing = await db.maintenancePlan.findUnique({
+        where: { id: fixture.id },
+      });
+      if (existing) {
+        assert.equal(
+          existing.tenantId,
+          principal.tenantId,
+          'Reserved Plan belongs to another tenant',
+        );
+        console.log(
+          'Maintenance demo Plan already exists; schedule and Tasks preserved',
+        );
+        continue;
+      }
+      const equipment = await app
+        .get(ASSET_CLIENT)
+        .equipment(fixture.equipmentId, principal);
+      assert.ok(
+        equipment && equipment.status !== 'RETIRED',
+        'Seed Equipment is missing or retired',
       );
-      console.log(
-        'Maintenance demo Plan already exists; schedule and Tasks preserved',
-      );
-      return;
-    }
-    const equipmentId =
-      process.env.MAINTENANCE_SEED_EQUIPMENT_ID ??
-      '00000000-0000-4000-8000-000000001101';
-    const equipment = await app
-      .get(ASSET_CLIENT)
-      .equipment(equipmentId, principal);
-    assert.ok(
-      equipment &&
-        equipment.id.toLowerCase() === equipmentId.toLowerCase() &&
-        equipment.status !== 'RETIRED',
-      'Seed Equipment is missing or retired',
-    );
-    assert.ok(
-      equipment.customerId &&
-        Number.isSafeInteger(equipment.snapshotVersion) &&
-        equipment.snapshotVersion >= 0,
-      'Asset snapshot is invalid',
-    );
-    await app
-      .get(PlansRepository)
-      .create(
+      await app.get(PlansRepository).create(
         principal.tenantId,
         {
-          equipmentId,
-          name: 'DEMO-MAINTENANCE-01: monthly inspection',
+          equipmentId: fixture.equipmentId,
+          name: fixture.name,
           frequencyUnit: 'MONTH',
-          frequencyValue: 1,
-          nextDueDate: vietnamToday(),
+          frequencyValue: 3,
+          nextDueDate: process.env.DEMO_SEED_DATE || vietnamToday(),
         },
         equipment,
-        planId,
+        fixture.id,
       );
-    console.log(
-      'Seeded Maintenance Plan ' +
-        planId +
-        '; first due date is today in Vietnam',
-    );
+      console.log(
+        'Seeded Maintenance Plan ' +
+          fixture.id +
+          '; first due date is today in Vietnam',
+      );
+    }
   } finally {
     await app.close();
   }

@@ -1,5 +1,7 @@
 # Staff guide
 
+> ADR 0022: demo mới dùng một tài khoản Service Manager để tiếp nhận và điều phối trong chi nhánh; xem [hướng dẫn chi nhánh](branch-service-management.md). Dispatcher chỉ giữ tương thích tài khoản cũ.
+
 This guide covers internal tenant roles. A Tenant Admin, Service Manager, and
 Dispatcher have different write permissions; a visible route does not grant a
 mutation permission.

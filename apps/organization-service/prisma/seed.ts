@@ -1,7 +1,7 @@
 /**
  * Development data, run by `prisma db seed` (see prisma.config.ts):
  *
- *   pnpm db:seed:dev   tenant DEMO, branches, customers, sites, locations,
+ *   pnpm db:seed:dev   tenant MP, branches, customers, sites, locations,
  *                      contacts; with Identity running and seeded, also the
  *                      customer memberships and branch staff of its demo accounts
  *
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   try {
     const summary = await seedDemoData(prisma, userIds);
     console.log(
-      `Seeded tenant DEMO, 2 branches, 2 customers, 3 sites, 4 locations, 2 contacts; ` +
+      `Seeded tenant ${DEMO_TENANT.code}, 2 branches, 2 customers, 4 sites, 8 locations, 4 contacts; ` +
         `${summary.memberships} memberships and ${summary.branchStaff} branch staff linked.`,
     );
   } finally {

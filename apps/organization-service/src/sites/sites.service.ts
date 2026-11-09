@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import type { DataScope } from '@pbl6/auth';
+import { Injectable, ForbiddenException } from '@nestjs/common';
+import type { DataScope, Principal } from '@pbl6/auth';
 import { BranchesRepository } from '../branches/branches.repository';
 import { notFound, unprocessable } from '../common/errors';
 import { assertCustomerVisible } from '../common/scope';
@@ -31,8 +31,26 @@ export class SitesService {
     scope: DataScope,
     customerId: string,
     input: CreateSiteDto,
+    actor?: Principal,
   ): Promise<SiteResponse> {
     await this.customers.load(scope, customerId);
+    if (actor && !actor.roles.includes('TENANT_ADMIN')) {
+      const own = await this.branches.primaryBranch(
+        scope.tenantId,
+        actor.userId,
+      );
+      await this.assertBranch(scope.tenantId, input.defaultServicingBranchId);
+      if (
+        input.defaultServicingBranchId &&
+        (!own || input.defaultServicingBranchId !== own.id)
+      )
+        throw new ForbiddenException({
+          code: 'BRANCH_ROUTING_FORBIDDEN',
+          message: 'Only Tenant Admin can choose another servicing branch',
+        });
+      if (own && input.defaultServicingBranchId === undefined)
+        input = { ...input, defaultServicingBranchId: own.id };
+    }
     await this.assertBranch(scope.tenantId, input.defaultServicingBranchId);
     const site = await this.sites.createSite({
       ...input,
@@ -46,8 +64,20 @@ export class SitesService {
     scope: DataScope,
     id: string,
     input: UpdateSiteDto,
+    actor?: Principal,
   ): Promise<SiteResponse> {
-    await this.load(scope, id);
+    const current = await this.load(scope, id);
+    await this.assertBranch(scope.tenantId, input.defaultServicingBranchId);
+    if (
+      actor &&
+      !actor.roles.includes('TENANT_ADMIN') &&
+      input.defaultServicingBranchId !== undefined &&
+      input.defaultServicingBranchId !== current.defaultServicingBranchId
+    )
+      throw new ForbiddenException({
+        code: 'BRANCH_ROUTING_FORBIDDEN',
+        message: 'Only Tenant Admin can change site routing',
+      });
     await this.assertBranch(scope.tenantId, input.defaultServicingBranchId);
     return toSiteResponse(await this.sites.updateSite(id, input));
   }
@@ -71,7 +101,8 @@ export class SitesService {
     branchId: string | null | undefined,
   ): Promise<void> {
     if (!branchId) return;
-    if (!(await this.branches.find(tenantId, branchId))) {
+    const branch = await this.branches.find(tenantId, branchId);
+    if (!branch || branch.status !== 'ACTIVE') {
       throw unprocessable(
         'BRANCH_NOT_FOUND',
         'The default servicing branch is not a branch of this tenant',

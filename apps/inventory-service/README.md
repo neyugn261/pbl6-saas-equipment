@@ -1,5 +1,7 @@
 # Inventory Service
 
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
+
 M3 runtime owned by Minh. Part/Warehouse, stock/threshold reads, immutable ledger,
 receive/adjust, issue/return, durable idempotency and LowStockDetected outbox/relay.
 ISSUE uses the durable WO reservation API implemented under ADR 0016. Missing
@@ -127,8 +129,8 @@ isLowStock and shortageQuantity so an old notification is not mistaken for curre
 ## Seed and verification
 
 Run Identity+Organization demo services/seeds first. `IDENTITY_SERVICE_URL` and
-`SEED_DEMO_PASSWORD` must be configured. Dev seed logs in as inventory@demo.local,
-validates Branch HCM with the real token, writes only inventory_db and refuses
+`SEED_DEMO_PASSWORD` must be configured. Dev seed logs in as the HCM and DN Inventory accounts,
+validates both branches with real tokens, seeds three parts and two warehouses, writes only inventory_db and refuses
 production. The seed preserves existing metadata, status, thresholds and quantities;
 its initial receipt uses a fixed idempotency key.
 

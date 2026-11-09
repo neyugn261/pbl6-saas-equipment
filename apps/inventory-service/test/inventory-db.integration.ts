@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { fixtureBranchContext } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import {
   ConflictException,
@@ -92,7 +94,7 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
       id === branchId ? { id, status: 'ACTIVE' } : null,
     ),
     workOrder: jest.fn(async (id: string) =>
-      !missingWO && id === workOrderId ? { id, status: woStatus } : null,
+      !missingWO && id === workOrderId ? { id, branchId, status: woStatus } : null,
     ),
     reserve: jest.fn(async (id: string, body: ReservationRequest) => {
       if (reserveUnavailable)
@@ -168,14 +170,29 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
 
   it('ledger resolves inactive part/warehouse metadata independently of dropdown pages, preserving snapshots', async () => {
     await receive().expect(201);
-    const before = await db.stockTransaction.findFirstOrThrow({ where: { tenantId, partId } });
-    await db.part.update({ where: { id: partId }, data: { status: 'INACTIVE', name: 'Renamed inactive part' } });
-    await db.warehouse.update({ where: { id: warehouseId }, data: { status: 'INACTIVE', name: 'Renamed inactive warehouse' } });
-    const response = await api('get', `/stock-transactions?partId=${partId}`).expect(200);
-    expect(response.body.items[0]).toMatchObject({ partId, warehouseId,
-      part: { name: 'Renamed inactive part' }, warehouse: { name: 'Renamed inactive warehouse' },
-      partSnapshot: before.partSnapshot, warehouseSnapshot: before.warehouseSnapshot });
-    const foreign = await api('get', `/stock-transactions?partId=${partId}`, undefined, undefined, foreignToken).expect(200);
+    const before = await db.stockTransaction.findFirstOrThrow({ where: { tenantId, partId },
+    });
+    await db.part.update({ where: { id: partId }, data: { status: 'INACTIVE', name: 'Renamed inactive part' },
+    });
+    await db.warehouse.update({ where: { id: warehouseId }, data: { status: 'INACTIVE', name: 'Renamed inactive warehouse' },
+    });
+    const response = await api('get', `/stock-transactions?partId=${partId}`,
+    ).expect(200);
+    expect(response.body.items[0]).toMatchObject({
+      partId,
+      warehouseId,
+      part: { name: 'Renamed inactive part' },
+      warehouse: { name: 'Renamed inactive warehouse' },
+      partSnapshot: before.partSnapshot,
+      warehouseSnapshot: before.warehouseSnapshot,
+    });
+    const foreign = await api(
+      'get',
+      `/stock-transactions?partId=${partId}`,
+      undefined,
+      undefined,
+      foreignToken,
+    ).expect(200);
     expect(foreign.body.items).toEqual([]);
   });
   const issue = (quantity = '1', key = randomUUID()) =>
@@ -191,6 +208,8 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
     });
   async function boot() {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(branchId))
       .overrideProvider(ReferencesClient)
       .useValue(refs)
       .overrideProvider(EventsService)
@@ -297,7 +316,7 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
       branchId: randomUUID(),
       code: 'BAD',
       name: 'Bad',
-    }).expect(422);
+    }).expect(404);
     refs.branch.mockResolvedValueOnce({ id: branchId, status: 'INACTIVE' });
     await api('post', '/warehouses', {
       branchId,
@@ -390,7 +409,7 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
       move('1'),
       randomUUID(),
       foreignToken,
-    ).expect(422);
+    ).expect(404);
   });
   it('latches below threshold, clears at equality, and emits a distinct new occurrence', async () => {
     await api('put', `/warehouses/${warehouseId}/stocks/${partId}`, {
@@ -439,7 +458,7 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
       undefined,
       signTestAccessToken({ role: 'TENANT_ADMIN', tenantId }),
     ).expect(200);
-    expect(refs.workOrder).not.toHaveBeenCalled();
+    expect(refs.workOrder).toHaveBeenCalledTimes(1); // Initial ISSUE validates WO branch; proof lookup stays local.
     expect(JSON.stringify(proof.body)).not.toContain(token);
     await api(
       'get',

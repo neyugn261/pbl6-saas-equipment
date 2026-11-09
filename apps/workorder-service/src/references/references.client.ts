@@ -5,6 +5,7 @@ import type { AppEnv } from '../config/env.validation';
 
 export const REFERENCES = Symbol('WORKORDER_REFERENCES');
 export interface UserRef {
+  primaryBranchId?: string | null;
   id: string;
   tenantId: string | null;
   userType: string;
@@ -16,6 +17,7 @@ export interface BranchRef {
   status: string;
 }
 export interface RequestRef {
+  branchId?: string | null;
   id: string;
   status: string;
   equipmentId: string;
@@ -60,10 +62,21 @@ export class HttpReferencesClient implements ReferencesClient {
       baseUrl: config.get('ASSET_SERVICE_URL', { infer: true }),
     });
   }
-  user(id: string, accessToken: string) {
-    return this.identity.getOrNull<UserRef>(`/internal/users/${id}`, {
-      accessToken,
-    });
+  async user(id: string, accessToken: string) {
+    const user = await this.identity.getOrNull<UserRef>(`/internal/users/${id}`,
+      {
+        accessToken,
+      },
+    );
+    if (!user) return null;
+    const context = await this.organization.get<{
+      tenantId: string;
+      userId: string;
+      branch: { id: string } | null;
+    }>(`/internal/staff/${id}/branch`, { accessToken });
+    if (context.tenantId !== user.tenantId || context.userId !== user.id)
+      throw new Error('Invalid staff branch reference');
+    return { ...user, primaryBranchId: context.branch?.id ?? null };
   }
   branch(id: string, accessToken: string) {
     return this.organization.getOrNull<BranchRef>(`/internal/branches/${id}`, {

@@ -18,11 +18,22 @@ async function main() {
     name: 'identity-service',
     baseUrl: IDENTITY_SERVICE_URL,
   });
-  const login = await identity.post<{ accessToken: string }>('/auth/login', {
-    tenantCode: 'DEMO',
-    email: 'inventory@demo.local',
-    password: SEED_DEMO_PASSWORD,
-  });
+  const catalog = require('../../../../scripts/demo/catalog.cjs');
+  const sessions: Array<{ branchId: string; accessToken: string }> = [];
+  for (const warehouse of catalog.warehouses) {
+    const session = await identity.post<{ accessToken: string }>(
+      '/auth/login',
+      {
+        tenantCode: catalog.tenant.code,
+        email: warehouse.email,
+        password: SEED_DEMO_PASSWORD,
+      },
+    );
+    sessions.push({
+      branchId: warehouse.branchId,
+      accessToken: session.accessToken,
+    });
+  }
   // No consumer/relay is started by this one-shot dev utility.
   process.env.RABBITMQ_URL = '';
   const { AppModule } = await import('../app.module.js');
@@ -34,16 +45,19 @@ async function main() {
     logger: ['error', 'warn'],
   });
   try {
-    const p = new AccessTokenVerifier(
-      jwtOptionsFromConfig(app.get(ConfigService)),
-    ).verify(login.accessToken);
-    const result = await seedInventory(
-      app.get(InventoryRepository),
-      app.get(ReferencesClient),
-      p,
-      process.env.NODE_ENV ?? 'development',
-    );
-    console.log(JSON.stringify({ status: 'READY', ...result }));
+    for (const session of sessions) {
+      const p = new AccessTokenVerifier(
+        jwtOptionsFromConfig(app.get(ConfigService)),
+      ).verify(session.accessToken);
+      const result = await seedInventory(
+        app.get(InventoryRepository),
+        app.get(ReferencesClient),
+        p,
+        process.env.NODE_ENV ?? 'development',
+        session.branchId,
+      );
+      console.log(JSON.stringify({ status: 'READY', ...result }));
+    }
   } finally {
     await app.close();
   }

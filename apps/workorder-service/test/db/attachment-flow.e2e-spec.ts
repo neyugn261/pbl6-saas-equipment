@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { createHash, randomUUID } from 'node:crypto';
 import { INestApplication, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -71,6 +73,8 @@ describe(`M3 A2/A3 attachment HTTP + PostgreSQL (${real ? 'REAL MinIO' : 'explic
     );
     await storage.initialize();
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(FIXTURE_BRANCH))
       .overrideProvider(ATTACHMENT_STORAGE)
       .useValue(storage)
       .compile();
@@ -101,6 +105,7 @@ describe(`M3 A2/A3 attachment HTTP + PostgreSQL (${real ? 'REAL MinIO' : 'explic
     const create = () =>
       db.workOrder.create({
         data: {
+          branchId: FIXTURE_BRANCH,
           tenantId,
           workOrderNo: `WO-A2-${randomUUID()}`,
           serviceRequestId: randomUUID(),
@@ -117,7 +122,7 @@ describe(`M3 A2/A3 attachment HTTP + PostgreSQL (${real ? 'REAL MinIO' : 'explic
       data: {
         tenantId,
         userId: techUserId,
-        branchId: randomUUID(),
+        branchId: FIXTURE_BRANCH,
         employeeCode: 'A2-CURRENT',
       },
     });
@@ -126,7 +131,7 @@ describe(`M3 A2/A3 attachment HTTP + PostgreSQL (${real ? 'REAL MinIO' : 'explic
       data: {
         tenantId,
         userId: pastUserId,
-        branchId: randomUUID(),
+        branchId: FIXTURE_BRANCH,
         employeeCode: 'A2-PAST',
       },
     });

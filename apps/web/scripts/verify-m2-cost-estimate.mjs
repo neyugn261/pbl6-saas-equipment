@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import catalog from "../../../scripts/demo/catalog.cjs";
 // Local DEMO integration check. Creates a service request and estimate through Gateway.
 import assert from 'node:assert/strict';
 
@@ -17,15 +18,15 @@ async function call(method, path, { token, body, status = 200 } = {}) {
   return data;
 }
 async function login(email) {
-  const result = await call('POST', '/api/identity/auth/login', { body: { tenantCode: 'DEMO', email, password } });
+  const result = await call('POST', '/api/identity/auth/login', { body: { tenantCode: catalog.tenant.code, email, password } });
   return result.accessToken;
 }
-const manager = await login('service.manager@demo.local');
+const manager = await login('service.manager.dn@demo.local');
 const customer = await login('customer.user@demo.local');
 const customerAdmin = await login('customer.admin@demo.local');
 const equipmentId = '00000000-0000-4000-8000-000000001102';
 const coverage = await call('GET', `/api/assets/equipment/${equipmentId}/warranty-status`, { token: customer });
-assert.notEqual(coverage.result, 'IN_WARRANTY', 'DEMO-ASSET-02 should be out of warranty');
+assert.notEqual(coverage.result, 'IN_WARRANTY', 'SA-002 should be out of warranty');
 const request = await call('POST', '/api/service-requests', { token: customer, status: 201, body: {
   equipmentId, type: 'REPAIR', priority: 'NORMAL', title: 'M2 web estimate verification', description: 'Local integration check',
 } });

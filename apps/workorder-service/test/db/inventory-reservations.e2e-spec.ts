@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { createHash, randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import {
@@ -50,6 +52,8 @@ describe('WO Inventory reservation HTTP + PostgreSQL (explicit proof fixture)', 
   };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(FIXTURE_BRANCH))
       .overrideProvider(InventoryProofClient)
       .useValue(client)
       .compile();
@@ -75,12 +79,13 @@ describe('WO Inventory reservation HTTP + PostgreSQL (explicit proof fixture)', 
       data: {
         tenantId,
         userId: techUserId,
-        branchId: randomUUID(),
+        branchId: FIXTURE_BRANCH,
         employeeCode: 'INV-TECH',
       },
     });
     const order = await db.workOrder.create({
       data: {
+        branchId: FIXTURE_BRANCH,
         tenantId,
         workOrderNo: `WO-R-${randomUUID()}`,
         serviceRequestId: randomUUID(),
@@ -260,6 +265,7 @@ describe('WO Inventory reservation HTTP + PostgreSQL (explicit proof fixture)', 
     await reserve().expect(200);
     const next = await db.workOrder.create({
       data: {
+        branchId: FIXTURE_BRANCH,
         tenantId,
         workOrderNo: `WO-R-${randomUUID()}`,
         serviceRequestId: randomUUID(),

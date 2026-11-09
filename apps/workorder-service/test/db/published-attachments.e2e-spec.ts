@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   INestApplication,
@@ -94,6 +96,8 @@ describe(`M3-A4 published SR file projection (${real ? 'real MinIO' : 'storage d
     );
     await storage.initialize();
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(FIXTURE_BRANCH))
       .overrideProvider(ATTACHMENT_STORAGE)
       .useValue(storage)
       .compile();
@@ -122,6 +126,7 @@ describe(`M3-A4 published SR file projection (${real ? 'real MinIO' : 'storage d
   ) =>
     db.workOrder.create({
       data: {
+        branchId: FIXTURE_BRANCH,
         tenantId,
         customerId,
         serviceRequestId: srId,
@@ -202,7 +207,7 @@ describe(`M3-A4 published SR file projection (${real ? 'real MinIO' : 'storage d
       data: {
         tenantId,
         userId: technicianUserId,
-        branchId: randomUUID(),
+        branchId: FIXTURE_BRANCH,
         employeeCode: 'A4-TECH',
       },
     });

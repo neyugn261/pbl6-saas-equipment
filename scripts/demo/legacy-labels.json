@@ -1,0 +1,325 @@
+{
+  "tenant": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "code": "DEMO",
+    "name": "Công ty Thiết bị Demo"
+  },
+  "users": [
+    {
+      "email": "platform.admin@pbl6.local",
+      "fullName": "Quản trị nền tảng",
+      "userType": "PLATFORM_STAFF"
+    },
+    {
+      "email": "tenant.admin@demo.local",
+      "fullName": "Quản trị Công ty Thiết bị Demo",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "service.manager@demo.local",
+      "fullName": "Nguyễn Minh Anh — Dịch vụ HCM",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "service.manager.dn@demo.local",
+      "fullName": "Trần Hải Nam — Dịch vụ Đà Nẵng",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "inventory@demo.local",
+      "fullName": "Lê Thu Hà — Kho HCM",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "inventory.dn@demo.local",
+      "fullName": "Võ Thanh Sơn — Kho Đà Nẵng",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "technician@demo.local",
+      "fullName": "Phạm Quốc Huy — Kỹ thuật HCM 01",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "technician.hcm02@demo.local",
+      "fullName": "Nguyễn Thảo Vy — Kỹ thuật HCM 02",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "technician.dn01@demo.local",
+      "fullName": "Trần Đức Minh — Kỹ thuật Đà Nẵng 01",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "technician.dn02@demo.local",
+      "fullName": "Lê Hoàng Phúc — Kỹ thuật Đà Nẵng 02",
+      "userType": "TENANT_STAFF"
+    },
+    {
+      "email": "customer.admin@demo.local",
+      "fullName": "Nguyễn Văn An — Bệnh viện Demo",
+      "userType": "CUSTOMER"
+    },
+    {
+      "email": "customer.user@demo.local",
+      "fullName": "Trần Ngọc Mai — Bệnh viện Demo",
+      "userType": "CUSTOMER"
+    },
+    {
+      "email": "factory.admin@demo.local",
+      "fullName": "Trần Thị Bình — Nhà máy Demo",
+      "userType": "CUSTOMER"
+    },
+    {
+      "email": "factory.user@demo.local",
+      "fullName": "Lê Văn Thành — Nhà máy Demo",
+      "userType": "CUSTOMER"
+    }
+  ],
+  "customers": [
+    {
+      "id": "00000000-0000-4000-8000-000000000101",
+      "code": "DEMO-CUST-01",
+      "name": "Bệnh viện Đa khoa Demo",
+      "email": "contact@hospital.demo.local"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "code": "DEMO-CUST-02",
+      "name": "Nhà máy Cơ khí Demo",
+      "email": "contact@factory.demo.local"
+    }
+  ],
+  "sites": [
+    {
+      "id": "00000000-0000-4000-8000-000000000401",
+      "code": "DEMO-SITE-01",
+      "name": "Bệnh viện — Cơ sở HCM"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000402",
+      "code": "DEMO-SITE-02",
+      "name": "Bệnh viện — Cơ sở Đà Nẵng"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000403",
+      "code": "DEMO-SITE-03",
+      "name": "Nhà máy — Xưởng Đà Nẵng"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000404",
+      "code": "DEMO-SITE-04",
+      "name": "Nhà máy — Xưởng HCM"
+    }
+  ],
+  "locations": [
+    {
+      "id": "00000000-0000-4000-8000-000000000501",
+      "code": "KHU-KT",
+      "name": "Khu kỹ thuật"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000502",
+      "code": "PHONG-VH",
+      "name": "Phòng vận hành"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000503",
+      "code": "KHU-KT",
+      "name": "Khu kỹ thuật"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000504",
+      "code": "PHONG-VH",
+      "name": "Phòng vận hành"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000505",
+      "code": "KHU-KT",
+      "name": "Khu kỹ thuật"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000506",
+      "code": "PHONG-VH",
+      "name": "Phòng vận hành"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000507",
+      "code": "KHU-KT",
+      "name": "Khu kỹ thuật"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000508",
+      "code": "PHONG-VH",
+      "name": "Phòng vận hành"
+    }
+  ],
+  "contacts": [
+    {
+      "id": "00000000-0000-4000-8000-000000000601",
+      "name": "Nguyễn Văn An",
+      "email": "an.nguyen@hospital.demo.local"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000602",
+      "name": "Trần Ngọc Mai",
+      "email": "mai.tran@hospital.demo.local"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000603",
+      "name": "Trần Thị Bình",
+      "email": "binh.tran@factory.demo.local"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000604",
+      "name": "Lê Văn Thành",
+      "email": "thanh.le@factory.demo.local"
+    }
+  ],
+  "models": [
+    {
+      "id": "00000000-0000-4000-8000-000000001001",
+      "manufacturer": "Demo Medical",
+      "name": "Máy siêu âm Demo"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001002",
+      "manufacturer": "Demo Industrial",
+      "name": "Máy bơm Demo"
+    }
+  ],
+  "equipment": [
+    {
+      "id": "00000000-0000-4000-8000-000000001101",
+      "assetCode": "DEMO-ASSET-01"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001102",
+      "assetCode": "DEMO-ASSET-02"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001103",
+      "assetCode": "DEMO-ASSET-03"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001104",
+      "assetCode": "DEMO-ASSET-04"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001105",
+      "assetCode": "DEMO-ASSET-05"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001106",
+      "assetCode": "DEMO-ASSET-06"
+    }
+  ],
+  "skills": [
+    {
+      "id": "00000000-0000-4000-8000-000000004101",
+      "code": "DEMO-DIAGNOSTICS",
+      "name": "Chẩn đoán thiết bị"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000004102",
+      "code": "DEMO-MAINTENANCE",
+      "name": "Bảo trì thiết bị"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000004103",
+      "code": "DEMO-REPAIR",
+      "name": "Sửa chữa điện và cơ khí"
+    }
+  ],
+  "technicians": [
+    {
+      "id": "00000000-0000-4000-8000-000000004001",
+      "employeeCode": "DEMO-TECH-01"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000004002",
+      "employeeCode": "DEMO-TECH-02"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000004003",
+      "employeeCode": "DEMO-TECH-03"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000004004",
+      "employeeCode": "DEMO-TECH-04"
+    }
+  ],
+  "parts": [
+    {
+      "id": "00000000-0000-4000-8000-000000005001",
+      "sku": "DEMO-FILTER-01",
+      "name": "Bộ lọc thiết bị"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000005002",
+      "sku": "DEMO-FUSE-01",
+      "name": "Cầu chì bảo vệ"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000005003",
+      "sku": "DEMO-SENSOR-01",
+      "name": "Cảm biến áp suất"
+    }
+  ],
+  "warehouses": [
+    {
+      "id": "00000000-0000-4000-8000-000000005101",
+      "code": "DEMO-HCM-STORE",
+      "name": "Kho phụ tùng HCM"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000005102",
+      "code": "DEMO-DN-STORE",
+      "name": "Kho phụ tùng Đà Nẵng"
+    }
+  ],
+  "plans": [
+    {
+      "id": "00000000-0000-4000-8000-000000003001",
+      "equipmentId": "00000000-0000-4000-8000-000000001105",
+      "name": "DEMO-MAINTENANCE-01: Kiểm tra máy siêu âm HCM"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000003002",
+      "equipmentId": "00000000-0000-4000-8000-000000001103",
+      "name": "DEMO-MAINTENANCE-02: Bảo trì máy bơm Đà Nẵng"
+    }
+  ],
+  "cases": [
+    {
+      "key": "DEMO-HCM-NEW",
+      "equipmentId": "00000000-0000-4000-8000-000000001101",
+      "title": "DEMO-HCM-NEW — Máy siêu âm hiển thị nhiễu"
+    },
+    {
+      "key": "DEMO-HCM-INPROGRESS",
+      "equipmentId": "00000000-0000-4000-8000-000000001104",
+      "title": "DEMO-HCM-INPROGRESS — Máy bơm hoạt động không ổn định"
+    },
+    {
+      "key": "DEMO-HCM-CLOSED",
+      "equipmentId": "00000000-0000-4000-8000-000000001105",
+      "title": "DEMO-HCM-CLOSED — Đã khắc phục lỗi nguồn máy siêu âm"
+    },
+    {
+      "key": "DEMO-DN-NEW",
+      "equipmentId": "00000000-0000-4000-8000-000000001106",
+      "title": "DEMO-DN-NEW — Máy bơm phát tiếng ồn bất thường"
+    },
+    {
+      "key": "DEMO-DN-ESTIMATE",
+      "equipmentId": "00000000-0000-4000-8000-000000001102",
+      "title": "DEMO-DN-ESTIMATE — Máy hết bảo hành, chờ duyệt chi phí"
+    },
+    {
+      "key": "DEMO-DN-CLOSED",
+      "equipmentId": "00000000-0000-4000-8000-000000001103",
+      "title": "DEMO-DN-CLOSED — Đã thay cầu chì máy không có bảo hành"
+    }
+  ]
+}
