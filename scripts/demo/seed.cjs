@@ -3,6 +3,7 @@ const { createHash } = require("node:crypto");
 const path = require("node:path");
 const { DemoRuntime, names, req, run, root } = require("./runtime.cjs");
 const catalog = require("./catalog.cjs");
+const { refreshOwnedLabels, logs: seedLogs } = require("./labels.cjs");
 const A = "/api/assets",
   W = "/api/workorders",
   M = "/api/maintenance",
@@ -67,6 +68,8 @@ async function seed(options = {}) {
     await run(["db:migrate"]);
     if (options.reset) await r.reset();
     await r.start();
+    await r.idle();
+    for (const name of names) await refreshOwnedLabels(r.dbs[name], name);
     console.log("1/6 Identity and Organization");
     await ownerSeed("identity", "exec", "prisma", "db", "seed", "--", "--dev");
     await ownerSeed("organization", "exec", "prisma", "db", "seed");
@@ -110,7 +113,7 @@ async function seed(options = {}) {
           wp,
           {
             mode: "APPLY",
-            name: `DEMO-${model.modelCode} — Bảo hành tiêu chuẩn`,
+            name: `Bảo hành ${model.modelCode}`,
             terms: "Bảo hành lỗi kỹ thuật do nhà sản xuất.",
             reason: "",
             durationMonths: 12,
@@ -124,7 +127,7 @@ async function seed(options = {}) {
           mp,
           {
             mode: "APPLY",
-            name: `DEMO-${model.modelCode} — Bảo trì định kỳ`,
+            name: `Bảo trì ${model.modelCode}`,
             terms: "Kiểm tra định kỳ mỗi ba tháng.",
             reason: "",
             rules: [
@@ -153,14 +156,16 @@ async function seed(options = {}) {
           },
         ],
       ]) {
-        const policyMarker = "policy:" + route;
+        const policyMarker = "policy-labels-v2:" + route;
         if (r.state.markers[policyMarker]) continue;
         const rows = await api("GET", route, manager("HCM"));
         const existing = (Array.isArray(rows) ? rows : rows.items).find(
           (p) => p.body?.name === body.name,
         );
         if (existing && existing.status !== "DRAFT") {
-          r.state.markers[policyMarker] = true; r.save(); continue;
+          r.state.markers[policyMarker] = true;
+          r.save();
+          continue;
         }
         const draft =
           existing || (await api("POST", route, manager("HCM"), { body }, 201));
@@ -171,7 +176,8 @@ async function seed(options = {}) {
           { expectedVersion: draft.version },
           201,
         );
-        r.state.markers[policyMarker] = true; r.save();
+        r.state.markers[policyMarker] = true;
+        r.save();
       }
     }
     console.log("3/6 Technicians, skills, warehouses and initial stock");
@@ -248,7 +254,7 @@ async function seed(options = {}) {
         portal = customer(fixture.equipmentId);
       const matches = await api(
         "GET",
-        `${S}?q=${encodeURIComponent(fixture.key)}&pageSize=100`,
+        `${S}?q=${encodeURIComponent(fixture.title)}&pageSize=100`,
         admin,
       );
       let sr = matches.items.find((row) => row.title === fixture.title);
@@ -268,12 +274,12 @@ async function seed(options = {}) {
             type: "REPAIR",
             priority: fixture.target === "IN_PROGRESS" ? "HIGH" : "NORMAL",
             title: fixture.title,
-            description:
-              "Bộ dữ liệu demo: kiểm tra thiết bị, đánh giá bảo hành và xử lý theo chi nhánh phục vụ.",
+            description: fixture.description,
           },
           201,
         );
-      r.state.cases[fixture.key].id = sr.id; r.save();
+      r.state.cases[fixture.key].id = sr.id;
+      r.save();
       const srRoute = S + "/" + sr.id;
       if (fixture.target === "NEW") {
         r.state.cases[fixture.key] = { id: sr.id, done: true };
@@ -387,10 +393,7 @@ async function seed(options = {}) {
         );
       const woRoute = `${W}/work-orders/${order.id}`;
       const logs = await api("GET", woRoute + "/logs", actor);
-      for (const note of [
-        "DEMO: Đã kiểm tra và xác nhận hiện tượng tại thiết bị.",
-        "DEMO: Đã thống nhất phương án xử lý với khách hàng.",
-      ])
+      for (const note of seedLogs)
         if (
           !(Array.isArray(logs) ? logs : logs.items).some(
             (log) => log.note === note,
@@ -610,6 +613,7 @@ async function seed(options = {}) {
     console.log(
       "6/6 Verify tenant, branch, customer, inventory and notifications",
     );
+    for (const name of names) await refreshOwnedLabels(r.dbs[name], name);
     const result = await verify(r, sessions, options.strict);
     r.state.complete = true;
     r.state.summary = result;

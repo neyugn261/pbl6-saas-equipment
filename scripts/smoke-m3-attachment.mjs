@@ -1,3 +1,4 @@
+import catalog from "./demo/catalog.cjs";
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
@@ -41,7 +42,7 @@ try {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        tenantCode: 'DEMO',
+        tenantCode: catalog.tenant.code,
         email: 'service.manager@demo.local',
         password,
       }),

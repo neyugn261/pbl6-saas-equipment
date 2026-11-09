@@ -45,7 +45,7 @@ try {
           tenantId: tenant.id,
           equipmentId: row.id,
           eventType: 'REGISTERED',
-          description: 'Thiết bị bàn giao trong bộ demo hai chi nhánh',
+          description: 'Ghi nhận bàn giao thiết bị cho khách hàng.',
         },
         update: {},
       });

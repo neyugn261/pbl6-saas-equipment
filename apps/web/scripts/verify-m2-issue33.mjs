@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import catalog from "../../../scripts/demo/catalog.cjs";
 // Real Gateway verification for issue #33. The synthetic second-tenant and
 // second-customer tokens exercise server-side scope without creating accounts.
 import assert from "node:assert/strict";
@@ -47,7 +48,7 @@ async function login(email) {
   const result = await fetch(identityBase + "/auth/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ tenantCode: "DEMO", email, password }),
+    body: JSON.stringify({ tenantCode: catalog.tenant.code, email, password }),
     signal: AbortSignal.timeout(10000),
   });
   assert.equal(

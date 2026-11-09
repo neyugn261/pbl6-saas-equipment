@@ -1,6 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { names, targets } = require("./runtime.cjs");
+const catalog = require("./catalog.cjs");
 function env() {
   return Object.fromEntries([
     ["NODE_ENV", "development"],
@@ -49,4 +50,52 @@ test("test reset refuses a development database even when it is localhost", () =
 });
 test("a missing target prevents the full operation", () => {
   assert.throws(() => targets({ ...env(), NOTIFICATION_DATABASE_URL: "" }));
+});
+test("business labels have practical codes and fault titles; account emails remain compatible", () => {
+  const labels = [
+    catalog.tenant,
+    ...catalog.users,
+    ...catalog.branches,
+    ...catalog.customers,
+    ...catalog.sites,
+    ...catalog.locations,
+    ...catalog.contacts,
+    ...catalog.models,
+    ...catalog.equipment,
+    ...catalog.skills,
+    ...catalog.technicians,
+    ...catalog.parts,
+    ...catalog.warehouses,
+    ...catalog.plans,
+    ...catalog.cases,
+  ];
+  for (const row of labels)
+    for (const field of [
+      "code",
+      "name",
+      "fullName",
+      "manufacturer",
+      "modelCode",
+      "assetCode",
+      "employeeCode",
+      "sku",
+      "title",
+      "description",
+    ]) {
+      if (row[field])
+        assert.doesNotMatch(
+          row[field],
+          /demo|\b(?:NEW|INPROGRESS|CLOSED|ESTIMATE)\b/i,
+          field,
+        );
+    }
+  assert.equal(catalog.tenant.code, "MP");
+  assert.equal(catalog.users.length, 14);
+  assert.ok(
+    catalog.users
+      .filter((u) => u.userType !== "PLATFORM_STAFF")
+      .every((u) => u.email.endsWith("@demo.local")),
+  );
+  assert.equal(new Set(catalog.equipment.map((e) => e.assetCode)).size, 6);
+  assert.equal(new Set(catalog.technicians.map((t) => t.employeeCode)).size, 4);
 });

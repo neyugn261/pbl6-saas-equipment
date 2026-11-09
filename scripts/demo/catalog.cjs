@@ -1,56 +1,21 @@
 // One fixture catalogue for all development seeds. No passwords or runtime tokens.
 const id = (suffix) =>
   `00000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`;
-const tenant = { id: id(1), code: "DEMO", name: "Công ty Thiết bị Demo" };
+const tenant = { id: id(1), code: "MP", name: "Công ty Thiết bị Minh Phát" };
 const users = [
-  ["platform.admin@pbl6.local", "Quản trị nền tảng", "PLATFORM_ADMIN"],
-  ["tenant.admin@demo.local", "Quản trị Công ty Thiết bị Demo", "TENANT_ADMIN"],
-  [
-    "service.manager@demo.local",
-    "Nguyễn Minh Anh — Dịch vụ HCM",
-    "SERVICE_MANAGER",
-    301,
-  ],
-  [
-    "service.manager.dn@demo.local",
-    "Trần Hải Nam — Dịch vụ Đà Nẵng",
-    "SERVICE_MANAGER",
-    302,
-  ],
-  ["inventory@demo.local", "Lê Thu Hà — Kho HCM", "INVENTORY_STAFF", 301],
-  [
-    "inventory.dn@demo.local",
-    "Võ Thanh Sơn — Kho Đà Nẵng",
-    "INVENTORY_STAFF",
-    302,
-  ],
-  [
-    "technician@demo.local",
-    "Phạm Quốc Huy — Kỹ thuật HCM 01",
-    "TECHNICIAN",
-    301,
-  ],
-  [
-    "technician.hcm02@demo.local",
-    "Nguyễn Thảo Vy — Kỹ thuật HCM 02",
-    "TECHNICIAN",
-    301,
-  ],
-  [
-    "technician.dn01@demo.local",
-    "Trần Đức Minh — Kỹ thuật Đà Nẵng 01",
-    "TECHNICIAN",
-    302,
-  ],
-  [
-    "technician.dn02@demo.local",
-    "Lê Hoàng Phúc — Kỹ thuật Đà Nẵng 02",
-    "TECHNICIAN",
-    302,
-  ],
+  ["platform.admin@pbl6.local", "Đặng Tuấn Kiệt", "PLATFORM_ADMIN"],
+  ["tenant.admin@demo.local", "Lê Quốc Bảo", "TENANT_ADMIN"],
+  ["service.manager@demo.local", "Nguyễn Minh Anh", "SERVICE_MANAGER", 301],
+  ["service.manager.dn@demo.local", "Trần Hải Nam", "SERVICE_MANAGER", 302],
+  ["inventory@demo.local", "Lê Thu Hà", "INVENTORY_STAFF", 301],
+  ["inventory.dn@demo.local", "Võ Thanh Sơn", "INVENTORY_STAFF", 302],
+  ["technician@demo.local", "Phạm Quốc Huy", "TECHNICIAN", 301],
+  ["technician.hcm02@demo.local", "Nguyễn Thảo Vy", "TECHNICIAN", 301],
+  ["technician.dn01@demo.local", "Trần Đức Minh", "TECHNICIAN", 302],
+  ["technician.dn02@demo.local", "Lê Hoàng Phúc", "TECHNICIAN", 302],
   [
     "customer.admin@demo.local",
-    "Nguyễn Văn An — Bệnh viện Demo",
+    "Nguyễn Văn An",
     "CUSTOMER_ADMIN",
     null,
     101,
@@ -58,7 +23,7 @@ const users = [
   ],
   [
     "customer.user@demo.local",
-    "Trần Ngọc Mai — Bệnh viện Demo",
+    "Trần Ngọc Mai",
     "CUSTOMER_USER",
     null,
     101,
@@ -66,20 +31,13 @@ const users = [
   ],
   [
     "factory.admin@demo.local",
-    "Trần Thị Bình — Nhà máy Demo",
+    "Trần Thị Bình",
     "CUSTOMER_ADMIN",
     null,
     102,
     203,
   ],
-  [
-    "factory.user@demo.local",
-    "Lê Văn Thành — Nhà máy Demo",
-    "CUSTOMER_USER",
-    null,
-    102,
-    204,
-  ],
+  ["factory.user@demo.local", "Lê Văn Thành", "CUSTOMER_USER", null, 102, 204],
 ].map(([email, fullName, role, branch, customer, membership]) => ({
   email,
   fullName,
@@ -113,18 +71,18 @@ const branches = [
 const customers = [
   {
     id: id(101),
-    code: "DEMO-CUST-01",
-    name: "Bệnh viện Đa khoa Demo",
+    code: "BV-AP",
+    name: "Bệnh viện Đa khoa An Phúc",
     taxCode: "0301234567",
-    email: "contact@hospital.demo.local",
+    email: "info@anphuc.example",
     address: "201 Nguyễn Chí Thanh, TP. Hồ Chí Minh",
   },
   {
     id: id(102),
-    code: "DEMO-CUST-02",
-    name: "Nhà máy Cơ khí Demo",
+    code: "CK-HL",
+    name: "Công ty Cơ khí Hòa Long",
     taxCode: "0401234567",
-    email: "contact@factory.demo.local",
+    email: "contact@hoalong.example",
     address: "KCN Hòa Khánh, Đà Nẵng",
   },
 ];
@@ -132,32 +90,32 @@ const sites = [
   {
     id: id(401),
     customerId: id(101),
-    code: "DEMO-SITE-01",
-    name: "Bệnh viện — Cơ sở HCM",
+    code: "AP-HCM",
+    name: "An Phúc - HCM",
     address: "201 Nguyễn Chí Thanh, TP. Hồ Chí Minh",
     defaultServicingBranchId: id(301),
   },
   {
     id: id(402),
     customerId: id(101),
-    code: "DEMO-SITE-02",
-    name: "Bệnh viện — Cơ sở Đà Nẵng",
+    code: "AP-DN",
+    name: "An Phúc - Đà Nẵng",
     address: "124 Hải Phòng, Đà Nẵng",
     defaultServicingBranchId: id(302),
   },
   {
     id: id(403),
     customerId: id(102),
-    code: "DEMO-SITE-03",
-    name: "Nhà máy — Xưởng Đà Nẵng",
+    code: "HL-DN",
+    name: "Xưởng Hòa Khánh",
     address: "KCN Hòa Khánh, Đà Nẵng",
     defaultServicingBranchId: id(302),
   },
   {
     id: id(404),
     customerId: id(102),
-    code: "DEMO-SITE-04",
-    name: "Nhà máy — Xưởng HCM",
+    code: "HL-HCM",
+    name: "Xưởng Tân Bình",
     address: "KCN Tân Bình, TP. Hồ Chí Minh",
     defaultServicingBranchId: id(301),
   },
@@ -166,7 +124,7 @@ const locations = sites.flatMap((site, i) => [
   {
     id: id(501 + i * 2),
     customerSiteId: site.id,
-    code: "KHU-KT",
+    code: "KT",
     name: "Khu kỹ thuật",
     type: "AREA",
     parentId: null,
@@ -174,7 +132,7 @@ const locations = sites.flatMap((site, i) => [
   {
     id: id(502 + i * 2),
     customerSiteId: site.id,
-    code: "PHONG-VH",
+    code: "VH",
     name: "Phòng vận hành",
     type: "ROOM",
     parentId: id(501 + i * 2),
@@ -186,7 +144,7 @@ const contacts = [
     customerId: id(101),
     customerSiteId: id(401),
     name: "Nguyễn Văn An",
-    email: "an.nguyen@hospital.demo.local",
+    email: "an.nguyen@anphuc.example",
     phone: "0901 000 001",
     position: "Trưởng phòng Vật tư",
     isPrimary: true,
@@ -196,7 +154,7 @@ const contacts = [
     customerId: id(101),
     customerSiteId: id(402),
     name: "Trần Ngọc Mai",
-    email: "mai.tran@hospital.demo.local",
+    email: "mai.tran@anphuc.example",
     phone: "0901 000 002",
     position: "Phụ trách thiết bị",
     isPrimary: false,
@@ -206,7 +164,7 @@ const contacts = [
     customerId: id(102),
     customerSiteId: id(403),
     name: "Trần Thị Bình",
-    email: "binh.tran@factory.demo.local",
+    email: "binh.tran@hoalong.example",
     phone: "0902 000 001",
     position: "Quản đốc",
     isPrimary: true,
@@ -216,7 +174,7 @@ const contacts = [
     customerId: id(102),
     customerSiteId: id(404),
     name: "Lê Văn Thành",
-    email: "thanh.le@factory.demo.local",
+    email: "thanh.le@hoalong.example",
     phone: "0902 000 002",
     position: "Phụ trách bảo trì",
     isPrimary: false,
@@ -225,15 +183,15 @@ const contacts = [
 const models = [
   {
     id: id(1001),
-    manufacturer: "Demo Medical",
+    manufacturer: "Mediviet",
     modelCode: "US-100",
-    name: "Máy siêu âm Demo",
+    name: "Máy siêu âm US-100",
   },
   {
     id: id(1002),
-    manufacturer: "Demo Industrial",
+    manufacturer: "VinaPump",
     modelCode: "PUMP-200",
-    name: "Máy bơm Demo",
+    name: "Máy bơm PUMP-200",
   },
 ];
 const equipment = [
@@ -249,14 +207,14 @@ const equipment = [
   customerId: id(customer),
   customerSiteId: id(site),
   locationId: id(location),
-  assetCode: "DEMO-ASSET-" + String(suffix - 1100).padStart(2, "0"),
+  assetCode: (model === 1001 ? "SA-" : "MB-") + serialNumber.slice(-3),
   serialNumber,
   warranty,
 }));
 const skills = [
-  { id: id(4101), code: "DEMO-DIAGNOSTICS", name: "Chẩn đoán thiết bị" },
-  { id: id(4102), code: "DEMO-MAINTENANCE", name: "Bảo trì thiết bị" },
-  { id: id(4103), code: "DEMO-REPAIR", name: "Sửa chữa điện và cơ khí" },
+  { id: id(4101), code: "CD", name: "Chẩn đoán thiết bị" },
+  { id: id(4102), code: "BT", name: "Bảo trì thiết bị" },
+  { id: id(4103), code: "SC", name: "Sửa chữa điện và cơ khí" },
 ];
 const technicians = users
   .filter((u) => u.role === "TECHNICIAN")
@@ -264,27 +222,26 @@ const technicians = users
     id: id(4001 + i),
     email: u.email,
     branchId: u.branchId,
-    employeeCode:
-      i === 0 ? "DEMO-TECH-01" : "DEMO-TECH-" + String(i + 1).padStart(2, "0"),
+    employeeCode: "KT" + String(i + 1).padStart(3, "0"),
   }));
 const parts = [
   {
     id: id(5001),
-    sku: "DEMO-FILTER-01",
-    name: "Bộ lọc thiết bị",
+    sku: "LOC-01",
+    name: "Lõi lọc thiết bị",
     unit: "cái",
     minimum: "5.00",
   },
   {
     id: id(5002),
-    sku: "DEMO-FUSE-01",
-    name: "Cầu chì bảo vệ",
+    sku: "CC-5A",
+    name: "Cầu chì 5A",
     unit: "cái",
     minimum: "5.00",
   },
   {
     id: id(5003),
-    sku: "DEMO-SENSOR-01",
+    sku: "CB-AS01",
     name: "Cảm biến áp suất",
     unit: "cái",
     minimum: "3.00",
@@ -293,16 +250,16 @@ const parts = [
 const warehouses = [
   {
     id: id(5101),
-    code: "DEMO-HCM-STORE",
-    name: "Kho phụ tùng HCM",
+    code: "K-HCM",
+    name: "Kho HCM",
     branchId: id(301),
     email: "inventory@demo.local",
     receipts: ["14.00", "20.00", "0.00"],
   },
   {
     id: id(5102),
-    code: "DEMO-DN-STORE",
-    name: "Kho phụ tùng Đà Nẵng",
+    code: "K-DN",
+    name: "Kho Đà Nẵng",
     branchId: id(302),
     email: "inventory.dn@demo.local",
     receipts: ["8.00", "3.00", "6.00"],
@@ -312,58 +269,71 @@ const plans = [
   {
     id: id(3001),
     equipmentId: id(1105),
-    name: "DEMO-MAINTENANCE-01: Kiểm tra máy siêu âm HCM",
+    name: "Bảo trì máy siêu âm SA-003",
     branch: "HCM",
   },
   {
     id: id(3002),
     equipmentId: id(1103),
-    name: "DEMO-MAINTENANCE-02: Bảo trì máy bơm Đà Nẵng",
+    name: "Bảo trì máy bơm MB-001",
     branch: "DN",
   },
 ];
+// Keep scenario keys stable across label updates; only titles/descriptions are stored as business text.
 const cases = [
   {
     key: "DEMO-HCM-NEW",
     equipmentId: id(1101),
     branch: "HCM",
     target: "NEW",
-    title: "DEMO-HCM-NEW — Máy siêu âm hiển thị nhiễu",
+    title: "Hình ảnh siêu âm bị nhiễu",
+    description:
+      "Hình ảnh xuất hiện sọc khi kiểm tra đầu dò. Đề nghị kiểm tra tín hiệu và nguồn cấp.",
   },
   {
     key: "DEMO-HCM-INPROGRESS",
     equipmentId: id(1104),
     branch: "HCM",
     target: "IN_PROGRESS",
-    title: "DEMO-HCM-INPROGRESS — Máy bơm hoạt động không ổn định",
+    title: "Áp suất bơm không ổn định",
+    description:
+      "Áp suất đầu ra dao động khi máy vận hành liên tục, lưu lượng giảm so với bình thường.",
   },
   {
     key: "DEMO-HCM-CLOSED",
     equipmentId: id(1105),
     branch: "HCM",
     target: "CLOSED",
-    title: "DEMO-HCM-CLOSED — Đã khắc phục lỗi nguồn máy siêu âm",
+    title: "Máy siêu âm không lên nguồn",
+    description:
+      "Máy không khởi động khi bật công tắc. Đèn báo nguồn chập chờn trước khi ngừng hoạt động.",
   },
   {
     key: "DEMO-DN-NEW",
     equipmentId: id(1106),
     branch: "DN",
     target: "NEW",
-    title: "DEMO-DN-NEW — Máy bơm phát tiếng ồn bất thường",
+    title: "Máy bơm phát tiếng ồn",
+    description:
+      "Máy phát tiếng ồn và rung khi chạy tải, cần kiểm tra ổ bi và cụm truyền động.",
   },
   {
     key: "DEMO-DN-ESTIMATE",
     equipmentId: id(1102),
     branch: "DN",
     target: "ESTIMATE",
-    title: "DEMO-DN-ESTIMATE — Máy hết bảo hành, chờ duyệt chi phí",
+    title: "Máy siêu âm khởi động chậm",
+    description:
+      "Máy mất nhiều thời gian khởi động và tự khởi động lại khi chuyển chế độ đo.",
   },
   {
     key: "DEMO-DN-CLOSED",
     equipmentId: id(1103),
     branch: "DN",
     target: "CLOSED",
-    title: "DEMO-DN-CLOSED — Đã thay cầu chì máy không có bảo hành",
+    title: "Máy bơm mất nguồn",
+    description:
+      "Máy bơm ngừng hoạt động, tủ điện vẫn có nguồn nhưng đèn báo thiết bị không sáng.",
   },
 ];
 function dateOffset(base, days) {

@@ -78,7 +78,7 @@ export default function DemoPage() {
         <div>
           <span className="demo-eyebrow">PBL6 · LUỒNG DEMO M1</span>
           <h1>Từ thiết bị đến yêu cầu được tiếp nhận</h1>
-          <p>Trình diễn luồng đang hoạt động qua Gateway, với dữ liệu của tenant DEMO và quyền của từng tài khoản.</p>
+          <p>Trình diễn luồng đang hoạt động qua Gateway, với dữ liệu của doanh nghiệp Minh Phát (MP) và quyền của từng tài khoản.</p>
         </div>
         <div className="demo-current-user">
           <small>Đang đăng nhập</small>

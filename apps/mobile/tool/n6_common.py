@@ -35,6 +35,6 @@ class Api:
             raise AssertionError(f'{method} {path}: HTTP {status}, expected {expected}, code {data.get("code", "UNKNOWN")}')
         return data
     def login(self,email):
-        token=self.call('POST','/api/identity/auth/login',body={'tenantCode':'DEMO','email':email,'password':self.runtime['password']})['accessToken']
+        token=self.call('POST','/api/identity/auth/login',body={'tenantCode':self.runtime.get('tenantCode','MP'),'email':email,'password':self.runtime['password']})['accessToken']
         self.tokens[token]=email
         return token

@@ -72,7 +72,7 @@ pnpm db:seed:dev      # demo data (refuses NODE_ENV=production), idempotent
 
 ## Dev seed
 
-`pnpm db:seed:dev` writes tenant DEMO, two branches, two customers, four sites, eight locations and four contacts from the shared catalog. With Identity running it resolves user IDs through login, links four customer accounts to their two customers, and assigns eight staff to their primary HCM/DN branch. Existing routing and memberships are preserved. New tenant/membership/site routing rows publish their normal outbox events. [Fixtures](../../docs/api/fixtures.md).
+`pnpm db:seed:dev` writes tenant MP, two branches, two customers, four sites, eight locations and four contacts from the shared catalog. With Identity running it resolves user IDs through login, links four customer accounts to their two customers, and assigns eight staff to their primary HCM/DN branch. Existing routing and memberships are preserved. New tenant/membership/site routing rows publish their normal outbox events. [Fixtures](../../docs/api/fixtures.md).
 
 Order on a fresh machine: `pnpm db:migrate` (root) → identity `db:seed:dev` →
 start identity → organization `db:seed:dev` → start organization (publishes

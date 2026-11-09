@@ -323,7 +323,7 @@ function LoginPage() {
     requestedNext?.startsWith("/portal/qr/") && !requestedNext.startsWith("//")
       ? requestedNext
       : null;
-  const [tenantCode, setTenantCode] = useState("DEMO");
+  const [tenantCode, setTenantCode] = useState("MP");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [platform, setPlatform] = useState(false);

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import catalog from "./demo/catalog.cjs";
 // M1 integration smoke test: Identity -> Asset -> Service Request through Gateway.
 // Start the four M1 services, apply migrations and seed their DEMO fixtures first.
 import { randomBytes } from "node:crypto";
@@ -7,7 +8,7 @@ const gateway = (process.env.GATEWAY_URL ?? "http://localhost:3000").replace(
   /\/$/,
   "",
 );
-const tenantCode = process.env.TENANT_CODE ?? "DEMO";
+const tenantCode = process.env.TENANT_CODE ?? catalog.tenant.code;
 const password = process.env.SEED_DEMO_PASSWORD;
 const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 

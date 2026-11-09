@@ -24,7 +24,7 @@ async function main() {
     const session = await identity.post<{ accessToken: string }>(
       '/auth/login',
       {
-        tenantCode: 'DEMO',
+        tenantCode: catalog.tenant.code,
         email: warehouse.email,
         password: SEED_DEMO_PASSWORD,
       },

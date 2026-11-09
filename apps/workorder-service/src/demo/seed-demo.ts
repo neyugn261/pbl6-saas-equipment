@@ -8,7 +8,7 @@ export const DEMO_WO = {
   tenantId: '00000000-0000-4000-8000-000000000001',
   branchId: '00000000-0000-4000-8000-000000000301',
   technicianId: '00000000-0000-4000-8000-000000004001',
-  employeeCode: 'DEMO-TECH-01',
+  employeeCode: 'KT001',
   skills: require('../../../../scripts/demo/catalog.cjs')
     .skills as ReadonlyArray<{ id: string; code: string; name: string }>,
 } as const;

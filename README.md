@@ -206,7 +206,7 @@ pnpm db:check-drift       # tuỳ chọn: xác nhận schema.prisma khớp migra
 
 ```bash
 pnpm identity:migrate       # chỉ identity_db (đã nằm trong `pnpm db:migrate` ở bước 4.4)
-pnpm identity:seed:dev      # permission catalog + tenant DEMO + tài khoản demo
+pnpm identity:seed:dev      # permission catalog + tenant MP + tài khoản demo
 pnpm dev:identity           # chạy ở http://localhost:3001 (watch mode)
 ```
 
@@ -219,7 +219,7 @@ curl http://localhost:3001/health
 
 curl -X POST http://localhost:3001/auth/login \
   -H "content-type: application/json" \
-  -d '{"tenantCode":"DEMO","email":"service.manager@demo.local","password":"<SEED_DEMO_PASSWORD>"}'
+  -d '{"tenantCode":"MP","email":"service.manager@demo.local","password":"<SEED_DEMO_PASSWORD>"}'
 ```
 
 **Windows (PowerShell)**
@@ -227,7 +227,7 @@ curl -X POST http://localhost:3001/auth/login \
 ```powershell
 Invoke-RestMethod http://localhost:3001/health
 
-$body = @{ tenantCode = "DEMO"; email = "service.manager@demo.local"; password = "<SEED_DEMO_PASSWORD>" } | ConvertTo-Json
+$body = @{ tenantCode = "MP"; email = "service.manager@demo.local"; password = "<SEED_DEMO_PASSWORD>" } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri http://localhost:3001/auth/login -ContentType "application/json" -Body $body
 ```
 
@@ -238,15 +238,15 @@ Tài khoản demo (mật khẩu = `SEED_DEMO_PASSWORD`):
 | Email | Tenant code | Vai trò / phạm vi |
 |---|---|---|
 | `platform.admin@pbl6.local` | *(bỏ trống)* | Platform Admin |
-| `tenant.admin@demo.local` | `DEMO` | Tenant Admin, toàn tenant |
-| `service.manager@demo.local` | `DEMO` | Service Manager HCM |
-| `service.manager.dn@demo.local` | `DEMO` | Service Manager Đà Nẵng |
-| `inventory@demo.local` | `DEMO` | Inventory Staff HCM |
-| `inventory.dn@demo.local` | `DEMO` | Inventory Staff Đà Nẵng |
-| `technician@demo.local`, `technician.hcm02@demo.local` | `DEMO` | Hai Technician HCM |
-| `technician.dn01@demo.local`, `technician.dn02@demo.local` | `DEMO` | Hai Technician Đà Nẵng |
-| `customer.admin@demo.local`, `customer.user@demo.local` | `DEMO` | Customer Admin/User Bệnh viện |
-| `factory.admin@demo.local`, `factory.user@demo.local` | `DEMO` | Customer Admin/User Nhà máy |
+| `tenant.admin@demo.local` | `MP` | Tenant Admin, toàn tenant |
+| `service.manager@demo.local` | `MP` | Service Manager HCM |
+| `service.manager.dn@demo.local` | `MP` | Service Manager Đà Nẵng |
+| `inventory@demo.local` | `MP` | Inventory Staff HCM |
+| `inventory.dn@demo.local` | `MP` | Inventory Staff Đà Nẵng |
+| `technician@demo.local`, `technician.hcm02@demo.local` | `MP` | Hai Technician HCM |
+| `technician.dn01@demo.local`, `technician.dn02@demo.local` | `MP` | Hai Technician Đà Nẵng |
+| `customer.admin@demo.local`, `customer.user@demo.local` | `MP` | Customer Admin/User Bệnh viện |
+| `factory.admin@demo.local`, `factory.user@demo.local` | `MP` | Customer Admin/User Nhà máy |
 
 API, cơ chế token và lỗi trả về: [apps/identity-service/README.md](apps/identity-service/README.md). Quy trình thay đổi schema: [apps/identity-service/prisma/README.md](apps/identity-service/prisma/README.md).
 
@@ -327,7 +327,7 @@ Các lệnh database riêng của Identity (chạy trong `apps/identity-service`
 | `pnpm db:migrate` | Áp migration (`prisma migrate deploy`) |
 | `pnpm db:check-drift` | So migration với `schema.prisma` (cần `IDENTITY_SHADOW_DATABASE_URL`) |
 | `pnpm db:seed` | Chỉ seed permission catalog |
-| `pnpm db:seed:dev` | Seed thêm tenant DEMO và tài khoản demo (không chạy khi `NODE_ENV=production`) |
+| `pnpm db:seed:dev` | Seed thêm tenant MP và tài khoản demo (không chạy khi `NODE_ENV=production`) |
 | `pnpm prisma:generate` | Sinh lại Prisma client |
 
 ## 8. Xử lý sự cố

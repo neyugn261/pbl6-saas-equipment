@@ -8,7 +8,7 @@ import { config as loadEnv } from 'dotenv';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 import { createPrismaAdapter } from '@pbl6/service-kit/prisma';
 import { CATALOG_STATUS } from '@pbl6/auth';
-import { seedDevData } from './seed/seed-dev-data';
+import { seedDevData, DEMO_TENANT } from './seed/seed-dev-data';
 import { seedPermissions } from './seed/seed-permissions';
 
 loadEnv({ path: '.env', quiet: true });
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     );
     if (withDevData) {
       await seedDevData(prisma, demoPassword!);
-      console.log('Seeded demo tenant DEMO and demo accounts.');
+      console.log(`Seeded tenant ${DEMO_TENANT.code} and development accounts.`);
     }
   } finally {
     await prisma.$disconnect();

@@ -2,7 +2,7 @@
 
 Nguồn dữ liệu thống nhất: [`scripts/demo/catalog.cjs`](../../scripts/demo/catalog.cjs). Mỗi service seed database của chính nó; các tình huống dịch vụ được tạo qua API, scheduler và event thật. Không cần tạo thủ công tài khoản hoặc chạy từng seed theo thứ tự.
 
-Kết quả thực chạy và ảnh giao diện: [nghiệm thu seed](../testing/demo-data.md).
+Kết quả thực chạy: [nghiệm thu seed ban đầu](../testing/demo-data.md) và [đổi tên/mã nghiệp vụ, giữ tiến trình local](../testing/seed-labels.md).
 
 ## Người mới pull dự án
 
@@ -23,7 +23,7 @@ Windows PowerShell dùng `Copy-Item .env.example .env` thay `cp`. Các lệnh pn
 
 ## Tài khoản
 
-Tenant code là `DEMO`; Platform Admin bỏ trống tenant code. Mật khẩu lấy từ `SEED_DEMO_PASSWORD`, không ghi mật khẩu thật vào repository.
+Tenant code là `MP`; Platform Admin bỏ trống tenant code. Mật khẩu lấy từ `SEED_DEMO_PASSWORD`, không ghi mật khẩu thật vào repository.
 
 | Email | Vai trò | Phạm vi |
 | --- | --- | --- |
@@ -37,10 +37,10 @@ Tenant code là `DEMO`; Platform Admin bỏ trống tenant code. Mật khẩu l�
 | technician.hcm02@demo.local | Technician | HCM 02, còn trống lịch |
 | technician.dn01@demo.local | Technician | Đà Nẵng 01, được giao bảo trì |
 | technician.dn02@demo.local | Technician | Đà Nẵng 02, còn trống lịch |
-| customer.admin@demo.local | Customer Admin | Bệnh viện Demo |
-| customer.user@demo.local | Customer User | Bệnh viện Demo |
-| factory.admin@demo.local | Customer Admin | Nhà máy Demo |
-| factory.user@demo.local | Customer User | Nhà máy Demo |
+| customer.admin@demo.local | Customer Admin | Bệnh viện An Phúc |
+| customer.user@demo.local | Customer User | Bệnh viện An Phúc |
+| factory.admin@demo.local | Customer Admin | Cơ khí Hòa Long |
+| factory.user@demo.local | Customer User | Cơ khí Hòa Long |
 
 Không seed tài khoản Dispatcher hoặc tài khoản mời chưa kích hoạt trong bộ demo chính.
 
@@ -56,14 +56,14 @@ Không seed tài khoản Dispatcher hoặc tài khoản mời chưa kích hoạt
 - 3 PDF thật trên MinIO: ghi chú kỹ thuật nội bộ của ca đang sửa, hai biên bản được công khai cho khách hàng trong báo cáo hoàn tất.
 - Lịch sử, assignment, nhật ký, giao dịch kho và thông báo phát sinh từ luồng xử lý, không giới hạn giả tạo ở 2–3 dòng.
 
-| Mã tình huống | Chi nhánh | Trạng thái ban đầu |
+| Yêu cầu | Chi nhánh | Trạng thái ban đầu |
 | --- | --- | --- |
-| DEMO-HCM-NEW | HCM | SR NEW, dành để trình diễn trực tiếp |
-| DEMO-HCM-INPROGRESS | HCM | SR PROCESSING, WO IN_PROGRESS, cấp 2 bộ lọc |
-| DEMO-HCM-CLOSED | HCM | SR CLOSED, WO COMPLETED, khách đã xác nhận |
-| DEMO-DN-NEW | Đà Nẵng | SR NEW, máy còn bảo hành |
-| DEMO-DN-ESTIMATE | Đà Nẵng | SR AWAITING_CUSTOMER_APPROVAL, dự toán SENT |
-| DEMO-DN-CLOSED | Đà Nẵng | Ngoài bảo hành; dự toán APPROVED, WO hoàn tất, dùng 1 cầu chì và trả 1 cầu chì |
+| Hình ảnh siêu âm bị nhiễu | HCM | SR NEW, dành để trình diễn trực tiếp |
+| Áp suất bơm không ổn định | HCM | SR PROCESSING, WO IN_PROGRESS, cấp 2 bộ lọc |
+| Máy siêu âm không lên nguồn | HCM | SR CLOSED, WO COMPLETED, khách đã xác nhận |
+| Máy bơm phát tiếng ồn | Đà Nẵng | SR NEW, máy còn bảo hành |
+| Máy siêu âm khởi động chậm | Đà Nẵng | SR AWAITING_CUSTOMER_APPROVAL, dự toán SENT |
+| Máy bơm mất nguồn | Đà Nẵng | Ngoài bảo hành; dự toán APPROVED, WO hoàn tất, dùng 1 cầu chì và trả 1 cầu chì |
 
 WO bảo trì HCM ở CREATED để demo phân công; WO bảo trì Đà Nẵng ở ASSIGNED để demo nhận việc. Mọi ca mới lưu timestamp thực tế của lần chuẩn bị dữ liệu; seed không giả mạo thời điểm người dùng đã thao tác. Ngày bảo hành/dự toán và lịch ban đầu tính theo ngày đầu tiên seed, giữ nguyên khi chạy lại.
 
@@ -71,9 +71,9 @@ Tồn sau seed sạch:
 
 | Phụ tùng | HCM | Đà Nẵng | Ngưỡng tối thiểu |
 | --- | ---: | ---: | ---: |
-| Bộ lọc | 12 | 8 | 5 |
-| Cầu chì | 20 | 2 | 5 |
-| Cảm biến áp suất | 0 | 6 | 3 |
+| LOC-01 — Lõi lọc thiết bị | 12 | 8 | 5 |
+| CC-5A — Cầu chì 5A | 20 | 2 | 5 |
+| CB-AS01 — Cảm biến áp suất | 0 | 6 | 3 |
 
 Số tồn được tính từ nhập đầu kỳ và giao dịch cấp/trả, không ghi đè trực tiếp để khớp bảng. Notification bootstrap, sự kiện tồn thấp và thông báo ca dịch vụ chạy qua broker thật.
 
@@ -96,3 +96,9 @@ Lệnh reset xóa dữ liệu ứng dụng trong đúng tám `<service>_db`, gi�
 `pnpm test:demo-seed` chạy guard tests và seed integration trên đúng tám `*_test_db`: reset sạch, đăng nhập 14 tài khoản, kiểm tra hai chi nhánh/customer scope, trạng thái, tồn kho, báo cáo/tệp/thông báo; chạy lại để kiểm tra không nhân đôi hoặc mất tiến trình. Không chạy song song với các DB suite dùng TRUNCATE.
 
 Khi dùng thiết bị Android thật, đặt `MINIO_PUBLIC_ENDPOINT` thành địa chỉ LAN mà điện thoại truy cập được. Seed uploader tự tạo ticket cho origin nội bộ; backend thông thường vẫn ký URL theo `.env` và không sửa host của URL đã ký.
+
+## Tên và mã nghiệp vụ
+
+Doanh nghiệp Minh Phát có mã đăng nhập `MP`. Khách hàng dùng `BV-AP` (Bệnh viện An Phúc), `CK-HL` (Cơ khí Hòa Long); site `AP-HCM`, `AP-DN`, `HL-HCM`, `HL-DN`; thiết bị `SA-001`–`SA-003`, `MB-001`–`MB-003`; nhân viên `KT001`–`KT004`; kho `K-HCM`, `K-DN`; phụ tùng `LOC-01`, `CC-5A`, `CB-AS01`. Họ tên tài khoản là tên người, không ghép vai trò/chi nhánh. Email đăng nhập và mật khẩu hiện có giữ nguyên.
+
+Nếu đã có bộ seed cũ, chạy `pnpm demo:seed` để đổi các nhãn mặc định cũ tại chỗ. Không cần reset DB: ID, trạng thái yêu cầu/WO, số tồn, ngày bảo hành và nội dung đã tự sửa được giữ. Chính sách đã publish và snapshot lịch sử không bị sửa; seed publish phiên bản mặc định mới với tên gọn. Khóa tình huống nội bộ giữ ổn định để không tạo trùng hồ sơ hoặc xuất phụ tùng lần nữa.

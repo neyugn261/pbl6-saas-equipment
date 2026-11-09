@@ -74,17 +74,26 @@ export async function seedInventory(
       },
       update: {},
     });
+    const receiptKey = catalog.id(5201 + wi * 3 + i);
+    const prior = await repo.db.inventoryOperation.findUnique({
+      where: { tenantId_key: { tenantId: p.tenantId, key: receiptKey } },
+    });
+    if (prior) {
+      if (prior.operation !== 'RECEIVE' || prior.state !== 'COMMITTED')
+        throw new Error('Initial stock receipt requires inspection');
+      continue;
+    }
     if (Number(fixture.receipts[i]) > 0)
       await repo.transact({
         tenantId: p.tenantId,
-        key: catalog.id(5201 + wi * 3 + i),
+        key: receiptKey,
         actorId: p.userId,
         operation: 'RECEIVE',
         request: {
           warehouseId: warehouse.id,
           partId: part.id,
           quantity: fixture.receipts[i],
-          note: 'Nhập tồn đầu kỳ demo',
+          note: 'Nhập tồn đầu kỳ',
         },
       });
   }

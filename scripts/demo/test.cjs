@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { DemoRuntime, req, root } = require("./runtime.cjs");
 const catalog = require("./catalog.cjs");
+const { legacy } = require("./labels.cjs");
 async function seed(args) {
   await new Promise((resolve, reject) => {
     const child = spawn(
@@ -94,7 +95,7 @@ async function main() {
     const login = async (email) =>
       (
         await edit.api("POST", "/api/identity/auth/login", null, {
-          tenantCode: "DEMO",
+          tenantCode: catalog.tenant.code,
           email,
           password: process.env.SEED_DEMO_PASSWORD,
         })
@@ -103,7 +104,7 @@ async function main() {
       inventory = await login("inventory@demo.local");
     const requests = await edit.api(
       "GET",
-      "/api/service-requests?q=DEMO-HCM-INPROGRESS",
+      "/api/service-requests?q=" + encodeURIComponent(catalog.cases[1].title),
       manager,
     );
     const orders = await edit.api(
@@ -130,7 +131,52 @@ async function main() {
       201,
       { "Idempotency-Key": require("node:crypto").randomUUID() },
     );
+    const intake = await edit.api(
+      "GET",
+      "/api/service-requests?q=" + encodeURIComponent(catalog.cases[0].title),
+      manager,
+    );
+    await edit.api(
+      "POST",
+      "/api/service-requests/" + intake.items[0].id + "/review",
+      manager,
+      {},
+    );
     await edit.idle();
+    // Existing installations still have the original labels. Emulate those exact values
+    // on the test DBs, together with an operator's custom part name.
+    const tenantId = catalog.tenant.id;
+    await edit.dbs.identity.tenantDirectory.update({
+      where: { tenantId },
+      data: { code: legacy.tenant.code },
+    });
+    await edit.dbs.organization.tenant.update({
+      where: { id: tenantId },
+      data: { code: legacy.tenant.code, name: legacy.tenant.name },
+    });
+    await edit.dbs.organization.customer.update({
+      where: { id: catalog.customers[0].id },
+      data: { code: legacy.customers[0].code, name: legacy.customers[0].name },
+    });
+    await edit.dbs.inventory.part.update({
+      where: { id: catalog.parts[0].id },
+      data: {
+        sku: legacy.parts[0].sku,
+        name: "Lõi lọc theo tiêu chuẩn nội bộ",
+      },
+    });
+    await edit.dbs.inventory.warehouse.update({
+      where: { id: catalog.warehouses[0].id },
+      data: { code: legacy.warehouses[0].code },
+    });
+    await edit.dbs.workorder.technician.update({
+      where: { id: catalog.technicians[0].id },
+      data: { employeeCode: legacy.technicians[0].employeeCode },
+    });
+    await edit.dbs["service-request"].serviceRequest.update({
+      where: { id: requests.items[0].id },
+      data: { title: legacy.cases[1].title },
+    });
   } finally {
     await edit.close();
   }
@@ -141,8 +187,53 @@ async function main() {
     edited,
     "Seed must preserve a paused job and operator stock receipts",
   );
+  const { Client } = req("identity")("pg");
+  for (const [service, query, expected] of [
+    [
+      "identity",
+      "SELECT code AS value FROM tenant_directory",
+      catalog.tenant.code,
+    ],
+    [
+      "organization",
+      "SELECT code AS value FROM customers WHERE id = $1",
+      catalog.customers[0].code,
+    ],
+    [
+      "inventory",
+      "SELECT sku AS value FROM parts WHERE id = $1",
+      catalog.parts[0].sku,
+    ],
+    [
+      "inventory",
+      "SELECT name AS value FROM parts WHERE id = $1",
+      "Lõi lọc theo tiêu chuẩn nội bộ",
+    ],
+    [
+      "workorder",
+      "SELECT employee_code AS value FROM technicians WHERE id = $1",
+      catalog.technicians[0].employeeCode,
+    ],
+  ]) {
+    const db = new Client({ connectionString: r.urls[service] });
+    await db.connect();
+    try {
+      const id =
+        service === "organization"
+          ? catalog.customers[0].id
+          : service === "workorder"
+            ? catalog.technicians[0].id
+            : catalog.parts[0].id;
+      assert.equal(
+        (await db.query(query, query.includes("$1") ? [id] : [])).rows[0].value,
+        expected,
+      );
+    } finally {
+      await db.end();
+    }
+  }
   console.log(
-    "PASS: clean reset, 14 logins, two-branch workflows, customer isolation, real broker/MinIO, three seed runs and operator progress preservation",
+    "PASS: clean reset, 14 logins, two-branch workflows, real broker/MinIO, legacy label upgrade, three seed runs and preservation of review/paused work, stock and custom names",
   );
 }
 main().catch((error) => {

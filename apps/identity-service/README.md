@@ -128,7 +128,7 @@ event's correlation id.
 pnpm db:migrate        # prisma migrate deploy
 pnpm db:check-drift    # migrations vs schema.prisma (needs IDENTITY_SHADOW_DATABASE_URL)
 pnpm db:seed           # provisional permission catalog
-pnpm db:seed:dev       # + demo tenant DEMO and demo accounts
+pnpm db:seed:dev       # + demo tenant MP and demo accounts
 pnpm start:dev
 pnpm test              # unit tests (no database)
 pnpm test:e2e          # API + event-handler tests on IDENTITY_TEST_DATABASE_URL (name must contain "test"; read from .env)

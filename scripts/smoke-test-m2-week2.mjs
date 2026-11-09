@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import catalog from "./demo/catalog.cjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
@@ -6,7 +7,7 @@ const gateway = (process.env.GATEWAY_URL ?? "http://localhost:3000").replace(
   /\/$/,
   "",
 );
-const tenantCode = process.env.TENANT_CODE ?? "DEMO";
+const tenantCode = process.env.TENANT_CODE ?? catalog.tenant.code;
 const password = process.env.SEED_DEMO_PASSWORD;
 if (!password) throw new Error("SEED_DEMO_PASSWORD is required");
 const evidence = [];
@@ -77,7 +78,7 @@ async function main() {
       body: {
         userId: user.id,
         branchId: branch.id,
-        employeeCode: "DEMO-TECH-01",
+        employeeCode: catalog.technicians[0].employeeCode,
       },
     });
   }

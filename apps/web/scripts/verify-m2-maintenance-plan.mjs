@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import catalog from "../../../scripts/demo/catalog.cjs";
 // Local DEMO integration check for the plan controls used by the web UI.
 import assert from 'node:assert/strict';
 
@@ -17,7 +18,7 @@ async function call(method, path, { token, body, status = 200 } = {}) {
   return data;
 }
 async function login(email) {
-  return (await call('POST', '/api/identity/auth/login', { body: { tenantCode: 'DEMO', email, password } })).accessToken;
+  return (await call('POST', '/api/identity/auth/login', { body: { tenantCode: catalog.tenant.code, email, password } })).accessToken;
 }
 const manager = await login('service.manager@demo.local');
 const customer = await login('customer.user@demo.local');

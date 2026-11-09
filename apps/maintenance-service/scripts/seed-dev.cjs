@@ -29,7 +29,7 @@ async function main() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          tenantCode: 'DEMO',
+          tenantCode: catalog.tenant.code,
           email: 'service.manager@demo.local',
           password: process.env.SEED_DEMO_PASSWORD,
         }),
