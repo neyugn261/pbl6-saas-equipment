@@ -51,6 +51,14 @@ Các service dùng chung `packages/` (build sẵn khi `pnpm install`): xác th�
 Seed/demo WO M2: [K7 — chuẩn bị dữ liệu và kịch bản](docs/demo/workorder-m2.md).
 Contract attachment M3: [K8 — OpenAPI và bàn giao](docs/api/workorder-attachments.md).
 
+Chi nhánh và vai trò dịch vụ: [ADR 0022](docs/decisions/0022-branch-service-management.md), [các giai đoạn và cách demo](docs/user-guide/branch-service-management.md). Service Manager đảm nhiệm tiếp nhận và điều phối trong chi nhánh; Tenant Admin xem và phân bổ toàn tenant.
+
+## Bộ dữ liệu demo dùng chung
+
+Người mới pull dự án: cấu hình `.env`, chạy `pnpm infra:up` rồi **`pnpm demo:seed`**. Lệnh tự build/migrate và chuẩn bị đủ hai chi nhánh, 14 tài khoản, sáu thiết bị, sáu yêu cầu, năm WO, kho, dự toán, bảo trì, báo cáo, tệp và thông báo. Sau đó chạy `pnpm dev:backend` và `pnpm dev:web`.
+
+Muốn thay dữ liệu local bằng bộ demo sạch: dừng backend rồi chạy **`pnpm demo:reset`**. Chạy lại `demo:seed` thông thường giữ tiến trình và tồn kho. Xem [tài khoản, dữ liệu và hướng dẫn đầy đủ](docs/user-guide/demo-data.md). Đây là luồng chuẩn thay cho việc ghép từng seed cũ.
+
 ## 2. Yêu cầu hệ thống
 
 | Công cụ | Phiên bản | Ghi chú |
@@ -211,7 +219,7 @@ curl http://localhost:3001/health
 
 curl -X POST http://localhost:3001/auth/login \
   -H "content-type: application/json" \
-  -d '{"tenantCode":"DEMO","email":"dispatcher@demo.local","password":"<SEED_DEMO_PASSWORD>"}'
+  -d '{"tenantCode":"DEMO","email":"service.manager@demo.local","password":"<SEED_DEMO_PASSWORD>"}'
 ```
 
 **Windows (PowerShell)**
@@ -219,7 +227,7 @@ curl -X POST http://localhost:3001/auth/login \
 ```powershell
 Invoke-RestMethod http://localhost:3001/health
 
-$body = @{ tenantCode = "DEMO"; email = "dispatcher@demo.local"; password = "<SEED_DEMO_PASSWORD>" } | ConvertTo-Json
+$body = @{ tenantCode = "DEMO"; email = "service.manager@demo.local"; password = "<SEED_DEMO_PASSWORD>" } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri http://localhost:3001/auth/login -ContentType "application/json" -Body $body
 ```
 
@@ -227,17 +235,18 @@ Invoke-RestMethod -Method Post -Uri http://localhost:3001/auth/login -ContentTyp
 
 Tài khoản demo (mật khẩu = `SEED_DEMO_PASSWORD`):
 
-| Email | Tenant code | Vai trò |
+| Email | Tenant code | Vai trò / phạm vi |
 |---|---|---|
 | `platform.admin@pbl6.local` | *(bỏ trống)* | Platform Admin |
-| `tenant.admin@demo.local` | `DEMO` | Tenant Admin |
-| `service.manager@demo.local` | `DEMO` | Service Manager |
-| `dispatcher@demo.local` | `DEMO` | Dispatcher |
-| `inventory@demo.local` | `DEMO` | Inventory Staff |
-| `technician@demo.local` | `DEMO` | Technician |
-| `customer.admin@demo.local` | `DEMO` | Customer Admin |
-| `customer.user@demo.local` | `DEMO` | Customer User |
-| `invited@demo.local` | `DEMO` | Chưa kích hoạt — không đăng nhập được |
+| `tenant.admin@demo.local` | `DEMO` | Tenant Admin, toàn tenant |
+| `service.manager@demo.local` | `DEMO` | Service Manager HCM |
+| `service.manager.dn@demo.local` | `DEMO` | Service Manager Đà Nẵng |
+| `inventory@demo.local` | `DEMO` | Inventory Staff HCM |
+| `inventory.dn@demo.local` | `DEMO` | Inventory Staff Đà Nẵng |
+| `technician@demo.local`, `technician.hcm02@demo.local` | `DEMO` | Hai Technician HCM |
+| `technician.dn01@demo.local`, `technician.dn02@demo.local` | `DEMO` | Hai Technician Đà Nẵng |
+| `customer.admin@demo.local`, `customer.user@demo.local` | `DEMO` | Customer Admin/User Bệnh viện |
+| `factory.admin@demo.local`, `factory.user@demo.local` | `DEMO` | Customer Admin/User Nhà máy |
 
 API, cơ chế token và lỗi trả về: [apps/identity-service/README.md](apps/identity-service/README.md). Quy trình thay đổi schema: [apps/identity-service/prisma/README.md](apps/identity-service/prisma/README.md).
 

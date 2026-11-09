@@ -1,4 +1,6 @@
 <p align="center">
+
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
@@ -160,3 +162,7 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+## Branch service management (ADR 0022)
+
+See [design](../../docs/decisions/0022-branch-service-management.md) and [runbook](../../docs/user-guide/branch-service-management.md). SERVICE_MANAGER handles both reception and dispatch; existing Dispatcher accounts remain compatible. Apply additive migrations before starting this version. Organization supplies the active primary branch live; tenant-wide customer/equipment master data and maintenance plans remain shared.

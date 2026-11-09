@@ -148,3 +148,10 @@ See [ADR 0019](../decisions/0019-customer-equipment-handover.md).
 Both use transactional outbox/inbox and current retry/DLQ. Bind both consumers before
 rolling out the new wizard; replay unbound events from the outbox with original IDs.
 STORE and legacy registrations retain synchronous setup. See [ADR 0021](../decisions/0021-registration-delivery-methods.md).
+
+## ADR 0022 — Branch routing additions
+
+- `CustomerSiteRoutingChanged.v1`: Organization/CustomerSite -> `workorder-service.site-routing`. Payload `siteId, branchId: UUID|null, revision: integer >=0`. Source/tenant/aggregate validated, transactional outbox/inbox, monotonic per-site revision; a conflicting same revision is rejected. Branch inactivity/site deletion/customer deletion emits an unavailable route. Initial seed also publishes routing. This affects new maintenance WO; only a previously unallocated CREATED maintenance WO with no assignment may acquire its initial route.
+- `ServiceRequestBranchAssigned.v1`: SR/ServiceRequest -> Notification. Same identity fields as Created with a required branchId. Admin allocation is recorded atomically with audit/outbox; notification does not fabricate a new Request.
+- Optional `branchId: UUID|null` is added compatibly to ServiceRequestCreated/StatusChanged, WorkOrderCreated/Assigned/Completed/Cancelled and LowStockDetected, including existing v2 variants. Notification preserves it in durable pending payloads and rows, then applies live staff branch scope to inbox/count/read. Legacy missing routing is visible to Tenant Admin, never treated as an unrestricted staff case. Customer recipient scope stays unchanged.
+- Staff membership is read synchronously from Organization with the caller token; no branch JWT claim or background token impersonation is introduced.

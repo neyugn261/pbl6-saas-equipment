@@ -10,7 +10,6 @@ interface InviteResult {
 
 const roleNames: Partial<Record<Role, string>> = {
   SERVICE_MANAGER: 'Quản lý dịch vụ',
-  DISPATCHER: 'Điều phối viên',
   INVENTORY_STAFF: 'Nhân viên kho',
   TECHNICIAN: 'Kỹ thuật viên',
   CUSTOMER_ADMIN: 'Quản trị khách hàng',
@@ -124,7 +123,11 @@ export default function InvitePage() {
             {activationUrl ? (
               <p>
                 Link kích hoạt (chỉ dùng ở môi trường dev/test):{' '}
-                <a href={activationUrl} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={activationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   {activationUrl}
                 </a>
               </p>

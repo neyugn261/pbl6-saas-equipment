@@ -315,7 +315,14 @@ export class EquipmentService {
       await this.repository.findDetail(scope, id),
       'EQUIPMENT_NOT_FOUND',
     );
+    const site = await this.organization.getSite(
+      row.customerId,
+      row.customerSiteId,
+      undefined,
+      principal,
+    );
     return {
+      defaultServicingBranchId: site?.defaultServicingBranchId ?? null,
       id: row.id,
       customerId: row.customerId,
       customerSiteId: row.customerSiteId,

@@ -1,0 +1,69 @@
+{
+  "status": "PASS",
+  "checks": [
+    "All eight direct backend health checks return 200; Gateway M1 aggregation is healthy; all 14 seeded accounts log in with their expected role",
+    "Both customer report PDFs download from real MinIO after normal backend restart",
+    "Web manager HCM displays exactly its three seeded requests",
+    "Web manager DN displays exactly its three seeded requests",
+    "Web Tenant Admin displays all six seeded requests across both branches"
+  ],
+  "pageErrors": [],
+  "backendHealth": {
+    "IDENTITY": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    },
+    "ORGANIZATION": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    },
+    "ASSET": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    },
+    "SERVICE_REQUEST": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    },
+    "WORKORDER": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    },
+    "MAINTENANCE": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    },
+    "INVENTORY": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    },
+    "NOTIFICATION": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "database": "up"
+      }
+    }
+  }
+}

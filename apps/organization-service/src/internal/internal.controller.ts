@@ -56,6 +56,39 @@ export class InternalController {
     private readonly branches: BranchesRepository,
   ) {}
 
+  @Get('staff-branch')
+  @AllowUserTypes('TENANT_STAFF')
+  @RequirePermissions('branch:read')
+  async staffBranch(@CurrentUser() user: Principal) {
+    const tenantId = requireTenantId(user);
+    const branch = await this.branches.primaryBranch(tenantId, user.userId);
+    return {
+      tenantId,
+      userId: user.userId,
+      branch: branch
+        ? { id: branch.id, code: branch.code, name: branch.name }
+        : null,
+    };
+  }
+
+  @Get('staff/:userId/branch')
+  @AllowUserTypes('TENANT_STAFF')
+  @RequirePermissions('technician:manage')
+  async staffPrimaryBranch(
+    @CurrentUser() caller: Principal,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    const tenantId = requireTenantId(caller);
+    const branch = await this.branches.primaryBranch(tenantId, userId);
+    return {
+      tenantId,
+      userId,
+      branch: branch
+        ? { id: branch.id, code: branch.code, name: branch.name }
+        : null,
+    };
+  }
+
   /** For Work Order (technician profiles): a live branch of the caller's tenant. */
   @Get('branches/:branchId')
   @AllowUserTypes('TENANT_STAFF')
@@ -66,7 +99,8 @@ export class InternalController {
   ): Promise<BranchRef> {
     const branch = await this.branches.find(requireTenantId(user), id);
     if (!branch) throw notFound('BRANCH_NOT_FOUND', 'Branch not found');
-    return { id: branch.id, code: branch.code, name: branch.name, status: branch.status };
+    return { id: branch.id, code: branch.code, name: branch.name, status: branch.status,
+    };
   }
 
   @Get('customers/:customerId')
@@ -100,17 +134,23 @@ export class InternalController {
       throw notFound('SITE_NOT_FOUND', 'Site not found');
     }
     if (query.locationId) {
-      const location = await this.repository.findLocation(scope.tenantId, query.locationId);
+      const location = await this.repository.findLocation(scope.tenantId, query.locationId,
+      );
       if (!location || location.customerSiteId !== site.id) {
         throw notFound('LOCATION_NOT_FOUND', 'Location not found');
       }
     }
+    const branch = site.defaultServicingBranchId
+      ? await this.branches.find(scope.tenantId, site.defaultServicingBranchId)
+      : null;
     return {
       customerId,
       siteId: site.id,
       siteStatus: site.status,
       locationId: query.locationId ?? null,
-      defaultServicingBranchId: site.defaultServicingBranchId,
+      defaultServicingBranchId: site.status === 'ACTIVE' && branch?.status === 'ACTIVE'
+          ? branch.id
+          : null,
     };
   }
 }

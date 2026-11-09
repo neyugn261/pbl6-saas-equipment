@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -95,6 +97,7 @@ describe('Notification API with PostgreSQL (notification_test_db)', () => {
         data: {
           tenantId: tenants[0],
           userId: users[0],
+          branchId: FIXTURE_BRANCH,
           type: 'ServiceRequestCreated.v1',
           title: 'Staff notice',
           content: 'Staff body',
@@ -107,12 +110,14 @@ describe('Notification API with PostgreSQL (notification_test_db)', () => {
           tenantId: tenants[0],
           userId: users[1],
           customerId: customers[0],
+          branchId: FIXTURE_BRANCH,
           type: 'ServiceRequestCreated.v1',
           title: 'Customer notice',
           content: 'Customer body',
           channel: 'IN_APP',
           status: 'SENT',
-          payload: { resourceType: 'SERVICE_REQUEST', resourceId: randomUUID() },
+          payload: { resourceType: 'SERVICE_REQUEST', resourceId: randomUUID(),
+          },
         },
       }),
       db.notification.create({
@@ -120,6 +125,7 @@ describe('Notification API with PostgreSQL (notification_test_db)', () => {
           tenantId: tenants[0],
           userId: users[1],
           customerId: customers[1],
+          branchId: FIXTURE_BRANCH,
           type: 'ServiceRequestCreated.v1',
           title: 'Old customer context',
           content: 'Must not be visible',
@@ -131,6 +137,7 @@ describe('Notification API with PostgreSQL (notification_test_db)', () => {
         data: {
           tenantId: tenants[1],
           userId: users[3],
+          branchId: FIXTURE_BRANCH,
           type: 'ServiceRequestCreated.v1',
           title: 'Other tenant',
           content: 'Must not be visible',
@@ -143,7 +150,9 @@ describe('Notification API with PostgreSQL (notification_test_db)', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext()).compile();
     app = moduleRef.createNestApplication();
     configureApp(app);
     await app.init();
@@ -200,8 +209,9 @@ describe('Notification API with PostgreSQL (notification_test_db)', () => {
       .get('/notifications')
       .set('authorization', `Bearer ${staffToken}`)
       .expect(200);
-    expect(staffList.body.items.map((item: { title: string }) => item.title))
-      .toEqual(['Staff notice']);
+    expect(
+      staffList.body.items.map((item: { title: string }) => item.title),
+    ).toEqual(['Staff notice']);
   });
 
   it('fails closed for moved, inactive, missing, or cross-tenant recipient snapshots', async () => {

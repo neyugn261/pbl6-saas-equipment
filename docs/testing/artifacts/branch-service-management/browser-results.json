@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "checks": [
+    "Manager branch notice and foreign-request error on real backend",
+    "Admin assigns a primary branch through live Organization API",
+    "Admin allocates an unrouted request; queue refreshes from backend",
+    "390x844 allocation screen has no horizontal overflow"
+  ],
+  "pageErrors": []
+}

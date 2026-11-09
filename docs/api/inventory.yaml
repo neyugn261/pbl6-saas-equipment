@@ -3,6 +3,10 @@ info:
   title: Inventory Service API — M3 runtime
   version: 0.3.0
   description: |
+    ADR 0022: SERVICE_MANAGER handles reception and dispatch. Branch-bound staff
+    routes resolve the active primary branch live from Organization; errors fail closed.
+    Customer/Equipment and maintenance plans remain tenant/customer scoped.
+    DISPATCHER is retained for existing accounts; new assignment/invitation is rejected.
     Owner Minh. Local Inventory runtime is implemented; Work Order reservation
     contract is awaiting Khương's implementation/review. ISSUE fails closed with
     503 when that capability is unavailable. Notification audience and UI remain

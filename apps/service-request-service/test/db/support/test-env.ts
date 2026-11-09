@@ -14,6 +14,7 @@ export function applyTestEnv(): void {
     SERVICE_REQUEST_DATABASE_URL: testDatabaseUrl(),
     ASSET_SERVICE_URL: 'http://localhost:1',
     WORKORDER_SERVICE_URL: 'http://localhost:1',
+    ORGANIZATION_SERVICE_URL: 'http://organization.test',
     RABBITMQ_URL: '',
   });
 }

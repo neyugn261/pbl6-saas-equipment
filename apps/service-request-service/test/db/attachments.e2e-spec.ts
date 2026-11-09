@@ -1,4 +1,5 @@
-﻿import { randomUUID } from 'node:crypto';
+import { FIXTURE_BRANCH } from '@pbl6/testing';
+import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { signTestAccessToken } from '@pbl6/testing';
 import request from 'supertest';
@@ -35,6 +36,7 @@ describe('C4 authorization (service_request_test_db, fake Work Order)', () => {
     attachmentId = randomUUID();
     const row = await prisma.serviceRequest.create({
       data: {
+        branchId: FIXTURE_BRANCH,
         tenantId,
         customerId,
         requestNo: 'SR-C4-TEST',
@@ -51,39 +53,37 @@ describe('C4 authorization (service_request_test_db, fake Work Order)', () => {
       tenantId,
       customerId,
     });
-    upstream
-      .mockReset()
-      .mockImplementation(
-        async (url: URL) =>
-          new Response(
-            JSON.stringify(
-              url.pathname.endsWith('/download')
-                ? {
-                    downloadUrl: 'https://storage.example/file?sig=test-only',
-                    expiresAt: new Date(Date.now() + 60000).toISOString(),
-                    storageKey: 'private',
-                    bucket: 'private',
-                  }
-                : {
-                    items: [
-                      {
-                        id: attachmentId,
-                        fileName: 'result.pdf',
-                        mimeType: 'application/pdf',
-                        sizeBytes: 10,
-                        createdAt: new Date().toISOString(),
-                        storageKey: 'private',
-                        internalNotes: 'private',
-                      },
-                    ],
-                    page: 1,
-                    pageSize: 20,
-                    total: 1,
-                    bucket: 'private',
-                  },
-            ),
+    upstream.mockReset().mockImplementation(
+      async (url: URL) =>
+        new Response(
+          JSON.stringify(
+            url.pathname.endsWith('/download')
+              ? {
+                  downloadUrl: 'https://storage.example/file?sig=test-only',
+                  expiresAt: new Date(Date.now() + 60000).toISOString(),
+                  storageKey: 'private',
+                  bucket: 'private',
+                }
+              : {
+                  items: [
+                    {
+                      id: attachmentId,
+                      fileName: 'result.pdf',
+                      mimeType: 'application/pdf',
+                      sizeBytes: 10,
+                      createdAt: new Date().toISOString(),
+                      storageKey: 'private',
+                      internalNotes: 'private',
+                    },
+                  ],
+                  page: 1,
+                  pageSize: 20,
+                  total: 1,
+                  bucket: 'private',
+                },
           ),
-      );
+        ),
+    );
   });
 
   it.each([

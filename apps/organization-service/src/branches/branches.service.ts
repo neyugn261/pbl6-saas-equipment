@@ -25,7 +25,8 @@ export class BranchesService {
     private readonly identity: IdentityClient,
   ) {}
 
-  async list(tenantId: string, query: ListQueryDto): Promise<Page<BranchResponse>> {
+  async list(tenantId: string, query: ListQueryDto,
+  ): Promise<Page<BranchResponse>> {
     const [rows, total] = await this.branches.list(tenantId, query);
     return toPage(rows.map(toBranchResponse), total, query);
   }
@@ -34,7 +35,8 @@ export class BranchesService {
     return toBranchResponse(await this.load(tenantId, id));
   }
 
-  async create(tenantId: string, input: CreateBranchDto): Promise<BranchResponse> {
+  async create(tenantId: string, input: CreateBranchDto,
+  ): Promise<BranchResponse> {
     const branch = await this.branches.create({ ...input, tenantId });
     return toBranchResponse(branch);
   }
@@ -75,8 +77,11 @@ export class BranchesService {
     input: AssignBranchUserDto,
   ): Promise<BranchUserAssignmentResponse> {
     const tenantId = requireTenantId(caller);
-    await this.load(tenantId, branchId);
-    await requireUser(this.identity, caller, input.userId, 'TENANT_STAFF', 'USER_NOT_TENANT_STAFF');
+    const branch = await this.load(tenantId, branchId);
+    if (branch.status !== 'ACTIVE')
+      throw conflict('BRANCH_INACTIVE', 'Assign staff to an active branch');
+    await requireUser(this.identity, caller, input.userId, 'TENANT_STAFF', 'USER_NOT_TENANT_STAFF',
+    );
     const assignment = await this.branches.assign(
       tenantId,
       branchId,
@@ -86,10 +91,12 @@ export class BranchesService {
     return toAssignmentResponse(assignment);
   }
 
-  async unassignUser(tenantId: string, branchId: string, userId: string): Promise<void> {
+  async unassignUser(tenantId: string, branchId: string, userId: string,
+  ): Promise<void> {
     await this.load(tenantId, branchId);
     if (!(await this.branches.unassign(tenantId, branchId, userId))) {
-      throw notFound('ASSIGNMENT_NOT_FOUND', 'The user is not assigned to this branch');
+      throw notFound('ASSIGNMENT_NOT_FOUND', 'The user is not assigned to this branch',
+      );
     }
   }
 

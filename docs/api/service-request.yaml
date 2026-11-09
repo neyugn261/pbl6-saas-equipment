@@ -37,12 +37,39 @@ tags:
   - name: Comments
   - name: Cost estimates
 paths:
+  /service-requests/{requestId}/branch:
+    patch:
+      summary: Tenant Admin allocates an unassigned service case
+      description: ADR 0022. Records actor/reason in history. Existing active branch ownership is preserved; Request may change only before acceptance, Work Order only while branch is null. Source Request must be allocated first for legacy Work Orders.
+      x-permissions: ['branch:manage']
+      x-user-types: [TENANT_STAFF]
+      parameters:
+        - { name: requestId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branchId, expectedBranchId, reason]
+              properties:
+                branchId: { type: string, format: uuid }
+                expectedBranchId: { type: [string, 'null'], format: uuid }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '200': { description: Allocated branch recorded }
+        '403': { description: Requires Tenant Admin branch management permission }
+        '404': { description: Case or active branch not found in tenant }
+        '409': { description: Allocation is locked or stale; reload source }
   /service-requests:
     get:
       tags: [Requests]
       summary: List service requests
       x-permissions: [service_request:read]
       parameters:
+        - { name: branchId, in: query, description: Tenant Admin branch filter; staff cannot widen their own branch, schema: { type: string, format: uuid } }
+        - { name: unallocated, in: query, description: Tenant Admin central queue, schema: { type: string, enum: ['true', 'false'] } }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
         - name: q
@@ -700,6 +727,7 @@ components:
           updatedAt,
         ]
       properties:
+        branchId: { type: [string, 'null'], format: uuid, description: Responsible branch; null is the central allocation queue }
         id: { type: string, format: uuid }
         requestNo: { type: string, examples: [SR-2026-0001] }
         customerId: { type: string, format: uuid }

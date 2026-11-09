@@ -12,10 +12,12 @@ import {
   ServiceRequestsController,
 } from './service-requests.controller';
 import { ServiceRequestsService } from './service-requests.service';
+import { RequestBranchController } from './request-branch.controller';
 
 @Module({
   imports: [AssetModule],
   controllers: [
+    RequestBranchController,
     ServiceRequestsController,
     CostEstimatesController,
     InternalServiceRequestsController,

@@ -3,6 +3,10 @@ info:
   title: PBL6 Notification Service
   version: 0.2.0-review
   description: |
+    ADR 0022: SERVICE_MANAGER handles reception and dispatch. Branch-bound staff
+    routes resolve the active primary branch live from Organization; errors fail closed.
+    Customer/Equipment and maintenance plans remain tenant/customer scoped.
+    DISPATCHER is retained for existing accounts; new assignment/invitation is rejected.
     Notification API implementation is in progress. This contract does not mean
     the additive Notification migration or recipient event producers are merged.
     Conventions: docs/api/conventions.md; event versions and payloads:

@@ -6,6 +6,7 @@ export * from './guards';
 export * from './jwt-options';
 export * from './principal';
 export * from './scope';
+export * from './branch-scope';
 export * from './verifier';
 // Re-exported so services import every auth decorator from one place.
 export { Public, IS_PUBLIC_KEY } from '@pbl6/service-kit';

@@ -1,5 +1,7 @@
 # Identity Service
 
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
+
 M3 Notification directory: tenant user invite, activation, role/status changes
 and accepted Organization membership events enqueue
 `NotificationRecipientSnapshot.v1` in a transactional outbox with a monotonic
@@ -133,13 +135,7 @@ pnpm test:e2e          # API + event-handler tests on IDENTITY_TEST_DATABASE_URL
 pnpm lint && pnpm typecheck
 ```
 
-Demo accounts after `db:seed:dev` (password = `SEED_DEMO_PASSWORD`):
-`platform.admin@pbl6.local` (no tenant code) and, with tenant code `DEMO`,
-`tenant.admin@`, `service.manager@`, `dispatcher@`, `inventory@`,
-`technician@`, `customer.admin@`, `customer.user@demo.local`;
-`invited@demo.local` is INVITED and cannot log in. The two customer accounts
-are linked to customer `DEMO-CUST-01` (`docs/api/fixtures.md`), so their
-tokens carry `customer_id`.
+Demo seed creates 14 active accounts, no Dispatcher/Invited account: one Platform Admin, one Tenant Admin, two Service Managers, two Inventory Staff, four Technicians, and four customer accounts for two customers. Password comes from `SEED_DEMO_PASSWORD`. Reruns preserve existing passwords/status/roles. The seed restores the eight fixed RBAC roles after a development reset and publishes recipient snapshots for newly created accounts. [Full account table](../../docs/user-guide/demo-data.md).
 
 ## User management (M1)
 

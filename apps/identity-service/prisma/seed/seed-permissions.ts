@@ -1,10 +1,10 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
-import { PERMISSIONS, ROLE_PERMISSIONS } from '@pbl6/auth';
+import { PERMISSIONS, ROLE_PERMISSIONS, ROLE_USER_TYPES } from '@pbl6/auth';
 
 /**
  * Upserts the permission catalog and makes role_permissions match
- * ROLE_PERMISSIONS exactly. Safe to run repeatedly. Fails if the catalog
- * references a role that migration 0001_init did not create.
+ * ROLE_PERMISSIONS exactly. Restores only the fixed approved roles after a
+ * development data reset; tenants still cannot create custom roles.
  */
 export async function seedPermissions(prisma: PrismaClient): Promise<void> {
   for (const [role, codes] of Object.entries(ROLE_PERMISSIONS)) {
@@ -17,6 +17,21 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
   }
 
   await prisma.$transaction(async (tx) => {
+    for (const [code, userType] of Object.entries(ROLE_USER_TYPES)) {
+      await tx.role.upsert({
+        where: { code },
+        create: {
+          code,
+          userType,
+          name: code
+            .toLowerCase()
+            .split('_')
+            .map((word) => word[0].toUpperCase() + word.slice(1))
+            .join(' '),
+        },
+        update: {},
+      });
+    }
     for (const [code, name] of Object.entries(PERMISSIONS)) {
       await tx.permission.upsert({
         where: { code },

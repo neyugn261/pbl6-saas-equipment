@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import { Controller, Get, Header, Query } from '@nestjs/common';
 import {
   AllowUserTypes,
@@ -8,6 +9,7 @@ import {
 import { WorkOrderSummaryQueryDto } from './dto';
 import { ReportsService } from './reports.service';
 
+@BranchScoped()
 @Controller('reports/work-orders')
 @AllowUserTypes('TENANT_STAFF')
 @RequirePermissions('report:read')

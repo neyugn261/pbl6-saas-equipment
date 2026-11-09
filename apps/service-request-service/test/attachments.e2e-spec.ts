@@ -1,7 +1,8 @@
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { BranchAccessClient } from '@pbl6/auth';
 import { configureApp } from '@pbl6/service-kit';
-import { signTestAccessToken } from '@pbl6/testing';
+import { FIXTURE_BRANCH, fixtureBranchContext, signTestAccessToken } from '@pbl6/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -29,6 +30,8 @@ describe('C4 HTTP security (fake database and upstream transport)', () => {
   beforeAll(async () => {
     fetchMock = jest.spyOn(global, 'fetch');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext())
       .overrideProvider(PrismaService)
       .useValue({ serviceRequest: { findFirst: lookup } })
       .compile();
@@ -46,7 +49,7 @@ describe('C4 HTTP security (fake database and upstream transport)', () => {
         where.id === requestId &&
         where.tenantId === tenantId &&
         (!where.customerId || where.customerId === customerId)
-          ? { id: requestId, tenantId, customerId }
+          ? { id: requestId, tenantId, customerId, branchId: FIXTURE_BRANCH }
           : null,
       );
   });
@@ -114,7 +117,7 @@ describe('C4 HTTP security (fake database and upstream transport)', () => {
         where: {
           id: requestId,
           tenantId,
-          ...(role === 'CUSTOMER_USER' ? { customerId } : {}),
+          ...(role === 'CUSTOMER_USER' ? { customerId } : { branchId: FIXTURE_BRANCH }),
         },
       });
       expect(lookup.mock.invocationCallOrder[0]).toBeLessThan(

@@ -1,6 +1,7 @@
 import { PORT_VARIABLE, validateEnv } from './env.validation';
 
 const valid = {
+  ORGANIZATION_SERVICE_URL: 'http://organization.test',
   ASSET_SERVICE_URL: 'http://localhost:3002',
   WORKORDER_SERVICE_URL: 'http://localhost:3004',
   SERVICE_REQUEST_DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',

@@ -20,6 +20,8 @@ datasource db {
 /// user_id, channel) is unique when source_event_id is set (partial unique in
 /// SQL), so a replayed event never notifies twice.
 model Notification {
+  /// NULL means unallocated legacy/central queue, never unrestricted branch access.
+  branchId      String?   @map("branch_id") @db.Uuid
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// NULL may represent a platform-level notification.
   tenantId      String?   @map("tenant_id") @db.Uuid
@@ -39,6 +41,7 @@ model Notification {
   readAt        DateTime? @map("read_at") @db.Timestamptz(6)
 
   @@index([tenantId, type, createdAt(sort: Desc)], map: "idx_notifications_tenant_type")
+  @@index([tenantId, branchId])
   @@map("notifications")
 }
 
@@ -74,8 +77,8 @@ model RecipientBootstrapRun {
   createdAt      DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
   receipts       RecipientBootstrapReceipt[]
 
-  @@index([tenantId, status, createdAt(sort: Desc)], map: "idx_recipient_bootstrap_runs_tenant_status")
   @@unique([bootstrapRunId, tenantId], map: "uq_recipient_bootstrap_runs_id_tenant")
+  @@index([tenantId, status, createdAt(sort: Desc)], map: "idx_recipient_bootstrap_runs_tenant_status")
   @@map("recipient_bootstrap_runs")
 }
 
@@ -118,20 +121,20 @@ model PendingNotificationEvent {
 /// Local projection of Service Request fields needed for notification routing.
 /// It deliberately stores no title, description, comments, or attachment data.
 model ServiceRequestSnapshot {
-  tenantId              String   @map("tenant_id") @db.Uuid
-  serviceRequestId      String   @map("service_request_id") @db.Uuid
-  requestNo             String   @map("request_no") @db.VarChar(50)
-  customerId            String   @map("customer_id") @db.Uuid
-  requesterId           String   @map("requester_id") @db.Uuid
-  requestType           String   @map("request_type") @db.VarChar(30)
-  priority              String   @db.VarChar(20)
-  status                String   @db.VarChar(40)
-  createdEventId        String   @map("created_event_id") @db.Uuid
-  latestStatusEventId   String?  @map("latest_status_event_id") @db.Uuid
-  sourceOccurredAt      DateTime @map("source_occurred_at") @db.Timestamptz(6)
+  tenantId              String    @map("tenant_id") @db.Uuid
+  serviceRequestId      String    @map("service_request_id") @db.Uuid
+  requestNo             String    @map("request_no") @db.VarChar(50)
+  customerId            String    @map("customer_id") @db.Uuid
+  requesterId           String    @map("requester_id") @db.Uuid
+  requestType           String    @map("request_type") @db.VarChar(30)
+  priority              String    @db.VarChar(20)
+  status                String    @db.VarChar(40)
+  createdEventId        String    @map("created_event_id") @db.Uuid
+  latestStatusEventId   String?   @map("latest_status_event_id") @db.Uuid
+  sourceOccurredAt      DateTime  @map("source_occurred_at") @db.Timestamptz(6)
   latestStatusChangedAt DateTime? @map("latest_status_changed_at") @db.Timestamptz(6)
-  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@id([tenantId, serviceRequestId])
   @@index([tenantId, requesterId], map: "idx_service_request_snapshots_requester")
@@ -170,8 +173,8 @@ model NotificationEventConflict {
   resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(6)
   resolvedBy     String?   @map("resolved_by") @db.Uuid
 
-  @@index([state, detectedAt], map: "idx_notification_event_conflicts_state")
   @@unique([sourceEventId, consumer, expectedSha256, observedSha256], map: "uq_notification_event_conflict_hashes")
+  @@index([state, detectedAt], map: "idx_notification_event_conflicts_state")
   @@map("notification_event_conflicts")
 }
 

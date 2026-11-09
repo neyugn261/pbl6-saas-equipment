@@ -217,6 +217,7 @@ test("Workshop shell preserves role navigation and highlights a child record's g
         NotificationBell: "NotificationBell",
       },
       "./role-workspace": roles,
+      "./BranchManagement": { BranchScopeNotice: "BranchScopeNotice" },
     },
   );
   const tree = Shell({ children: "Actual route content" });
@@ -275,6 +276,7 @@ test("Workshop shell keeps customer links in portal and hides tenant notificatio
           NotificationBell: "NotificationBell",
         },
         "./role-workspace": roles,
+        "./BranchManagement": { BranchScopeNotice: "BranchScopeNotice" },
       },
     );
     const tree = Shell({ children: "Route" });

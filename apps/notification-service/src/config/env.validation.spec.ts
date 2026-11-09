@@ -1,6 +1,7 @@
 import { PORT_VARIABLE, validateEnv } from './env.validation';
 
 const validEnv = {
+  ORGANIZATION_SERVICE_URL: 'http://organization.test',
   JWT_ACCESS_SECRET: 'test-secret-with-more-than-thirty-two-characters',
   NOTIFICATION_DATABASE_URL: 'postgresql://localhost/notification_db',
 };
@@ -9,6 +10,7 @@ describe('validateEnv', () => {
   it('uses the default port when none is configured', () => {
     expect(validateEnv(validEnv)).toEqual({
       NODE_ENV: 'development',
+      ORGANIZATION_SERVICE_URL: validEnv.ORGANIZATION_SERVICE_URL,
       PORT: 3005,
       NOTIFICATION_DATABASE_URL: validEnv.NOTIFICATION_DATABASE_URL,
       JWT_ACCESS_SECRET: validEnv.JWT_ACCESS_SECRET,
@@ -25,13 +27,13 @@ describe('validateEnv', () => {
 
   it('rejects an invalid port', () => {
     expect(() =>
-      validateEnv({ ...validEnv, [PORT_VARIABLE]: 'abc' }),
-    ).toThrow(PORT_VARIABLE);
+      validateEnv({ ...validEnv, [PORT_VARIABLE]: 'abc' })).toThrow(PORT_VARIABLE,
+    );
   });
 
   it('rejects an unknown NODE_ENV', () => {
     expect(() =>
-      validateEnv({ ...validEnv, NODE_ENV: 'staging' }),
-    ).toThrow('NODE_ENV');
+      validateEnv({ ...validEnv, NODE_ENV: 'staging' })).toThrow('NODE_ENV',
+    );
   });
 });

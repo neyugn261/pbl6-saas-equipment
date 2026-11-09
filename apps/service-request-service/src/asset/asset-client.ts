@@ -6,6 +6,7 @@ import type { AppEnv } from '../config/env.validation';
 export const ASSET_CLIENT = Symbol('ASSET_CLIENT');
 
 export interface EquipmentReference {
+  defaultServicingBranchId?: string | null;
   id: string;
   customerId: string;
   customerSiteId: string;

@@ -13,6 +13,8 @@ export interface Principal {
   permissions: ReadonlySet<PermissionCode>;
   /** Set only for CUSTOMER accounts linked to a customer (ADR 0003). */
   customerId: string | null;
+  /** Resolved live by BranchScopeGuard. Undefined means not resolved; null is tenant-wide. */
+  branchId?: string | null;
   /** Raw bearer token, forwarded on synchronous service calls (ADR 0004). */
   accessToken: string;
   expiresAt: Date;

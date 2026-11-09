@@ -1,7 +1,8 @@
 import { Logger, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { BranchAccessClient } from '@pbl6/auth';
 import { configureApp } from '@pbl6/service-kit';
-import { signTestAccessToken } from '@pbl6/testing';
+import { fixtureBranchContext, signTestAccessToken } from '@pbl6/testing';
 import request from 'supertest';
 import { randomUUID } from 'node:crypto';
 import { AppModule } from '../src/app.module';
@@ -14,6 +15,8 @@ describe('Inventory real HTTP pipeline', () => {
   const tenantId = randomUUID();
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext())
       .overrideProvider(PrismaService)
       .useValue({
         $queryRawUnsafe: async () => {

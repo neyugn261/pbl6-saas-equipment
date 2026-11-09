@@ -20,15 +20,15 @@ datasource db {
 
 /// status: ACTIVE | SUSPENDED | DISABLED. Soft-deleted with deleted_at.
 model Tenant {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  code      String    @unique @db.VarChar(50)
-  name      String    @db.VarChar(200)
-  status    String    @default("ACTIVE") @db.VarChar(30)
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code      String     @unique @db.VarChar(50)
+  name      String     @db.VarChar(200)
+  status    String     @default("ACTIVE") @db.VarChar(30)
   /// Informational only; subscription management is out of MVP scope.
-  plan      String    @default("BASIC") @db.VarChar(50)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  plan      String     @default("BASIC") @db.VarChar(50)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime?  @map("deleted_at") @db.Timestamptz(6)
   branches  Branch[]
   customers Customer[]
 
@@ -38,20 +38,20 @@ model Tenant {
 /// Internal branch of the equipment vendor (not a customer site).
 /// status: ACTIVE | INACTIVE.
 model Branch {
-  id                String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String                 @map("tenant_id") @db.Uuid
-  code              String                 @db.VarChar(50)
-  name              String                 @db.VarChar(150)
-  address           String
-  phone             String?                @db.VarChar(30)
-  email             String?                @db.VarChar(255)
-  status            String                 @default("ACTIVE") @db.VarChar(30)
-  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt         DateTime?              @map("deleted_at") @db.Timestamptz(6)
-  tenant            Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  servicedSites     CustomerSite[]
-  userAssignments   BranchUserAssignment[]
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
+  code            String                 @db.VarChar(50)
+  name            String                 @db.VarChar(150)
+  address         String
+  phone           String?                @db.VarChar(30)
+  email           String?                @db.VarChar(255)
+  status          String                 @default("ACTIVE") @db.VarChar(30)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  servicedSites   CustomerSite[]
+  userAssignments BranchUserAssignment[]
 
   @@unique([tenantId, code])
   @@unique([tenantId, id])
@@ -86,6 +86,7 @@ model Customer {
 
 /// Physical location of a customer. Latitude/longitude ranges are CHECKed in SQL.
 model CustomerSite {
+  routingVersion           Int               @default(0) @map("routing_version")
   id                       String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId                 String            @map("tenant_id") @db.Uuid
   customerId               String            @map("customer_id") @db.Uuid

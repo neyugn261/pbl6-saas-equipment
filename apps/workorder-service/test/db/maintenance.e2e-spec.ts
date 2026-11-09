@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -42,6 +44,8 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(FIXTURE_BRANCH))
       .overrideProvider(REFERENCES)
       .useValue(refs)
       .compile();
@@ -51,6 +55,38 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
     db = app.get(PrismaService);
     consumer = app.get(MaintenanceEventsConsumer);
   });
+  async function handleWithRouting(
+    event: Parameters<MaintenanceEventsConsumer['handle']>[0],
+  ) {
+    const p = event.payload as {
+      customerSiteId?: string | null;
+      maintenanceTaskId?: string;
+    };
+    if (event.tenantId && p.customerSiteId)
+      await db.siteBranchSnapshot.createMany({
+        data: [
+          {
+            tenantId: event.tenantId,
+            siteId: p.customerSiteId,
+            branchId: FIXTURE_BRANCH,
+            revision: 1,
+          },
+        ],
+        skipDuplicates: true,
+      });
+    const result = await consumer.handle(event);
+    // Legacy tasks with no site are explicitly allocated in this lifecycle fixture.
+    if (event.tenantId && !p.customerSiteId && p.maintenanceTaskId)
+      await db.workOrder.updateMany({
+        where: {
+          tenantId: event.tenantId,
+          maintenanceTaskId: p.maintenanceTaskId,
+          branchId: null,
+        },
+        data: { branchId: FIXTURE_BRANCH },
+      });
+    return result;
+  }
   afterAll(async () => {
     await app?.close();
   });
@@ -104,7 +140,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   };
   it('commits snapshot, Vietnam calendar date, sequence, null actor history, inbox and Created v1 atomically', async () => {
     const event = due();
-    expect(await consumer.handle(event)).toBe('processed');
+    expect(await handleWithRouting(event)).toBe('processed');
     const row = await db.workOrder.findFirstOrThrow();
     expect(row).toMatchObject({
       tenantId,
@@ -147,6 +183,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
     expect(outbox.payload).toEqual({
       data: {
         workOrderId: row.id,
+        branchId: FIXTURE_BRANCH,
         workOrderNo: row.workOrderNo,
         serviceRequestId: null,
         maintenanceTaskId: event.aggregateId,
@@ -164,7 +201,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
     const event = due();
     expect(
       (
-        await Promise.all([consumer.handle(event), consumer.handle(event)])
+        await Promise.all([handleWithRouting(event), handleWithRouting(event)])
       ).sort(),
     ).toEqual(['duplicate', 'processed']);
     expect(await db.workOrder.count()).toBe(1);
@@ -176,7 +213,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
       other = replay(event);
     other.aggregateId = other.aggregateId.toUpperCase();
     other.payload = { ...other.payload, maintenanceTaskId: other.aggregateId };
-    await Promise.all([consumer.handle(event), consumer.handle(other)]);
+    await Promise.all([handleWithRouting(event), handleWithRouting(other)]);
     expect(await db.workOrder.count()).toBe(1);
     expect(await db.outboxEvent.count()).toBe(1);
     expect(await db.workOrderStatusHistory.count()).toBe(1);
@@ -185,7 +222,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   });
   it('ignores changed replay snapshots rather than overwriting an existing WO', async () => {
     const event = due();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     const previous = await db.workOrder.findFirstOrThrow();
     const other = replay(event);
     other.payload = {
@@ -194,7 +231,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
       title: 'Changed snapshot',
       scheduledDate: '2030-12-31',
     };
-    await consumer.handle(other);
+    await handleWithRouting(other);
     expect(await db.workOrder.findFirstOrThrow()).toEqual(previous);
   });
   it('supports null site and correlation and preserves canonical PostgreSQL UUID values', async () => {
@@ -202,7 +239,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
     event.tenantId = tenantId.toUpperCase();
     event.payload.equipmentId = equipmentId.toUpperCase();
     event.correlationId = null;
-    await consumer.handle(event);
+    await handleWithRouting(event);
     expect(await db.workOrder.findFirstOrThrow()).toMatchObject({
       tenantId,
       equipmentId,
@@ -214,13 +251,13 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   });
   it('does not automatically recreate a cancelled WO when old or new due delivery arrives', async () => {
     const event = due();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     const row = await db.workOrder.findFirstOrThrow();
     await action(row.id, 'cancel', manager, {
       reason: 'Manager will decide replacement',
     }).expect(200);
-    expect(await consumer.handle(event)).toBe('duplicate');
-    await consumer.handle(replay(event));
+    expect(await handleWithRouting(event)).toBe('duplicate');
+    await handleWithRouting(replay(event));
     expect(await db.workOrder.count()).toBe(1);
     expect((await db.workOrder.findFirstOrThrow()).status).toBe('CANCELLED');
     expect(
@@ -243,13 +280,13 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   });
   it('completes a maintenance WO with v2 result and never duplicates it on due replay', async () => {
     const event = due();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     const row = await db.workOrder.findFirstOrThrow();
     const tech = await db.technician.create({
       data: {
         tenantId,
         userId: techUser,
-        branchId: randomUUID(),
+        branchId: FIXTURE_BRANCH,
         employeeCode: 'MAINT-TECH',
       },
     });
@@ -264,7 +301,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
       result: 'RESOLVED',
       customerSummary: 'Maintenance completed',
     }).expect(200);
-    await consumer.handle(replay(event));
+    await handleWithRouting(replay(event));
     expect(await db.workOrder.count()).toBe(1);
     expect((await db.workOrder.findFirstOrThrow()).status).toBe('COMPLETED');
     expect(await db.serviceReport.count()).toBe(1);
@@ -291,7 +328,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   });
   it('enforces the database constraint even for a completed task but permits a separately authorized replacement after cancellation', async () => {
     const event = due();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     const row = await db.workOrder.findFirstOrThrow();
     await db.workOrder.update({
       where: { id: row.id },
@@ -319,16 +356,16 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   });
   it('rejects a task UUID already owned by another tenant and rolls back its inbox', async () => {
     const event = due();
-    await consumer.handle(event);
+    await handleWithRouting(event);
     const other = replay(event);
     other.tenantId = foreignTenant;
-    await expect(consumer.handle(other)).rejects.toThrow('tenant mismatch');
+    await expect(handleWithRouting(other)).rejects.toThrow('tenant mismatch');
     expect(await db.workOrder.count()).toBe(1);
     expect(
       await db.processedEvent.count({ where: { eventId: other.eventId } }),
     ).toBe(0);
     other.tenantId = tenantId;
-    expect(await consumer.handle(other)).toBe('processed');
+    expect(await handleWithRouting(other)).toBe('processed');
   });
   it.each([
     'tenant',
@@ -349,7 +386,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
     if (name === 'impossibleDate') event.payload.scheduledDate = '2026-04-31';
     if (name === 'nonLeapDay') event.payload.scheduledDate = '2026-02-29';
     if (name === 'yearZero') event.payload.scheduledDate = '0000-01-01';
-    await expect(consumer.handle(event)).rejects.toBeInstanceOf(
+    await expect(handleWithRouting(event)).rejects.toBeInstanceOf(
       InvalidEventError,
     );
     expect(await db.workOrder.count()).toBe(0);
@@ -362,7 +399,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
       "ALTER TABLE outbox_events ADD CONSTRAINT maintenance_reject_created CHECK (event_type <> 'WorkOrderCreated')",
     );
     try {
-      await expect(consumer.handle(event)).rejects.toThrow();
+      await expect(handleWithRouting(event)).rejects.toThrow();
       for (const count of [
         await db.workOrder.count(),
         await db.workOrderStatusHistory.count(),
@@ -376,7 +413,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
         'ALTER TABLE outbox_events DROP CONSTRAINT maintenance_reject_created',
       );
     }
-    expect(await consumer.handle(event)).toBe('processed');
+    expect(await handleWithRouting(event)).toBe('processed');
     expect((await db.workOrder.findFirstOrThrow()).workOrderNo).toMatch(
       /-0001$/,
     );
@@ -386,6 +423,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
     const source = {
       id: randomUUID(),
       status: 'ACCEPTED',
+      branchId: FIXTURE_BRANCH,
       equipmentId,
       customerId,
       type: 'REPAIR',
@@ -400,7 +438,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
       locationId: null,
     });
     await Promise.all([
-      ...events.map((event) => consumer.handle(event)),
+      ...events.map((event) => handleWithRouting(event)),
       request(app.getHttpServer())
         .post('/work-orders')
         .auth(manager, { type: 'bearer' })
@@ -414,7 +452,7 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
     expect(await db.outboxEvent.count()).toBe(5);
   });
   it('keeps event-created WO reads in normal tenant/assignment scope', async () => {
-    await consumer.handle(due());
+    await handleWithRouting(due());
     const row = await db.workOrder.findFirstOrThrow();
     const read = (token: string) =>
       request(app.getHttpServer())
@@ -432,10 +470,10 @@ describe('Maintenance Task to WO — real PostgreSQL, contract events; no upstre
   it('ignores events of another type or unsupported version without writes', async () => {
     const event = due();
     event.eventVersion = 3;
-    await consumer.handle(event);
+    await handleWithRouting(event);
     event.eventVersion = 1;
     event.eventType = 'WorkOrderCreated';
-    await consumer.handle(event);
+    await handleWithRouting(event);
     expect(await db.processedEvent.count()).toBe(0);
     expect(await db.workOrder.count()).toBe(0);
   });

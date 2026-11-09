@@ -158,8 +158,19 @@ export class InventoryRepository {
       return after;
     });
   }
-  async warehouses(tenantId: string, q: InventoryQuery) {
-    const where = { tenantId, branchId: q.branchId, status: q.status };
+  async warehouses(
+    tenantId: string,
+    q: InventoryQuery,
+    branchId: string | null = null,
+  ) {
+    const where = {
+      tenantId,
+      branchId: branchId ?? q.branchId,
+      ...(branchId && q.branchId && q.branchId !== branchId
+        ? { id: { in: [] } }
+        : {}),
+      status: q.status,
+    };
     const [items, total] = await this.db.$transaction(
       [
         this.db.warehouse.findMany({
@@ -218,8 +229,13 @@ export class InventoryRepository {
       return after;
     });
   }
-  async stocks(tenantId: string, q: InventoryQuery) {
+  async stocks(
+    tenantId: string,
+    q: InventoryQuery,
+    branchId: string | null = null,
+  ) {
     const where: Prisma.StockWhereInput = {
+      ...(branchId ? { warehouse: { branchId } } : {}),
       tenantId,
       warehouseId: q.warehouseId,
       partId: q.partId,
@@ -262,9 +278,14 @@ export class InventoryRepository {
       ),
     );
   }
-  async ledger(tenantId: string, q: InventoryQuery) {
+  async ledger(
+    tenantId: string,
+    q: InventoryQuery,
+    branchId: string | null = null,
+  ) {
     const where = {
       tenantId,
+      ...(branchId ? { warehouse: { branchId } } : {}),
       warehouseId: q.warehouseId,
       partId: q.partId,
       type: q.type,
@@ -277,7 +298,10 @@ export class InventoryRepository {
       [
         this.db.stockTransaction.findMany({
           where,
-          include: { warehouse: { select: { name: true, code: true } }, part: { select: { name: true, sku: true } } },
+          include: {
+            warehouse: { select: { name: true, code: true } },
+            part: { select: { name: true, sku: true } },
+          },
           ...toSkipTake(q),
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         }),
@@ -287,9 +311,17 @@ export class InventoryRepository {
     );
     return json(toPage(items, total, q));
   }
-  async usages(tenantId: string, workOrderId: string) {
+  async usages(
+    tenantId: string,
+    workOrderId: string,
+    branchId: string | null = null,
+  ) {
     const rows = await this.db.workOrderPart.findMany({
-      where: { tenantId, workOrderId },
+      where: {
+        tenantId,
+        workOrderId,
+        ...(branchId ? { warehouse: { branchId } } : {}),
+      },
       include: {
         returns: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] },
         confirmations: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
@@ -332,8 +364,43 @@ export class InventoryRepository {
     if (!row) throw notFound();
     return row;
   }
-  async auditHistory(tenantId: string, q: AuditQuery) {
-    const where = { tenantId, entityType: q.entityType, entityId: q.entityId };
+  async auditHistory(
+    tenantId: string,
+    q: AuditQuery,
+    branchId: string | null = null,
+  ) {
+    const warehouses = branchId
+      ? await this.db.warehouse.findMany({
+          where: { tenantId, branchId },
+          select: { id: true },
+        })
+      : [];
+    const stocks = branchId
+      ? await this.db.stock.findMany({
+          where: { tenantId, warehouseId: { in: warehouses.map((w) => w.id) } },
+          select: { id: true },
+        })
+      : [];
+    const where = {
+      tenantId,
+      entityType: q.entityType,
+      entityId: q.entityId,
+      ...(branchId
+        ? {
+            OR: [
+              { entityType: 'PART' },
+              {
+                entityType: 'WAREHOUSE',
+                entityId: { in: warehouses.map((w) => w.id) },
+              },
+              {
+                entityType: 'STOCK',
+                entityId: { in: stocks.map((row) => row.id) },
+              },
+            ],
+          }
+        : {}),
+    };
     const [items, total] = await this.db.$transaction(
       [
         this.db.inventoryAudit.findMany({
@@ -510,8 +577,27 @@ export class InventoryRepository {
     if (!row) throw notFound();
     return row;
   }
-  async operations(tenantId: string, q: InventoryQuery) {
+  async operations(
+    tenantId: string,
+    q: InventoryQuery,
+    branchId: string | null = null,
+  ) {
+    const warehouses = branchId
+      ? await this.db.warehouse.findMany({
+          where: { tenantId, branchId },
+          select: { id: true },
+        })
+      : [];
     const where: Prisma.InventoryOperationWhereInput = {
+      ...(branchId
+        ? {
+            OR: warehouses.length
+              ? warehouses.map((w) => ({
+                  request: { path: ['warehouseId'], equals: w.id },
+                }))
+              : [{ id: { in: [] } }],
+          }
+        : {}),
       tenantId,
       operation: 'ISSUE',
       ...(q.workOrderId ? { workOrderId: q.workOrderId } : {}),
@@ -818,13 +904,17 @@ export class InventoryRepository {
       minimum,
       stock.lowStockAlertedAt !== null,
     );
-    if (policy.emit)
+    if (policy.emit) {
+      const warehouse = await tx.warehouse.findFirst({
+        where: { tenantId: stock.tenantId, id: stock.warehouseId },
+      });
       await enqueueEvent(tx, Events.LowStockDetected, {
         tenantId: stock.tenantId,
         aggregateId: stock.id,
         correlationId: getCorrelationId(),
         payload: {
           stockId: stock.id,
+          branchId: warehouse?.branchId ?? null,
           partId: stock.partId,
           partSku: sku,
           warehouseId: stock.warehouseId,
@@ -832,6 +922,7 @@ export class InventoryRepository {
           minQuantity: minimum.toFixed(2),
         },
       });
+    }
     return tx.stock.update({
       where: { id: stock.id },
       data: {

@@ -1,3 +1,4 @@
+import { FIXTURE_BRANCH } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import type { RoleCode } from '@pbl6/auth';
@@ -989,6 +990,7 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
       .expect(200, {
         id: created.body.id,
         requestNo: created.body.requestNo,
+        branchId: FIXTURE_BRANCH,
         status: 'NEW',
         title: 'Internal reference',
         customerId: customerA,

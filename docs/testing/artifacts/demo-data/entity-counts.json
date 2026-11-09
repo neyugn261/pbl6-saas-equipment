@@ -1,0 +1,48 @@
+{
+  "status": "PASS",
+  "counts": {
+    "IDENTITY": {
+      "users": 14
+    },
+    "ORGANIZATION": {
+      "branches": 2,
+      "customers": 2,
+      "customer_sites": 4,
+      "locations": 8,
+      "customer_contacts": 4,
+      "branch_user_assignments": 8,
+      "customer_user_memberships": 4
+    },
+    "ASSET": {
+      "equipment_models": 2,
+      "equipments": 6,
+      "warranties": 5,
+      "equipment_qr_codes": 6,
+      "equipment_registrations": 2,
+      "model_warranty_revisions": 2
+    },
+    "SERVICE_REQUEST": {
+      "service_requests": 6,
+      "cost_estimates": 2,
+      "cost_estimate_items": 6
+    },
+    "WORKORDER": {
+      "technicians": 4,
+      "skills": 3,
+      "work_orders": 5,
+      "service_reports": 2,
+      "work_order_attachments": 1,
+      "report_attachments": 2
+    },
+    "MAINTENANCE": {
+      "maintenance_plans": 2,
+      "maintenance_tasks": 2,
+      "model_maintenance_revisions": 2
+    },
+    "INVENTORY": {
+      "parts": 3,
+      "warehouses": 2,
+      "stocks": 6
+    }
+  }
+}

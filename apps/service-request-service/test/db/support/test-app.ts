@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { FIXTURE_BRANCH, fixtureBranchContext } from '@pbl6/testing';
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { configureApp } from '@pbl6/service-kit';
@@ -13,10 +15,12 @@ export async function createTestApp(): Promise<{
   prisma: PrismaService;
   assets: FakeAssetClient;
 }> {
-  const assets = new FakeAssetClient();
+  const assets = new FakeAssetClient(FIXTURE_BRANCH);
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
+    .overrideProvider(BranchAccessClient)
+    .useValue(fixtureBranchContext())
     .overrideProvider(ASSET_CLIENT)
     .useValue(assets)
     .compile();

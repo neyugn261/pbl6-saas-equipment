@@ -1,0 +1,90 @@
+{
+  "status": "READY",
+  "tenant": "DEMO",
+  "counts": {
+    "branches": 2,
+    "customers": 2,
+    "equipment": 6,
+    "requests": 6,
+    "workOrders": 5,
+    "technicians": 4,
+    "parts": 3,
+    "warehouses": 2,
+    "stocks": 6,
+    "maintenancePlans": 2,
+    "maintenanceTasks": 2
+  },
+  "date": "2026-11-09",
+  "accounts": [
+    {
+      "email": "platform.admin@pbl6.local",
+      "role": "PLATFORM_ADMIN",
+      "branch": null
+    },
+    {
+      "email": "tenant.admin@demo.local",
+      "role": "TENANT_ADMIN",
+      "branch": null
+    },
+    {
+      "email": "service.manager@demo.local",
+      "role": "SERVICE_MANAGER",
+      "branch": "HCM"
+    },
+    {
+      "email": "service.manager.dn@demo.local",
+      "role": "SERVICE_MANAGER",
+      "branch": "DN"
+    },
+    {
+      "email": "inventory@demo.local",
+      "role": "INVENTORY_STAFF",
+      "branch": "HCM"
+    },
+    {
+      "email": "inventory.dn@demo.local",
+      "role": "INVENTORY_STAFF",
+      "branch": "DN"
+    },
+    {
+      "email": "technician@demo.local",
+      "role": "TECHNICIAN",
+      "branch": "HCM"
+    },
+    {
+      "email": "technician.hcm02@demo.local",
+      "role": "TECHNICIAN",
+      "branch": "HCM"
+    },
+    {
+      "email": "technician.dn01@demo.local",
+      "role": "TECHNICIAN",
+      "branch": "DN"
+    },
+    {
+      "email": "technician.dn02@demo.local",
+      "role": "TECHNICIAN",
+      "branch": "DN"
+    },
+    {
+      "email": "customer.admin@demo.local",
+      "role": "CUSTOMER_ADMIN",
+      "branch": null
+    },
+    {
+      "email": "customer.user@demo.local",
+      "role": "CUSTOMER_USER",
+      "branch": null
+    },
+    {
+      "email": "factory.admin@demo.local",
+      "role": "CUSTOMER_ADMIN",
+      "branch": null
+    },
+    {
+      "email": "factory.user@demo.local",
+      "role": "CUSTOMER_USER",
+      "branch": null
+    }
+  ]
+}

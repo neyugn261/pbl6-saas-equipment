@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Controller,
   Get,
@@ -15,6 +16,7 @@ import {
 import { PaginationQueryDto } from '@pbl6/service-kit';
 import { ServiceRequestAttachmentsService } from './service-request-attachments.service';
 
+@BranchScoped()
 @Controller('service-requests/:requestId/result/attachments')
 @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
 @RequirePermissions('service_request:read')

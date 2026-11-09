@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   try {
     const summary = await seedDemoData(prisma, userIds);
     console.log(
-      `Seeded tenant DEMO, 2 branches, 2 customers, 3 sites, 4 locations, 2 contacts; ` +
+      `Seeded tenant DEMO, 2 branches, 2 customers, 4 sites, 8 locations, 4 contacts; ` +
         `${summary.memberships} memberships and ${summary.branchStaff} branch staff linked.`,
     );
   } finally {

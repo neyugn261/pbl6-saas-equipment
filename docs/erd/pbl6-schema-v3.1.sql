@@ -2079,3 +2079,24 @@ ALTER TABLE equipment_registrations ADD CONSTRAINT equipment_registrations_legac
  ((cardinality(maintenance_plan_ids)=1 AND maintenance_plan_id=maintenance_plan_ids[1]) OR (cardinality(maintenance_plan_ids)>1 AND maintenance_plan_id IS NULL))))
  ELSE false END) IS TRUE))
 ));
+
+-- ADR 0022: service management and primary-branch access (additive, no inferred history).
+\connect organization_db
+-- organization-service / 20261109120000_site_routing_version
+ALTER TABLE customer_sites ADD COLUMN routing_version INTEGER NOT NULL DEFAULT 0 CHECK (routing_version >= 0);
+
+\connect service_request_db
+-- service-request-service / 20261109120000_branch_service_scope
+ALTER TABLE service_requests ADD COLUMN branch_id UUID NULL;
+CREATE INDEX service_requests_tenant_id_branch_id_idx ON service_requests(tenant_id, branch_id);
+
+\connect workorder_db
+-- workorder-service / 20261109120000_branch_service_scope
+ALTER TABLE work_orders ADD COLUMN branch_id UUID NULL;
+CREATE INDEX work_orders_tenant_id_branch_id_idx ON work_orders(tenant_id, branch_id);
+CREATE TABLE site_branch_snapshots (tenant_id UUID NOT NULL, site_id UUID NOT NULL, branch_id UUID NULL, revision INTEGER NOT NULL CHECK (revision >= 0), PRIMARY KEY (tenant_id, site_id));
+
+\connect notification_db
+-- notification-service / 20261109120000_branch_service_scope
+ALTER TABLE notifications ADD COLUMN branch_id UUID NULL;
+CREATE INDEX notifications_tenant_id_branch_id_idx ON notifications(tenant_id, branch_id);

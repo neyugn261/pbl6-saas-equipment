@@ -7,11 +7,25 @@ import {
   Prisma,
 } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { enqueueSiteRouting } from '../sites/site-routing';
 
 /** Data access for internal branches (organization_db only). Soft-deleted rows are never returned. */
 @Injectable()
 export class BranchesRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  async primaryBranch(tenantId: string, userId: string) {
+    const assignment = await this.prisma.branchUserAssignment.findFirst({
+      where: {
+        tenantId,
+        userId,
+        isPrimary: true,
+        branch: { deletedAt: null, status: 'ACTIVE' },
+      },
+      include: { branch: true },
+    });
+    return assignment?.branch ?? null;
+  }
 
   displayNames(tenantId: string, ids: string[]) {
     return this.prisma.branch.findMany({
@@ -20,7 +34,8 @@ export class BranchesRepository {
     });
   }
 
-  async list(tenantId: string, query: ListQueryDto): Promise<[Branch[], number]> {
+  async list(tenantId: string, query: ListQueryDto,
+  ): Promise<[Branch[], number]> {
     const where: Prisma.BranchWhereInput = {
       tenantId,
       deletedAt: null,
@@ -38,7 +53,8 @@ export class BranchesRepository {
   }
 
   find(tenantId: string, id: string): Promise<Branch | null> {
-    return this.prisma.branch.findFirst({ where: { id, tenantId, deletedAt: null } });
+    return this.prisma.branch.findFirst({ where: { id, tenantId, deletedAt: null },
+    });
   }
 
   create(data: Prisma.BranchUncheckedCreateInput): Promise<Branch> {
@@ -46,10 +62,26 @@ export class BranchesRepository {
   }
 
   update(id: string, data: Prisma.BranchUncheckedUpdateInput): Promise<Branch> {
-    return this.prisma.branch.update({ where: { id }, data });
+    return this.prisma.$transaction(async (tx) => {
+      const branch = await tx.branch.update({ where: { id }, data });
+      if (data.status !== undefined || data.deletedAt !== undefined) {
+        const sites = await tx.customerSite.findMany({
+          where: { tenantId: branch.tenantId, defaultServicingBranchId: id },
+        });
+        for (const site of sites) {
+          const changed = await tx.customerSite.update({
+            where: { id: site.id },
+            data: { routingVersion: { increment: 1 } },
+          });
+          await enqueueSiteRouting(tx, changed);
+        }
+      }
+      return branch;
+    });
   }
 
-  listAssignments(tenantId: string, branchId: string): Promise<BranchUserAssignment[]> {
+  listAssignments(tenantId: string, branchId: string,
+  ): Promise<BranchUserAssignment[]> {
     return this.prisma.branchUserAssignment.findMany({
       where: { tenantId, branchId },
       orderBy: { createdAt: 'asc' },
@@ -70,7 +102,8 @@ export class BranchesRepository {
     return this.prisma.$transaction(async (tx) => {
       if (isPrimary) {
         await tx.branchUserAssignment.updateMany({
-          where: { tenantId, userId, isPrimary: true, branchId: { not: branchId } },
+          where: { tenantId, userId, isPrimary: true, branchId: { not: branchId },
+          },
           data: { isPrimary: false },
         });
       }
@@ -83,7 +116,8 @@ export class BranchesRepository {
   }
 
   /** False when the user was not assigned to the branch. */
-  async unassign(tenantId: string, branchId: string, userId: string): Promise<boolean> {
+  async unassign(tenantId: string, branchId: string, userId: string,
+  ): Promise<boolean> {
     const { count } = await this.prisma.branchUserAssignment.deleteMany({
       where: { tenantId, branchId, userId },
     });
@@ -96,7 +130,8 @@ export class BranchesRepository {
       this.prisma.customerSite.count({
         where: { tenantId, defaultServicingBranchId: id, deletedAt: null },
       }),
-      this.prisma.branchUserAssignment.count({ where: { tenantId, branchId: id } }),
+      this.prisma.branchUserAssignment.count({ where: { tenantId, branchId: id },
+      }),
     ]);
     return sites > 0 || assignments > 0;
   }

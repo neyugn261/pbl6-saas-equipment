@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { INestApplication, Logger, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { signTestAccessToken } from '@pbl6/testing';
+import { FIXTURE_BRANCH, signTestAccessToken } from '@pbl6/testing';
 import { configureApp, UpstreamError, UpstreamUnavailableError } from '@pbl6/service-kit';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -73,7 +73,7 @@ describe('equipment HTTP contract (e2e)', () => {
     organization.customers.clear(); organization.sites.clear();
     organization.customers.set(customerA, { id: customerA, code: 'C-A', name: 'Customer A', status: 'ACTIVE' });
     organization.sites.set(`${customerA}:${siteA}`, { customerId: customerA, siteId: siteA,
-      siteStatus: 'ACTIVE', locationId: locationA, defaultServicingBranchId: null });
+      siteStatus: 'ACTIVE', locationId: locationA, defaultServicingBranchId: FIXTURE_BRANCH });
     organization.sites.set(`${customerA}:${siteB}`, { customerId: customerA, siteId: siteB,
       siteStatus: 'ACTIVE', locationId: null, defaultServicingBranchId: null });
     models.findScoped.mockImplementation(async (tenantId: string, id: string) =>
@@ -185,7 +185,8 @@ describe('equipment HTTP contract (e2e)', () => {
       warranty: { result: 'NO_WARRANTY', warrantyId: null, endDate: null } });
     const ref = await request(app.getHttpServer()).get(`/internal/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${customer}`).expect(200);
-    expect(Object.keys(ref.body).sort()).toEqual(['assetCode', 'customerId', 'customerSiteId', 'id', 'locationId', 'status']);
+    expect(Object.keys(ref.body).sort()).toEqual(['assetCode', 'customerId', 'customerSiteId', 'defaultServicingBranchId', 'id', 'locationId', 'serviceSetupPending', 'status']);
+    expect(ref.body.defaultServicingBranchId).toBe(FIXTURE_BRANCH);
     const history = await request(app.getHttpServer()).get(`/equipment/${equipmentId}/history?page=1&pageSize=5`)
       .set('authorization', `Bearer ${customer}`).expect(200);
     expect(history.body.items[0]).toMatchObject({ eventType: 'REGISTERED', equipmentId });
@@ -255,7 +256,7 @@ describe('equipment HTTP contract (e2e)', () => {
     const status = await request(app.getHttpServer()).get(`/equipment/${equipmentId}/warranty-status?date=2028-02-29`)
       .set('authorization', `Bearer ${customer}`).expect(200);
     expect(status.body).toEqual({ equipmentId, date: '2028-02-29', result: 'NO_WARRANTY',
-      warrantyId: null, endDate: null });
+      warrantyId: null, endDate: null, policyVersionId: null, policySnapshot: null });
     expect(repository.warrantyAt).toHaveBeenCalledWith(tenantA, equipmentId, '2028-02-29');
     await request(app.getHttpServer()).get(`/equipment/${equipmentId}/warranty-status?date=2027-02-29`)
       .set('authorization', `Bearer ${staff}`).expect(400);

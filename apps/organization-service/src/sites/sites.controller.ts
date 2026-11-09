@@ -48,7 +48,7 @@ export class SitesController {
     @Body() body: CreateSiteDto,
     @CurrentUser() user: Principal,
   ): Promise<SiteResponse> {
-    return this.sites.create(dataScope(user), customerId, body);
+    return this.sites.create(dataScope(user), customerId, body, user);
   }
 
   @Get('sites/:siteId')
@@ -68,7 +68,7 @@ export class SitesController {
     @Body() body: UpdateSiteDto,
     @CurrentUser() user: Principal,
   ): Promise<SiteResponse> {
-    return this.sites.update(dataScope(user), id, body);
+    return this.sites.update(dataScope(user), id, body, user);
   }
 
   @Delete('sites/:siteId')

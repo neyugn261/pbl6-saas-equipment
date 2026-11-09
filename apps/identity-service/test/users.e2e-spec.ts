@@ -33,17 +33,31 @@ describe('Identity Users & Internal API (e2e)', () => {
   const http = () => request(app.getHttpServer());
 
   it('batch display names include inactive users, omit foreign tenants and preserve internal staff authorization', async () => {
-    await prisma.user.update({ where: { id: adminUserIdA }, data: { status: 'DISABLED', fullName: 'Historical technician' } });
-    const other = await prisma.user.findFirstOrThrow({ where: { tenantId: tenantB } });
+    await prisma.user.update({ where: { id: adminUserIdA }, data: { status: 'DISABLED', fullName: 'Historical technician' },
+    });
+    const other = await prisma.user.findFirstOrThrow({ where: { tenantId: tenantB },
+    });
     const result = await http().get('/internal/display-names/users')
       .query({ ids: [adminUserIdA, other.id, adminUserIdA].join(',') })
-      .set('Authorization', `Bearer ${techTokenA}`).expect(200);
-    expect(result.body).toEqual([{ id: adminUserIdA, tenantId: tenantA, name: 'Historical technician' }]);
-    await http().get('/internal/display-names/users').query({ ids: adminUserIdA }).expect(401);
-    await http().get('/internal/display-names/users').query({ ids: adminUserIdA })
-      .set('Authorization', `Bearer ${customerAdminTokenA}`).expect(403);
-    await http().get('/internal/display-names/users').query({ ids: Array(101).fill(adminUserIdA).join(',') })
-      .set('Authorization', `Bearer ${techTokenA}`).expect(400);
+      .set('Authorization', `Bearer ${techTokenA}`)
+      .expect(200);
+    expect(result.body).toEqual([
+      { id: adminUserIdA, tenantId: tenantA, name: 'Historical technician' },
+    ]);
+    await http()
+      .get('/internal/display-names/users')
+      .query({ ids: adminUserIdA })
+      .expect(401);
+    await http()
+      .get('/internal/display-names/users')
+      .query({ ids: adminUserIdA })
+      .set('Authorization', `Bearer ${customerAdminTokenA}`)
+      .expect(403);
+    await http()
+      .get('/internal/display-names/users')
+      .query({ ids: Array(101).fill(adminUserIdA).join(',') })
+      .set('Authorization', `Bearer ${techTokenA}`)
+      .expect(400);
   });
 
   beforeAll(async () => {
@@ -704,10 +718,10 @@ describe('Identity Users & Internal API (e2e)', () => {
       const res = await http()
         .patch(`/users/${staffUserId}/roles`)
         .set('Authorization', `Bearer ${tenantAdminTokenA}`)
-        .send({ roles: ['SERVICE_MANAGER', 'DISPATCHER'] })
+        .send({ roles: ['SERVICE_MANAGER', 'TECHNICIAN'] })
         .expect(200);
 
-      expect(res.body.roles.sort()).toEqual(['DISPATCHER', 'SERVICE_MANAGER']);
+      expect(res.body.roles.sort()).toEqual(['SERVICE_MANAGER', 'TECHNICIAN']);
 
       // Check DB
       const userRoles = await prisma.userRole.findMany({
@@ -715,7 +729,16 @@ describe('Identity Users & Internal API (e2e)', () => {
         include: { role: true },
       });
       const codes = userRoles.map((r) => r.role.code).sort();
-      expect(codes).toEqual(['DISPATCHER', 'SERVICE_MANAGER']);
+      expect(codes).toEqual(['SERVICE_MANAGER', 'TECHNICIAN']);
+    });
+
+    it('rejects assigning the retired Dispatcher role to a new holder', async () => {
+      const result = await http()
+        .patch(`/users/${staffUserId}/roles`)
+        .set('Authorization', `Bearer ${tenantAdminTokenA}`)
+        .send({ roles: ['DISPATCHER'] })
+        .expect(403);
+      expect(result.body.code).toBe('ROLE_RETIRED');
     });
 
     it('Tenant Admin assigns CUSTOMER_ADMIN to a CUSTOMER account', async () => {

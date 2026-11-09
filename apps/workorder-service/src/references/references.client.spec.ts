@@ -11,8 +11,17 @@ describe('Work Order HTTP references', () => {
     const fetch = jest
       .spyOn(globalThis, 'fetch')
       .mockImplementation(
-        async () =>
-          new Response(JSON.stringify({ id: 'ref' }), { status: 200 }),
+        async (url) =>
+          new Response(JSON.stringify(
+              String(url).includes('/internal/staff/')
+                ? {
+                    userId: 'user-id',
+                    tenantId: 'tenant-id',
+                    branch: { id: 'branch-id' },
+                  }
+                : { id: 'user-id', tenantId: 'tenant-id' },
+            ), { status: 200 },
+          ),
       );
     const client = new HttpReferencesClient(
       new ConfigService({
@@ -30,6 +39,7 @@ describe('Work Order HTTP references', () => {
     });
     expect(fetch.mock.calls.map((c) => String(c[0]))).toEqual([
       'http://identity.test/internal/users/user-id',
+      'http://organization.test/internal/staff/user-id/branch',
       'http://organization.test/internal/branches/branch-id',
       'http://requests.test/internal/service-requests/request-id',
       'http://asset.test/internal/equipment/equipment-id',

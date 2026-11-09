@@ -1,5 +1,7 @@
 # Maintenance Service
 
+Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
+
 ## Detailed history and equipment dossier integration (ADR 0010)
 
 Additive migration `20261027141000_maintenance_history` records Plan/Task changes
@@ -109,9 +111,9 @@ pnpm --filter maintenance-service scheduler:tick
 ```
 
 Seed validates Equipment through Asset and the manager's verified token, writes
-only Maintenance, and creates fixed Plan `…003001` due today. Reruns preserve the
+only Maintenance, and creates fixed Plans `…003001` and `…003002` due today for equipment `…001105` and `…001103`. Reruns preserve the
 schedule/Tasks. It refuses production. A locally supplied
-`MAINTENANCE_SEED_ACCESS_TOKEN` may replace demo login; it is still verified and
+`MAINTENANCE_SEED_ACCESS_TOKEN` may replace demo login; `MAINTENANCE_SEED_EQUIPMENT_ID` selects a single first-Plan fixture for isolated tests; it is still verified and
 must have maintenance:manage. Never commit tokens. `scheduler:tick` defaults to
 today; an optional YYYY-MM-DD override is allowed only in dev/test.
 

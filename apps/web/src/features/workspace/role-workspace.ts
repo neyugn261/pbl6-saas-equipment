@@ -189,6 +189,13 @@ const links: NavigationItem[] = [
     roles: ["TENANT_ADMIN", "INVENTORY_STAFF"],
   },
   {
+    path: "/app/organization/service-branches",
+    label: "Phân bổ dịch vụ",
+    group: "Quản trị doanh nghiệp",
+    icon: "MapPin",
+    roles: ["TENANT_ADMIN"],
+  },
+  {
     path: "/app/organization/branches",
     label: "Chi nhánh",
     group: "Quản trị doanh nghiệp",
@@ -310,7 +317,8 @@ const links: NavigationItem[] = [
 ];
 export function navigationFor(roles: readonly string[]) {
   return links
-    .filter((item) => item.path !== "/admin/audit-logs" && item.roles.some((role) => roles.includes(role)))
+    .filter((item) => item.path !== "/admin/audit-logs" && item.roles.some((role) => roles.includes(role)),
+    )
     .map((item) => ({
       ...item,
       label:

@@ -16,6 +16,7 @@ function principal(
 ): Principal {
   return {
     userId: USER_ID,
+    branchId: USER_ID,
     sessionId: '00000000-0000-4000-8000-000000000401',
     tenantId: TENANT_ID,
     userType,
@@ -38,6 +39,7 @@ function serviceRequest(
     warrantyPolicySnapshot: null,
     warrantyPolicyVersionId: null,
     id: REQUEST_ID,
+    branchId: USER_ID,
     tenantId: TENANT_ID,
     requestNo: 'SR-2026-0001',
     customerId: CUSTOMER_ID,
@@ -158,6 +160,7 @@ describe('ServiceRequestsService', () => {
       customerSiteId: '00000000-0000-4000-8000-000000000411',
       locationId: null,
       assetCode: 'DEMO-EQUIPMENT',
+      defaultServicingBranchId: USER_ID,
       status: 'ACTIVE',
     });
     assets.warranties.set(EQUIPMENT_ID, {
@@ -296,6 +299,7 @@ describe('ServiceRequestsService', () => {
     ).resolves.toEqual({
       id: REQUEST_ID,
       requestNo: request.requestNo,
+      branchId: request.branchId,
       status: request.status,
       title: request.title,
       customerId: CUSTOMER_ID,

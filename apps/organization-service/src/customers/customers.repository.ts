@@ -8,6 +8,7 @@ import {
 } from '../generated/prisma/client.js';
 import { enqueueMembershipChanged } from '../memberships/membership-events';
 import { PrismaService } from '../prisma/prisma.service';
+import { enqueueSiteRouting } from '../sites/site-routing';
 
 /** Data access for customers and their contacts. Soft-deleted rows are never returned. */
 @Injectable()
@@ -38,14 +39,16 @@ export class CustomersRepository {
   }
 
   find(tenantId: string, id: string): Promise<Customer | null> {
-    return this.prisma.customer.findFirst({ where: { id, tenantId, deletedAt: null } });
+    return this.prisma.customer.findFirst({ where: { id, tenantId, deletedAt: null },
+    });
   }
 
   create(data: Prisma.CustomerUncheckedCreateInput): Promise<Customer> {
     return this.prisma.customer.create({ data });
   }
 
-  update(id: string, data: Prisma.CustomerUncheckedUpdateInput): Promise<Customer> {
+  update(id: string, data: Prisma.CustomerUncheckedUpdateInput,
+  ): Promise<Customer> {
     return this.prisma.customer.update({ where: { id }, data });
   }
 
@@ -56,7 +59,18 @@ export class CustomersRepository {
    */
   softDelete(id: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.customer.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.customer.update({ where: { id }, data: { deletedAt: new Date() },
+      });
+      const sites = await tx.customerSite.findMany({
+        where: { customerId: id },
+      });
+      for (const site of sites) {
+        const changed = await tx.customerSite.update({
+          where: { id: site.id },
+          data: { routingVersion: { increment: 1 } },
+        });
+        await enqueueSiteRouting(tx, changed);
+      }
       const active = await tx.customerUserMembership.findMany({
         where: { customerId: id, status: 'ACTIVE' },
       });
@@ -70,7 +84,8 @@ export class CustomersRepository {
     });
   }
 
-  listContacts(tenantId: string, customerId: string): Promise<CustomerContact[]> {
+  listContacts(tenantId: string, customerId: string,
+  ): Promise<CustomerContact[]> {
     return this.prisma.customerContact.findMany({
       where: { tenantId, customerId, deletedAt: null },
       orderBy: [{ isPrimary: 'desc' }, { name: 'asc' }],

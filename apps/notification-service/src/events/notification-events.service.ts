@@ -27,6 +27,7 @@ export const NOTIFICATION_BUSINESS_CONSUMER =
 export const NOTIFICATION_BUSINESS_EVENTS = [
   Events.EquipmentHandoverChanged,
   Events.ServiceRequestCreated,
+  Events.ServiceRequestBranchAssigned,
   Events.ServiceRequestStatusChanged,
   Events.WorkOrderCreated,
   Events.WorkOrderAssigned,
@@ -41,10 +42,12 @@ const RETRY_POLICY = {
   maxDelayMs: 60_000,
 } as const;
 
-type PendingPayload =
+type PendingPayload = { branchId?: string | null } & (
   | { kind: 'EQUIPMENT_HANDOVER_CHANGED'; occurredAt: string; handoverId: string; equipmentId: string;
       customerId: string; createdBy: string; handoverNo: string; assetCode: string; version: number;
-      status: 'PENDING_CUSTOMER_CONFIRMATION' | 'ACTIVATED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED' }
+      status:
+        | 'PENDING_CUSTOMER_CONFIRMATION' | 'ACTIVATED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+    }
   | {
       kind: 'SERVICE_REQUEST_CREATED';
       occurredAt: string;
@@ -110,7 +113,8 @@ type PendingPayload =
       partSku: string;
       quantity: string;
       minQuantity: string;
-    };
+    }
+);
 
 interface Recipient {
   userId: string;
@@ -133,7 +137,8 @@ type ReconcileResult =
     }
   | { kind: 'WAIT'; reason: string }
   | { kind: 'STALE' }
-  | { kind: 'CONFLICT'; reason: string; expectedHash: string; observedHash: string };
+  | { kind: 'CONFLICT'; reason: string; expectedHash: string; observedHash: string;
+    };
 
 @Injectable()
 export class NotificationEventsService {
@@ -141,6 +146,10 @@ export class NotificationEventsService {
 
   async handle(envelope: EventEnvelope): Promise<void> {
     const payload = this.allowlistedPayload(envelope);
+    if (payload && 'branchId' in (envelope.payload as object))
+      payload.branchId = (
+        envelope.payload as { branchId?: string | null }
+      ).branchId;
     const tenantId = envelope.tenantId;
     if (!payload || !tenantId) {
       throw new Error('Unsupported or unscoped Notification business event');
@@ -211,7 +220,8 @@ export class NotificationEventsService {
         },
       });
 
-      if (isEvent(envelope, Events.ServiceRequestCreated)) {
+      if (isEvent(envelope, Events.ServiceRequestCreated) ||
+        isEvent(envelope, Events.ServiceRequestBranchAssigned)) {
         await this.projectServiceRequestCreated(tx, envelope, payload);
       }
 
@@ -464,7 +474,8 @@ export class NotificationEventsService {
       return;
     }
 
-    const result = await this.resolveRecipients(tx, row, payload, serviceRequest);
+    const result = await this.resolveRecipients(tx, row, payload, serviceRequest,
+    );
     if (result.kind === 'WAIT') {
       await this.defer(tx, row, result.reason);
       return;
@@ -508,6 +519,7 @@ export class NotificationEventsService {
               : result.rendered;
           return {
             tenantId: row.tenantId,
+            branchId: payload.branchId ?? null,
             userId: recipient.userId,
             customerId: recipient.customerId,
             sourceEventId: row.sourceEventId,
@@ -556,7 +568,8 @@ export class NotificationEventsService {
     const current = await tx.serviceRequestSnapshot.findUnique({
       where: key,
     });
-    if (!current) return { kind: 'WAIT', reason: 'WAITING_FOR_SERVICE_REQUEST_PROJECTION' };
+    if (!current)
+      return { kind: 'WAIT', reason: 'WAITING_FOR_SERVICE_REQUEST_PROJECTION' };
     if (
       current.customerId !== payload.customerId ||
       current.requestNo !== payload.requestNo
@@ -599,7 +612,10 @@ export class NotificationEventsService {
       current.status !== payload.fromStatus &&
       current.status !== payload.toStatus
     ) {
-      return { kind: 'WAIT', reason: 'WAITING_FOR_SERVICE_REQUEST_STATUS_ORDER' };
+      return {
+        kind: 'WAIT',
+        reason: 'WAITING_FOR_SERVICE_REQUEST_STATUS_ORDER',
+      };
     }
     if (current.status === payload.toStatus) {
       return { kind: 'APPLIED', serviceRequest: current };
@@ -620,7 +636,10 @@ export class NotificationEventsService {
       },
     });
     if (update.count === 0) {
-      return { kind: 'WAIT', reason: 'WAITING_FOR_SERVICE_REQUEST_STATUS_ORDER' };
+      return {
+        kind: 'WAIT',
+        reason: 'WAITING_FOR_SERVICE_REQUEST_STATUS_ORDER',
+      };
     }
     const updated = await tx.serviceRequestSnapshot.findUnique({ where: key });
     if (!updated) throw new Error('Service Request projection disappeared');
@@ -639,32 +658,76 @@ export class NotificationEventsService {
     switch (payload.kind) {
       case 'EQUIPMENT_HANDOVER_CHANGED': {
         // A late submit notification must not override a terminal decision.
-        const newer = await tx.pendingNotificationEvent.findFirst({ where: {
-          tenantId: row.tenantId, eventType: 'EquipmentHandoverChanged',
-          AND: [{ payload: { path: ['handoverId'], equals: payload.handoverId } },
-            { payload: { path: ['version'], gt: payload.version } }],
-        } });
+        const newer = await tx.pendingNotificationEvent.findFirst({
+          where: {
+            tenantId: row.tenantId,
+            eventType: 'EquipmentHandoverChanged',
+            AND: [
+              { payload: { path: ['handoverId'], equals: payload.handoverId } },
+              { payload: { path: ['version'], gt: payload.version } },
+            ],
+          },
+        });
         if (newer) return { kind: 'STALE' };
-        if (payload.status === 'PENDING_CUSTOMER_CONFIRMATION' || payload.status === 'ACTIVATED') {
-          const customers = await tx.recipientSnapshot.findMany({ where: { tenantId: row.tenantId,
-            userType: 'CUSTOMER', customerId: payload.customerId, accountStatus: 'ACTIVE', membershipStatus: 'ACTIVE' } });
+        if (
+          payload.status === 'PENDING_CUSTOMER_CONFIRMATION' ||
+          payload.status === 'ACTIVATED'
+        ) {
+          const customers = await tx.recipientSnapshot.findMany({
+            where: {
+              tenantId: row.tenantId,
+              userType: 'CUSTOMER',
+              customerId: payload.customerId,
+              accountStatus: 'ACTIVE',
+              membershipStatus: 'ACTIVE',
+            },
+          });
           for (const customer of customers) {
-            if (customer.membershipId && customer.membershipSourceChangedAt && this.canReadNotifications(customer) &&
-              permissionsOf(this.roles(customer)).has('equipment_handover:respond')) {
-              this.add(recipients, { userId: customer.userId, customerId: payload.customerId });
+            if (
+              customer.membershipId &&
+              customer.membershipSourceChangedAt &&
+              this.canReadNotifications(customer) &&
+              permissionsOf(this.roles(customer)).has(
+                'equipment_handover:respond',
+              )
+            ) {
+              this.add(recipients, {
+                userId: customer.userId,
+                customerId: payload.customerId,
+              });
             }
           }
-          if (recipients.size === 0 && payload.status === 'PENDING_CUSTOMER_CONFIRMATION')
-            return { kind: 'WAIT', reason: 'WAITING_FOR_HANDOVER_CUSTOMER_RECIPIENT' };
+          if (
+            recipients.size === 0 &&
+            payload.status === 'PENDING_CUSTOMER_CONFIRMATION'
+          )
+            return {
+              kind: 'WAIT',
+              reason: 'WAITING_FOR_HANDOVER_CUSTOMER_RECIPIENT',
+            };
         }
         if (payload.status !== 'PENDING_CUSTOMER_CONFIRMATION') {
-          await this.addStaffByRoles(tx, row.tenantId, ['TENANT_ADMIN', 'SERVICE_MANAGER'], recipients);
+          await this.addStaffByRoles(
+            tx,
+            row.tenantId,
+            ['TENANT_ADMIN', 'SERVICE_MANAGER'],
+            recipients,
+          );
         }
-        const labels = { PENDING_CUSTOMER_CONFIRMATION: 'Bạn có thiết bị mới cần xác nhận bàn giao.',
-          ACTIVATED: 'Bàn giao đã được xác nhận và thiết bị đã kích hoạt.', REJECTED: 'Khách hàng đã từ chối bàn giao.',
-          EXPIRED: 'Yêu cầu xác nhận bàn giao đã hết hạn.', CANCELLED: 'Yêu cầu bàn giao đã bị hủy.' };
-        rendered = { title: labels[payload.status], body: `${payload.handoverNo} · ${payload.assetCode}`,
-          resourceType: 'EQUIPMENT_HANDOVER', resourceId: payload.handoverId };
+        const labels = {
+          PENDING_CUSTOMER_CONFIRMATION:
+            'Bạn có thiết bị mới cần xác nhận bàn giao.',
+          ACTIVATED: 'Bàn giao đã được xác nhận và thiết bị đã kích hoạt.',
+          REJECTED: 'Khách hàng đã từ chối bàn giao.',
+          EXPIRED: 'Yêu cầu xác nhận bàn giao đã hết hạn.',
+          CANCELLED: 'Yêu cầu bàn giao đã bị hủy.',
+        };
+        rendered = {
+          title: labels[payload.status],
+          body: `${payload.handoverNo} · ${payload.assetCode}`,
+          resourceType: 'EQUIPMENT_HANDOVER',
+          resourceId: payload.handoverId,
+        };
         break;
       }
       case 'SERVICE_REQUEST_CREATED': {
@@ -691,7 +754,11 @@ export class NotificationEventsService {
         break;
       }
       case 'SERVICE_REQUEST_STATUS_CHANGED': {
-        if (!serviceRequest) return { kind: 'WAIT', reason: 'WAITING_FOR_SERVICE_REQUEST_PROJECTION' };
+        if (!serviceRequest)
+          return {
+            kind: 'WAIT',
+            reason: 'WAITING_FOR_SERVICE_REQUEST_PROJECTION',
+          };
         const requester = await this.getRequester(
           tx,
           row.tenantId,
@@ -863,8 +930,11 @@ export class NotificationEventsService {
     | { kind: 'OK'; recipient: Recipient | null }
     | { kind: 'WAIT'; reason: string }
   > {
-    const snapshot = await tx.recipientSnapshot.findUnique({ where: { userId } });
-    if (!snapshot) return { kind: 'WAIT', reason: 'WAITING_FOR_REQUESTER_PROJECTION' };
+    const snapshot = await tx.recipientSnapshot.findUnique({
+      where: { userId },
+    });
+    if (!snapshot)
+      return { kind: 'WAIT', reason: 'WAITING_FOR_REQUESTER_PROJECTION' };
     if (
       snapshot.tenantId !== tenantId ||
       snapshot.accountStatus !== 'ACTIVE' ||
@@ -906,9 +976,7 @@ export class NotificationEventsService {
       },
     });
     for (const snapshot of snapshots) {
-      if (
-        roles.some((role) => this.hasRole(snapshot, role, tenantId))
-      ) {
+      if (roles.some((role) => this.hasRole(snapshot, role, tenantId))) {
         this.add(recipients, { userId: snapshot.userId, customerId: null });
       }
     }
@@ -934,13 +1002,18 @@ export class NotificationEventsService {
 
   private roles(snapshot: RecipientSnapshot): string[] {
     return Array.isArray(snapshot.roleCodes) &&
-      snapshot.roleCodes.every((role): role is string => typeof role === 'string')
+      snapshot.roleCodes.every(
+        (role): role is string => typeof role === 'string',
+      )
       ? snapshot.roleCodes
       : [];
   }
 
   private add(recipients: Map<string, Recipient>, recipient: Recipient): void {
-    recipients.set(`${recipient.userId}:${recipient.customerId ?? ''}`, recipient);
+    recipients.set(
+      `${recipient.userId}:${recipient.customerId ?? ''}`,
+      recipient,
+    );
   }
 
   private async checkTerminalConflict(
@@ -949,7 +1022,12 @@ export class NotificationEventsService {
     payload: PendingPayload,
   ): Promise<
     | { kind: 'STALE' }
-    | { kind: 'CONFLICT'; reason: string; expectedHash: string; observedHash: string }
+    | {
+        kind: 'CONFLICT';
+        reason: string;
+        expectedHash: string;
+        observedHash: string;
+      }
     | undefined
   > {
     if (
@@ -1102,14 +1180,28 @@ export class NotificationEventsService {
     });
   }
 
-  private allowlistedPayload(envelope: EventEnvelope): PendingPayload | undefined {
+  private allowlistedPayload(
+    envelope: EventEnvelope,
+  ): PendingPayload | undefined {
     if (isEvent(envelope, Events.EquipmentHandoverChanged)) {
       const p = envelope.payload;
-      return { kind: 'EQUIPMENT_HANDOVER_CHANGED', occurredAt: envelope.occurredAt,
-        handoverId: p.handoverId, equipmentId: p.equipmentId, customerId: p.customerId,
-        createdBy: p.createdBy, handoverNo: p.handoverNo, assetCode: p.assetCode, status: p.status, version: p.version };
+      return {
+        kind: 'EQUIPMENT_HANDOVER_CHANGED',
+        occurredAt: envelope.occurredAt,
+        handoverId: p.handoverId,
+        equipmentId: p.equipmentId,
+        customerId: p.customerId,
+        createdBy: p.createdBy,
+        handoverNo: p.handoverNo,
+        assetCode: p.assetCode,
+        status: p.status,
+        version: p.version,
+      };
     }
-    if (isEvent(envelope, Events.ServiceRequestCreated)) {
+    if (
+      isEvent(envelope, Events.ServiceRequestCreated) ||
+      isEvent(envelope, Events.ServiceRequestBranchAssigned)
+    ) {
       return {
         kind: 'SERVICE_REQUEST_CREATED',
         occurredAt: envelope.occurredAt,
@@ -1192,8 +1284,11 @@ export class NotificationEventsService {
     return undefined;
   }
 
-  private readPendingPayload(value: Prisma.JsonValue): PendingPayload | undefined {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  private readPendingPayload(
+    value: Prisma.JsonValue,
+  ): PendingPayload | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return undefined;
     const raw = value as Prisma.JsonObject;
     const kind = raw.kind;
     const occurredAt = raw.occurredAt;
@@ -1204,7 +1299,9 @@ export class NotificationEventsService {
     ) {
       return undefined;
     }
-    const uuid = (candidate: Prisma.JsonValue | undefined): candidate is string =>
+    const uuid = (
+      candidate: Prisma.JsonValue | undefined,
+    ): candidate is string =>
       typeof candidate === 'string' && isUUID(candidate);
     const text = (
       candidate: Prisma.JsonValue | undefined,
@@ -1226,33 +1323,78 @@ export class NotificationEventsService {
       candidate: Prisma.JsonValue | undefined,
     ): candidate is string =>
       typeof candidate === 'string' && is.decimal(candidate);
-    const nullableUuid = (candidate: Prisma.JsonValue | undefined): candidate is string | null =>
-      candidate === null || uuid(candidate);
+    const nullableUuid = (
+      candidate: Prisma.JsonValue | undefined,
+    ): candidate is string | null => candidate === null || uuid(candidate);
+    if (raw.branchId !== undefined && !nullableUuid(raw.branchId))
+      return undefined;
+    const branchId = raw.branchId as string | null | undefined;
     const hasOnlyKeys = (...keys: string[]) =>
-      Object.keys(raw).every((key) => keys.includes(key));
-    const hasOneOrigin = (serviceRequestId: string | null, maintenanceTaskId: string | null) =>
-      (serviceRequestId === null) !== (maintenanceTaskId === null);
+      Object.keys(raw).every((key) => key === 'branchId' || keys.includes(key));
+    const hasOneOrigin = (
+      serviceRequestId: string | null,
+      maintenanceTaskId: string | null,
+    ) => (serviceRequestId === null) !== (maintenanceTaskId === null);
     switch (kind) {
       case 'EQUIPMENT_HANDOVER_CHANGED':
-        if (uuid(raw.handoverId) && uuid(raw.equipmentId) && uuid(raw.customerId) && uuid(raw.createdBy) &&
-          text(raw.handoverNo, 50) && text(raw.assetCode, 100) && typeof raw.version === 'number' && Number.isSafeInteger(raw.version) && raw.version > 0 &&
-          oneOf(raw.status, ['PENDING_CUSTOMER_CONFIRMATION', 'ACTIVATED', 'REJECTED', 'CANCELLED', 'EXPIRED']))
-          return { kind, occurredAt, handoverId: raw.handoverId, equipmentId: raw.equipmentId, customerId: raw.customerId,
-            createdBy: raw.createdBy, handoverNo: raw.handoverNo, assetCode: raw.assetCode, version: raw.version,
-            status: raw.status as Extract<PendingPayload, { kind: 'EQUIPMENT_HANDOVER_CHANGED' }>['status'] };
+        if (
+          uuid(raw.handoverId) &&
+          uuid(raw.equipmentId) &&
+          uuid(raw.customerId) &&
+          uuid(raw.createdBy) &&
+          text(raw.handoverNo, 50) &&
+          text(raw.assetCode, 100) &&
+          typeof raw.version === 'number' &&
+          Number.isSafeInteger(raw.version) &&
+          raw.version > 0 &&
+          oneOf(raw.status, [
+            'PENDING_CUSTOMER_CONFIRMATION',
+            'ACTIVATED',
+            'REJECTED',
+            'CANCELLED',
+            'EXPIRED',
+          ])
+        )
+          return {
+            branchId,
+            kind,
+            occurredAt,
+            handoverId: raw.handoverId,
+            equipmentId: raw.equipmentId,
+            customerId: raw.customerId,
+            createdBy: raw.createdBy,
+            handoverNo: raw.handoverNo,
+            assetCode: raw.assetCode,
+            version: raw.version,
+            status: raw.status as Extract<
+              PendingPayload,
+              { kind: 'EQUIPMENT_HANDOVER_CHANGED' }
+            >['status'],
+          };
         return undefined;
       case 'SERVICE_REQUEST_CREATED':
         if (
           hasOnlyKeys(
-            'kind', 'occurredAt', 'serviceRequestId', 'requestNo', 'customerId',
-            'equipmentId', 'requesterId', 'requestType', 'priority',
+            'kind',
+            'occurredAt',
+            'serviceRequestId',
+            'requestNo',
+            'customerId',
+            'equipmentId',
+            'requesterId',
+            'requestType',
+            'priority',
           ) &&
-          uuid(raw.serviceRequestId) && text(raw.requestNo, 50) &&
-          uuid(raw.customerId) && uuid(raw.equipmentId) && uuid(raw.requesterId) &&
+          uuid(raw.serviceRequestId) &&
+          text(raw.requestNo, 50) &&
+          uuid(raw.customerId) &&
+          uuid(raw.equipmentId) &&
+          uuid(raw.requesterId) &&
           oneOf(raw.requestType, SERVICE_REQUEST_TYPES) &&
           oneOf(raw.priority, PRIORITIES)
         ) {
           return {
+            branchId,
             kind,
             occurredAt,
             serviceRequestId: raw.serviceRequestId,
@@ -1268,8 +1410,14 @@ export class NotificationEventsService {
       case 'SERVICE_REQUEST_STATUS_CHANGED':
         if (
           !hasOnlyKeys(
-            'kind', 'occurredAt', 'serviceRequestId', 'requestNo', 'customerId',
-            'equipmentId', 'fromStatus', 'toStatus',
+            'kind',
+            'occurredAt',
+            'serviceRequestId',
+            'requestNo',
+            'customerId',
+            'equipmentId',
+            'fromStatus',
+            'toStatus',
           )
         ) {
           return undefined;
@@ -1277,37 +1425,49 @@ export class NotificationEventsService {
         {
           const fromStatus = raw.fromStatus;
           const toStatus = raw.toStatus;
-        if (
-          uuid(raw.serviceRequestId) && text(raw.requestNo, 50) &&
-          uuid(raw.customerId) && uuid(raw.equipmentId) &&
-          (fromStatus === null || oneOf(fromStatus, SERVICE_REQUEST_STATUSES)) &&
-          oneOf(toStatus, SERVICE_REQUEST_STATUSES)
-        ) {
-          return {
-            kind,
-            occurredAt,
-            serviceRequestId: raw.serviceRequestId,
-            requestNo: raw.requestNo,
-            customerId: raw.customerId,
-            equipmentId: raw.equipmentId,
-            fromStatus,
-            toStatus,
-          };
-        }
-        return undefined;
+          if (
+            uuid(raw.serviceRequestId) &&
+            text(raw.requestNo, 50) &&
+            uuid(raw.customerId) &&
+            uuid(raw.equipmentId) &&
+            (fromStatus === null ||
+              oneOf(fromStatus, SERVICE_REQUEST_STATUSES)) &&
+            oneOf(toStatus, SERVICE_REQUEST_STATUSES)
+          ) {
+            return {
+              branchId,
+              kind,
+              occurredAt,
+              serviceRequestId: raw.serviceRequestId,
+              requestNo: raw.requestNo,
+              customerId: raw.customerId,
+              equipmentId: raw.equipmentId,
+              fromStatus,
+              toStatus,
+            };
+          }
+          return undefined;
         }
       case 'WORK_ORDER_CREATED':
         if (
           hasOnlyKeys(
-            'kind', 'occurredAt', 'workOrderId', 'workOrderNo',
-            'serviceRequestId', 'maintenanceTaskId', 'customerId',
+            'kind',
+            'occurredAt',
+            'workOrderId',
+            'workOrderNo',
+            'serviceRequestId',
+            'maintenanceTaskId',
+            'customerId',
           ) &&
-          uuid(raw.workOrderId) && text(raw.workOrderNo, 50) &&
-          nullableUuid(raw.serviceRequestId) && nullableUuid(raw.maintenanceTaskId) &&
+          uuid(raw.workOrderId) &&
+          text(raw.workOrderNo, 50) &&
+          nullableUuid(raw.serviceRequestId) &&
+          nullableUuid(raw.maintenanceTaskId) &&
           hasOneOrigin(raw.serviceRequestId, raw.maintenanceTaskId) &&
           uuid(raw.customerId)
         ) {
           return {
+            branchId,
             kind,
             occurredAt,
             workOrderId: raw.workOrderId,
@@ -1321,14 +1481,20 @@ export class NotificationEventsService {
       case 'WORK_ORDER_ASSIGNED':
         if (
           hasOnlyKeys(
-            'kind', 'occurredAt', 'workOrderId', 'workOrderNo',
-            'technicianUserId', 'scheduledStart',
+            'kind',
+            'occurredAt',
+            'workOrderId',
+            'workOrderNo',
+            'technicianUserId',
+            'scheduledStart',
           ) &&
-          uuid(raw.workOrderId) && text(raw.workOrderNo, 50) &&
+          uuid(raw.workOrderId) &&
+          text(raw.workOrderNo, 50) &&
           uuid(raw.technicianUserId) &&
           (raw.scheduledStart === null || isoDateTime(raw.scheduledStart))
         ) {
           return {
+            branchId,
             kind,
             occurredAt,
             workOrderId: raw.workOrderId,
@@ -1341,17 +1507,27 @@ export class NotificationEventsService {
       case 'WORK_ORDER_COMPLETED':
         if (
           hasOnlyKeys(
-            'kind', 'occurredAt', 'workOrderId', 'workOrderNo',
-            'serviceRequestId', 'maintenanceTaskId', 'customerId', 'result',
+            'kind',
+            'occurredAt',
+            'workOrderId',
+            'workOrderNo',
+            'serviceRequestId',
+            'maintenanceTaskId',
+            'customerId',
+            'result',
             'customerSummary',
           ) &&
-          uuid(raw.workOrderId) && text(raw.workOrderNo, 50) &&
-          nullableUuid(raw.serviceRequestId) && nullableUuid(raw.maintenanceTaskId) &&
+          uuid(raw.workOrderId) &&
+          text(raw.workOrderNo, 50) &&
+          nullableUuid(raw.serviceRequestId) &&
+          nullableUuid(raw.maintenanceTaskId) &&
           hasOneOrigin(raw.serviceRequestId, raw.maintenanceTaskId) &&
-          uuid(raw.customerId) && oneOf(raw.result, REPORT_RESULTS) &&
+          uuid(raw.customerId) &&
+          oneOf(raw.result, REPORT_RESULTS) &&
           text(raw.customerSummary, 2_000)
         ) {
           return {
+            branchId,
             kind,
             occurredAt,
             workOrderId: raw.workOrderId,
@@ -1367,15 +1543,23 @@ export class NotificationEventsService {
       case 'WORK_ORDER_CANCELLED':
         if (
           hasOnlyKeys(
-            'kind', 'occurredAt', 'workOrderId', 'workOrderNo',
-            'serviceRequestId', 'maintenanceTaskId', 'cancelServiceRequest',
+            'kind',
+            'occurredAt',
+            'workOrderId',
+            'workOrderNo',
+            'serviceRequestId',
+            'maintenanceTaskId',
+            'cancelServiceRequest',
           ) &&
-          uuid(raw.workOrderId) && text(raw.workOrderNo, 50) &&
-          nullableUuid(raw.serviceRequestId) && nullableUuid(raw.maintenanceTaskId) &&
+          uuid(raw.workOrderId) &&
+          text(raw.workOrderNo, 50) &&
+          nullableUuid(raw.serviceRequestId) &&
+          nullableUuid(raw.maintenanceTaskId) &&
           hasOneOrigin(raw.serviceRequestId, raw.maintenanceTaskId) &&
           typeof raw.cancelServiceRequest === 'boolean'
         ) {
           return {
+            branchId,
             kind,
             occurredAt,
             workOrderId: raw.workOrderId,
@@ -1389,12 +1573,20 @@ export class NotificationEventsService {
       case 'LOW_STOCK_DETECTED':
         if (
           hasOnlyKeys(
-            'kind', 'occurredAt', 'stockId', 'partSku', 'quantity', 'minQuantity',
+            'kind',
+            'occurredAt',
+            'stockId',
+            'partSku',
+            'quantity',
+            'minQuantity',
           ) &&
-          uuid(raw.stockId) && text(raw.partSku, 100) &&
-          decimal(raw.quantity) && decimal(raw.minQuantity)
+          uuid(raw.stockId) &&
+          text(raw.partSku, 100) &&
+          decimal(raw.quantity) &&
+          decimal(raw.minQuantity)
         ) {
           return {
+            branchId,
             kind,
             occurredAt,
             stockId: raw.stockId,

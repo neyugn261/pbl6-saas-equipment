@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Body,
   Controller,
@@ -26,6 +27,7 @@ import {
 } from './dto';
 import { TechniciansService } from './technicians.service';
 
+@BranchScoped()
 @Controller('technicians')
 @AllowUserTypes('TENANT_STAFF')
 export class TechniciansController {
@@ -76,6 +78,7 @@ export class TechniciansController {
     return this.service.replaceSkills(p, id, input);
   }
 }
+@BranchScoped()
 @Controller('skills')
 @AllowUserTypes('TENANT_STAFF')
 export class SkillsController {

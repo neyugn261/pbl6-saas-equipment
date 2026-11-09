@@ -20,7 +20,7 @@ info:
       (ADR 0008 D6), never through this API.
     - A caller whose only Work Order permission is `work_order:execute`
       (TECHNICIAN) sees only Work Orders it is or was assigned to; any other id
-      answers 404. Dispatcher and Service Manager see the whole tenant.
+      answers 404. Service Manager and legacy Dispatcher are limited to their active primary branch; Tenant Admin sees the whole tenant.
 
     Calls to other services (ADR 0004, caller's token forwarded):
     - Service Request `GET /internal/service-requests/{id}`: status,
@@ -97,6 +97,30 @@ tags:
   - name: Internal
     description: Called by other services with the caller's token; not exposed by the gateway.
 paths:
+  /work-orders/{workOrderId}/branch:
+    patch:
+      summary: Tenant Admin allocates an unassigned service case
+      description: ADR 0022. Records actor/reason in history. Existing active branch ownership is preserved; Request may change only before acceptance, Work Order only while branch is null. Source Request must be allocated first for legacy Work Orders.
+      x-permissions: ['branch:manage']
+      x-user-types: [TENANT_STAFF]
+      parameters:
+        - { name: workOrderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [branchId, reason]
+              properties:
+                branchId: { type: string, format: uuid }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '200': { description: Allocated branch recorded }
+        '403': { description: Requires Tenant Admin branch management permission }
+        '404': { description: Case or active branch not found in tenant }
+        '409': { description: Allocation is locked or stale; reload source }
   /internal/work-orders/{workOrderId}/inventory-reservations:
     $ref: './inventory-reservations.yaml#/paths/~1internal~1work-orders~1{workOrderId}~1inventory-reservations'
   /internal/work-orders/{workOrderId}/inventory-reservations/settle:
@@ -197,6 +221,8 @@ paths:
       x-permissions: [work_order:read]
       x-user-types: [TENANT_STAFF]
       parameters:
+        - { name: branchId, in: query, description: Tenant Admin branch filter; staff cannot widen their own branch, schema: { type: string, format: uuid } }
+        - { name: unallocated, in: query, description: Tenant Admin central queue, schema: { type: string, enum: ['true', 'false'] } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
         - name: q
@@ -924,6 +950,7 @@ components:
       type: object
       required: [id, workOrderNo, equipmentId, customerId, type, title, priority, status, createdAt, updatedAt]
       properties:
+        branchId: { type: [string, 'null'], format: uuid, description: Responsible branch; null is the central allocation queue }
         id: { type: string, format: uuid }
         workOrderNo: { type: string, examples: [WO-2026-0001] }
         serviceRequestId: { type: [string, 'null'], format: uuid }

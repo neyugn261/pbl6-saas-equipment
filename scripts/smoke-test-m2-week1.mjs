@@ -35,9 +35,9 @@ async function main() {
   const profiles = await call('GET', '/api/workorders/technicians?pageSize=100', { token: manager });
   let profile = profiles.items.find(p => p.userId === technicianUser.id);
   if (!profile) {
-    const branches = await call('GET', '/api/organization/branches?pageSize=100', { token: manager });
-    const branch = branches.items.find(b => b.id === process.env.M2_BRANCH_ID || (!process.env.M2_BRANCH_ID && b.status === 'ACTIVE'));
-    assert.ok(branch, 'Seed an active demo branch first');
+    const { branch } = await call('GET', '/api/organization/staff/me/branch', { token: technician });
+    assert.ok(branch, 'Assign an active primary branch to the demo technician first');
+    if (process.env.M2_BRANCH_ID) assert.equal(branch.id, process.env.M2_BRANCH_ID);
     profile = await call('POST', '/api/workorders/technicians', { token: manager, status: 201,
       body: { userId: technicianUser.id, branchId: branch.id, employeeCode: 'DEMO-TECH-01' } });
   }

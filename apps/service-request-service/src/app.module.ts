@@ -23,6 +23,8 @@ import { ServiceRequestsModule } from './service-requests/service-requests.modul
     // Global JwtAuthGuard + PermissionsGuard: every route needs a token unless @Public().
     AuthModule.forRootAsync({
       inject: [ConfigService],
+      branchServiceUrl: (config: ConfigService) =>
+        config.getOrThrow<string>('ORGANIZATION_SERVICE_URL'),
       useFactory: (config: ConfigService) => jwtOptionsFromConfig(config),
     }),
     HealthModule.forRootAsync({

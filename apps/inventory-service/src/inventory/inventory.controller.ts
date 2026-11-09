@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Body,
   Controller,
@@ -45,6 +46,7 @@ import {
 } from './dto';
 import { InventoryService } from './inventory.service';
 
+@BranchScoped()
 @Controller()
 @AllowUserTypes('TENANT_STAFF')
 export class InventoryController {
@@ -245,6 +247,7 @@ export class InventoryController {
   }
 }
 
+@BranchScoped()
 @Controller('work-order-parts')
 @AllowUserTypes('TENANT_STAFF')
 export class UsageConfirmationController {
@@ -262,6 +265,7 @@ export class UsageConfirmationController {
 }
 
 /** A scoped service history projection; no stock/catalog access is granted to customers. */
+@BranchScoped()
 @Controller('equipment/:id/service-parts')
 @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
 @RequirePermissions('equipment:read')
@@ -278,6 +282,7 @@ export class ServicePartsController {
 }
 
 /** Blocked at Gateway; WO forwards the current authorized Inventory caller. */
+@BranchScoped()
 @Controller('internal/inventory-operations')
 @AllowUserTypes('TENANT_STAFF')
 export class InternalInventoryController {

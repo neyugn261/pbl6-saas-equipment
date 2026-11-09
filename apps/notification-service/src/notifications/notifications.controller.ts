@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import {
   Controller,
   Get,
@@ -16,6 +17,7 @@ import {
 import { NotificationsService } from './notifications.service';
 import { NotificationQueryDto } from './notification-query.dto';
 
+@BranchScoped()
 @Controller('notifications')
 @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
 @RequirePermissions('notification:read')

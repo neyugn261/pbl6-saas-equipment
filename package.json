@@ -34,7 +34,12 @@
     "test": "pnpm build:packages && pnpm -r --if-present test",
     "test:e2e": "pnpm build:packages && pnpm -r --if-present test:e2e",
     "lint": "pnpm -r --if-present lint",
-    "test:model-policies": "pnpm build:packages && pnpm --filter identity-service --filter organization-service --filter asset-service --filter maintenance-service --filter workorder-service --filter service-request-service --filter api-gateway build && node scripts/test-model-policies.cjs"
+    "test:branch-scope": "pnpm build:packages && pnpm --filter api-gateway --filter identity-service --filter organization-service --filter asset-service --filter maintenance-service --filter service-request-service --filter workorder-service --filter inventory-service --filter notification-service build && node scripts/test-branch-service-management.cjs",
+    "test:model-policies": "pnpm build:packages && pnpm --filter identity-service --filter organization-service --filter asset-service --filter maintenance-service --filter workorder-service --filter service-request-service --filter api-gateway build && node scripts/test-model-policies.cjs",
+    "demo:build": "pnpm build:packages && pnpm --filter api-gateway --filter identity-service --filter organization-service --filter asset-service --filter service-request-service --filter workorder-service --filter maintenance-service --filter inventory-service --filter notification-service build",
+    "demo:seed": "pnpm demo:build && node scripts/demo/seed.cjs",
+    "demo:reset": "pnpm demo:build && node scripts/demo/seed.cjs --reset --strict",
+    "test:demo-seed": "pnpm demo:build && node --test scripts/demo/guards.test.cjs && node scripts/demo/test.cjs"
   },
   "packageManager": "pnpm@11.26.0",
   "engines": {

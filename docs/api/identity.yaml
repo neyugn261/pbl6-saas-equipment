@@ -3,6 +3,10 @@ info:
   title: PBL6 Identity Service
   version: 0.1.0-draft
   description: |
+    ADR 0022: SERVICE_MANAGER handles reception and dispatch. Branch-bound staff
+    routes resolve the active primary branch live from Organization; errors fail closed.
+    Customer/Equipment and maintenance plans remain tenant/customer scoped.
+    DISPATCHER is retained for existing accounts; new assignment/invitation is rejected.
     DRAFT contract (M1) — owner: Member D (Nguyên).
     Conventions: docs/api/conventions.md. `x-permissions` lists catalog
     permissions checked by `@RequirePermissions` (packages/auth/src/catalog.ts).

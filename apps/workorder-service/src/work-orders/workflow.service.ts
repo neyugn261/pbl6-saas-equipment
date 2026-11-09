@@ -35,17 +35,22 @@ type ActionInput = Partial<
 > & { report?: ServiceReportDto };
 @Injectable()
 export class WorkOrderWorkflowService {
-  constructor(private readonly repo: WorkOrderWorkflowRepository, @Optional() private readonly names?: DisplayNameLookup) {}
+  constructor(private readonly repo: WorkOrderWorkflowRepository, @Optional() private readonly names?: DisplayNameLookup,
+  ) {}
   async assignments(p: Principal, id: string) {
     const rows = await this.repo.assignments(p, id);
-    const users = await this.names?.lookup('users', rows.flatMap(row => [row.technicianUserId, row.assignedBy]), p);
-    return rows.map(row => ({ ...row, technicianName: users?.get(row.technicianUserId.toLowerCase())?.name ?? null,
-      assignedByName: users?.get(row.assignedBy.toLowerCase())?.name ?? null }));
+    const users = await this.names?.lookup('users', rows.flatMap((row) => [row.technicianUserId, row.assignedBy]), p,
+    );
+    return rows.map((row) => ({ ...row, technicianName: users?.get(row.technicianUserId.toLowerCase())?.name ?? null,
+      assignedByName: users?.get(row.assignedBy.toLowerCase())?.name ?? null,
+    }));
   }
   async logs(p: Principal, id: string) {
     const rows = await this.repo.logs(p, id);
-    const users = await this.names?.lookup('users', rows.map(row => row.actorUserId), p);
-    return rows.map(row => ({ ...row, actorName: users?.get(row.actorUserId.toLowerCase())?.name ?? null }));
+    const users = await this.names?.lookup('users', rows.map((row) => row.actorUserId), p,
+    );
+    return rows.map((row) => ({ ...row, actorName: users?.get(row.actorUserId.toLowerCase())?.name ?? null,
+    }));
   }
   report(p: Principal, id: string) {
     return this.repo.report(p, id);
@@ -100,6 +105,11 @@ export class WorkOrderWorkflowService {
         const technician = await tx.technician.findFirst({
           where: { tenantId: order.tenantId, id: input.technicianId },
         });
+        if (technician && technician.branchId !== order.branchId)
+          throw invalid(
+            'TECHNICIAN_BRANCH_MISMATCH',
+            'Choose a technician from the Work Order branch',
+          );
         if (!technician)
           throw invalid('TECHNICIAN_NOT_FOUND', 'Technician was not found');
         if (!['AVAILABLE', 'BUSY'].includes(technician.status))
@@ -134,6 +144,7 @@ export class WorkOrderWorkflowService {
           correlationId: getCorrelationId(),
           payload: {
             workOrderId: id,
+            branchId: order.branchId,
             workOrderNo: order.workOrderNo,
             technicianId: technician.id,
             technicianUserId: technician.userId,
@@ -207,6 +218,7 @@ export class WorkOrderWorkflowService {
             correlationId: getCorrelationId(),
             payload: {
               workOrderId: id,
+              branchId: order.branchId,
               workOrderNo: order.workOrderNo,
               serviceRequestId: order.serviceRequestId,
               maintenanceTaskId: order.maintenanceTaskId,

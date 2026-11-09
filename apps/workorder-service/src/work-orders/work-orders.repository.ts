@@ -1,3 +1,4 @@
+import { branchWhere, staffBranchId, assertBranchAccess } from '@pbl6/auth';
 import { Injectable } from '@nestjs/common';
 import { type Principal, requireTenantId } from '@pbl6/auth';
 import {
@@ -34,6 +35,7 @@ export const isTechnicianOnly = (p: Principal) =>
 export function workOrderScope(p: Principal): Prisma.WorkOrderWhereInput {
   return {
     tenantId: requireTenantId(p),
+    ...branchWhere(p),
     ...(isTechnicianOnly(p)
       ? { assignments: { some: { technician: { userId: p.userId } } } }
       : {}),
@@ -65,6 +67,7 @@ export function workOrderView(row: WorkOrderRow, p: Principal) {
   return {
     id: row.id,
     workOrderNo: row.workOrderNo,
+    branchId: row.branchId,
     serviceRequestId: row.serviceRequestId,
     maintenanceTaskId: row.maintenanceTaskId,
     equipmentId: row.equipmentId,
@@ -124,6 +127,14 @@ export class WorkOrdersRepository {
         'scheduledFrom must not follow scheduledTo',
       );
     const conditions = [Prisma.sql`w.tenant_id = ${tenantId}::uuid`];
+    const branchId = staffBranchId(p);
+    if (branchId) conditions.push(Prisma.sql`w.branch_id = ${branchId}::uuid`);
+    if (q.branchId) {
+      assertBranchAccess(p, q.branchId);
+      conditions.push(Prisma.sql`w.branch_id = ${q.branchId}::uuid`);
+    }
+    if (p.roles.includes('TENANT_ADMIN') && q.unallocated === 'true')
+      conditions.push(Prisma.sql`w.branch_id IS NULL`);
     if (isTechnicianOnly(p))
       conditions.push(
         Prisma.sql`EXISTS (SELECT 1 FROM work_order_assignments a JOIN technicians t ON t.id = a.technician_id AND t.tenant_id = a.tenant_id WHERE a.work_order_id = w.id AND a.tenant_id = w.tenant_id AND t.user_id = ${p.userId}::uuid)`,
@@ -230,11 +241,18 @@ export class WorkOrdersRepository {
             'The request already has an active Work Order',
           );
         const { source, equipment } = await resolve();
+        if (!source.branchId)
+          throw invalid(
+            'BRANCH_ROUTING_REQUIRED',
+            'Allocate the Service Request to an active branch first',
+          );
+        assertBranchAccess(p, source.branchId);
         const row = await tx.workOrder.create({
           data: {
             tenantId,
             workOrderNo: await nextWorkOrderNumber(tx, tenantId),
             serviceRequestId: source.id,
+            branchId: source.branchId,
             equipmentId: source.equipmentId,
             customerId: source.customerId,
             customerSiteId: equipment.customerSiteId,
@@ -276,6 +294,7 @@ export class WorkOrdersRepository {
           correlationId: getCorrelationId(),
           payload: {
             workOrderId: row.id,
+            branchId: row.branchId,
             workOrderNo: row.workOrderNo,
             serviceRequestId: row.serviceRequestId,
             maintenanceTaskId: null,

@@ -136,6 +136,7 @@ export class WorkOrderWorkflowRepository {
       correlationId: getCorrelationId(),
       payload: {
         workOrderId: order.id,
+        branchId: order.branchId,
         workOrderNo: order.workOrderNo,
         serviceRequestId: order.serviceRequestId,
         maintenanceTaskId: order.maintenanceTaskId,

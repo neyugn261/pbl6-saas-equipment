@@ -12,7 +12,9 @@ const {
   requireTestDatabaseUrl,
   signTestAccessToken,
   testJwtEnv,
+  fixtureBranchContext,
 } = require('@pbl6/testing');
+const { BranchAccessClient } = require('@pbl6/auth');
 const { configureApp } = require('@pbl6/service-kit');
 const {
   RabbitMqEventBus,
@@ -57,6 +59,7 @@ const tenantId = randomUUID(),
   customerId = randomUUID(),
   equipmentId = randomUUID(),
   siteId = randomUUID(),
+  branchId = randomUUID(),
   userId = randomUUID();
 const manager = signTestAccessToken({ role: 'SERVICE_MANAGER', tenantId });
 const technician = signTestAccessToken({
@@ -179,10 +182,12 @@ async function main() {
   process.env.MAINTENANCE_SERVICE_URL = await maintenanceApp.getUrl();
   const workorderApp = await application(
     woRequire('./dist/app.module').AppModule,
+    { token: BranchAccessClient, value: fixtureBranchContext(branchId) },
   );
   woDb = workorderApp.get(
     woRequire('./dist/prisma/prisma.service').PrismaService,
   );
+  await woDb.siteBranchSnapshot.create({ data: { tenantId, siteId, branchId, revision: 1 } });
   process.env.WORKORDER_SERVICE_URL = await workorderApp.getUrl();
   const assetConfig = assetApp.get(
     assetRequire('@nestjs/config').ConfigService,
@@ -220,7 +225,7 @@ async function main() {
     },
   });
   const tech = await woDb.technician.create({
-    data: { tenantId, userId, branchId: randomUUID(), employeeCode: 'M2-TECH' },
+    data: { tenantId, userId, branchId, employeeCode: 'M2-TECH' },
   });
   bus = new RabbitMqEventBus({ url: brokerUrl, exchange });
   const subscribe = (name, events, handler) => {
@@ -311,6 +316,7 @@ async function main() {
     201,
   );
   const movedSite = randomUUID();
+  await woDb.siteBranchSnapshot.create({ data: { tenantId, siteId: movedSite, branchId, revision: 1 } });
   await call(base, 'PATCH', '/api/assets/equipment/' + equipmentId, manager, {
     customerSiteId: movedSite,
   });
@@ -695,6 +701,7 @@ async function main() {
   console.log(
     'PASS real cancellation → replacement request → supplied WO ID → Task link → next replacement → report/Task/Asset history; duplicate/replayed Due/stale cancellation and terminal-before-Created preserve the completed Task',
   );
+  const isolatedSeedPlanId = randomUUID();
   for (let i = 0; i < 2; i++) {
     // Asset runs in this process: do not block its HTTP event loop while the
     // separate seed process validates the real Asset reference.
@@ -707,6 +714,7 @@ async function main() {
           ...process.env,
           MAINTENANCE_SEED_ACCESS_TOKEN: manager,
           MAINTENANCE_SEED_EQUIPMENT_ID: equipmentId,
+          MAINTENANCE_SEED_PLAN_ID: isolatedSeedPlanId,
         },
       },
     );
@@ -714,7 +722,7 @@ async function main() {
   }
   assert.equal(
     await maintenanceDb.maintenancePlan.count({
-      where: { tenantId, id: '00000000-0000-4000-8000-000000003001' },
+      where: { tenantId, id: isolatedSeedPlanId },
     }),
     1,
   );
@@ -745,6 +753,7 @@ async function cleanup() {
       'technician',
       'documentSequence',
       'outboxEvent',
+      'siteBranchSnapshot',
     ])
       await woDb[name].deleteMany({ where });
     await woDb.processedEvent.deleteMany({ where: inboxWhere });

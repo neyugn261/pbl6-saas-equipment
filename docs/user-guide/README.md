@@ -21,3 +21,7 @@ fields are not evidence that corresponding backend APIs exist.
 
 See the [current implementation](../FRONTEND_IMPLEMENTATION.md) and
 [Workshop handoff, API gaps and next tasks](../reports/2026-11-08-workshop-ui-handoff.md).
+
+- [Quản lý dịch vụ theo chi nhánh: giai đoạn, cấu hình và demo](branch-service-management.md).
+
+- [Bộ seed dùng chung hai chi nhánh, tài khoản và reset local](demo-data.md).

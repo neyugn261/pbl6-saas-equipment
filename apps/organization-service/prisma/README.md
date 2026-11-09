@@ -23,3 +23,5 @@ and `pnpm db:check-drift`.
 
 Verified on 2026-10-13 against PostgreSQL 17.11: `0001_init` applies cleanly
 and twice in a row; both diffs (migrations ↔ schema, database ↔ schema) are empty.
+
+ADR 0022 adds nullable branch ownership (service cases/notifications), site routing revision and the WO site routing projection. Apply the new migration; historical rows are not assigned from a user or current site automatically. See [branch runbook](../../../docs/user-guide/branch-service-management.md).

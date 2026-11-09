@@ -1,3 +1,4 @@
+import { BranchScoped } from '@pbl6/auth';
 import { WarrantyAssessmentDto } from './dto';
 import {
   Body,
@@ -30,6 +31,7 @@ import {
   UpdateServiceRequestDto,
 } from './dto';
 
+@BranchScoped()
 @Controller('service-requests')
 @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
 export class ServiceRequestsController {
@@ -224,6 +226,7 @@ export class ServiceRequestsController {
   }
 }
 
+@BranchScoped()
 @Controller('internal/service-requests')
 @AllowUserTypes('TENANT_STAFF')
 export class InternalServiceRequestsController {
@@ -239,6 +242,7 @@ export class InternalServiceRequestsController {
   }
 }
 
+@BranchScoped()
 @Controller('estimates')
 @AllowUserTypes('TENANT_STAFF', 'CUSTOMER')
 export class CostEstimatesController {

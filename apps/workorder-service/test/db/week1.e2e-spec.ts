@@ -1,3 +1,5 @@
+import { BranchAccessClient } from '@pbl6/auth';
+import { fixtureBranchContext } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -48,6 +50,8 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(BranchAccessClient)
+      .useValue(fixtureBranchContext(branchId))
       .overrideProvider(REFERENCES)
       .useValue(refs)
       .compile();
@@ -70,6 +74,7 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
       tenantId,
       userType: 'TENANT_STAFF',
       roles: ['TECHNICIAN'],
+      primaryBranchId: branchId,
       status: 'ACTIVE',
     }));
     refs.branch.mockResolvedValue({ id: branchId, status: 'ACTIVE' });
@@ -86,6 +91,7 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
   function source(overrides: Partial<RequestRef> = {}) {
     const row = {
       id: randomUUID(),
+      branchId: branchId,
       status: 'ACCEPTED',
       equipmentId,
       customerId,
@@ -119,6 +125,7 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
       tenantId,
       userType: 'TENANT_STAFF',
       roles: ['TECHNICIAN'],
+      primaryBranchId: branchId,
       status: 'ACTIVE',
     });
     const tech = await postTechnician({
@@ -180,6 +187,7 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
       tenantId: otherTenant,
       userType: 'TENANT_STAFF',
       roles: ['TECHNICIAN'],
+      primaryBranchId: branchId,
     });
     await postTechnician().expect(422);
     refs.user.mockResolvedValueOnce({
@@ -514,6 +522,7 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
     expect(Object.keys(ref.body).sort()).toEqual(
       [
         'id',
+        'branchId',
         'workOrderNo',
         'status',
         'equipmentId',

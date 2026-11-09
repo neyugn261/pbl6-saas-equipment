@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import {
   CustomerSite,
   Location,
-  Prisma,
-} from '../generated/prisma/client.js';
+  Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
+import { enqueueSiteRouting } from './site-routing';
 
 export type LocationWithCustomer = Location & {
   customerSite: { customerId: string };
@@ -19,11 +19,13 @@ export type LocationWithCustomer = Location & {
 export class SitesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  displayNames(scope: { tenantId: string; customerId: string | null }, ids: string[]) {
+  displayNames(scope: { tenantId: string; customerId: string | null }, ids: string[],
+  ) {
     return this.prisma.customerSite.findMany({
       where: { tenantId: scope.tenantId, id: { in: [...new Set(ids)] },
         ...(scope.customerId ? { customerId: scope.customerId } : {}),
-        deletedAt: null, customer: { deletedAt: null } },
+        deletedAt: null, customer: { deletedAt: null },
+      },
       select: { id: true, tenantId: true, name: true, code: true },
     });
   }
@@ -41,21 +43,34 @@ export class SitesRepository {
     });
   }
 
-  createSite(data: Prisma.CustomerSiteUncheckedCreateInput): Promise<CustomerSite> {
-    return this.prisma.customerSite.create({ data });
+  createSite(data: Prisma.CustomerSiteUncheckedCreateInput,
+  ): Promise<CustomerSite> {
+    return this.prisma.$transaction(async (tx) => {
+      const site = await tx.customerSite.create({ data: { ...data, routingVersion: 1 },
+      });
+      await enqueueSiteRouting(tx, site);
+      return site;
+    });
   }
 
   updateSite(
     id: string,
     data: Prisma.CustomerSiteUncheckedUpdateInput,
   ): Promise<CustomerSite> {
-    return this.prisma.customerSite.update({ where: { id }, data });
+    return this.prisma.$transaction(async (tx) => {
+      const site = await tx.customerSite.update({ where: { id }, data: { ...data, routingVersion: { increment: 1 } },
+      });
+      await enqueueSiteRouting(tx, site);
+      return site;
+    });
   }
 
   /** Soft-deletes the site; contacts tied to it stay with the customer, without a site. */
   softDeleteSite(id: string): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.customerSite.update({ where: { id }, data: { deletedAt: new Date() } });
+      const site = await tx.customerSite.update({ where: { id }, data: { deletedAt: new Date(), routingVersion: { increment: 1 } },
+      });
+      await enqueueSiteRouting(tx, site);
       await tx.customerContact.updateMany({
         where: { customerSiteId: id },
         data: { customerSiteId: null },
@@ -71,7 +86,8 @@ export class SitesRepository {
   }
 
   /** A live location whose site and customer are live too, with the site's customer. */
-  findLocation(tenantId: string, id: string): Promise<LocationWithCustomer | null> {
+  findLocation(tenantId: string, id: string,
+  ): Promise<LocationWithCustomer | null> {
     return this.prisma.location.findFirst({
       where: {
         id,
@@ -114,7 +130,9 @@ export class LocationTree {
 
   hasLiveChildren(id: string): Promise<boolean> {
     return this.tx.location
-      .count({ where: { parentId: id, customerSiteId: this.siteId, deletedAt: null } })
+      .count({
+        where: { parentId: id, customerSiteId: this.siteId, deletedAt: null },
+      })
       .then((count) => count > 0);
   }
 
@@ -122,7 +140,10 @@ export class LocationTree {
     return this.tx.location.create({ data });
   }
 
-  update(id: string, data: Prisma.LocationUncheckedUpdateInput): Promise<Location> {
+  update(
+    id: string,
+    data: Prisma.LocationUncheckedUpdateInput,
+  ): Promise<Location> {
     return this.tx.location.update({ where: { id }, data });
   }
 }

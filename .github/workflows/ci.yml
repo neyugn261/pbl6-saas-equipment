@@ -211,6 +211,25 @@ jobs:
         env:
           RABBITMQ_TEST_URL: amqp://pbl6:pbl6_dev_password@127.0.0.1:5672
         run: pnpm test:model-policies
+      - name: Branch service management and access isolation integration
+        env:
+          RABBITMQ_TEST_URL: amqp://pbl6:pbl6_dev_password@127.0.0.1:5672
+        run: pnpm test:branch-scope
+      - name: Complete demo seed, rerun and operator progress integration
+        env:
+          NODE_ENV: development
+          JWT_ACCESS_SECRET: ci-demo-seed-secret-0123456789abcdef
+          SEED_DEMO_PASSWORD: ci-demo-seed-password
+          RABBITMQ_URL: amqp://pbl6:pbl6_dev_password@127.0.0.1:5672
+          RABBITMQ_MANAGEMENT_URL: http://127.0.0.1:15672
+          MINIO_ENDPOINT: 127.0.0.1
+          MINIO_PORT: '9000'
+          MINIO_USE_SSL: 'false'
+          MINIO_REGION: us-east-1
+          MINIO_ACCESS_KEY: pbl6
+          MINIO_SECRET_KEY: pbl6_minio_password
+          MINIO_PUBLIC_ENDPOINT: http://127.0.0.1:9000
+        run: pnpm test:demo-seed
       - name: M1 regression and M2 workflows through API Gateway
         env:
           NODE_ENV: development

@@ -10,6 +10,7 @@ import type { AppEnv } from '../config/env.validation';
 import { PrismaService } from '../prisma/prisma.service';
 import { MaintenanceEventsConsumer } from './maintenance-events.consumer';
 import { ServiceRequestEventsConsumer } from './service-request-events.consumer';
+import { SiteRoutingConsumer } from './site-routing.consumer';
 
 @Injectable()
 export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
@@ -21,6 +22,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     private readonly db: PrismaService,
     private readonly requests: ServiceRequestEventsConsumer,
     private readonly maintenance: MaintenanceEventsConsumer,
+    private readonly routing: SiteRoutingConsumer,
   ) {}
   async onModuleInit() {
     const url = this.config.get('RABBITMQ_URL', { infer: true });
@@ -31,6 +33,11 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.bus = new RabbitMqEventBus({ url, logger: this.logger });
+    this.bus.subscribe({
+      queue: 'workorder-service.site-routing',
+      events: [Events.CustomerSiteRoutingChanged],
+      handler: (envelope) => this.routing.handle(envelope),
+    });
     this.bus.subscribe({
       queue: REQUEST_CONSUMER_QUEUE,
       events: [Events.ServiceRequestStatusChanged],

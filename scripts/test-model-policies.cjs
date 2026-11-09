@@ -141,7 +141,9 @@ async function fixtureUser(role, tenant, email, customerId) {
     },
   });
   if (customerId) {
-    const membership = await dbs.organization.customerUserMembership.create({ data: { tenantId: tenant, customerId, userId: user.id, status: "ACTIVE" } });
+    const membership = await dbs.organization.customerUserMembership.create({
+      data: { tenantId: tenant, customerId, userId: user.id, status: "ACTIVE" },
+    });
     await dbs.identity.userCustomerLink.create({
       data: {
         userId: user.id,
@@ -243,7 +245,41 @@ async function main() {
     tenantId,
     "technician@policy.test",
   );
-  await fixtureUser("SERVICE_MANAGER", otherTenant, "manager@policy.test");
+  await call(
+    "POST",
+    `/api/organization/branches/${branch.id}/users`,
+    admin,
+    { userId: managerUser.id, isPrimary: true },
+    201,
+  );
+  await call(
+    "POST",
+    `/api/organization/branches/${branch.id}/users`,
+    admin,
+    { userId: techUser.id, isPrimary: true },
+    201,
+  );
+  const otherManagerUser = await fixtureUser(
+    "SERVICE_MANAGER",
+    otherTenant,
+    "manager@policy.test",
+  );
+  const foreignBranch = await dbs.organization.branch.create({
+    data: {
+      tenantId: otherTenant,
+      code: "OTHER",
+      name: "Other branch",
+      address: "Other address",
+    },
+  });
+  await dbs.organization.branchUserAssignment.create({
+    data: {
+      tenantId: otherTenant,
+      branchId: foreignBranch.id,
+      userId: otherManagerUser.id,
+      isPrimary: true,
+    },
+  });
   const manager = await login(managerUser.email),
     other = await login(managerUser.email, tenantCodeB),
     tech = await login(techUser.email);
@@ -545,11 +581,49 @@ async function main() {
     ],
     handler: (e) => srConsumer.handle(e),
   });
-  const registrationGroup = () => apps.maintenance.get(maintReq(path.join(root, 'apps/maintenance-service/dist/registrations/registration-group.service.js')).RegistrationGroupService);
-  const registrationReceipt = () => apps.asset.get(assetReq(path.join(root, 'apps/asset-service/dist/events/registration-maintenance.consumer.js')).RegistrationMaintenanceConsumer);
-  bus.subscribe({ queue: exchange + '.registration-confirmations', events: [Events.EquipmentRegistrationConfirmed], handler: e => registrationGroup().confirmed(e) });
-  bus.subscribe({ queue: exchange + '.registration-receipts', events: [Events.RegistrationMaintenanceReady], handler: e => registrationReceipt().handle(e) });
+  const registrationGroup = () =>
+    apps.maintenance.get(
+      maintReq(
+        path.join(
+          root,
+          "apps/maintenance-service/dist/registrations/registration-group.service.js",
+        ),
+      ).RegistrationGroupService,
+    );
+  const registrationReceipt = () =>
+    apps.asset.get(
+      assetReq(
+        path.join(
+          root,
+          "apps/asset-service/dist/events/registration-maintenance.consumer.js",
+        ),
+      ).RegistrationMaintenanceConsumer,
+    );
+  bus.subscribe({
+    queue: exchange + ".registration-confirmations",
+    events: [Events.EquipmentRegistrationConfirmed],
+    handler: (e) => registrationGroup().confirmed(e),
+  });
+  bus.subscribe({
+    queue: exchange + ".registration-receipts",
+    events: [Events.RegistrationMaintenanceReady],
+    handler: (e) => registrationReceipt().handle(e),
+  });
+  const routingConsumer = apps.workorder.get(
+    req("workorder")(
+      path.join(
+        root,
+        "apps/workorder-service/dist/events/site-routing.consumer.js",
+      ),
+    ).SiteRoutingConsumer,
+  );
+  bus.subscribe({
+    queue: exchange + ".site-routing",
+    events: [Events.CustomerSiteRoutingChanged],
+    handler: (e) => routingConsumer.handle(e),
+  });
   await bus.start();
+  relay("organization");
   relay("maintenance");
   relay("workorder");
   relay("service-request");
@@ -1408,6 +1482,7 @@ async function main() {
     tenantId,
     "technician2@policy.test",
   );
+  await call('POST', `/api/organization/branches/${branch.id}/users`, admin, { userId: tech2User.id, isPrimary: true }, 201);
   const technician2 = await call(
     "POST",
     W + "/technicians",
@@ -1559,13 +1634,63 @@ async function main() {
     case: "independent anniversary Tasks; assignment removal blocks old technician, preserves audit; replacement replay keeps frozen checklist with fresh results; NONE differs from missing configuration",
     status: "PASS",
   });
-  await require('./test-maintenance-terms.cjs')({ call, A, M, manager, customerToken, other,
-    warranty, item, registration, dbs, scheduler, tenantId, drain, evidence, root, ports, tenantCode: tenantCodeA, password });
-  relay('asset');
-  await require('./test-handover-methods.cjs')({ call, A, M, manager, customerToken, other, warranty, item,
-    dbs, scheduler, tenantId, customer, site, drain, evidence, root, ports, tenantCode: tenantCodeA, password,
-    fixtureUser, login, registrationGroup, registrationReceipt,
-    expire: () => apps.asset.get(assetReq(path.join(root, 'apps/asset-service/dist/handovers/handover.service.js')).HandoverService).expireDue() });
+  await require("./test-maintenance-terms.cjs")({
+    call,
+    A,
+    M,
+    manager,
+    customerToken,
+    other,
+    warranty,
+    item,
+    registration,
+    dbs,
+    scheduler,
+    tenantId,
+    drain,
+    evidence,
+    root,
+    ports,
+    tenantCode: tenantCodeA,
+    password,
+  });
+  relay("asset");
+  await require("./test-handover-methods.cjs")({
+    call,
+    A,
+    M,
+    manager,
+    customerToken,
+    other,
+    warranty,
+    item,
+    dbs,
+    scheduler,
+    tenantId,
+    customer,
+    site,
+    drain,
+    evidence,
+    root,
+    ports,
+    tenantCode: tenantCodeA,
+    password,
+    fixtureUser,
+    login,
+    registrationGroup,
+    registrationReceipt,
+    expire: () =>
+      apps.asset
+        .get(
+          assetReq(
+            path.join(
+              root,
+              "apps/asset-service/dist/handovers/handover.service.js",
+            ),
+          ).HandoverService,
+        )
+        .expireDue(),
+  });
   console.log(
     JSON.stringify(
       {
@@ -1612,6 +1737,7 @@ main()
         "request-orders",
         "registration-confirmations",
         "registration-receipts",
+        "site-routing",
       ])
         for (const name of Object.values(
           subscriptionQueues(exchange + "." + suffix),

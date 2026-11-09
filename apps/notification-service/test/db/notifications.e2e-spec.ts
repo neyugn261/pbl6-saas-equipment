@@ -1,3 +1,4 @@
+import { FIXTURE_BRANCH } from '@pbl6/testing';
 import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type { Principal } from '@pbl6/auth';
@@ -25,6 +26,7 @@ describe('Notification API persistence (notification_test_db)', () => {
     tenantIndex = 0,
   ): Principal => ({
     userId: userIds[userIndex],
+    branchId: FIXTURE_BRANCH,
     sessionId: randomUUID(),
     tenantId: tenantIds[tenantIndex],
     userType,
@@ -90,6 +92,7 @@ describe('Notification API persistence (notification_test_db)', () => {
     const rows = await Promise.all([
       db.notification.create({
         data: {
+          branchId: FIXTURE_BRANCH,
           tenantId: tenantIds[0],
           userId: userIds[0],
           type: 'ServiceRequestStatusChanged.v1',
@@ -101,6 +104,7 @@ describe('Notification API persistence (notification_test_db)', () => {
       }),
       db.notification.create({
         data: {
+          branchId: FIXTURE_BRANCH,
           tenantId: tenantIds[0],
           userId: userIds[1],
           customerId: customerIds[0],
@@ -113,6 +117,7 @@ describe('Notification API persistence (notification_test_db)', () => {
       }),
       db.notification.create({
         data: {
+          branchId: FIXTURE_BRANCH,
           tenantId: tenantIds[0],
           userId: userIds[1],
           customerId: customerIds[1],

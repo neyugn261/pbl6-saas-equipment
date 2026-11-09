@@ -30,6 +30,51 @@ tags:
   - name: Internal
     description: Called by other services with the caller's token; not exposed by the gateway.
 paths:
+  /staff/me/branch:
+    get:
+      summary: Read the caller's active primary branch
+      x-permissions: ['branch:read']
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Live Organization membership; branch is null if missing or inactive
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffBranchContext' }
+  /staff/{userId}/branch:
+    get:
+      summary: Tenant Admin reads a staff member's primary branch
+      x-permissions: ['branch:manage']
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Same-tenant branch context, with null for missing membership
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffBranchContext' }
+  /internal/staff-branch:
+    get:
+      summary: Resolve the caller's branch for service authorization
+      x-permissions: ['branch:read']
+      responses:
+        '200':
+          description: Same contract as /staff/me/branch; Gateway blocks internal paths
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffBranchContext' }
+  /internal/staff/{userId}/branch:
+    get:
+      summary: Validate the primary branch of a technician account
+      x-permissions: ['technician:manage']
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Same-tenant staff branch context
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffBranchContext' }
   /tenants:
     get:
       tags: [Tenants]
@@ -806,6 +851,21 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
   schemas:
+    StaffBranchContext:
+      type: object
+      required: [tenantId, userId, branch]
+      properties:
+        tenantId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        branch:
+          oneOf:
+            - { type: 'null' }
+            - type: object
+              required: [id, code, name]
+              properties:
+                id: { type: string, format: uuid }
+                code: { type: string }
+                name: { type: string }
     Error:
       type: object
       required: [code, message]

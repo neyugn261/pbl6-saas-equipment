@@ -1,3 +1,4 @@
+import { assertBranchAccess, staffBranchId } from '@pbl6/auth';
 import {
   BadRequestException,
   ForbiddenException,
@@ -58,6 +59,15 @@ export class InventoryService {
         message: 'Inventory is available to tenant staff only',
       });
     return requireTenantId(p).toLowerCase();
+  }
+  private async scopedWarehouse(p: Principal, id: string) {
+    const warehouse = await this.repo.warehouse(this.tenant(p), id);
+    assertBranchAccess(p, warehouse.branchId);
+    return warehouse;
+  }
+  private async operationWarehouse(p: Principal, row: InventoryOperation) {
+    const request = row.request as unknown as Movement;
+    await this.scopedWarehouse(p, request.warehouseId);
   }
   private key(key: string) {
     if (typeof key !== 'string' || !isUUID(key))
@@ -137,16 +147,22 @@ export class InventoryService {
     );
   }
   async warehouses(p: Principal, q: InventoryQuery) {
-    const page = await this.repo.warehouses(this.tenant(p), q) as unknown as Page<Record<string, unknown> & { branchId: string }>;
-    const branches = await this.names?.lookup('branches', page.items.map(row => row.branchId), p);
-    return { ...page, items: page.items.map(row => ({ ...row,
+    const page = (await this.repo.warehouses(this.tenant(p), q,
+      staffBranchId(p),
+    )) as unknown as Page<Record<string, unknown> & { branchId: string }>;
+    const branches = await this.names?.lookup('branches', page.items.map((row) => row.branchId), p,
+    );
+    return { ...page, items: page.items.map((row) => ({ ...row,
       branchName: branches?.get(row.branchId.toLowerCase())?.name ?? null,
-      branchCode: branches?.get(row.branchId.toLowerCase())?.code ?? null })) };
+      branchCode: branches?.get(row.branchId.toLowerCase())?.code ?? null,
+      })),
+    };
   }
   async warehouse(p: Principal, id: string) {
-    return json(await this.repo.warehouse(this.tenant(p), id));
+    return json(await this.scopedWarehouse(p, id));
   }
   private async activeBranch(id: string, p: Principal) {
+    assertBranchAccess(p, id);
     const branch = await this.refs.branch(id, p);
     if (
       !branch ||
@@ -175,23 +191,24 @@ export class InventoryService {
   async updateWarehouse(p: Principal, id: string, input: WarehousePatch) {
     nonEmptyPatch(input);
     const tenantId = this.tenant(p);
-    const existing = await this.repo.warehouse(tenantId, id);
+    const existing = await this.scopedWarehouse(p, id);
     if (input.status === 'ACTIVE')
       await this.activeBranch(existing.branchId, p);
     return json(await this.repo.updateWarehouse(tenantId, id, input, p.userId));
   }
   stocks(p: Principal, q: InventoryQuery) {
-    return this.repo.stocks(this.tenant(p), q);
+    return this.repo.stocks(this.tenant(p), q, staffBranchId(p));
   }
   ledger(p: Principal, q: InventoryQuery) {
-    return this.repo.ledger(this.tenant(p), q);
+    return this.repo.ledger(this.tenant(p), q, staffBranchId(p));
   }
-  threshold(
+  async threshold(
     p: Principal,
     warehouseId: string,
     partId: string,
     minimum: string,
   ) {
+    await this.scopedWarehouse(p, warehouseId);
     return this.repo.threshold(
       this.tenant(p),
       warehouseId,
@@ -201,6 +218,7 @@ export class InventoryService {
     );
   }
   async receive(p: Principal, key: string, input: StockMutation) {
+    await this.scopedWarehouse(p, input.warehouseId);
     if (!input.documentReference?.trim() && !input.note?.trim())
       throw new BadRequestException({
         code: 'RECEIPT_REFERENCE_REQUIRED',
@@ -213,6 +231,7 @@ export class InventoryService {
     ).response;
   }
   async adjust(p: Principal, key: string, input: AdjustInput) {
+    await this.scopedWarehouse(p, input.warehouseId);
     if (!input.note?.trim())
       throw new BadRequestException({
         code: 'ADJUSTMENT_REASON_REQUIRED',
@@ -247,11 +266,12 @@ export class InventoryService {
   async usages(p: Principal, workOrderId: string) {
     const tenantId = this.tenant(p);
     await this.scopedWorkOrder(workOrderId, p);
-    return this.repo.usages(tenantId, workOrderId);
+    return this.repo.usages(tenantId, workOrderId, staffBranchId(p));
   }
   async returnPart(p: Principal, key: string, id: string, input: ReturnInput) {
     const tenantId = this.tenant(p);
     const usage = await this.repo.usage(tenantId, id);
+    await this.scopedWarehouse(p, usage.warehouseId);
     const ctx = this.context(p, key, 'RETURN', {
       warehouseId: usage.warehouseId,
       partId: usage.partId,
@@ -268,10 +288,11 @@ export class InventoryService {
     return (await this.repo.transact(ctx)).response;
   }
   auditHistory(p: Principal, q: AuditQuery) {
-    return this.repo.auditHistory(this.tenant(p), q);
+    return this.repo.auditHistory(this.tenant(p), q, staffBranchId(p));
   }
   async inspect(p: Principal, key: string, id: string, input: InspectionInput) {
     const original = await this.repo.transaction(this.tenant(p), id);
+    await this.scopedWarehouse(p, original.warehouseId);
     const ctx = this.context(p, key, 'INSPECT', {
       warehouseId: original.warehouseId,
       partId: original.partId,
@@ -293,6 +314,7 @@ export class InventoryService {
   ) {
     const tenantId = this.tenant(p);
     const usage = await this.repo.usage(tenantId, id);
+    await this.scopedWarehouse(p, usage.warehouseId);
     const ctx = this.context(p, key, 'CONFIRM_USE', {
       warehouseId: usage.warehouseId,
       partId: usage.partId,
@@ -376,6 +398,7 @@ export class InventoryService {
       this.tenant(p),
       original.workOrderPartId,
     );
+    await this.scopedWarehouse(p, usage.warehouseId);
     const ctx = this.context(p, key, 'REVERSE_USE', {
       warehouseId: usage.warehouseId,
       partId: usage.partId,
@@ -430,6 +453,7 @@ export class InventoryService {
         'COST_CURRENCY_REQUIRED',
         'Internal reference cost and currency must be supplied together; omit both when unknown',
       );
+    const warehouse = await this.scopedWarehouse(p, input.warehouseId);
     const ctx = this.context(p, key, 'ISSUE', {
       ...this.movement(input),
       workOrderId: workOrderId.toLowerCase(),
@@ -440,6 +464,14 @@ export class InventoryService {
             unitCostCurrency: input.unitCostCurrency,
           }),
     });
+    const cached = await this.repo.cached(ctx);
+    if (cached && cached.state !== 'PENDING') return this.settle(p, cached);
+    const wo = await this.scopedWorkOrder(workOrderId, p);
+    if (wo.branchId !== warehouse.branchId)
+      throw invalid(
+        'WAREHOUSE_BRANCH_MISMATCH',
+        'Choose a warehouse from the Work Order branch',
+      );
     await this.repo.prepareIssue(ctx);
     return this.runIssue(p, ctx);
   }
@@ -504,14 +536,16 @@ export class InventoryService {
   }
   async operation(p: Principal, key: string) {
     const row = await this.repo.operation(this.tenant(p), this.key(key));
+    await this.operationWarehouse(p, row);
     if (row.operation !== 'ISSUE') throw notFound();
     return json(this.repo.proof(row));
   }
   operations(p: Principal, q: InventoryQuery) {
-    return this.repo.operations(this.tenant(p), q);
+    return this.repo.operations(this.tenant(p), q, staffBranchId(p));
   }
   async retry(p: Principal, key: string) {
     const row = await this.repo.operation(this.tenant(p), this.key(key));
+    await this.operationWarehouse(p, row);
     if (row.operation !== 'ISSUE')
       throw conflict(
         'NOT_AN_ISSUE_OPERATION',
@@ -527,6 +561,7 @@ export class InventoryService {
   }
   async abort(p: Principal, key: string) {
     const row = await this.repo.operation(this.tenant(p), this.key(key));
+    await this.operationWarehouse(p, row);
     if (row.operation !== 'ISSUE' || row.state === 'COMMITTED')
       throw conflict(
         'OPERATION_NOT_ABORTABLE',

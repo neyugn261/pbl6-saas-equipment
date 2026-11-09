@@ -1,5 +1,7 @@
 # End-to-end demo: handover to customer confirmation
 
+> ADR 0022: demo mới dùng một tài khoản Service Manager để tiếp nhận và điều phối trong chi nhánh; xem [hướng dẫn chi nhánh](branch-service-management.md). Dispatcher chỉ giữ tương thích tài khoản cũ.
+
 For the full Vietnamese setup, demo accounts, exact routes, rehearsal cases and
 Notification deployment/bootstrap readiness gate, use the
 [M3 complete runbook for Khương](../demo/m3-complete-runbook.md).

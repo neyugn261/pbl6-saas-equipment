@@ -1,3 +1,4 @@
+import { BranchAllocationPage } from "./features/workspace/BranchManagement";
 import ServiceManagerWorkOrder from "./features/workspace/ServiceManagerWorkOrder";
 import ServiceManagerShell from "./features/workspace/ServiceManagerShell";
 import WorkspaceRouteBoundary from "./features/workspace/WorkspaceRouteBoundary";
@@ -832,9 +833,12 @@ function EquipmentPage() {
                                 : item.registrationStatus ===
                                     "PENDING_MAINTENANCE"
                                   ? "Chờ bảo trì"
-                                  : item.registrationStatus === "PENDING_CUSTOMER_CONFIRMATION" ? "Chờ khách xác nhận" : item.registrationStatus === "DRAFT"
-                                    ? "Tiếp tục hồ sơ"
-                                    : "Hoàn thiện bàn giao"}
+                                  : item.registrationStatus ===
+                                      "PENDING_CUSTOMER_CONFIRMATION"
+                                    ? "Chờ khách xác nhận"
+                                    : item.registrationStatus === "DRAFT"
+                                      ? "Tiếp tục hồ sơ"
+                                      : "Hoàn thiện bàn giao"}
                             </Link>
                           </td>
                         )}
@@ -1764,6 +1768,11 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
       path: "/app/inventory/transactions",
       element: <InventoryTransactionsRoute />,
       roles: ["TENANT_ADMIN", "INVENTORY_STAFF"],
+    },
+    {
+      path: "/app/organization/service-branches",
+      element: <BranchAllocationPage />,
+      roles: ["TENANT_ADMIN"],
     },
     {
       path: "/app/organization/branches",
