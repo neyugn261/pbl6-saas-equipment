@@ -313,6 +313,26 @@ describe('Equipment registration — real Asset/Maintenance HTTP and dedicated P
       }),
     ).toMatchObject({ name: 'Edited by manager', status: 'INACTIVE' });
   });
+  it('accepts only actual handover for completion, keeps other dates optional and rejects future actual dates', async () => {
+    const onlyHandover = input({ warranty: { mode: 'NONE', reason: 'No warranty agreed' },
+      maintenance: { mode: 'NONE', reason: 'On demand' } });
+    const draft = await create(onlyHandover).expect(201);
+    const result = await submit(draft.body.id).expect(200);
+    expect(result.body.status).toBe('COMPLETED');
+    const eq = await db.equipment.findUniqueOrThrow({ where: { id: result.body.equipmentId } });
+    expect(eq.installationDate).toBeNull();
+    expect(eq.commissionedDate).toBeNull();
+
+    const withoutHandover = input();
+    const { handoverDate: _unusedDate, ...data } = withoutHandover.equipment.data;
+    const incomplete = await create({ ...withoutHandover, equipment: { mode: 'NEW', data } }).expect(201);
+    await submit(incomplete.body.id).expect(400);
+    for (const field of ['handoverDate', 'installationDate', 'commissionedDate']) {
+      const source = input();
+      await create({ ...source, equipment: { mode: 'NEW', data: { ...source.equipment.data, [field]: '2999-01-01' } } }).expect(400);
+    }
+  });
+
   it('allows explicit NONE, keeps unknown drafts incomplete and rejects unknown nested fields', async () => {
     const draft = await create(
       input({

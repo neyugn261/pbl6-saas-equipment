@@ -25,6 +25,10 @@ describe('EquipmentRepository', () => {
       const args = findMany.mock.lastCall?.[0];
       expect(args.where).toMatchObject({ tenantId, customerId });
       expect(args.skip).toBe(5);
+      expect(args.include.warranties).toEqual({
+        where: { tenantId, status: 'ACTIVE', startDate: { lte: dbDate(todayInVietnam()) } },
+        orderBy: [{ endDate: 'desc' }, { id: 'asc' }], take: 1,
+      });
       expect(args.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }]);
       if (warranty === 'IN_WARRANTY') {
         expect(args.where.warranties.some.status).toBe('ACTIVE');

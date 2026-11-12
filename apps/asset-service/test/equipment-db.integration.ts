@@ -3,7 +3,7 @@ import { config as loadEnv } from 'dotenv';
 import { requireTestDatabaseUrl } from '@pbl6/testing';
 import { createPrismaAdapter } from '@pbl6/service-kit/prisma';
 import { PrismaClient } from '../src/generated/prisma/client.js';
-import { EquipmentRepository, dbDate } from '../src/equipment/equipment.repository';
+import { EquipmentRepository, dbDate, todayInVietnam } from '../src/equipment/equipment.repository';
 import { EquipmentModelRepository } from '../src/equipment-models/equipment-model.repository';
 import { WarrantyRepository } from '../src/warranties/warranty.repository';
 import { QrRepository } from '../src/qr/qr.repository';
@@ -151,6 +151,38 @@ it('serializes overlapping warranty writes, keeps VOID history, and respects cus
   const history = await prisma.equipmentHistory.findMany({ where: { tenantId, equipmentId: row.id } });
   expect(history.filter((entry) => entry.eventType === 'WARRANTY_ADDED')).toHaveLength(2);
   expect(history.filter((entry) => entry.eventType === 'WARRANTY_VOIDED')).toHaveLength(1);
+});
+
+it('projects the same selected warranty in list and detail for empty, future, void, ended and date-boundary periods', async () => {
+  const today = todayInVietnam();
+  const offset = (days: number) => {
+    const value = dbDate(today);
+    value.setUTCDate(value.getUTCDate() + days);
+    return value;
+  };
+  const cases: { name: string; periods: { startDate: Date; endDate: Date; status?: string }[];
+    result: 'NO_WARRANTY' | 'OUT_OF_WARRANTY' | 'IN_WARRANTY' }[] = [
+    { name: 'none', periods: [], result: 'NO_WARRANTY' },
+    { name: 'future', periods: [{ startDate: offset(1), endDate: offset(30) }], result: 'NO_WARRANTY' },
+    { name: 'void', periods: [{ startDate: offset(-30), endDate: offset(30), status: 'VOID' }], result: 'NO_WARRANTY' },
+    { name: 'ended', periods: [{ startDate: offset(-30), endDate: offset(-1) }, { startDate: offset(1), endDate: offset(30) }], result: 'OUT_OF_WARRANTY' },
+    { name: 'starts-today', periods: [{ startDate: offset(0), endDate: offset(30) }, { startDate: offset(-30), endDate: offset(-1) }], result: 'IN_WARRANTY' },
+    { name: 'ends-today', periods: [{ startDate: offset(-30), endDate: offset(0) }, { startDate: offset(1), endDate: offset(30) }], result: 'IN_WARRANTY' },
+  ];
+  for (const test of cases) {
+    const row = await repo.createWithHistory(tenantId, actorId, input(`projection-${test.name}`, `projection-${test.name}`));
+    if (test.periods.length) await prisma.warranty.createMany({ data: test.periods.map(period => ({
+      tenantId, equipmentId: row.id, warrantyType: 'STANDARD', ...period,
+    })) });
+    const page = await repo.list({ tenantId, customerId }, { page: 1, pageSize: 100, sort: 'assetCode', q: row.assetCode });
+    const projected = page.rows.find(item => item.id === row.id)!.warranties;
+    const detail = await repo.warrantyAt(tenantId, row.id, page.asOfDate);
+    expect(projected).toHaveLength(detail ? 1 : 0);
+    expect(projected[0]?.id ?? null).toBe(detail?.id ?? null);
+    const filtered = await repo.list({ tenantId, customerId }, { page: 1, pageSize: 100,
+      sort: 'assetCode', q: row.assetCode, warranty: test.result });
+    expect(filtered.rows.map(item => item.id)).toContain(row.id);
+  }
 });
 
 it('rejects new warranty and QR writes after retirement while preserving existing records', async () => {

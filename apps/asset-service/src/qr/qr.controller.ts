@@ -1,10 +1,18 @@
-import { Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Controller, Delete, Get, Header, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { AllowUserTypes, CurrentUser, RequirePermissions, type Principal } from '@pbl6/auth';
 import { QrService } from './qr.service';
 
 @Controller('equipment/:equipmentId/qr-codes')
 export class EquipmentQrController {
   constructor(private readonly qr: QrService) {}
+
+  @Get()
+  @Header('Cache-Control', 'no-store')
+  @RequirePermissions('qr:manage')
+  @AllowUserTypes('TENANT_STAFF')
+  current(@CurrentUser() principal: Principal, @Param('equipmentId', ParseUUIDPipe) id: string) {
+    return this.qr.current(principal, id);
+  }
 
   @Post()
   @RequirePermissions('qr:manage')

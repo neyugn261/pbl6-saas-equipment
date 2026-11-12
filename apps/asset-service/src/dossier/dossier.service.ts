@@ -10,6 +10,7 @@ import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { EquipmentService } from '../equipment/equipment.service';
 import { HistoryFeedQuery, HistoryService } from '../history/history.service';
 import { WarrantyService } from '../warranties/warranty.service';
+import { QrService } from '../qr/qr.service';
 
 type Row = Record<string, unknown>;
 type Source =
@@ -96,6 +97,7 @@ export class DossierService {
     private readonly equipment: EquipmentService,
     private readonly history: HistoryService,
     private readonly warranties: WarrantyService,
+    private readonly qr: QrService,
   ) {}
   private permitted(p: Principal, source: Source) {
     const permission: PermissionCode =
@@ -305,6 +307,7 @@ export class DossierService {
       maintenanceHistory,
       serviceParts,
       latestCompletion,
+      qr,
     ] = await Promise.all([
       this.warranties.list(p, id),
       this.history.list(
@@ -416,6 +419,11 @@ export class DossierService {
       ),
       this.partsSection(p, id, preview),
       this.history.latestCompletion(p, id),
+      p.userType === 'TENANT_STAFF' && p.permissions.has('qr:manage')
+        ? this.qr.current(p, id).then((data) => ({
+            status: 'AVAILABLE' as const, data, fetchedAt: new Date().toISOString(),
+          }))
+        : Promise.resolve({ status: 'RESTRICTED' as const, data: null }),
     ]);
     const missingFields = [
       'displayName',
@@ -432,6 +440,7 @@ export class DossierService {
       equipment: core,
       warranties,
       calendarCoverage: core.warranty,
+      qr,
       coverageMeaning:
         'CALENDAR_ONLY_CLAIM_DECISION_BELONGS_TO_SERVICE_REQUEST',
       operationalCondition: {

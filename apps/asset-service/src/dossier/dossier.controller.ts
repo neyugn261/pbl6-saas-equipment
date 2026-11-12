@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Controller, Get, Header, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import {
   AllowUserTypes,
   CurrentUser,
@@ -19,7 +19,9 @@ export class DossierController {
   ) {
     return this.dossier.serviceParts(p, id, q);
   }
-  @Get('dossier') detail(
+  @Get('dossier')
+  @Header('Cache-Control', 'no-store')
+  detail(
     @CurrentUser() p: Principal,
     @Param('equipmentId', ParseUUIDPipe) id: string,
   ) {

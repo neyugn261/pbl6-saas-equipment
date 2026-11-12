@@ -19,6 +19,22 @@ const missingQr = () =>
 export class QrRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async current(scope: DataScope, equipmentId: string) {
+    const equipment = await this.prisma.equipment.findFirst({
+      where: { ...scopeWhere(scope), id: equipmentId },
+      select: {
+        status: true,
+        qrCodes: {
+          where: { tenantId: scope.tenantId },
+          orderBy: [{ revokedAt: { sort: 'asc', nulls: 'first' } }, { createdAt: 'desc' }, { id: 'asc' }],
+          take: 1,
+        },
+      },
+    });
+    if (!equipment) throw missingEquipment();
+    return { equipmentStatus: equipment.status, qr: equipment.qrCodes[0] ?? null };
+  }
+
   async issue(
     scope: DataScope,
     equipmentId: string,
