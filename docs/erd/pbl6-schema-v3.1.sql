@@ -965,6 +965,7 @@ CREATE TABLE service_reports (
     solution TEXT NOT NULL,
     result VARCHAR(30) NOT NULL CHECK (result IN ('RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED')),
     customer_note TEXT,
+    unresolved_reason TEXT,
     submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, work_order_id)
@@ -2095,6 +2096,8 @@ CREATE INDEX service_requests_tenant_id_branch_id_idx ON service_requests(tenant
 ALTER TABLE work_orders ADD COLUMN branch_id UUID NULL;
 CREATE INDEX work_orders_tenant_id_branch_id_idx ON work_orders(tenant_id, branch_id);
 CREATE TABLE site_branch_snapshots (tenant_id UUID NOT NULL, site_id UUID NOT NULL, branch_id UUID NULL, revision INTEGER NOT NULL CHECK (revision >= 0), PRIMARY KEY (tenant_id, site_id));
+-- workorder-service / 20261112193000_service_report_unresolved_reason
+ALTER TABLE service_reports ADD COLUMN unresolved_reason TEXT NULL;
 
 \connect notification_db
 -- notification-service / 20261109120000_branch_service_scope

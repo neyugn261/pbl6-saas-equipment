@@ -56,11 +56,25 @@ export class WorkOrdersService {
       );
       if (!source || !sameUuid(source.id, input.serviceRequestId))
         throw missing('SERVICE_REQUEST_NOT_FOUND');
-      if (source.status !== 'ACCEPTED')
+      const effectiveType = input.type ?? source.type;
+      if (!WO_TYPES.includes(effectiveType))
         throw invalid(
-          'SERVICE_REQUEST_NOT_ACCEPTED',
-          'Only an ACCEPTED Service Request can create a Work Order',
+          'INVALID_WORK_ORDER_TYPE',
+          `Work Order type must be one of: ${WO_TYPES.join(', ')}`,
         );
+      if (effectiveType === 'INSPECTION') {
+        if (!['REVIEWING', 'ACCEPTED'].includes(source.status))
+          throw invalid(
+            'SERVICE_REQUEST_NOT_READY_FOR_INSPECTION',
+            'An INSPECTION Work Order requires a REVIEWING or ACCEPTED Service Request',
+          );
+      } else {
+        if (source.status !== 'ACCEPTED')
+          throw invalid(
+            'SERVICE_REQUEST_NOT_ACCEPTED',
+            'Only an ACCEPTED Service Request can create a Work Order',
+          );
+      }
       const equipment = await this.refs.equipment(
         source.equipmentId,
         p.accessToken,
@@ -82,7 +96,7 @@ export class WorkOrdersService {
           'SERVICE_REQUEST_REFERENCE_INVALID',
           'Service Request type or priority is invalid',
         );
-      return { source, equipment };
+      return { source, equipment, effectiveType };
     });
   }
   async reference(p: Principal, id: string) {

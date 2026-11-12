@@ -185,6 +185,7 @@ export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
   workOrderNo: string;
   equipmentId: string;
   customerId: string;
+  type?: (typeof WORK_ORDER_TYPES)[number];
   serviceReportId: string;
   result: (typeof REPORT_RESULTS)[number];
   completedAt: string;
@@ -197,6 +198,7 @@ export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
 export interface WorkOrderCompletedV2 extends WorkOrderCompletedV1 {
   customerChecklist?: CustomerChecklistResult[];
   customerSummary: string;
+  unresolvedReason?: string | null;
 }
 
 export interface WorkOrderCancelledV1 extends WorkOrderOrigin {
@@ -511,6 +513,7 @@ export const Events = {
       maintenanceTaskId: is.nullable(is.uuid),
       equipmentId: is.uuid,
       customerId: is.uuid,
+      type: (value) => value === undefined || is.oneOf(WORK_ORDER_TYPES)(value),
       serviceReportId: is.uuid,
       result: is.oneOf(REPORT_RESULTS),
       completedAt: is.isoDateTime,
@@ -529,10 +532,13 @@ export const Events = {
       maintenanceTaskId: is.nullable(is.uuid),
       equipmentId: is.uuid,
       customerId: is.uuid,
+      type: (value) => value === undefined || is.oneOf(WORK_ORDER_TYPES)(value),
       serviceReportId: is.uuid,
       result: is.oneOf(REPORT_RESULTS),
       completedAt: is.isoDateTime,
       customerSummary: is.string(2000),
+      unresolvedReason: (value) =>
+        value === undefined || is.nullable(is.string(2000))(value),
       customerChecklist: (value) =>
         value === undefined || validCustomerChecklist(value),
     },

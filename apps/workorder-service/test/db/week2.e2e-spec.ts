@@ -255,6 +255,56 @@ describe('Work Order week 2 — workflows, transactions and SR cancellation', ()
     await action(wo.id, 'complete', technician, report).expect(409);
     await action(wo.id, 'logs', technician, { note: 'late' }).expect(409);
   });
+  it('enforces mandatory unresolvedReason when completing with UNRESOLVED and records it in report and outbox', async () => {
+    const wo = await running();
+    await action(wo.id, 'complete', technician, {
+      problemDescription: 'Hardware severely damaged',
+      solution: 'Assessed on-site condition',
+      result: 'UNRESOLVED',
+      customerSummary: 'Unable to fix on site due to component failure',
+    }).expect(400);
+
+    await action(wo.id, 'complete', technician, {
+      problemDescription: 'Hardware severely damaged',
+      solution: 'Assessed on-site condition',
+      result: 'UNRESOLVED',
+      unresolvedReason: '   ',
+      customerSummary: 'Unable to fix on site due to component failure',
+    })
+      .expect(422)
+      .expect((r) => expect(r.body.code).toBe('UNRESOLVED_REASON_REQUIRED'));
+
+    const reasonText =
+      'Main circuit board burned, replacement parts unavailable in branch warehouse';
+    await action(wo.id, 'complete', technician, {
+      problemDescription: 'Hardware severely damaged',
+      solution: 'Assessed on-site condition',
+      result: 'UNRESOLVED',
+      unresolvedReason: reasonText,
+      customerSummary: 'Unable to fix on site; escalating for depot repair',
+    }).expect(200);
+
+    const reportRow = await db.serviceReport.findUniqueOrThrow({
+      where: { workOrderId: wo.id },
+    });
+    expect(reportRow.result).toBe('UNRESOLVED');
+    expect(reportRow.unresolvedReason).toBe(reasonText);
+
+    const reportRes = await get(wo.id, '/service-report', technician).expect(200);
+    expect(reportRes.body.result).toBe('UNRESOLVED');
+    expect(reportRes.body.unresolvedReason).toBe(reasonText);
+
+    const event = await db.outboxEvent.findFirstOrThrow({
+      where: { eventType: 'WorkOrderCompleted', aggregateId: wo.id },
+    });
+    expect(event.eventVersion).toBe(2);
+    expect(event.payload).toMatchObject({
+      data: {
+        result: 'UNRESOLVED',
+        unresolvedReason: reasonText,
+      },
+    });
+  });
   it('supports direct start, rejection and reassignment without erasing assignment history', async () => {
     const wo = await create();
     await assigned(wo.id);

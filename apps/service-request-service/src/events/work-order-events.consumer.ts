@@ -54,6 +54,11 @@ function canonical(phase: Phase, payload: Payload): Record<string, unknown> {
       result: p.result,
       completedAt: new Date(p.completedAt).toISOString(),
       customerSummary: 'customerSummary' in p ? p.customerSummary : null,
+      unresolvedReason:
+        'unresolvedReason' in p
+          ? ((p as { unresolvedReason?: string | null }).unresolvedReason ?? null)
+          : null,
+      ...('type' in p && p.type ? { type: p.type } : {}),
       ...('customerChecklist' in p
         ? { customerChecklist: p.customerChecklist }
         : {}),
@@ -318,7 +323,15 @@ export class WorkOrderEventsConsumer {
       }
       return; // Durable pending Created(B); A's terminal will reconcile it.
     }
-    if (request.status !== 'ACCEPTED') return; // Persist receipt for later reconciliation.
+    const createdPayload = row.createdPayload as Record<string, unknown> | null;
+    const isInspection = createdPayload?.type === 'INSPECTION';
+    if (
+      request.status !== 'ACCEPTED' &&
+      !(isInspection && request.status === 'REVIEWING')
+    ) {
+      return; // Persist receipt for later reconciliation.
+    }
+    const fromStatus = request.status as ServiceRequestStatus;
     const active = await tx.workOrderLifecycle.update({
       where: {
         tenantId_workOrderId: {
@@ -344,7 +357,7 @@ export class WorkOrderEventsConsumer {
     await this.recordStatusChange(
       tx,
       updated,
-      'ACCEPTED',
+      fromStatus,
       'PROCESSING',
       null,
       correlationId,
@@ -368,6 +381,10 @@ export class WorkOrderEventsConsumer {
     )
       return;
     const p = row.terminalPayload as Record<string, unknown>;
+    const createdPayload = row.createdPayload as Record<string, unknown> | null;
+    const isInspection =
+      (p.type as string | undefined) === 'INSPECTION' ||
+      createdPayload?.type === 'INSPECTION';
     const resolved =
       row.terminalPhase === 'COMPLETED' &&
       (p.result === 'RESOLVED' || p.result === 'PARTIALLY_RESOLVED');
@@ -375,10 +392,14 @@ export class WorkOrderEventsConsumer {
       row.terminalPhase === 'CANCELLED'
         ? p.cancelServiceRequest
           ? 'CANCELLED'
-          : 'ACCEPTED'
-        : resolved
-          ? 'RESOLVED'
-          : 'ACCEPTED';
+          : isInspection
+            ? 'REVIEWING'
+            : 'ACCEPTED'
+        : isInspection
+          ? 'REVIEWING'
+          : resolved
+            ? 'RESOLVED'
+            : 'ACCEPTED';
     await tx.workOrderLifecycle.update({
       where: {
         tenantId_workOrderId: {
@@ -405,7 +426,10 @@ export class WorkOrderEventsConsumer {
               resolutionSummary: p.customerSummary as string | null,
               resolvedWorkOrderNo: p.workOrderNo as string,
               resolutionCompletedAt: new Date(p.completedAt as string),
-              resolvedAt: resolved ? new Date(p.completedAt as string) : null,
+              resolvedAt:
+                !isInspection && resolved
+                  ? new Date(p.completedAt as string)
+                  : null,
             }
           : {}),
       },
@@ -415,10 +439,15 @@ export class WorkOrderEventsConsumer {
       updated,
       'PROCESSING',
       nextStatus,
-      row.terminalPhase === 'CANCELLED' ? (p.reason as string | null) : null,
+      row.terminalPhase === 'CANCELLED'
+        ? (p.reason as string | null)
+        : ((p.unresolvedReason as string | null) ??
+           (isInspection
+             ? `Inspection completed (${p.result as string}): ${p.customerSummary as string}`
+             : null)),
       correlationId,
     );
-    if (nextStatus === 'ACCEPTED')
+    if (nextStatus === 'ACCEPTED' || nextStatus === 'REVIEWING')
       await this.reconcile(tx, updated, correlationId);
   }
 

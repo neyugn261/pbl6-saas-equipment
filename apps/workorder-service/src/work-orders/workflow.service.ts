@@ -9,7 +9,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import type { Principal } from '@pbl6/auth';
-import { enqueueEvent, Events } from '@pbl6/event-contracts';
+import { enqueueEvent, Events, WORK_ORDER_TYPES } from '@pbl6/event-contracts';
 import { getCorrelationId, DisplayNameLookup } from '@pbl6/service-kit';
 import { invalid } from '../common/errors';
 import { WorkOrderWorkflowRepository } from './workflow.repository';
@@ -190,6 +190,15 @@ export class WorkOrderWorkflowService {
                 : 'IN_PROGRESS';
         if (action === 'complete') {
           const reportInput = input.report!;
+          if (reportInput.result === 'UNRESOLVED') {
+            const reason = reportInput.unresolvedReason?.trim();
+            if (!reason) {
+              throw invalid(
+                'UNRESOLVED_REASON_REQUIRED',
+                'An unresolved reason is required when the work order result is UNRESOLVED',
+              );
+            }
+          }
           const report = await tx.serviceReport.create({
             data: {
               tenantId: order.tenantId,
@@ -199,6 +208,10 @@ export class WorkOrderWorkflowService {
               rootCause: reportInput.rootCause ?? null,
               solution: reportInput.solution,
               result: reportInput.result,
+              unresolvedReason:
+                reportInput.result === 'UNRESOLVED'
+                  ? (reportInput.unresolvedReason?.trim() ?? null)
+                  : (reportInput.unresolvedReason?.trim() || null),
               customerNote: reportInput.customerSummary,
               submittedAt: now,
             },
@@ -224,8 +237,13 @@ export class WorkOrderWorkflowService {
               maintenanceTaskId: order.maintenanceTaskId,
               equipmentId: order.equipmentId,
               customerId: order.customerId,
+              type: order.type as (typeof WORK_ORDER_TYPES)[number],
               serviceReportId: report.id,
               result: reportInput.result,
+              unresolvedReason:
+                reportInput.result === 'UNRESOLVED'
+                  ? (reportInput.unresolvedReason?.trim() ?? null)
+                  : null,
               customerSummary: reportInput.customerSummary,
               ...(order.checklist
                 ? {

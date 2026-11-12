@@ -333,6 +333,26 @@ describe('Work Order week 1 — real PostgreSQL, explicit fake upstreams', () =>
     expect(await db.documentSequence.count()).toBe(0);
     expect(await db.outboxEvent.count()).toBe(0);
   });
+  it('supports creating INSPECTION work order for REVIEWING service request and rejects non-inspection types', async () => {
+    const reviewingSrc = source({ status: 'REVIEWING', type: 'REPAIR' });
+    const inspectionWO = (
+      await postWO(reviewingSrc.id, { type: 'INSPECTION' }).expect(201)
+    ).body;
+    expect(inspectionWO.type).toBe('INSPECTION');
+    expect(inspectionWO.serviceRequestId).toBe(reviewingSrc.id);
+
+    const otherReviewing = source({ status: 'REVIEWING', type: 'REPAIR' });
+    await postWO(otherReviewing.id, { type: 'REPAIR' })
+      .expect(422)
+      .expect((r) => expect(r.body.code).toBe('SERVICE_REQUEST_NOT_ACCEPTED'));
+
+    const awaitingInfoSrc = source({ status: 'AWAITING_INFO', type: 'REPAIR' });
+    await postWO(awaitingInfoSrc.id, { type: 'INSPECTION' })
+      .expect(422)
+      .expect((r) =>
+        expect(r.body.code).toBe('SERVICE_REQUEST_NOT_READY_FOR_INSPECTION'),
+      );
+  });
   it('rolls back the order, sequence, logs and history when outbox insertion fails', async () => {
     await db.$executeRawUnsafe(
       "ALTER TABLE outbox_events ADD CONSTRAINT week1_test_reject_event CHECK (event_type <> 'WorkOrderCreated')",
