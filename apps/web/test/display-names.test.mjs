@@ -26,6 +26,7 @@ function renderM2(componentName, response, path = '') {
       assignments: { status: 'AVAILABLE', data: response.assignments ?? [] }, history: { status: 'AVAILABLE', data: [] }, logs: { status: 'AVAILABLE', data: [] }, report: { status: 'NOT_FOUND', data: null },
     } }) } },
     '../auth/session': tab.session, '../display-names': labels,
+    './DossierQr': { default: 'dossier-qr' },
     '../features/workspace/ServiceDetailUI': detailUI(tab,h),
     '../features/workspace/EquipmentPartsHistory': { default: 'parts-history' },
     '../features/workspace/WorkOrderReadiness': { WorkOrderLocation: 'work-location' },

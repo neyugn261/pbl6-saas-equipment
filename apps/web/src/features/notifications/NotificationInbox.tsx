@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { ApiError, api } from '../../api/client'
 import { getSessionGeneration, useSession } from '../../auth/session'
 import type { Page } from '../../types/domain'
+import { hideTechnicalIds, recordLabel } from '../../display-names'
+import { useWorkspaceData } from '../workspace/workspace-data'
 
 type Notification = {
   id: string
@@ -35,6 +37,43 @@ function resourcePath(item: Notification, customer: boolean): string | null {
   if (item.resourceType === 'EQUIPMENT') return `${customer ? '/portal/equipment' : '/app/equipment'}/${item.resourceId}`
   if (item.resourceType === 'STOCK') return customer ? null : '/app/inventory/warehouses'
   return null
+}
+
+const resourceLabel: Record<NonNullable<Notification['resourceType']>, string> = {
+  SERVICE_REQUEST: 'Yêu cầu dịch vụ',
+  WORK_ORDER: 'Lệnh công việc',
+  EQUIPMENT: 'Thiết bị',
+  STOCK: 'Tồn kho',
+  EQUIPMENT_HANDOVER: 'Hồ sơ bàn giao',
+}
+
+type Reference = {
+  requestNo?: string
+  workOrderNo?: string
+  equipmentId?: string
+  assetCode?: string
+  displayName?: string | null
+  title?: string
+}
+
+function NotificationResourceLink({ item, path, fallback }: { item: Notification; path: string; fallback: string }) {
+  const id = encodeURIComponent(item.resourceId ?? '')
+  const request = item.resourceType === 'SERVICE_REQUEST'
+  const order = item.resourceType === 'WORK_ORDER'
+  const source = useWorkspaceData<Reference>(
+    order ? 'workorders' : 'requestsLive',
+    order ? `/work-orders/${id}` : request ? `/service-requests/${id}` : null,
+  ).data
+  const equipmentId = item.resourceType === 'EQUIPMENT' ? item.resourceId : source?.equipmentId
+  const equipment = useWorkspaceData<Reference>(
+    'assetM2', equipmentId ? `/equipment/${encodeURIComponent(equipmentId)}` : null,
+  ).data
+  const label = recordLabel(
+    source?.requestNo ?? source?.workOrderNo ?? equipment?.assetCode,
+    equipment?.displayName ?? source?.title,
+    `Mở ${fallback.toLocaleLowerCase('vi')}`,
+  )
+  return <Link to={path}>{label}</Link>
 }
 
 export function NotificationInbox() {
@@ -106,14 +145,17 @@ export function NotificationInbox() {
           : <ul className="m2-linked-list">
               {result?.items.map((item) => {
                 const path = resourcePath(item, customer)
+                const label = item.resourceType ? resourceLabel[item.resourceType] : 'Hồ sơ liên quan'
+                const title = hideTechnicalIds(item.title) || label
+                const body = hideTechnicalIds(item.body, 'hồ sơ liên quan')
                 return <li key={item.id}>
                   <span>
-                    <strong>{item.title}</strong>
-                    <p>{item.body}</p>
+                    <strong>{title}</strong>
+                    {body && <p>{body}</p>}
                     <small>{new Date(item.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</small>
                   </span>
                   <span>
-                    {path && <Link to={path}>Mở liên kết</Link>}
+                    {path && <NotificationResourceLink item={item} path={path} fallback={label} />}
                     {!item.readAt && <button disabled={busyId === item.id} onClick={() => void markRead(item.id)}>Đánh dấu đã đọc</button>}
                     {item.readAt && <small>Đã đọc</small>}
                   </span>

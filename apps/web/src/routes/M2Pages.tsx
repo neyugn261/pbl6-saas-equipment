@@ -28,6 +28,7 @@ import { getSessionGeneration, useSession } from "../auth/session";
 import type { Page } from "../types/domain";
 import { AttachmentsPanel } from "../features/attachments/AttachmentsPanel";
 import { displayName, technicianName } from "../display-names";
+import DossierQr from "./DossierQr";
 
 type Row = Record<string, unknown>;
 type Availability =
@@ -817,6 +818,9 @@ export function DossierPage() {
                 </div>
               </dl>
             </section>
+            {canManageEquipment && id && (
+              <DossierQr key={id} equipmentId={id} assetCode={asText(dossier.equipment.assetCode)} />
+            )}
             <ServiceSections
               items={[
                 {

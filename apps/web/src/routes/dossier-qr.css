@@ -1,0 +1,19 @@
+.dossier-qr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.dossier-qr img {
+  border: 1px solid #e2e8f0;
+}
+
+.dossier-qr-frame {
+  position: absolute;
+  left: -10000px;
+  width: 50mm;
+  height: 30mm;
+  border: 0;
+}

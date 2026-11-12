@@ -165,7 +165,12 @@ test('Notification inbox, filters, pagination, mark-read and bell use the config
   }, { VITE_GATEWAY_API_URL: 'https://example.test/gateway/' })
   const inbox = hooks(), bell = hooks()
   const imports = (h) => ({ react: h.react, 'react/jsx-runtime': h.jsx, 'lucide-react': { Bell: 'bell' },
-    'react-router-dom': { Link: 'link' }, '../../api/client': tab.client, '../../auth/session': tab.session })
+    'react-router-dom': { Link: 'link' }, '../../api/client': tab.client, '../../auth/session': tab.session,
+    '../../display-names': tab.load('display-names.ts'),
+    '../workspace/workspace-data': tab.load('features/workspace/workspace-data.ts', {
+      react: h.react, '../../api/client': tab.client, '../../auth/session': tab.session,
+    }),
+  })
   const { NotificationInbox } = tab.load('features/notifications/NotificationInbox.tsx', imports(inbox))
   const { NotificationBell } = tab.load('features/notifications/NotificationInbox.tsx', imports(bell))
   inbox.render(NotificationInbox)
