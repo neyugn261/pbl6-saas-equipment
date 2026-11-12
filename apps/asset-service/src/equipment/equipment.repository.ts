@@ -62,6 +62,8 @@ export type EquipmentDetailRow = Equipment & {
   registration?: { id: string; status: string; deliveryMethod?: string | null; maintenanceProvisioning?: string | null } | null;
 };
 
+export type EquipmentListRow = Equipment & { warranties: Warranty[] };
+
 @Injectable()
 export class EquipmentRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -69,8 +71,10 @@ export class EquipmentRepository {
   async list(
     scope: DataScope,
     query: ListEquipmentQueryDto,
-  ): Promise<{ rows: Equipment[]; total: number }> {
-    const date = dbDate(todayInVietnam());
+  ): Promise<{ rows: EquipmentListRow[]; total: number; asOfDate: string }> {
+    // Capture the day once for both filtering and the returned projection.
+    const asOfDate = todayInVietnam();
+    const date = dbDate(asOfDate);
     const covering: Prisma.WarrantyWhereInput = {
       status: 'ACTIVE',
       startDate: { lte: date },
@@ -136,13 +140,23 @@ export class EquipmentRepository {
       this.prisma.equipment.findMany({
         where,
         orderBy,
-        include: { registration: { select: { id: true, status: true, deliveryMethod: true, maintenanceProvisioning: true } } },
+        include: {
+          registration: { select: { id: true, status: true, deliveryMethod: true, maintenanceProvisioning: true } },
+          warranties: {
+            // A covering period sorts before every ended period. Future and
+            // VOID periods never participate, matching warrantyAt(). Bound the
+            // relation to one row per equipment, without per-item API calls.
+            where: { tenantId: scope.tenantId, status: 'ACTIVE', startDate: { lte: date } },
+            orderBy: [{ endDate: 'desc' }, { id: 'asc' }],
+            take: 1,
+          },
+        },
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
       this.prisma.equipment.count({ where }),
     ]);
-    return { rows, total };
+    return { rows, total, asOfDate };
   }
 
   findScoped(scope: DataScope, id: string): Promise<Equipment | null> {

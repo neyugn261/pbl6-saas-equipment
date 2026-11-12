@@ -31,6 +31,16 @@ import {
   todayInVietnam,
 } from './equipment.repository';
 
+export interface WarrantyStatusResponse {
+  equipmentId: string;
+  date: string;
+  result: 'NO_WARRANTY' | 'IN_WARRANTY' | 'OUT_OF_WARRANTY';
+  warrantyId: string | null;
+  endDate: string | null;
+  policyVersionId: string | null;
+  policySnapshot: Warranty['policySnapshot'] | null;
+}
+
 export interface EquipmentResponse {
   displayName: string | null;
   description: string | null;
@@ -124,20 +134,21 @@ export class EquipmentService {
   async list(
     principal: Principal,
     query: ListEquipmentQueryDto,
-  ): Promise<Page<EquipmentResponse>> {
+  ): Promise<Page<EquipmentResponse & { warranty: WarrantyStatusResponse }>> {
     if (principal.userType === 'CUSTOMER' && query.registrationStatus)
       throw new ForbiddenException({
         code: 'FORBIDDEN',
         message: 'Registration progress filters are staff-only',
       });
-    const { rows, total } = await this.repository.list(
+    const { rows, total, asOfDate } = await this.repository.list(
       dataScope(principal),
       query,
     );
     return toPage(
-      rows.map((row) =>
-        equipmentResponse(row, principal.userType === 'CUSTOMER'),
-      ),
+      rows.map((row) => ({
+        ...equipmentResponse(row, principal.userType === 'CUSTOMER'),
+        warranty: this.warrantyResponse(row.id, asOfDate, row.warranties[0] ?? null),
+      })),
       total,
       query,
     );
@@ -217,7 +228,7 @@ export class EquipmentService {
     equipmentId: string,
     date: string,
     warranty: Warranty | null,
-  ) {
+  ): WarrantyStatusResponse {
     const result = !warranty
       ? 'NO_WARRANTY'
       : dateString(warranty.startDate)! <= date &&

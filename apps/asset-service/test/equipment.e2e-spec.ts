@@ -50,7 +50,7 @@ describe('equipment HTTP contract (e2e)', () => {
     createWithHistory: jest.fn(), patchWithHistory: jest.fn(), history: jest.fn(),
   };
   const warranties = { list: jest.fn(), add: jest.fn(), void: jest.fn() };
-  const qrCodes = { issue: jest.fn(), revoke: jest.fn(), resolve: jest.fn() };
+  const qrCodes = { current: jest.fn(), issue: jest.fn(), revoke: jest.fn(), resolve: jest.fn() };
   const fakePrisma = { $connect: async () => undefined, $disconnect: async () => undefined,
     $queryRawUnsafe: async () => [{ '?column?': 1 }] };
 
@@ -85,8 +85,9 @@ describe('equipment HTTP contract (e2e)', () => {
       scope.tenantId === tenantA && id === equipmentId && (scope.customerId === null || scope.customerId === customerA)
         ? { ...equipmentRow(), model: modelRow(), qrCodes: [] } : null);
     repository.list.mockImplementation(async (scope: {tenantId: string; customerId: string | null}) => ({
-      rows: scope.tenantId === tenantA && scope.customerId !== customerB ? [equipmentRow()] : [],
+      rows: scope.tenantId === tenantA && scope.customerId !== customerB ? [equipmentRow({ warranties: [] })] : [],
       total: scope.tenantId === tenantA && scope.customerId !== customerB ? 1 : 0,
+      asOfDate: '2026-10-21',
     }));
     repository.warrantyAt.mockResolvedValue(null);
     warranties.list.mockResolvedValue([]);
@@ -250,6 +251,45 @@ describe('equipment HTTP contract (e2e)', () => {
     const ended = await request(app.getHttpServer()).get(`/equipment/${equipmentId}`)
       .set('authorization', `Bearer ${staff}`).expect(200);
     expect(ended.body.warranty).toMatchObject({ result: 'OUT_OF_WARRANTY', endDate: '1901-01-31' });
+  });
+
+  it('returns a calendar warranty projection on list without leaking raw warranty records', async () => {
+    const warranty = { id: randomUUID(), startDate: new Date('2026-10-21'), endDate: new Date('2026-10-21'),
+      terms: 'not a list field', status: 'ACTIVE' };
+    repository.list.mockResolvedValue({ rows: [equipmentRow({ warranties: [warranty] })], total: 1, asOfDate: '2026-10-21' });
+    for (const token of [staff, customer]) {
+      const { body } = await request(app.getHttpServer()).get('/equipment')
+        .set('authorization', `Bearer ${token}`).expect(200);
+      expect(body.items[0].warranty).toMatchObject({ equipmentId, date: '2026-10-21',
+        result: 'IN_WARRANTY', warrantyId: warranty.id, endDate: '2026-10-21' });
+      expect(body.items[0].warranties).toBeUndefined();
+      expect(body.items[0].tenantId).toBeUndefined();
+    }
+    expect(repository.warrantyAt).not.toHaveBeenCalled();
+  });
+
+  it('reads the existing QR with management permission, scope and no side effects', async () => {
+    const code = { id: randomUUID(), equipmentId, token: 'q'.repeat(43), createdAt: now, revokedAt: null };
+    qrCodes.current.mockImplementation(async (scope: { tenantId: string }) => {
+      if (scope.tenantId !== tenantA) throw new NotFoundException();
+      return { equipmentStatus: 'ACTIVE', qr: code };
+    });
+    for (const token of [customer, dispatcher]) {
+      await request(app.getHttpServer()).get(`/equipment/${equipmentId}/qr-codes`)
+        .set('authorization', `Bearer ${token}`).expect(403);
+    }
+    expect(qrCodes.current).not.toHaveBeenCalled();
+    for (let i = 0; i < 2; i++) {
+      const { body, headers } = await request(app.getHttpServer()).get(`/equipment/${equipmentId}/qr-codes`)
+        .set('authorization', `Bearer ${staff}`).expect(200);
+      expect(body).toMatchObject({ state: 'ACTIVE', canPrint: true, code: { id: code.id, token: code.token,
+        url: `http://portal.test/portal/qr/${code.token}` } });
+      expect(headers['cache-control']).toBe('no-store');
+    }
+    await request(app.getHttpServer()).get(`/equipment/${equipmentId}/qr-codes`)
+      .set('authorization', `Bearer ${staffB}`).expect(404);
+    expect(qrCodes.issue).not.toHaveBeenCalled();
+    expect(qrCodes.revoke).not.toHaveBeenCalled();
   });
 
   it('checks warranty status and enforces warranty mutation permissions and date validation', async () => {

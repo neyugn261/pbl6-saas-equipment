@@ -11,6 +11,8 @@ Equipment models, equipment, warranties and warranty check, QR codes, equipment 
 - Detailed dossier/history supplement: [equipment-dossier.yaml](../../docs/api/equipment-dossier.yaml), [frontend/owner handoff](../../docs/plans/equipment-dossier-handoff.md), ADR 0010.
 - Organization HTTP client: `ORGANIZATION_SERVICE_URL` (required, already in root `.env.example`). It forwards the caller's token and correlation id; production has no fake fallback.
 - QR portal base URL: `ASSET_QR_PORTAL_BASE_URL` (required, HTTP(S)); generated QR links use `<base>/portal/qr/<token>`.
+- Review fixes (12/11): equipment list now includes calendar `warranty`; `GET /equipment/:id/qr-codes` reads the existing printable code for staff with `qr:manage`, and dossier exposes it as a permission-filtered `qr` section. These reads do not rotate tokens and return `Cache-Control: no-store`. See [implementation and verification handoff](../../docs/reports/2026-11-12-minh-review-implementation-handoff.md).
+- Planned handover dates and Part Request/return-request APIs remain [contract proposals](../../docs/plans/2026-11-12-minh-dates-and-parts-contract-proposal.md), not implemented endpoints.
 
 ## Status
 

@@ -148,6 +148,7 @@ afterAll(async () => {
   await db.outboxEvent.deleteMany({ where: { tenantId } });
   await db.equipmentHistory.deleteMany({ where: { tenantId } });
   await db.warranty.deleteMany({ where: { tenantId } });
+  await db.equipmentQrCode.deleteMany({ where: { tenantId } });
   await db.equipment.deleteMany({ where: { tenantId } });
   await db.equipmentModelHistory.deleteMany({ where: { tenantId } });
   await db.equipmentModel.deleteMany({ where: { tenantId } });
@@ -202,6 +203,32 @@ it('authorizes equipment before upstream calls and validates query filters', asy
     .get('/equipment-history?from=2026-02-01&to=2026-01-01')
     .set(headers())
     .expect(400);
+});
+
+it('reads a stable printable QR in the manager dossier and restricts the customer section', async () => {
+  fetchMock = fakeSources();
+  const { body: issued } = await request(app.getHttpServer())
+    .post(`/equipment/${equipmentId}/qr-codes`).set(headers()).expect(201);
+  const histories = await db.equipmentHistory.count({ where: { tenantId, equipmentId } });
+  for (let index = 0; index < 2; index++) {
+    const { body, headers: responseHeaders } = await request(app.getHttpServer())
+      .get(`/equipment/${equipmentId}/dossier`).set(headers()).expect(200);
+    expect(body.qr).toMatchObject({ status: 'AVAILABLE', data: {
+      state: 'ACTIVE', canPrint: true, code: { id: issued.id, token: issued.token, url: issued.url },
+    } });
+    expect(responseHeaders['cache-control']).toBe('no-store');
+  }
+  const { body: customerDossier } = await request(app.getHttpServer())
+    .get(`/equipment/${equipmentId}/dossier`).set(headers(customer)).expect(200);
+  expect(customerDossier.qr).toEqual({ status: 'RESTRICTED', data: null });
+  expect(JSON.stringify(customerDossier)).not.toContain(issued.token);
+  expect(await db.equipmentHistory.count({ where: { tenantId, equipmentId } })).toBe(histories);
+  expect(await db.equipmentQrCode.count({ where: { tenantId, equipmentId } })).toBe(1);
+  await request(app.getHttpServer()).delete(`/equipment/${equipmentId}/qr-codes`).set(headers()).expect(204);
+  const { body: revoked } = await request(app.getHttpServer())
+    .get(`/equipment/${equipmentId}/qr-codes`).set(headers()).expect(200);
+  expect(revoked).toMatchObject({ state: 'REVOKED', code: null, canPrint: false });
+  await request(app.getHttpServer()).get(`/qr/${issued.token}`).set(headers(customer)).expect(404);
 });
 it('composes customer service parts with an allowlist and distinguishes unavailable history from an empty list', async () => {
   fetchMock = fakeSources();
