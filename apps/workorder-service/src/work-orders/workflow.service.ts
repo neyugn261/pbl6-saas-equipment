@@ -9,7 +9,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import type { Principal } from '@pbl6/auth';
-import { enqueueEvent, Events } from '@pbl6/event-contracts';
+import { enqueueEvent, Events, WORK_ORDER_TYPES } from '@pbl6/event-contracts';
 import { getCorrelationId, DisplayNameLookup } from '@pbl6/service-kit';
 import { invalid } from '../common/errors';
 import { WorkOrderWorkflowRepository } from './workflow.repository';
@@ -237,6 +237,7 @@ export class WorkOrderWorkflowService {
               maintenanceTaskId: order.maintenanceTaskId,
               equipmentId: order.equipmentId,
               customerId: order.customerId,
+              type: order.type as (typeof WORK_ORDER_TYPES)[number],
               serviceReportId: report.id,
               result: reportInput.result,
               unresolvedReason:

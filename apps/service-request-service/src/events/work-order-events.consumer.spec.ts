@@ -260,4 +260,127 @@ describe('WorkOrderEventsConsumer contract and state protection', () => {
       }),
     );
   });
+
+  it('applies INSPECTION Created for a REVIEWING Service Request, transitioning to PROCESSING', async () => {
+    const base = created();
+    const inspectionEvent = {
+      ...base,
+      payload: {
+        ...base.payload,
+        type: 'INSPECTION' as const,
+      },
+    };
+    const { consumer, tx } = setup('REVIEWING', inspectionEvent);
+    tx.serviceRequest.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: inspectionEvent.payload.serviceRequestId,
+        tenantId: inspectionEvent.tenantId,
+        requestNo: 'SR-TEST',
+        equipmentId: inspectionEvent.payload.equipmentId,
+        customerId: inspectionEvent.payload.customerId,
+        ...data,
+      }),
+    );
+    await consumer.handle(inspectionEvent);
+    expect(tx.serviceRequest.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'PROCESSING',
+          activeWorkOrderId: inspectionEvent.payload.workOrderId,
+        }),
+      }),
+    );
+    expect(tx.requestStatusHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          oldStatus: 'REVIEWING',
+          newStatus: 'PROCESSING',
+        }),
+      }),
+    );
+  });
+
+  it('completes INSPECTION Work Order by returning Service Request to REVIEWING instead of RESOLVED', async () => {
+    const base = created();
+    const inspectionEvent = {
+      ...base,
+      payload: {
+        ...base.payload,
+        type: 'INSPECTION' as const,
+      },
+    };
+    const { consumer, tx } = setup('PROCESSING', inspectionEvent);
+    tx.serviceRequest.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: inspectionEvent.payload.serviceRequestId,
+        tenantId: inspectionEvent.tenantId,
+        requestNo: 'SR-TEST',
+        equipmentId: inspectionEvent.payload.equipmentId,
+        customerId: inspectionEvent.payload.customerId,
+        ...data,
+      }),
+    );
+    const completedEvent = {
+      ...inspectionEvent,
+      eventId: randomUUID(),
+      eventType: 'WorkOrderCompleted',
+      eventVersion: 2,
+      payload: {
+        ...inspectionEvent.payload,
+        serviceReportId: randomUUID(),
+        result: 'RESOLVED' as const,
+        completedAt: new Date().toISOString(),
+        customerSummary:
+          'Inspection completed: main bearing requires replacement',
+      },
+    };
+    const lifecycleRow = {
+      tenantId: inspectionEvent.tenantId,
+      workOrderId: inspectionEvent.payload.workOrderId,
+      requestId: inspectionEvent.payload.serviceRequestId,
+      equipmentId: inspectionEvent.payload.equipmentId,
+      customerId: inspectionEvent.payload.customerId,
+      createdPayload: {
+        workOrderId: inspectionEvent.payload.workOrderId,
+        workOrderNo: inspectionEvent.payload.workOrderNo,
+        serviceRequestId: inspectionEvent.payload.serviceRequestId,
+        maintenanceTaskId: null,
+        equipmentId: inspectionEvent.payload.equipmentId,
+        customerId: inspectionEvent.payload.customerId,
+        type: 'INSPECTION',
+        priority: inspectionEvent.payload.priority,
+      },
+      appliedPhase: 'CREATED',
+      terminalPhase: null,
+      terminalPayload: null,
+    };
+    tx.workOrderLifecycle.findUnique.mockResolvedValue(lifecycleRow);
+    tx.workOrderLifecycle.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        ...lifecycleRow,
+        ...data,
+      }),
+    );
+
+    await consumer.handle(completedEvent);
+    expect(tx.serviceRequest.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'REVIEWING',
+          activeWorkOrderId: null,
+          resolutionResult: 'RESOLVED',
+          resolvedAt: null,
+        }),
+      }),
+    );
+    expect(tx.requestStatusHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          oldStatus: 'PROCESSING',
+          newStatus: 'REVIEWING',
+          reason: expect.stringContaining('Inspection completed'),
+        }),
+      }),
+    );
+  });
 });

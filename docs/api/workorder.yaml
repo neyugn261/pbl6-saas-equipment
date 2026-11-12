@@ -279,10 +279,13 @@ paths:
                       items: { type: array, items: { $ref: '#/components/schemas/WorkOrder' } }
     post:
       tags: [Work orders]
-      summary: Create a work order from an ACCEPTED service request
+      summary: Create a work order from a service request
       description: |
-        The request is read from Service Request (`GET /internal/service-requests/{id}`)
-        and must be ACCEPTED; `equipmentId`, `customerId`, `type`, and defaults
+        The request is read from Service Request (`GET /internal/service-requests/{id}`).
+        For standard types (REPAIR, WARRANTY, MAINTENANCE), the request must be ACCEPTED.
+        For INSPECTION work orders, the request may be in either REVIEWING or ACCEPTED status,
+        allowing diagnostic dispatch prior to formal estimate approval.
+        `equipmentId`, `customerId`, `type` (or overridden in body), and defaults
         for `priority` and `title` are copied from it (read after taking the
         advisory lock of the request, see the race in the description), site
         and location from Asset
@@ -996,6 +999,12 @@ components:
       required: [serviceRequestId]
       properties:
         serviceRequestId: { type: string, format: uuid }
+        type:
+          $ref: '#/components/schemas/WorkOrderType'
+          description: |
+            Optional. If omitted, defaults to the Service Request's type.
+            Allows explicitly creating an INSPECTION work order for diagnostic/assessment
+            purposes even when the underlying request is a REPAIR or WARRANTY case.
         title: { type: string, maxLength: 200, description: 'Default: the request title (Service Request reference)' }
         description: { type: string }
         priority: { $ref: '#/components/schemas/Priority' }

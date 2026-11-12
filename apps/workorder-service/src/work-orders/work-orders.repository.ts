@@ -217,7 +217,11 @@ export class WorkOrdersRepository {
   async create(
     p: Principal,
     input: CreateWorkOrderDto,
-    resolve: () => Promise<{ source: RequestRef; equipment: EquipmentRef }>,
+    resolve: () => Promise<{
+      source: RequestRef;
+      equipment: EquipmentRef;
+      effectiveType?: string;
+    }>,
   ) {
     const tenantId = requireTenantId(p);
     assertSchedule(
@@ -240,7 +244,7 @@ export class WorkOrdersRepository {
             'ACTIVE_WORK_ORDER_EXISTS',
             'The request already has an active Work Order',
           );
-        const { source, equipment } = await resolve();
+        const { source, equipment, effectiveType } = await resolve();
         if (!source.branchId)
           throw invalid(
             'BRANCH_ROUTING_REQUIRED',
@@ -257,7 +261,7 @@ export class WorkOrdersRepository {
             customerId: source.customerId,
             customerSiteId: equipment.customerSiteId,
             locationId: equipment.locationId,
-            type: source.type,
+            type: effectiveType ?? input.type ?? source.type,
             priority: input.priority ?? source.priority,
             title: input.title ?? source.title,
             description: input.description ?? null,

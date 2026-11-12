@@ -185,6 +185,7 @@ export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
   workOrderNo: string;
   equipmentId: string;
   customerId: string;
+  type?: (typeof WORK_ORDER_TYPES)[number];
   serviceReportId: string;
   result: (typeof REPORT_RESULTS)[number];
   completedAt: string;
@@ -512,6 +513,7 @@ export const Events = {
       maintenanceTaskId: is.nullable(is.uuid),
       equipmentId: is.uuid,
       customerId: is.uuid,
+      type: (value) => value === undefined || is.oneOf(WORK_ORDER_TYPES)(value),
       serviceReportId: is.uuid,
       result: is.oneOf(REPORT_RESULTS),
       completedAt: is.isoDateTime,
@@ -530,6 +532,7 @@ export const Events = {
       maintenanceTaskId: is.nullable(is.uuid),
       equipmentId: is.uuid,
       customerId: is.uuid,
+      type: (value) => value === undefined || is.oneOf(WORK_ORDER_TYPES)(value),
       serviceReportId: is.uuid,
       result: is.oneOf(REPORT_RESULTS),
       completedAt: is.isoDateTime,

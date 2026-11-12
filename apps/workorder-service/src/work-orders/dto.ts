@@ -30,6 +30,9 @@ const DATE_TIME_ZONE = /T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 export class CreateWorkOrderDto {
   @IsUUID() serviceRequestId: string;
   @ValidateIf((_o, v) => v !== undefined)
+  @IsIn(WO_TYPES)
+  type?: (typeof WO_TYPES)[number];
+  @ValidateIf((_o, v) => v !== undefined)
   @IsString()
   @MinLength(1)
   @MaxLength(200)
