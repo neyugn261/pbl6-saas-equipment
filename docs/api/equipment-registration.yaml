@@ -1,12 +1,16 @@
 openapi: 3.1.0
 info:
   title: Equipment registration / handover
-  version: 0.1.0-local
+  version: 0.1.1-local
   description: Implemented supplement to Asset and Maintenance contracts, based on ADR
     0012, ADR 0021 and docs/plans/equipment-registration-technical-design.md. Explicit deliveryMethod selects STORE staff completion or CUSTOMER_SITE acceptance before applying policies. Null preserves legacy behavior. Reuse current Organization/Identity/RBAC/Gateway
     and existing domain APIs. Additive migrations 20261031090000_equipment_registration and 20261031090000_plan_registration_link are service-owned. Public operations
     use the Asset Gateway prefix; /internal operations require direct service origins and are blocked
     by Gateway. All references and permission/state rules must also be enforced by the owning backend.
+    handoverDate, installationDate and commissionedDate are actual dates and cannot be in the future.
+    Only actual handoverDate is required for completion by checkDates; installation and commissioning
+    dates are optional and are not applicable to STORE. This does not remove policy/acceptance requirements
+    of the selected registration flow. Planned dates are not implemented and must not be sent as actual dates.
 servers:
 - url: /api/assets
   description: Public API Gateway base

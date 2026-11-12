@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: PBL6 Asset Service
-  version: 0.4.0-local
+  version: 0.5.0-local
   description: |
     ADR 0022: SERVICE_MANAGER handles reception and dispatch. Branch-bound staff
     routes resolve the active primary branch live from Organization; errors fail closed.
@@ -177,7 +177,7 @@ paths:
                   - type: object
                     required: [items]
                     properties:
-                      items: { type: array, items: { $ref: '#/components/schemas/Equipment' } }
+                      items: { type: array, items: { $ref: '#/components/schemas/EquipmentListItem' } }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -406,6 +406,30 @@ paths:
   /equipment/{equipmentId}/qr-codes:
     parameters:
       - $ref: '#/components/parameters/EquipmentId'
+    get:
+      tags: [QR codes]
+      summary: Read the current printable QR without issuing or rotating a token
+      description: |
+        TENANT_STAFF with qr:manage only. Equipment scope is checked before
+        returning a token. Read-only and Cache-Control no-store. NOT_ISSUED
+        means no code exists; REVOKED means no active code remains. INELIGIBLE
+        means equipment is RETIRED; no printable token is returned. Existing
+        scans keep their existing authorization behavior. An ACTIVE code may
+        be printed again through this read; POST explicitly replaces the token.
+      x-permissions: [qr:manage]
+      x-user-types: [TENANT_STAFF]
+      responses:
+        '200':
+          description: Current QR state and allowed actions; code is null unless ACTIVE
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentQr' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/EquipmentNotFound' }
     post:
       tags: [QR codes]
       summary: Create or re-print the QR code
@@ -690,6 +714,20 @@ components:
         status: { $ref: '#/components/schemas/EquipmentStatus' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    EquipmentListItem:
+      description: |
+        Equipment plus calendar warranty evaluated on the same Vietnam-local
+        day as the warranty filter. Select covering ACTIVE warranty; otherwise
+        latest ended ACTIVE, endDate descending then id ascending. Future-only
+        and VOID-only return NO_WARRANTY under the existing contract. This is
+        not a decision that a particular fault is covered. Raw warranty rows
+        are not included; use the existing warranties endpoint for periods.
+      allOf:
+        - $ref: '#/components/schemas/Equipment'
+        - type: object
+          required: [warranty]
+          properties:
+            warranty: { $ref: '#/components/schemas/WarrantyStatus' }
     EquipmentDetail:
       allOf:
         - $ref: '#/components/schemas/Equipment'
@@ -788,13 +826,28 @@ components:
         result: { $ref: '#/components/schemas/WarrantyCheckResult' }
         warrantyId: { type: [string, 'null'], format: uuid, description: Covering ACTIVE warranty for IN_WARRANTY; latest ACTIVE warranty ended before date for OUT_OF_WARRANTY; null for NO_WARRANTY }
         endDate: { type: [string, 'null'], format: date, description: End date of warrantyId; null exactly when warrantyId is null }
+        policyVersionId: { type: [string, 'null'], format: uuid }
+        policySnapshot: { type: [object, 'null'], additionalProperties: true }
+    CurrentQr:
+      type: object
+      required: [equipmentId, state, code, canIssue, canPrint, reason]
+      properties:
+        equipmentId: { type: string, format: uuid }
+        state: { enum: [ACTIVE, NOT_ISSUED, REVOKED, INELIGIBLE] }
+        code:
+          oneOf:
+            - { $ref: '#/components/schemas/QrCode' }
+            - { type: 'null' }
+        canIssue: { type: boolean, description: False for RETIRED equipment; caller must still have qr:manage }
+        canPrint: { type: boolean, description: True only for ACTIVE printable code }
+        reason: { enum: [EQUIPMENT_RETIRED, null] }
     QrCode:
       type: object
       required: [id, equipmentId, token, url, createdAt]
       properties:
         id: { type: string, format: uuid }
         equipmentId: { type: string, format: uuid }
-        token: { type: string, minLength: 22, maxLength: 255, pattern: '^[A-Za-z0-9_-]+$', description: Random, at least 128 bits, base64url; only the new active token is returned }
+        token: { type: string, minLength: 22, maxLength: 255, pattern: '^[A-Za-z0-9_-]+$', description: Random base64url; returned on issue or an authorized read of the current printable code }
         url: { type: string, format: uri, description: 'Absolute portal deep link containing the token, e.g. <web>/portal/qr/<token>; portal base URL configuration is reviewed separately' }
         createdAt: { type: string, format: date-time }
     HistoryEntry:

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Asset equipment dossier and detailed histories
-  version: 0.4.0-local
+  version: 0.5.0-local
   description: |
     ADR 0010 supplement to asset.yaml, owned by Minh. Gateway prefix /api/assets.
     Equipment is authorized before any upstream call. Every source receives the
@@ -42,6 +42,13 @@ paths:
       summary: Profile, calendar warranty, condition, linked work and history previews
       x-permissions: [equipment:read]
       x-user-types: [TENANT_STAFF, CUSTOMER]
+      description: |
+        qr is a local read-only Section. TENANT_STAFF with qr:manage receive
+        AVAILABLE with asset.yaml CurrentQr. Other users receive RESTRICTED
+        with null data; no printable token is queried. The core equipment is
+        authorized first. GET never issues, rotates or revokes a token and
+        returns Cache-Control no-store. UI must re-read before printing and
+        distinguish print-existing from explicit POST replace-token.
       responses:
         '200':
           description: Independently read source sections and local profile; partial availability is explicit
@@ -204,11 +211,20 @@ components:
         fetchedAt: { type: string, format: date-time }
     Dossier:
       type: object
-      required: [equipment, warranties, calendarCoverage, operationalCondition, profileCompleteness, customer, site, contacts, location, requests, workOrders, maintenance, maintenanceHistory, timelinePreview, latestRecordedService, historyCoverage, asOf, links]
+      required: [equipment, warranties, calendarCoverage, qr, operationalCondition, profileCompleteness, customer, site, contacts, location, requests, workOrders, maintenance, maintenanceHistory, timelinePreview, latestRecordedService, historyCoverage, asOf, links]
       properties:
         equipment: { $ref: './asset.yaml#/components/schemas/EquipmentDetail' }
         warranties: { type: array, items: { $ref: './asset.yaml#/components/schemas/Warranty' } }
         calendarCoverage: { $ref: './asset.yaml#/components/schemas/WarrantyStatus' }
+        qr:
+          allOf:
+            - $ref: '#/components/schemas/Section'
+            - type: object
+              properties:
+                data:
+                  oneOf:
+                    - { $ref: './asset.yaml#/components/schemas/CurrentQr' }
+                    - { type: 'null' }
         coverageMeaning: { const: CALENDAR_ONLY_CLAIM_DECISION_BELONGS_TO_SERVICE_REQUEST }
         operationalCondition:
           type: object
