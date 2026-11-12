@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../ui/components.dart';
 import 'service_report_read.dart';
+import 'signature_pad.dart';
 import 'read_widgets.dart';
 import 'command_dialog.dart';
 import 'work_order_workflow.dart';
@@ -23,7 +24,15 @@ class _LiveReportFormState extends State<LiveReportForm>
   final _problem = TextEditingController(),
       _cause = TextEditingController(),
       _solution = TextEditingController(),
-      _summary = TextEditingController();
+      _summary = TextEditingController(),
+      _unresolvedReason = TextEditingController(),
+      _signerName = TextEditingController(),
+      _signerTitle = TextEditingController(),
+      _signerPhone = TextEditingController(),
+      _signOffNotes = TextEditingController();
+  final _signatureController = SignatureController();
+  String _signOffStatus = 'NOT_APPLICABLE';
+  String? _signatureAttachmentId;
   Object? _assignmentId;
   Timer? _autosave;
   bool _ready = false, _discarded = false, _draftTouched = false;
@@ -37,8 +46,20 @@ class _LiveReportFormState extends State<LiveReportForm>
       _leaving = false;
   WorkOrderWorkflow get flow => widget.workflow;
   bool get _dirty =>
-      [_problem, _cause, _solution, _summary].any((c) => c.text.isNotEmpty) ||
-      _result != 'RESOLVED';
+      [
+        _problem,
+        _cause,
+        _solution,
+        _summary,
+        _unresolvedReason,
+        _signerName,
+        _signerTitle,
+        _signerPhone,
+        _signOffNotes,
+      ].any((c) => c.text.isNotEmpty) ||
+      _result != 'RESOLVED' ||
+      _signOffStatus != 'NOT_APPLICABLE' ||
+      _signatureController.isNotEmpty;
   bool get _sameAssignment =>
       nested(flow.order?.data ?? {}, 'currentAssignment')['id'] ==
       _assignmentId;
@@ -46,9 +67,20 @@ class _LiveReportFormState extends State<LiveReportForm>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    for (final c in [_problem, _cause, _solution, _summary]) {
+    for (final c in [
+      _problem,
+      _cause,
+      _solution,
+      _summary,
+      _unresolvedReason,
+      _signerName,
+      _signerTitle,
+      _signerPhone,
+      _signOffNotes,
+    ]) {
       c.addListener(_onEdit);
     }
+    _signatureController.addListener(_onEdit);
     _assignmentId = nested(flow.order!.data, 'currentAssignment')['id'];
     unawaited(_restoreDraft());
   }
@@ -69,11 +101,21 @@ class _LiveReportFormState extends State<LiveReportForm>
           throw const ApiException('WORKSPACE_STORAGE_FAILED');
         }
         _assignmentId = draft['assignmentId'];
-        _problem.text = body['problemDescription'] as String;
-        _cause.text = body['rootCause'] as String;
-        _solution.text = body['solution'] as String;
-        _summary.text = body['customerSummary'] as String;
-        _result = body['result'] as String;
+        _problem.text = (body['problemDescription'] as String?) ?? '';
+        _cause.text = (body['rootCause'] as String?) ?? '';
+        _solution.text = (body['solution'] as String?) ?? '';
+        _summary.text = (body['customerSummary'] as String?) ?? '';
+        _result = (body['result'] as String?) ?? 'RESOLVED';
+        _unresolvedReason.text = (body['unresolvedReason'] as String?) ?? '';
+        final signOff = body['signOff'];
+        if (signOff is Map) {
+          _signOffStatus = (signOff['status'] as String?) ?? 'NOT_APPLICABLE';
+          _signerName.text = (signOff['signerName'] as String?) ?? '';
+          _signerTitle.text = (signOff['signerTitle'] as String?) ?? '';
+          _signerPhone.text = (signOff['signerPhone'] as String?) ?? '';
+          _signOffNotes.text = (signOff['notes'] as String?) ?? '';
+          _signatureAttachmentId = signOff['signatureAttachmentId'] as String?;
+        }
         _step = (draft['step'] as int).clamp(0, 2);
         _observedDirty = _dirty;
         _draftNotice =
@@ -110,6 +152,25 @@ class _LiveReportFormState extends State<LiveReportForm>
         'solution': _solution.text,
         'customerSummary': _summary.text,
         'result': _result,
+        if (_result == 'UNRESOLVED' && _unresolvedReason.text.trim().isNotEmpty)
+          'unresolvedReason': _unresolvedReason.text.trim(),
+        if (_signOffStatus != 'NOT_APPLICABLE' ||
+            _signerName.text.isNotEmpty ||
+            _signatureAttachmentId != null ||
+            _signOffNotes.text.isNotEmpty)
+          'signOff': {
+            'status': _signOffStatus,
+            if (_signerName.text.trim().isNotEmpty)
+              'signerName': _signerName.text.trim(),
+            if (_signerTitle.text.trim().isNotEmpty)
+              'signerTitle': _signerTitle.text.trim(),
+            if (_signerPhone.text.trim().isNotEmpty)
+              'signerPhone': _signerPhone.text.trim(),
+            if (_signatureAttachmentId != null)
+              'signatureAttachmentId': _signatureAttachmentId,
+            if (_signOffNotes.text.trim().isNotEmpty)
+              'notes': _signOffNotes.text.trim(),
+          },
       },
     };
     await flow.repo.records.put(flow.id, 'reportDraft', snapshot);
@@ -165,9 +226,20 @@ class _LiveReportFormState extends State<LiveReportForm>
     // removes the route without a user navigation callback.
     final save = _persistDraft();
     unawaited(save.catchError((Object _) {}));
-    for (final c in [_problem, _cause, _solution, _summary]) {
+    for (final c in [
+      _problem,
+      _cause,
+      _solution,
+      _summary,
+      _unresolvedReason,
+      _signerName,
+      _signerTitle,
+      _signerPhone,
+      _signOffNotes,
+    ]) {
       c.dispose();
     }
+    _signatureController.dispose();
     super.dispose();
   }
 
@@ -176,7 +248,26 @@ class _LiveReportFormState extends State<LiveReportForm>
     if (_cause.text.trim().isNotEmpty) 'rootCause': _cause.text.trim(),
     'solution': _solution.text.trim(),
     'result': _result,
+    if (_result == 'UNRESOLVED' && _unresolvedReason.text.trim().isNotEmpty)
+      'unresolvedReason': _unresolvedReason.text.trim(),
     'customerSummary': _summary.text.trim(),
+    if (_signOffStatus != 'NOT_APPLICABLE' ||
+        _signerName.text.trim().isNotEmpty ||
+        _signatureAttachmentId != null ||
+        _signOffNotes.text.trim().isNotEmpty)
+      'signOff': {
+        'status': _signOffStatus,
+        if (_signerName.text.trim().isNotEmpty)
+          'signerName': _signerName.text.trim(),
+        if (_signerTitle.text.trim().isNotEmpty)
+          'signerTitle': _signerTitle.text.trim(),
+        if (_signerPhone.text.trim().isNotEmpty)
+          'signerPhone': _signerPhone.text.trim(),
+        if (_signatureAttachmentId != null)
+          'signatureAttachmentId': _signatureAttachmentId,
+        if (_signOffNotes.text.trim().isNotEmpty)
+          'notes': _signOffNotes.text.trim(),
+      },
   };
 
   Future<void> _leave() async {
@@ -246,6 +337,16 @@ class _LiveReportFormState extends State<LiveReportForm>
   void _next() {
     if (!_ready) return;
     if (!_form.currentState!.validate()) return;
+    if (_step == 2 &&
+        _signOffStatus == 'SIGNED' &&
+        _signatureController.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng yêu cầu khách hàng ký nhận vào ô chữ ký.'),
+        ),
+      );
+      return;
+    }
     setState(() {
       if (_step < 2) {
         _step++;
@@ -270,6 +371,34 @@ class _LiveReportFormState extends State<LiveReportForm>
       }
       return;
     }
+
+    if (_signOffStatus == 'SIGNED' &&
+        _signatureController.isNotEmpty &&
+        _signatureAttachmentId == null &&
+        flow.repo.attachments != null) {
+      try {
+        final pngBytes = await _signatureController.toPngBytes();
+        if (pngBytes != null && pngBytes.isNotEmpty) {
+          final attempt = flow.repo.attachments!.create(
+            workOrderId: flow.id,
+            report: false,
+            fileName: 'signature-${DateTime.now().millisecondsSinceEpoch}.png',
+            mimeType: 'image/png',
+            bytes: pngBytes,
+          );
+          final res = await flow.repo.attachments!.upload(attempt);
+          _signatureAttachmentId = res['id'] as String?;
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _draftError = 'Không thể tải lên tệp chữ ký. Vui lòng thử lại.';
+          });
+        }
+        return;
+      }
+    }
+
     final success = await flow.execute('complete', body: _body);
     if (mounted && success) {
       _autosave?.cancel();
@@ -330,6 +459,7 @@ class _LiveReportFormState extends State<LiveReportForm>
               )
             : _bottom(),
         child: ReadList(
+          key: ValueKey(_submitted ? 'submitted' : (_preview ? 'preview' : 'step-$_step')),
           children: _submitted
               ? [
                   const Notice(
@@ -418,9 +548,30 @@ class _LiveReportFormState extends State<LiveReportForm>
                       'Kết quả dành cho khách hàng',
                       fields: {
                         'Kết quả': label(_result),
+                        if (_result == 'UNRESOLVED' &&
+                            _unresolvedReason.text.trim().isNotEmpty)
+                          'Lý do chưa xử lý': _unresolvedReason.text.trim(),
                         'Tóm tắt cho khách hàng': _summary.text.trim(),
                       },
                     ),
+                    if (_signOffStatus != 'NOT_APPLICABLE')
+                      DataCard(
+                        'Xác nhận nghiệm thu hiện trường',
+                        fields: {
+                          'Trạng thái': label(_signOffStatus),
+                          if (_signerName.text.trim().isNotEmpty)
+                            'Người ký': _signerName.text.trim(),
+                          if (_signerTitle.text.trim().isNotEmpty)
+                            'Chức vụ': _signerTitle.text.trim(),
+                          if (_signerPhone.text.trim().isNotEmpty)
+                            'Số điện thoại': _signerPhone.text.trim(),
+                          if (_signatureController.isNotEmpty)
+                            'Chữ ký':
+                                'Đã thu thập chữ ký tay (${_signatureController.strokes.length} nét)',
+                          if (_signOffNotes.text.trim().isNotEmpty)
+                            'Ghi chú nghiệm thu': _signOffNotes.text.trim(),
+                        },
+                      ),
                   ] else
                     Form(
                       key: _form,
@@ -486,17 +637,27 @@ class _LiveReportFormState extends State<LiveReportForm>
                               ],
                               onChanged:
                                   !_ready ||
-                                      !_sameAssignment ||
-                                      (flow.order?.terminal ?? true) ||
-                                      flow.busy ||
-                                      flow.uncertain
-                                  ? null
-                                  : (v) {
-                                      setState(() => _result = v!);
-                                      _onEdit();
-                                    },
+                                          !_sameAssignment ||
+                                          (flow.order?.terminal ?? true) ||
+                                          flow.busy ||
+                                          flow.uncertain
+                                      ? null
+                                      : (v) {
+                                          setState(() => _result = v!);
+                                          _onEdit();
+                                        },
                             ),
                             const SizedBox(height: 16),
+                            if (_result == 'UNRESOLVED') ...[
+                              _field(
+                                'report-unresolved-reason',
+                                _unresolvedReason,
+                                'Lý do chưa xử lý được *',
+                                2000,
+                                required: true,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                             _field(
                               'report-summary',
                               _summary,
@@ -507,6 +668,141 @@ class _LiveReportFormState extends State<LiveReportForm>
                             const Text(
                               'Khách hàng sẽ đọc phần tóm tắt này; không đưa chẩn đoán nội bộ vào đây.',
                             ),
+                            const SizedBox(height: 24),
+                            const Divider(),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.draw_outlined,
+                                  size: 20,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Nghiệm thu tại hiện trường',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Xác nhận nghiệm thu từ đại diện khách hàng trước khi hoàn thành dịch vụ.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: Theme.of(context).hintColor),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _signOffChip(
+                                  'NOT_APPLICABLE',
+                                  'Không áp dụng',
+                                  'signoff-chip-not-applicable',
+                                ),
+                                _signOffChip(
+                                  'SIGNED',
+                                  'Khách ký tại chỗ',
+                                  'signoff-chip-signed',
+                                ),
+                                _signOffChip(
+                                  'CUSTOMER_ABSENT',
+                                  'Khách vắng mặt',
+                                  'signoff-chip-absent',
+                                ),
+                                _signOffChip(
+                                  'CUSTOMER_REFUSED',
+                                  'Khách từ chối ký',
+                                  'signoff-chip-refused',
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            if (_signOffStatus == 'SIGNED') ...[
+                              _textField(
+                                'report-signer-name',
+                                _signerName,
+                                'Họ tên người ký *',
+                                255,
+                                required: true,
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _textField(
+                                      'report-signer-title',
+                                      _signerTitle,
+                                      'Chức danh / vai trò',
+                                      255,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _textField(
+                                      'report-signer-phone',
+                                      _signerPhone,
+                                      'Số điện thoại',
+                                      30,
+                                      keyboardType: TextInputType.phone,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              SignaturePad(
+                                controller: _signatureController,
+                                enabled:
+                                    _ready &&
+                                    _sameAssignment &&
+                                    !(flow.order?.terminal ?? true) &&
+                                    !flow.busy &&
+                                    !flow.uncertain,
+                              ),
+                              const SizedBox(height: 12),
+                              _field(
+                                'report-signoff-notes',
+                                _signOffNotes,
+                                'Ghi chú nghiệm thu (tùy chọn)',
+                                2000,
+                              ),
+                            ],
+                            if (_signOffStatus == 'CUSTOMER_ABSENT') ...[
+                              _field(
+                                'report-signoff-notes',
+                                _signOffNotes,
+                                'Lý do khách hàng vắng mặt *',
+                                2000,
+                                required: true,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Ghi rõ người chứng kiến tại hiện trường (nếu có) hoặc thời điểm liên hệ khách.',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: Theme.of(context).hintColor),
+                              ),
+                            ],
+                            if (_signOffStatus == 'CUSTOMER_REFUSED') ...[
+                              _field(
+                                'report-signoff-notes',
+                                _signOffNotes,
+                                'Lý do khách từ chối ký *',
+                                2000,
+                                required: true,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Ghi rõ lý do khách hàng từ chối nghiệm thu để điều phối viên theo dõi.',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: Theme.of(context).hintColor),
+                              ),
+                            ],
                           ],
                         ],
                       ),
@@ -515,6 +811,60 @@ class _LiveReportFormState extends State<LiveReportForm>
         ),
       ),
     ),
+  );
+
+  Widget _signOffChip(String value, String title, String key) {
+    final selected = _signOffStatus == value;
+    final enabled =
+        _ready &&
+        _sameAssignment &&
+        !(flow.order?.terminal ?? true) &&
+        !flow.busy &&
+        !flow.uncertain;
+    return ChoiceChip(
+      key: Key(key),
+      label: Text(title),
+      selected: selected,
+      onSelected: enabled
+          ? (sel) {
+              if (sel) {
+                setState(() => _signOffStatus = value);
+                _onEdit();
+              }
+            }
+          : null,
+    );
+  }
+
+  Widget _textField(
+    String key,
+    TextEditingController controller,
+    String title,
+    int limit, {
+    bool required = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) => TextFormField(
+    key: Key(key),
+    controller: controller,
+    enabled:
+        _ready &&
+        _sameAssignment &&
+        !(flow.order?.terminal ?? true) &&
+        !flow.busy &&
+        !flow.uncertain,
+    maxLength: limit,
+    keyboardType: keyboardType,
+    decoration: InputDecoration(
+      labelText: title,
+      counterText: '',
+    ),
+    validator: (v) {
+      if (required && (v == null || v.trim().isEmpty)) {
+        return 'Vui lòng nhập $title.';
+      }
+      if ((v?.trim().length ?? 0) > limit) return 'Tối đa $limit ký tự.';
+      return null;
+    },
   );
   Widget _field(
     String key,

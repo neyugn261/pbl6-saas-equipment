@@ -29,25 +29,51 @@ class ServiceReportRead extends StatelessWidget {
   Widget build(BuildContext context) => ReadView<Json?>(
     requestKey: revision,
     load: _load,
-    builder: (r) => r == null
-        ? const Notice('Công việc chưa có báo cáo dịch vụ.')
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              statusPill(text(r, 'result')),
-              const SizedBox(height: 16),
-              DataCard(
-                'Báo cáo dịch vụ',
-                fields: {
-                  'Vấn đề': r['problemDescription'],
-                  'Nguyên nhân': r['rootCause'],
-                  'Giải pháp': r['solution'],
-                  'Tóm tắt cho khách hàng': r['customerSummary'],
-                  'Nộp lúc': dateText(r['submittedAt'], time: true),
-                  'Mã báo cáo': r['id'],
-                },
-              ),
-            ],
+    builder: (r) {
+      if (r == null) {
+        return const Notice('Công việc chưa có báo cáo dịch vụ.');
+      }
+      final signOff = r['signOff'] as Map<String, dynamic>?;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          statusPill(text(r, 'result')),
+          const SizedBox(height: 16),
+          DataCard(
+            'Báo cáo dịch vụ',
+            fields: {
+              'Vấn đề': r['problemDescription'],
+              'Nguyên nhân': r['rootCause'],
+              'Giải pháp': r['solution'],
+              if (r['unresolvedReason'] != null)
+                'Lý do chưa xử lý': r['unresolvedReason'],
+              'Tóm tắt cho khách hàng': r['customerSummary'],
+              'Nộp lúc': dateText(r['submittedAt'], time: true),
+              'Mã báo cáo': r['id'],
+            },
           ),
+          if (signOff != null && signOff['status'] != null) ...[
+            const SizedBox(height: 16),
+            DataCard(
+              'Xác nhận nghiệm thu hiện trường',
+              fields: {
+                'Trạng thái': label(signOff['status'].toString()),
+                if (signOff['signerName'] != null)
+                  'Người ký': signOff['signerName'],
+                if (signOff['signerTitle'] != null)
+                  'Chức vụ': signOff['signerTitle'],
+                if (signOff['signerPhone'] != null)
+                  'Số điện thoại': signOff['signerPhone'],
+                if (signOff['signedAt'] != null)
+                  'Thời điểm ký': dateText(signOff['signedAt'], time: true),
+                if (signOff['notes'] != null)
+                  'Ghi chú / Lý do': signOff['notes'],
+              },
+            ),
+          ],
+        ],
+      );
+    },
   );
 }
