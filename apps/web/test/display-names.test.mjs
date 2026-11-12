@@ -75,16 +75,29 @@ test('ledger labels use per-row snapshot/current metadata, independent of ACTIVE
 test('ledger component renders inactive rows outside dropdowns, preserving historical snapshots', async () => {
   const h = hooks()
   const empty = { items: [], total: 0, page: 1, pageSize: 20 }
-  const ledger = { items: [{ id: 'txn', createdAt: '2026-11-01', quantity: '1', type: 'RECEIVE', partId: 'part-205', warehouseId: 'warehouse-205',
-    part: { name: 'Current part' }, warehouse: { name: 'Inactive warehouse' }, partSnapshot: { name: 'Historical part' } }], total: 205 }
-  const api = { inventory: async path => path.startsWith('/stock-transactions?') ? ledger : empty, workorders: async () => empty }
+  const transactionId = 'fc69918c-5352-4fa3-9f12-a0da30756943'
+  const orderId = 'fc69918c-5352-4fa3-9f12-a0da30756944'
+  const otherOrderId = 'fc69918c-5352-4fa3-9f12-a0da30756945'
+  const row = { id: transactionId, createdAt: '2026-11-01', quantity: '1', type: 'ISSUE', partId: 'part-205', warehouseId: 'warehouse-205',
+    referenceType: 'WORK_ORDER', referenceId: orderId,
+    part: { name: 'Current part' }, warehouse: { name: 'Inactive warehouse' }, partSnapshot: { name: 'Historical part' } }
+  const ledger = { items: [row, { ...row, id: 'txn-2', referenceId: otherOrderId }], total: 205 }
+  const api = {
+    inventory: async path => path.startsWith('/stock-transactions?') ? ledger : empty,
+    workorders: async () => ({ ...empty, items: [{ id: orderId, workOrderNo: 'WO-007', status: 'COMPLETED' }] }),
+  }
   const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
     './stock-mutation': tab.stock, '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
   h.render(InventoryTransactionsPage); await settle(); const tree = expand(h.render(InventoryTransactionsPage))
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Inactive warehouse').length)
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Historical part').length)
-  assert.equal(nodes(tree, n => n.type === 'td' && ['part-205', 'warehouse-205', 'Current part'].includes(n.props.children)).length, 0)
+  assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'WO-007').length)
+  assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Lệnh công việc liên quan').length)
+  const visibleText = nodes(tree, n => typeof n.props?.children === 'string').map(n => n.props.children)
+  for (const value of [transactionId, orderId, otherOrderId, 'part-205', 'warehouse-205', 'Current part']) {
+    assert.ok(!visibleText.some(text => text.includes(value)), value)
+  }
 })
 test('warehouse list uses scoped branch name and keeps branch ID as form value', async () => {
   const h = hooks()
