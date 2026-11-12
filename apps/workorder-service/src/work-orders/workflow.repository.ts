@@ -203,6 +203,7 @@ export class WorkOrderWorkflowRepository {
       rootCause: row.rootCause,
       solution: row.solution,
       result: row.result,
+      unresolvedReason: row.unresolvedReason,
       customerSummary: row.customerNote,
       submittedAt: row.submittedAt,
     };

@@ -190,6 +190,15 @@ export class WorkOrderWorkflowService {
                 : 'IN_PROGRESS';
         if (action === 'complete') {
           const reportInput = input.report!;
+          if (reportInput.result === 'UNRESOLVED') {
+            const reason = reportInput.unresolvedReason?.trim();
+            if (!reason) {
+              throw invalid(
+                'UNRESOLVED_REASON_REQUIRED',
+                'An unresolved reason is required when the work order result is UNRESOLVED',
+              );
+            }
+          }
           const report = await tx.serviceReport.create({
             data: {
               tenantId: order.tenantId,
@@ -199,6 +208,10 @@ export class WorkOrderWorkflowService {
               rootCause: reportInput.rootCause ?? null,
               solution: reportInput.solution,
               result: reportInput.result,
+              unresolvedReason:
+                reportInput.result === 'UNRESOLVED'
+                  ? (reportInput.unresolvedReason?.trim() ?? null)
+                  : (reportInput.unresolvedReason?.trim() || null),
               customerNote: reportInput.customerSummary,
               submittedAt: now,
             },
@@ -226,6 +239,10 @@ export class WorkOrderWorkflowService {
               customerId: order.customerId,
               serviceReportId: report.id,
               result: reportInput.result,
+              unresolvedReason:
+                reportInput.result === 'UNRESOLVED'
+                  ? (reportInput.unresolvedReason?.trim() ?? null)
+                  : null,
               customerSummary: reportInput.customerSummary,
               ...(order.checklist
                 ? {

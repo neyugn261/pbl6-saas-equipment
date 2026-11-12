@@ -42,6 +42,14 @@ export class ServiceReportDto {
   @IsString() @MinLength(1) @MaxLength(5000) solution: string;
   @IsIn(['RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED']) result:
     'RESOLVED' | 'PARTIALLY_RESOLVED' | 'UNRESOLVED';
+  @ValidateIf(
+    (o: ServiceReportDto) =>
+      o.result === 'UNRESOLVED' || o.unresolvedReason !== undefined,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  unresolvedReason?: string;
   @IsString() @MinLength(1) @MaxLength(2000) customerSummary: string;
 }
 /** Global whitelist rejects fields for actions with no request body. */

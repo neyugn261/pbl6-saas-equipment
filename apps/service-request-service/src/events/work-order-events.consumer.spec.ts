@@ -37,6 +37,7 @@ describe('WorkOrderEventsConsumer contract and state protection', () => {
     const row = {
       id: event.payload.serviceRequestId,
       tenantId: event.tenantId,
+      requestNo: 'SR-TEST',
       equipmentId: event.payload.equipmentId,
       customerId: event.payload.customerId,
       status,
@@ -191,5 +192,72 @@ describe('WorkOrderEventsConsumer contract and state protection', () => {
       }),
     ).rejects.toThrow();
     expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('applies UNRESOLVED completion, moves status to ACCEPTED and records unresolvedReason in history', async () => {
+    const { consumer, event, tx } = setup('PROCESSING');
+    tx.serviceRequest.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: event.payload.serviceRequestId,
+        tenantId: event.tenantId,
+        requestNo: 'SR-TEST',
+        equipmentId: event.payload.equipmentId,
+        customerId: event.payload.customerId,
+        ...data,
+      }),
+    );
+    const completedEvent = {
+      ...event,
+      eventId: randomUUID(),
+      eventType: 'WorkOrderCompleted',
+      eventVersion: 2,
+      payload: {
+        ...event.payload,
+        serviceReportId: randomUUID(),
+        result: 'UNRESOLVED' as const,
+        unresolvedReason:
+          'Damaged motor coils; replacement parts unavailable on site',
+        completedAt: new Date().toISOString(),
+        customerSummary: 'Could not resolve on site',
+      },
+    };
+    const lifecycleRow = {
+      tenantId: event.tenantId,
+      workOrderId: event.payload.workOrderId,
+      requestId: event.payload.serviceRequestId,
+      equipmentId: event.payload.equipmentId,
+      customerId: event.payload.customerId,
+      appliedPhase: 'CREATED',
+      terminalPhase: null,
+      terminalPayload: null,
+    };
+    tx.workOrderLifecycle.findUnique.mockResolvedValue(lifecycleRow);
+    tx.workOrderLifecycle.update.mockImplementation(({ data }) =>
+      Promise.resolve({
+        ...lifecycleRow,
+        ...data,
+      }),
+    );
+
+    await consumer.handle(completedEvent);
+    expect(tx.serviceRequest.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'ACCEPTED',
+          activeWorkOrderId: null,
+          resolutionResult: 'UNRESOLVED',
+        }),
+      }),
+    );
+    expect(tx.requestStatusHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          oldStatus: 'PROCESSING',
+          newStatus: 'ACCEPTED',
+          reason:
+            'Damaged motor coils; replacement parts unavailable on site',
+        }),
+      }),
+    );
   });
 });

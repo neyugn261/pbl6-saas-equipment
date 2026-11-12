@@ -247,6 +247,7 @@ model ServiceReport {
   solution           String
   result             String                   @db.VarChar(30)
   customerNote       String?                  @map("customer_note")
+  unresolvedReason   String?                  @map("unresolved_reason")
   submittedAt        DateTime                 @default(now()) @map("submitted_at") @db.Timestamptz(6)
   workOrder          WorkOrder                @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   technician         Technician               @relation(fields: [tenantId, technicianId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)

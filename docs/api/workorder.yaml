@@ -466,10 +466,11 @@ paths:
         Only the assigned technician. In one transaction: the service report
         is created, the assignment becomes COMPLETED, the technician's status
         is recomputed (D11), `completedAt` is set and `WorkOrderCompleted.v2`
-        (report `result` and `customerSummary`) is written. Service Request
-        moves to RESOLVED (RESOLVED / PARTIALLY_RESOLVED) or back to ACCEPTED
-        (UNRESOLVED) and stores the customer summary (D6a); Asset records
-        equipment history.
+        (report `result`, `customerSummary` and `unresolvedReason` when UNRESOLVED)
+        is written. When result is UNRESOLVED, `unresolvedReason` is required.
+        Service Request moves to RESOLVED (RESOLVED / PARTIALLY_RESOLVED) or back
+        to ACCEPTED (UNRESOLVED) and stores the customer summary (D6a); Asset
+        records equipment history.
       x-permissions: [work_order:execute, service_report:submit]
       x-user-types: [TENANT_STAFF]
       x-events: [WorkOrderCompleted.v2]
@@ -1056,6 +1057,13 @@ components:
         rootCause: { type: string, maxLength: 5000 }
         solution: { type: string, minLength: 1, maxLength: 5000 }
         result: { $ref: '#/components/schemas/ReportResult' }
+        unresolvedReason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: |
+            Mandatory when result is UNRESOLVED. Explains the reason why the technician
+            could not resolve the issue, enabling manager escalation.
         customerSummary:
           type: string
           minLength: 1
@@ -1075,6 +1083,7 @@ components:
         rootCause: { type: [string, 'null'] }
         solution: { type: string }
         result: { $ref: '#/components/schemas/ReportResult' }
+        unresolvedReason: { type: [string, 'null'] }
         customerSummary: { type: string }
         submittedAt: { type: string, format: date-time }
     Technician:

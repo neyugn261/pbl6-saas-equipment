@@ -54,6 +54,10 @@ function canonical(phase: Phase, payload: Payload): Record<string, unknown> {
       result: p.result,
       completedAt: new Date(p.completedAt).toISOString(),
       customerSummary: 'customerSummary' in p ? p.customerSummary : null,
+      unresolvedReason:
+        'unresolvedReason' in p
+          ? ((p as { unresolvedReason?: string | null }).unresolvedReason ?? null)
+          : null,
       ...('customerChecklist' in p
         ? { customerChecklist: p.customerChecklist }
         : {}),
@@ -415,7 +419,9 @@ export class WorkOrderEventsConsumer {
       updated,
       'PROCESSING',
       nextStatus,
-      row.terminalPhase === 'CANCELLED' ? (p.reason as string | null) : null,
+      row.terminalPhase === 'CANCELLED'
+        ? (p.reason as string | null)
+        : ((p.unresolvedReason as string | null) ?? null),
       correlationId,
     );
     if (nextStatus === 'ACCEPTED')
