@@ -206,6 +206,15 @@ export class WorkOrderWorkflowRepository {
       unresolvedReason: row.unresolvedReason,
       customerSummary: row.customerNote,
       submittedAt: row.submittedAt,
+      signOff: {
+        status: row.signOffStatus,
+        signerName: row.signerName,
+        signerTitle: row.signerTitle,
+        signerPhone: row.signerPhone,
+        signedAt: row.signedAt,
+        signatureAttachmentId: row.signatureAttachmentId,
+        notes: row.signOffNotes,
+      },
     };
   }
   private async requireReadable(p: Principal, id: string) {

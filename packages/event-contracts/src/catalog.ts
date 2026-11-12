@@ -191,6 +191,23 @@ export interface WorkOrderCompletedV1 extends WorkOrderOrigin {
   completedAt: string;
 }
 
+export const SIGN_OFF_STATUSES = [
+  'SIGNED',
+  'CUSTOMER_ABSENT',
+  'CUSTOMER_REFUSED',
+  'NOT_APPLICABLE',
+] as const;
+
+export interface WorkOrderSignOffPayload {
+  status: (typeof SIGN_OFF_STATUSES)[number];
+  signerName?: string | null;
+  signerTitle?: string | null;
+  signerPhone?: string | null;
+  signedAt?: string | null;
+  signatureAttachmentId?: string | null;
+  notes?: string | null;
+}
+
 /**
  * Adds the customer-facing resolution summary (D6a); internal notes are never
  * included in the event.
@@ -199,6 +216,7 @@ export interface WorkOrderCompletedV2 extends WorkOrderCompletedV1 {
   customerChecklist?: CustomerChecklistResult[];
   customerSummary: string;
   unresolvedReason?: string | null;
+  signOff?: WorkOrderSignOffPayload | null;
 }
 
 export interface WorkOrderCancelledV1 extends WorkOrderOrigin {
@@ -541,6 +559,19 @@ export const Events = {
         value === undefined || is.nullable(is.string(2000))(value),
       customerChecklist: (value) =>
         value === undefined || validCustomerChecklist(value),
+      signOff: (value) =>
+        value === undefined ||
+        is.nullable(
+          is.object({
+            status: is.oneOf(SIGN_OFF_STATUSES),
+            signerName: (v) => v === undefined || is.nullable(is.string(100))(v),
+            signerTitle: (v) => v === undefined || is.nullable(is.string(100))(v),
+            signerPhone: (v) => v === undefined || is.nullable(is.string(30))(v),
+            signedAt: (v) => v === undefined || is.nullable(is.isoDateTime)(v),
+            signatureAttachmentId: (v) => v === undefined || is.nullable(is.uuid)(v),
+            notes: (v) => v === undefined || is.nullable(is.string(2000))(v),
+          }),
+        )(value),
     },
   }),
   WorkOrderCancelled: define<WorkOrderCancelledV1>({

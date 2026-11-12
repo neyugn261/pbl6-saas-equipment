@@ -966,6 +966,13 @@ CREATE TABLE service_reports (
     result VARCHAR(30) NOT NULL CHECK (result IN ('RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED')),
     customer_note TEXT,
     unresolved_reason TEXT,
+    sign_off_status VARCHAR(30) NOT NULL DEFAULT 'NOT_APPLICABLE' CHECK (sign_off_status IN ('SIGNED', 'CUSTOMER_ABSENT', 'CUSTOMER_REFUSED', 'NOT_APPLICABLE')),
+    signer_name VARCHAR(100),
+    signer_title VARCHAR(100),
+    signer_phone VARCHAR(30),
+    signed_at TIMESTAMPTZ,
+    signature_attachment_id UUID,
+    sign_off_notes TEXT,
     submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, work_order_id)

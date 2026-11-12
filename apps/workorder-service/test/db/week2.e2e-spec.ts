@@ -305,6 +305,80 @@ describe('Work Order week 2 — workflows, transactions and SR cancellation', ()
       },
     });
   });
+  it('records field sign-off during completion and via dedicated sign-off endpoint', async () => {
+    const wo = await running();
+    // 1. Complete with valid SIGNED sign-off
+    await action(wo.id, 'complete', technician, {
+      ...report,
+      signOff: {
+        status: 'SIGNED',
+        signerName: 'Tran Van A',
+        signerTitle: 'Site Supervisor',
+        signerPhone: '0901234567',
+      },
+    }).expect(200);
+
+    const reportRes = await get(wo.id, '/service-report', technician).expect(200);
+    expect(reportRes.body.signOff).toMatchObject({
+      status: 'SIGNED',
+      signerName: 'Tran Van A',
+      signerTitle: 'Site Supervisor',
+      signerPhone: '0901234567',
+    });
+
+    const event = await db.outboxEvent.findFirstOrThrow({
+      where: { eventType: 'WorkOrderCompleted', aggregateId: wo.id },
+    });
+    expect(event.payload).toMatchObject({
+      data: {
+        signOff: {
+          status: 'SIGNED',
+          signerName: 'Tran Van A',
+        },
+      },
+    });
+
+    // 2. Update sign-off via dedicated endpoint as Service Manager
+    const updatedRes = await request(app.getHttpServer())
+      .post(`/work-orders/${wo.id}/service-report/sign-off`)
+      .set('Authorization', `Bearer ${manager}`)
+      .send({
+        status: 'CUSTOMER_REFUSED',
+        notes: 'Customer disputed minor paint scratch',
+      })
+      .expect(200);
+
+    expect(updatedRes.body.signOff).toMatchObject({
+      status: 'CUSTOMER_REFUSED',
+      notes: 'Customer disputed minor paint scratch',
+    });
+
+    // 3. Reject SIGNED with missing/empty signerName via dedicated endpoint
+    await request(app.getHttpServer())
+      .post(`/work-orders/${wo.id}/service-report/sign-off`)
+      .set('Authorization', `Bearer ${technician}`)
+      .send({
+        status: 'SIGNED',
+        signerName: '   ',
+      })
+      .expect(422)
+      .expect((res) => {
+        expect(res.body.code).toBe('SIGNER_NAME_REQUIRED');
+      });
+
+    // 4. Reject CUSTOMER_REFUSED with missing notes
+    await request(app.getHttpServer())
+      .post(`/work-orders/${wo.id}/service-report/sign-off`)
+      .set('Authorization', `Bearer ${technician}`)
+      .send({
+        status: 'CUSTOMER_REFUSED',
+        notes: '   ',
+      })
+      .expect(422)
+      .expect((res) => {
+        expect(res.body.code).toBe('REFUSAL_REASON_REQUIRED');
+      });
+  });
   it('supports direct start, rejection and reassignment without erasing assignment history', async () => {
     const wo = await create();
     await assigned(wo.id);
