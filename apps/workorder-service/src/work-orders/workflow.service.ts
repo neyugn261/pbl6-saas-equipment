@@ -11,7 +11,7 @@ import {
 import type { Principal } from '@pbl6/auth';
 import { enqueueEvent, Events, WORK_ORDER_TYPES } from '@pbl6/event-contracts';
 import { getCorrelationId, DisplayNameLookup } from '@pbl6/service-kit';
-import { invalid } from '../common/errors';
+import { invalid, missing } from '../common/errors';
 import { WorkOrderWorkflowRepository } from './workflow.repository';
 import {
   ACTION_STATES,
@@ -25,6 +25,7 @@ import {
   CancelWorkOrderDto,
   ReasonDto,
   ServiceReportDto,
+  SignOffDto,
   WorkLogDto,
 } from './workflow.dto';
 import { workOrderView } from './work-orders.repository';
@@ -199,6 +200,75 @@ export class WorkOrderWorkflowService {
               );
             }
           }
+
+          const signOffInput = reportInput.signOff;
+          let signOffStatus = 'NOT_APPLICABLE';
+          let signerName: string | null = null;
+          let signerTitle: string | null = null;
+          let signerPhone: string | null = null;
+          let signedAt: Date | null = null;
+          let signatureAttachmentId: string | null = null;
+          let signOffNotes: string | null = null;
+
+          if (signOffInput) {
+            signOffStatus = signOffInput.status;
+            if (signOffStatus === 'SIGNED') {
+              const name = signOffInput.signerName?.trim();
+              if (!name) {
+                throw invalid(
+                  'SIGNER_NAME_REQUIRED',
+                  'Signer name is required when sign-off status is SIGNED',
+                );
+              }
+              signerName = name;
+              signerTitle = signOffInput.signerTitle?.trim() || null;
+              signerPhone = signOffInput.signerPhone?.trim() || null;
+              signedAt = now;
+              signatureAttachmentId = signOffInput.signatureAttachmentId || null;
+              signOffNotes = signOffInput.notes?.trim() || null;
+            } else if (signOffStatus === 'CUSTOMER_REFUSED') {
+              const notes = signOffInput.notes?.trim();
+              if (!notes) {
+                throw invalid(
+                  'REFUSAL_REASON_REQUIRED',
+                  'A note or reason is required when customer refuses to sign',
+                );
+              }
+              signOffNotes = notes;
+              signerName = signOffInput.signerName?.trim() || null;
+              signerTitle = signOffInput.signerTitle?.trim() || null;
+              signerPhone = signOffInput.signerPhone?.trim() || null;
+            } else if (signOffStatus === 'CUSTOMER_ABSENT') {
+              const notes = signOffInput.notes?.trim();
+              if (!notes) {
+                throw invalid(
+                  'ABSENCE_REASON_REQUIRED',
+                  'A note or reason is required when customer is absent',
+                );
+              }
+              signOffNotes = notes;
+            } else {
+              signOffNotes = signOffInput.notes?.trim() || null;
+            }
+
+            if (signatureAttachmentId) {
+              const att = await tx.workOrderAttachment.findFirst({
+                where: {
+                  tenantId: order.tenantId,
+                  workOrderId: id,
+                  id: signatureAttachmentId,
+                  deletedAt: null,
+                },
+              });
+              if (!att) {
+                throw invalid(
+                  'SIGNATURE_ATTACHMENT_NOT_FOUND',
+                  'Signature attachment does not belong to this work order',
+                );
+              }
+            }
+          }
+
           const report = await tx.serviceReport.create({
             data: {
               tenantId: order.tenantId,
@@ -213,6 +283,13 @@ export class WorkOrderWorkflowService {
                   ? (reportInput.unresolvedReason?.trim() ?? null)
                   : (reportInput.unresolvedReason?.trim() || null),
               customerNote: reportInput.customerSummary,
+              signOffStatus,
+              signerName,
+              signerTitle,
+              signerPhone,
+              signedAt,
+              signatureAttachmentId,
+              signOffNotes,
               submittedAt: now,
             },
           });
@@ -245,6 +322,15 @@ export class WorkOrderWorkflowService {
                   ? (reportInput.unresolvedReason?.trim() ?? null)
                   : null,
               customerSummary: reportInput.customerSummary,
+              signOff: {
+                status: signOffStatus as any,
+                signerName,
+                signerTitle,
+                signerPhone,
+                signedAt: signedAt ? signedAt.toISOString() : null,
+                signatureAttachmentId,
+                notes: signOffNotes,
+              },
               ...(order.checklist
                 ? {
                     customerChecklist: requiredChecklist(order.checklist).map(
@@ -389,6 +475,141 @@ export class WorkOrderWorkflowService {
         results: updated.checklistResults,
         version: updated.checklistVersion,
         canEdit: true,
+      };
+    });
+  }
+  async updateSignOff(p: Principal, id: string, input: SignOffDto) {
+    return this.repo.change(p, id, async ({ tx, order, now }) => {
+      const isManager = p.permissions.has('work_order:manage');
+      let isAssignedTech = false;
+      if (p.permissions.has('work_order:execute')) {
+        const completedAssignment = await tx.workOrderAssignment.findFirst({
+          where: {
+            tenantId: order.tenantId,
+            workOrderId: id,
+            status: { in: ['ACCEPTED', 'COMPLETED'] },
+            technician: { userId: p.userId },
+          },
+        });
+        if (completedAssignment) isAssignedTech = true;
+      }
+      if (!isManager && !isAssignedTech) {
+        throw new ForbiddenException({
+          code: 'FORBIDDEN',
+          message:
+            'Only the assigned technician or service manager may update sign-off',
+        });
+      }
+
+      const report = await tx.serviceReport.findFirst({
+        where: { tenantId: order.tenantId, workOrderId: id },
+      });
+      if (!report) throw missing('SERVICE_REPORT_NOT_FOUND');
+
+      let signerName: string | null = null;
+      let signerTitle: string | null = null;
+      let signerPhone: string | null = null;
+      let signedAt: Date | null = null;
+      let signatureAttachmentId: string | null = null;
+      let signOffNotes: string | null = null;
+
+      if (input.status === 'SIGNED') {
+        const name = input.signerName?.trim();
+        if (!name) {
+          throw invalid(
+            'SIGNER_NAME_REQUIRED',
+            'Signer name is required when sign-off status is SIGNED',
+          );
+        }
+        signerName = name;
+        signerTitle = input.signerTitle?.trim() || null;
+        signerPhone = input.signerPhone?.trim() || null;
+        signedAt = now;
+        signatureAttachmentId = input.signatureAttachmentId || null;
+        signOffNotes = input.notes?.trim() || null;
+      } else if (input.status === 'CUSTOMER_REFUSED') {
+        const notes = input.notes?.trim();
+        if (!notes) {
+          throw invalid(
+            'REFUSAL_REASON_REQUIRED',
+            'A note or reason is required when customer refuses to sign',
+          );
+        }
+        signOffNotes = notes;
+        signerName = input.signerName?.trim() || null;
+        signerTitle = input.signerTitle?.trim() || null;
+        signerPhone = input.signerPhone?.trim() || null;
+      } else if (input.status === 'CUSTOMER_ABSENT') {
+        const notes = input.notes?.trim();
+        if (!notes) {
+          throw invalid(
+            'ABSENCE_REASON_REQUIRED',
+            'A note or reason is required when customer is absent',
+          );
+        }
+        signOffNotes = notes;
+      } else {
+        signOffNotes = input.notes?.trim() || null;
+      }
+
+      if (signatureAttachmentId) {
+        const woAtt = await tx.workOrderAttachment.findFirst({
+          where: {
+            tenantId: order.tenantId,
+            workOrderId: id,
+            id: signatureAttachmentId,
+            deletedAt: null,
+          },
+        });
+        const repAtt = await tx.reportAttachment.findFirst({
+          where: {
+            tenantId: order.tenantId,
+            serviceReportId: report.id,
+            id: signatureAttachmentId,
+            deletedAt: null,
+          },
+        });
+        if (!woAtt && !repAtt) {
+          throw invalid(
+            'SIGNATURE_ATTACHMENT_NOT_FOUND',
+            'Signature attachment does not belong to this work order or service report',
+          );
+        }
+      }
+
+      const updated = await tx.serviceReport.update({
+        where: { id: report.id },
+        data: {
+          signOffStatus: input.status,
+          signerName,
+          signerTitle,
+          signerPhone,
+          signedAt,
+          signatureAttachmentId,
+          signOffNotes,
+        },
+      });
+
+      return {
+        id: updated.id,
+        workOrderId: updated.workOrderId,
+        technicianId: updated.technicianId,
+        problemDescription: updated.problemDescription,
+        rootCause: updated.rootCause,
+        solution: updated.solution,
+        result: updated.result,
+        unresolvedReason: updated.unresolvedReason,
+        customerSummary: updated.customerNote,
+        submittedAt: updated.submittedAt,
+        signOff: {
+          status: updated.signOffStatus,
+          signerName: updated.signerName,
+          signerTitle: updated.signerTitle,
+          signerPhone: updated.signerPhone,
+          signedAt: updated.signedAt,
+          signatureAttachmentId: updated.signatureAttachmentId,
+          notes: updated.signOffNotes,
+        },
       };
     });
   }

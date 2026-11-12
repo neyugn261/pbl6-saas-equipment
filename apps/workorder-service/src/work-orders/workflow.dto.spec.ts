@@ -75,4 +75,69 @@ describe('ServiceReportDto validation', () => {
     const errors = await validate(dto);
     expect(errors.length).toBe(0);
   });
+
+  describe('SignOff validation', () => {
+    it('accepts a valid SIGNED sign-off', async () => {
+      const dto = plainToInstance(ServiceReportDto, {
+        ...baseValid,
+        signOff: {
+          status: 'SIGNED',
+          signerName: 'Nguyen Van A',
+          signerTitle: 'Factory Manager',
+          signerPhone: '0901234567',
+          signatureAttachmentId: '11111111-1111-4111-8111-111111111111',
+        },
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('rejects SIGNED when signerName is missing', async () => {
+      const dto = plainToInstance(ServiceReportDto, {
+        ...baseValid,
+        signOff: {
+          status: 'SIGNED',
+        },
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      const signOffError = errors.find((e) => e.property === 'signOff');
+      expect(signOffError).toBeDefined();
+    });
+
+    it('accepts valid CUSTOMER_REFUSED with reason in notes', async () => {
+      const dto = plainToInstance(ServiceReportDto, {
+        ...baseValid,
+        signOff: {
+          status: 'CUSTOMER_REFUSED',
+          notes: 'Customer disputed the diagnosis',
+        },
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('accepts valid CUSTOMER_ABSENT with explanation in notes', async () => {
+      const dto = plainToInstance(ServiceReportDto, {
+        ...baseValid,
+        signOff: {
+          status: 'CUSTOMER_ABSENT',
+          notes: 'Customer representative left the facility before maintenance completed',
+        },
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('accepts valid NOT_APPLICABLE sign-off', async () => {
+      const dto = plainToInstance(ServiceReportDto, {
+        ...baseValid,
+        signOff: {
+          status: 'NOT_APPLICABLE',
+        },
+      });
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+  });
 });

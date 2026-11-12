@@ -541,6 +541,39 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /work-orders/{workOrderId}/service-report/sign-off:
+    parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
+    post:
+      tags: [Activity]
+      summary: Update or record field sign-off on an existing service report
+      x-permissions: [work_order:read]
+      x-user-types: [TENANT_STAFF]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignOffInput' }
+      responses:
+        '200':
+          description: Updated service report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceReport' }
+        '403':
+          description: FORBIDDEN — caller is not the assigned technician or service manager
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: WORK_ORDER_NOT_FOUND or SERVICE_REPORT_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: SIGNER_NAME_REQUIRED, REFUSAL_REASON_REQUIRED, ABSENCE_REASON_REQUIRED, or SIGNATURE_ATTACHMENT_NOT_FOUND
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /work-orders/{workOrderId}/history:
     parameters: [{ $ref: '#/components/parameters/WorkOrderId' }]
     get:
@@ -1081,6 +1114,47 @@ components:
             What was done, written for the customer (ADR 0008 D6a); shown on the
             Service Request. Never internal notes. Stored in
             `service_reports.customer_note`.
+        signOff:
+          $ref: '#/components/schemas/SignOffInput'
+    SignOffInput:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [SIGNED, CUSTOMER_ABSENT, CUSTOMER_REFUSED, NOT_APPLICABLE]
+        signerName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Mandatory when status is SIGNED.
+        signerTitle:
+          type: string
+          maxLength: 100
+        signerPhone:
+          type: string
+          maxLength: 30
+        signatureAttachmentId:
+          type: string
+          format: uuid
+        notes:
+          type: string
+          maxLength: 2000
+          description: Mandatory when status is CUSTOMER_REFUSED or CUSTOMER_ABSENT.
+    SignOff:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [SIGNED, CUSTOMER_ABSENT, CUSTOMER_REFUSED, NOT_APPLICABLE]
+        signerName: { type: [string, 'null'] }
+        signerTitle: { type: [string, 'null'] }
+        signerPhone: { type: [string, 'null'] }
+        signedAt: { type: [string, 'null'], format: date-time }
+        signatureAttachmentId: { type: [string, 'null'], format: uuid }
+        notes: { type: [string, 'null'] }
     ServiceReport:
       type: object
       required: [id, workOrderId, technicianId, problemDescription, solution, result, customerSummary, submittedAt]
@@ -1095,6 +1169,8 @@ components:
         unresolvedReason: { type: [string, 'null'] }
         customerSummary: { type: string }
         submittedAt: { type: string, format: date-time }
+        signOff:
+          $ref: '#/components/schemas/SignOff'
     Technician:
       type: object
       required: [id, userId, branchId, employeeCode, status, skills]

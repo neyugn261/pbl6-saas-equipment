@@ -248,6 +248,13 @@ model ServiceReport {
   result             String                   @db.VarChar(30)
   customerNote       String?                  @map("customer_note")
   unresolvedReason   String?                  @map("unresolved_reason")
+  signOffStatus      String                   @default("NOT_APPLICABLE") @map("sign_off_status") @db.VarChar(30)
+  signerName         String?                  @map("signer_name") @db.VarChar(100)
+  signerTitle        String?                  @map("signer_title") @db.VarChar(100)
+  signerPhone        String?                  @map("signer_phone") @db.VarChar(30)
+  signedAt           DateTime?                @map("signed_at") @db.Timestamptz(6)
+  signatureAttachmentId String?               @map("signature_attachment_id") @db.Uuid
+  signOffNotes       String?                  @map("sign_off_notes")
   submittedAt        DateTime                 @default(now()) @map("submitted_at") @db.Timestamptz(6)
   workOrder          WorkOrder                @relation(fields: [tenantId, workOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   technician         Technician               @relation(fields: [tenantId, technicianId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)

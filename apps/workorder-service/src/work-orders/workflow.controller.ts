@@ -22,6 +22,7 @@ import {
   EmptyActionDto,
   ReasonDto,
   ServiceReportDto,
+  SignOffDto,
   WorkLogDto,
 } from './workflow.dto';
 
@@ -173,5 +174,15 @@ export class WorkOrderWorkflowController {
   @RequirePermissions('work_order:read')
   report(@CurrentUser() p: Principal, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.report(p, id);
+  }
+  @Post('service-report/sign-off')
+  @HttpCode(200)
+  @RequirePermissions('work_order:read')
+  signOff(
+    @CurrentUser() p: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: SignOffDto,
+  ) {
+    return this.service.updateSignOff(p, id, input);
   }
 }
