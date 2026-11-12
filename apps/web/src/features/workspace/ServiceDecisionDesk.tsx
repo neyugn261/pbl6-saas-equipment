@@ -191,6 +191,9 @@ export function QueueContents({
                       <PriorityBadge priority={String(item.priority)} />
                     )}
                   </span>
+                  {item.resolutionResult === "UNRESOLVED" && (
+                    <small className="workshop-outcome-warning">Cần xem lại: lần xử lý trước chưa giải quyết được sự cố.</small>
+                  )}
                   <small>
                     {recordAge(item.createdAt)} · Cập nhật{" "}
                     {formatDate(item.updatedAt ?? item.createdAt, true)}

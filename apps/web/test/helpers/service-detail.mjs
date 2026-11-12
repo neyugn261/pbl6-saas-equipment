@@ -5,6 +5,7 @@ export function detailUI(tab,h) {
     'lucide-react':{ArrowLeft:'icon',ArrowRight:'icon',Info:'icon',RefreshCw:'icon'},
     './WorkspaceUI':{Badge:({status}) => h.jsx.jsx('span',{children:status})},
     './service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
+    '../../display-names':tab.load('display-names.ts'),
     './service-detail.css':{},
   })
 }

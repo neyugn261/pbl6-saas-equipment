@@ -44,12 +44,14 @@ export default function EstimatePanel({
   onChange,
   requestNo,
   equipmentSummary,
+  openDraft = 0,
 }: {
   requestId: string;
   allowedActions: string[];
   onChange: () => void;
   requestNo?: string;
   equipmentSummary?: string;
+  openDraft?: number;
 }) {
   const { profile } = useSession();
   const sessionGeneration = getSessionGeneration();
@@ -73,17 +75,21 @@ export default function EstimatePanel({
     submissionPending: false,
     submissionConfirmed: false,
   });
-  const { selected, createOpen, items, validUntil, notes } = draft;
+  const [dismissedDraft, setDismissedDraft] = useState(0);
+  const { selected, items, validUntil, notes } = draft;
+  const createOpen = draft.createOpen || (openDraft > dismissedDraft && !selected && allowedActions.includes("create-estimate"));
   const setSelected = (value: string | null) =>
     setDraft((old) => ({ ...old, selected: value ?? "" }));
-  const setCreateOpen = (value: boolean) =>
+  const setCreateOpen = (value: boolean) => {
+    if (!value) setDismissedDraft(openDraft);
     setDraft((old) => ({ ...old, createOpen: value }));
+  };
   const setItems = (value: Item[]) =>
-    setDraft((old) => ({ ...old, items: value }));
+    setDraft((old) => ({ ...old, createOpen: true, items: value }));
   const setValidUntil = (value: string) =>
-    setDraft((old) => ({ ...old, validUntil: value }));
+    setDraft((old) => ({ ...old, createOpen: true, validUntil: value }));
   const setNotes = (value: string) =>
-    setDraft((old) => ({ ...old, notes: value }));
+    setDraft((old) => ({ ...old, createOpen: true, notes: value }));
   const [decisionReason, setDecisionReason] = useState("");
   const [receipt, setReceipt] = useState("");
   const [pending, setPending] = useState<{
@@ -192,6 +198,7 @@ export default function EstimatePanel({
         `Đã ghi nhận ${pending?.label ?? "thay đổi dự toán"}. Kiểm tra trạng thái và phiên bản vừa tải bên dưới.`,
       );
       await reload(true);
+      setDismissedDraft(openDraft);
       draftStatus.save({
         ...draft,
         selected: "",

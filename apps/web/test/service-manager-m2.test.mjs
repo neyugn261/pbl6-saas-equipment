@@ -111,6 +111,7 @@ function setup(name, asset = dossier, kind = "plan") {
     "../api/client": { ...tab.client, api },
     "../auth/session": session,
     "../display-names": tab.load("display-names.ts"),
+    "./DossierQr": { default: "dossier-qr" },
     "../features/attachments/AttachmentsPanel": {
       AttachmentsPanel: "attachments",
     },

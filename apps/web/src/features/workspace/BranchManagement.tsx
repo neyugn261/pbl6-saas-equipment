@@ -4,6 +4,9 @@ import { api } from "../../api/client";
 import { useSession, getSessionGeneration } from "../../auth/session";
 import { useDirectory, errorText } from "../../routes/registration-data";
 import type { Page } from "../../types/domain";
+import { recordLabel } from "../../display-names";
+import { serviceLabels } from "./service-detail-data";
+import { formatDate } from "./workspace-data";
 
 type Branch = { id: string; code: string; name: string; status: string };
 type Context = { branch: Branch | null };
@@ -289,6 +292,7 @@ type CaseRow = {
   id: string;
   title: string;
   status: string;
+  createdAt?: string;
   requestNo?: string;
   workOrderNo?: string;
   branchId: string | null;
@@ -419,20 +423,24 @@ export function BranchAllocationPage() {
       {data.error && <p role="alert">{data.error}</p>}
       {data.value && (
         <>
-          <p>{data.value.total} hồ sơ phù hợp.</p>
+          <p>{data.value.total} {filter === "unallocated" ? "hồ sơ chờ phân bổ" : "hồ sơ phù hợp"}.</p>
+          {filter === "unallocated" && data.value.items.length === 0 && (
+            <p>Hàng chờ hiện không có hồ sơ.</p>
+          )}
           {data.value.items.map((row) => (
             <article className="m1-card" key={row.id}>
               <h2>
                 <Link
                   to={`/app/${area === "requestsLive" ? "service-requests" : "work-orders"}/${row.id}`}
                 >
-                  {row.requestNo || row.workOrderNo} · {row.title}
+                  {recordLabel(row.requestNo || row.workOrderNo, row.title, "Hồ sơ dịch vụ")}
                 </Link>
               </h2>
               <p>
-                {row.status} ·{" "}
-                {row.branchId ? "Đã có chi nhánh xử lý" : "Chưa phân bổ"}
+                {serviceLabels[row.status] ?? row.status} ·{" "}
+                {row.branchId ? "Đã có chi nhánh xử lý" : "Chờ quản trị doanh nghiệp phân bổ"}
               </p>
+              {row.createdAt && <p>Ghi nhận lúc {formatDate(row.createdAt, true)}</p>}
               {!row.branchId &&
                 ![
                   "COMPLETED",

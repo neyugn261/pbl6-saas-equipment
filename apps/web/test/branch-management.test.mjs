@@ -26,6 +26,11 @@ function setup(
     "../../api/client": tab.client,
     "../../auth/session": tab.session,
     "../../routes/registration-data": directory,
+    "../../display-names": tab.load("display-names.ts"),
+    "./service-detail-data": tab.load("features/workspace/service-detail-data.ts"),
+    "./workspace-data": tab.load("features/workspace/workspace-data.ts", {
+      react: host.react, "../../api/client": tab.client, "../../auth/session": tab.session,
+    }),
   });
   return { tab, host, components };
 }

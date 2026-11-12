@@ -10,7 +10,7 @@ import { ApiError, api } from "../../api/client";
 import { getSessionGeneration, useSession } from "../../auth/session";
 import type { Page } from "../../types/domain";
 import { StockMutation, type StockRequest } from "./stock-mutation";
-import { displayName } from "../../display-names";
+import { displayName, hideTechnicalIds, recordLabel } from "../../display-names";
 import {
   quantityText,
   quantityEntry,
@@ -59,6 +59,7 @@ type LedgerRow = {
   type: string;
   reasonCode?: string | null;
   quantity: string;
+  balanceAfter?: string | null;
   createdAt: string;
   referenceType: string | null;
   referenceId: string | null;
@@ -1372,9 +1373,13 @@ export function InventoryTransactionsPage({
                               )
                               .map((row) => (
                                 <option key={row.id} value={row.id}>
-                                  {date(row.createdAt)} ·{" "}
-                                  {stockLabels[row.type] ?? row.type} ·{" "}
-                                  {quantityText(row.quantity)} · {row.id}
+                                  {[
+                                    date(row.createdAt),
+                                    stockLabels[row.type] ?? row.type,
+                                    quantityText(row.quantity),
+                                    row.balanceAfter != null && `Tồn sau: ${quantityText(row.balanceAfter)}`,
+                                    row.note && hideTechnicalIds(row.note),
+                                  ].filter(Boolean).join(" · ")}
                                 </option>
                               ))}
                           </select>
@@ -1559,7 +1564,6 @@ export function InventoryTransactionsPage({
                         <th>Kho</th>
                         <th>Phụ tùng</th>
                         <th>Tham chiếu</th>
-                        <th>ID giao dịch</th>
                         <th>Ghi chú</th>
                       </tr>
                     </thead>
@@ -1580,20 +1584,15 @@ export function InventoryTransactionsPage({
                             {displayName("part", row.part, row.partSnapshot)}
                           </td>
                           <td>
-                            {row.referenceId ? (
-                              <details>
-                                <summary>Hồ sơ tham chiếu</summary>
-                                <code>{row.referenceId}</code>
-                              </details>
-                            ) : (
-                              "Chưa có tham chiếu"
-                            )}
-                          </td>
-                          <td>
-                            <details>
-                              <summary>Mã tra cứu</summary>
-                              <code>{row.id}</code>
-                            </details>
+                            {!row.referenceId
+                              ? "Chưa có tham chiếu"
+                              : row.referenceType === "WORK_ORDER"
+                                ? recordLabel(
+                                    workOrders.find((order) => order.id === row.referenceId)?.workOrderNo,
+                                    undefined,
+                                    "Lệnh công việc liên quan",
+                                  )
+                                : "Hồ sơ liên quan"}
                           </td>
                           <td>{row.note ?? "—"}</td>
                         </tr>

@@ -3,6 +3,7 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Info, RefreshCw } from "lucide-react";
 import { Badge } from "./WorkspaceUI";
+import { hideTechnicalIds } from "../../display-names";
 import "./service-detail.css";
 
 export function ServiceHeader({
@@ -271,8 +272,6 @@ export function BusinessValues({ data }: { data: unknown }) {
       <span>Thay đổi liên kết nội bộ; xem hồ sơ liên quan.</span>
     );
   }
-  const text = String(data);
-  if (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(text))
-    return <span>Tham chiếu nội bộ</span>;
+  const text = hideTechnicalIds(String(data), "Tham chiếu nội bộ");
   return <span>{serviceLabels[text] ?? text}</span>;
 }

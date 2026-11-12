@@ -13,6 +13,8 @@ import {
   requestResponsibility,
 } from "./features/workspace/service-detail-data";
 import RequestCloseoutSummary from "./features/workspace/RequestCloseoutSummary";
+import { requestIntake } from "./features/workspace/request-intake";
+import { recordLabel } from "./display-names";
 import { ModelPolicyPage } from "./routes/ModelPolicyPage";
 import { WarrantyAssessmentPanel } from "./routes/ModelPolicyPanels";
 import { useDirectory } from "./routes/registration-data";
@@ -810,7 +812,7 @@ function EquipmentPage() {
                           {item.warranty?.result ? (
                             <StatusBadge status={item.warranty.result} />
                           ) : (
-                            "—"
+                            "Chưa có dữ liệu"
                           )}
                         </td>
                         <td>
@@ -955,6 +957,7 @@ function RequestDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile } = useSession();
+  const isManager = profile?.roles.includes("SERVICE_MANAGER") === true;
   const sessionGeneration = getSessionGeneration();
   const data = useLoad<RequestDetail>(
     () => api.requestsLive(`/service-requests/${id}`),
@@ -971,6 +974,9 @@ function RequestDetailPage() {
   const actionDialog = useRef<HTMLDialogElement>(null);
   const actionLock = useRef(false);
   const [version, setVersion] = useState(0);
+  const [nextFocus, setNextFocus] = useState<{ id: string; generation: number; target: string }>();
+  const appliedFocus = useRef<typeof nextFocus>(undefined);
+  const [draftStart, setDraftStart] = useState<{ id: string; generation: number; sequence: number }>();
   const [comment, setComment] = useState("");
   const [visibility, setVisibility] = useState<"CUSTOMER" | "INTERNAL">(
     "CUSTOMER",
@@ -979,6 +985,29 @@ function RequestDetailPage() {
     override?.generation === sessionGeneration ? override.value : null;
   const current =
     currentOverride?.id === data.value?.id ? currentOverride : data.value;
+  const intake = current && isManager ? requestIntake(current) : null;
+  useEffect(() => {
+    if (
+      busy || !nextFocus || nextFocus.id !== current?.id ||
+      nextFocus.generation !== sessionGeneration || nextFocus === appliedFocus.current
+    ) return;
+    const target = document.getElementById(nextFocus.target);
+    if (!target) return;
+    appliedFocus.current = nextFocus;
+    target.focus();
+  }, [busy, current?.id, nextFocus, sessionGeneration]);
+
+  function advanceRequest(refreshed: RequestDetail, afterAssessment = false) {
+    if (!isManager) return;
+    const step = requestIntake(refreshed);
+    setNextFocus({ id: refreshed.id, generation: sessionGeneration, target: step.target ?? "request-intake" });
+    if (
+      afterAssessment && refreshed.coverageAssessment?.decision === "NOT_COVERED" &&
+      refreshed.allowedActions.includes("create-estimate")
+    ) {
+      setDraftStart(previous => ({ id: refreshed.id, generation: sessionGeneration, sequence: (previous?.sequence ?? 0) + 1 }));
+    }
+  }
   const equipmentLabel = useLoad<EquipmentRecord | null>(
     () =>
       current?.equipmentId
@@ -997,6 +1026,7 @@ function RequestDetailPage() {
       if (getSessionGeneration() !== sessionGeneration) return;
       setOverride({ generation: sessionGeneration, value: refreshed });
       setVersion((value) => value + 1);
+      return refreshed;
     } catch (cause) {
       setError(
         conflict
@@ -1064,6 +1094,7 @@ function RequestDetailPage() {
       actionDialog.current?.close();
       setPendingAction("");
       setActionReason("");
+      if (["review", "warranty-check", "accept"].includes(action)) advanceRequest(refreshed);
     } catch (cause) {
       if (getSessionGeneration() !== sessionGeneration) return;
       if (cause instanceof ApiError && cause.status === 409) {
@@ -1124,6 +1155,29 @@ function RequestDetailPage() {
     "confirm",
     "reopen",
   ];
+  const assessmentPanel = current && (
+    <WarrantyAssessmentPanel
+      key={`${sessionGeneration}:${current.id}`}
+      request={current}
+      changed={async () => {
+        const refreshed = await refreshRequest();
+        if (refreshed) advanceRequest(refreshed, true);
+      }}
+    />
+  );
+  const estimatePanel = current && (
+    <EstimatePanel
+      key={`${sessionGeneration}:${current.id}`}
+      requestNo={current.requestNo}
+      equipmentSummary={equipmentLabel.value
+        ? recordLabel(equipmentLabel.value.assetCode, equipmentLabel.value.displayName, "Thiết bị chưa xác định")
+        : undefined}
+      requestId={current.id}
+      allowedActions={current.allowedActions ?? []}
+      openDraft={draftStart?.id === current.id && draftStart.generation === sessionGeneration ? draftStart.sequence : 0}
+      onChange={() => void refreshRequest()}
+    />
+  );
   return (
     <Frame
       title={current?.title ?? "Yêu cầu dịch vụ"}
@@ -1166,14 +1220,37 @@ function RequestDetailPage() {
               Boolean(current.resolutionResult)) && (
               <RequestCloseoutSummary request={current} />
             )}
+            {isManager && current.resolutionResult === "UNRESOLVED" && (
+              <section className="m1-card workshop-outcome-warning" aria-label="Kết quả xử lý trước">
+                <strong>Lần xử lý trước chưa giải quyết được sự cố</strong>
+                <p>{current.resolutionSummary || "Chưa có tóm tắt kết quả kỹ thuật."}</p>
+                <p>Đọc lệnh liên quan và xác định phương án xử lý tiếp.</p>
+              </section>
+            )}
             {error ? <Problem error={error} /> : null}
+            {intake && (
+              <section id="request-intake" tabIndex={-1} aria-label="Tiến trình tiếp nhận">
+                <ol className="sd-progress request-intake-progress">
+                  {["Xem sự cố", "Thẩm định bảo hành", "Chọn phương án", "Điều phối & theo dõi"].map((label, index) => (
+                    <li key={label} data-state={index < intake.stage ? "done" : index === intake.stage ? "current" : "pending"}
+                      aria-current={index === intake.stage ? "step" : undefined}>
+                      <span aria-hidden="true">{index < intake.stage ? "✓" : index + 1}</span>{label}
+                    </li>
+                  ))}
+                </ol>
+                <ServiceNotice title={intake.title}>
+                  <p>{intake.detail}</p>
+                </ServiceNotice>
+              </section>
+            )}
             <div className="m1-actions">
               <button disabled={busy} onClick={() => void refreshRequest()}>
                 Làm mới trạng thái
               </button>
               {current.status === "ACCEPTED" &&
-                profile?.roles.includes("SERVICE_MANAGER") && (
+                isManager && (
                   <button
+                    id="request-create-order"
                     disabled={busy}
                     onClick={() => void createWorkOrder()}
                   >
@@ -1184,6 +1261,7 @@ function RequestDetailPage() {
                 ?.filter((action) => actions.includes(action))
                 .map((action) => (
                   <button
+                    id={`request-${action}`}
                     disabled={busy}
                     key={action}
                     onClick={() => {
@@ -1204,21 +1282,23 @@ function RequestDetailPage() {
                 phút; dùng “Làm mới trạng thái” để kiểm tra.
               </p>
             )}
-            <ServiceNotice
-              title={
-                current.status === "ACCEPTED"
-                  ? "Yêu cầu đã đủ điều kiện tạo lệnh"
-                  : current.status === "NEW"
-                    ? "Bắt đầu xem xét yêu cầu"
-                    : "Theo dõi bước xử lý tiếp theo"
-              }
-            >
-              <p>
-                {current.status === "ACCEPTED"
-                  ? "Tạo lệnh công việc, sau đó phân công kỹ thuật viên và theo dõi kết quả."
-                  : "Kiểm tra mô tả sự cố, hồ sơ thiết bị, quyết định bảo hành và trao đổi trước khi chuyển trạng thái."}
-              </p>
-            </ServiceNotice>
+            {intake && (
+              <>
+                <div className="m1-request-detail-grid request-intake-grid">
+                  <section className="m1-card m1-section-card">
+                    <div className="m1-section-header"><h2>Mô tả sự cố</h2></div>
+                    <div className="m1-section-body m1-prose">{current.description}</div>
+                    <div className="m1-section-body">
+                      <Link to={`/app/equipment/${current.equipmentId}`}>
+                        {recordLabel(equipmentLabel.value?.assetCode, equipmentLabel.value?.displayName, "Mở hồ sơ thiết bị")}
+                      </Link>
+                    </div>
+                  </section>
+                  <div id="request-assessment" tabIndex={-1}>{assessmentPanel}</div>
+                </div>
+                <div id="request-estimate" tabIndex={-1}>{estimatePanel}</div>
+              </>
+            )}
             <ServiceSections
               items={[
                 {
@@ -1257,14 +1337,14 @@ function RequestDetailPage() {
                       />
                       <div className="m1-request-detail-grid">
                         <div>
-                          <section className="m1-card m1-section-card">
+                          {!intake && <section className="m1-card m1-section-card">
                             <div className="m1-section-header">
                               <h2>Mô tả sự cố</h2>
                             </div>
                             <div className="m1-section-body m1-prose">
                               {current.description}
                             </div>
-                          </section>
+                          </section>}
                           <section className="m1-card m1-section-card">
                             <div className="m1-section-header">
                               <h2>Thiết bị & vị trí</h2>
@@ -1398,7 +1478,7 @@ function RequestDetailPage() {
                 },
                 {
                   key: "decision",
-                  label: "Bảo hành & dự toán",
+                  label: intake ? "Hồ sơ & chính sách" : "Bảo hành & dự toán",
                   content: (
                     <>
                       <RequestDossierExtras
@@ -1419,22 +1499,7 @@ function RequestDetailPage() {
                           </ul>
                         </section>
                       )}
-                      <WarrantyAssessmentPanel
-                        key={current.id}
-                        request={current}
-                        changed={() => void refreshRequest()}
-                      />
-                      <EstimatePanel
-                        requestNo={current.requestNo}
-                        equipmentSummary={
-                          equipmentLabel.value
-                            ? `${equipmentLabel.value.assetCode} · serial ${equipmentLabel.value.serialNumber}`
-                            : undefined
-                        }
-                        requestId={current.id}
-                        allowedActions={current.allowedActions ?? []}
-                        onChange={() => void refreshRequest()}
-                      />
+                      {!intake && <>{assessmentPanel}{estimatePanel}</>}
                     </>
                   ),
                 },

@@ -4,6 +4,8 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import { getSessionGeneration, useSession } from '../auth/session'
 import type { Page } from '../types/domain'
+import { locationOptions } from '../display-names'
+import { EquipmentIdentity } from '../features/workspace/WorkspaceUI'
 import {
   DirectoryPicker,
   LoadState,
@@ -220,7 +222,7 @@ export function RegistrationListPage() {
                   <tr key={row.id}>
                     <td>
                       <Link to={`/app/equipment-registrations/${row.id}`}>
-                        Mở hồ sơ · {row.id.slice(0, 8)}
+                        <EquipmentIdentity equipmentId={row.equipmentId} />
                       </Link>
                     </td>
                     <td>{statusNames[row.status]}</td>
@@ -317,11 +319,17 @@ export function EquipmentRegistrationPage() {
     form.customerId ? `/customers/${form.customerId}` : null,
     revision,
   )
-  const locations = useDirectory<DirectoryRow[]>(
+  const locations = useDirectory<(DirectoryRow & { parentId: string | null; customerSiteId: string })[]>(
     'organization',
     form.siteId ? `/sites/${form.siteId}/locations` : null,
     revision,
   )
+  const [locationSearch, setLocationSearch] = useState({ siteId: '', text: '' })
+  const locationQuery = locationSearch.siteId === form.siteId ? locationSearch.text : ''
+  const locationChoices = locationOptions(locations.value ?? [], form.siteId)
+    .filter(row => row.id === form.locationId || row.label.toLocaleLowerCase('vi').includes(locationQuery.trim().toLocaleLowerCase('vi')))
+  const locationLocked = Boolean(record) ||
+    (form.source === 'EXISTING' && Boolean(form.equipmentId)) || busy || !form.siteId
   const contacts = useDirectory<DirectoryRow[]>(
     'organization',
     form.customerId ? `/customers/${form.customerId}/contacts` : null,
@@ -1229,23 +1237,30 @@ export function EquipmentRegistrationPage() {
                       </button>
                     )}
                     <LoadState {...sites} />
+                    {!locationLocked && (
+                      <label>
+                        Tìm vị trí theo đường dẫn
+                        <input
+                          type="search"
+                          value={locationQuery}
+                          onChange={(e) => setLocationSearch({ siteId: form.siteId, text: e.target.value })}
+                        />
+                      </label>
+                    )}
                     <label>
                       Vị trí chi tiết
                       <select
                         value={form.locationId}
-                        disabled={
-                          Boolean(record) ||
-                          (form.source === 'EXISTING' &&
-                            Boolean(form.equipmentId)) ||
-                          busy ||
-                          !form.siteId
-                        }
+                        disabled={locationLocked || locations.loading}
                         onChange={(e) => field('locationId', e.target.value)}
                       >
                         <option value="">Không chỉ định</option>
-                        {locations.value?.map((row) => (
+                        {form.locationId && !locationChoices.some(row => row.id === form.locationId) && (
+                          <option value={form.locationId}>Vị trí đã lưu</option>
+                        )}
+                        {locationChoices.map((row) => (
                           <option value={row.id} key={row.id}>
-                            {row.name}
+                            {row.label}
                           </option>
                         ))}
                       </select>

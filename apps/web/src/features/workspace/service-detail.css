@@ -261,6 +261,16 @@
   background: #e6f5ee;
   color: #25845c;
 }
+.request-intake-progress {
+  flex-wrap: wrap;
+}
+.request-intake-progress li {
+  min-width: 135px;
+}
+.request-intake-grid {
+  align-items: start;
+  margin-block: 16px;
+}
 .sd-related-link {
   display: flex;
   align-items: center;
