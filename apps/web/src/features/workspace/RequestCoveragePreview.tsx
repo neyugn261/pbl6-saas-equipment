@@ -40,6 +40,7 @@ export default function RequestCoveragePreview({
           {serviceLabels[String(check.result)] ?? "Chưa kiểm tra"} · Kiểm tra{" "}
           {formatDate(check.checkedAt, true)}
         </small>
+        {typeof data.data?.nextAction === "string" && <p><strong>Bước tiếp theo: </strong>{data.data.nextAction}</p>}
       </DataState>
     </div>
   );

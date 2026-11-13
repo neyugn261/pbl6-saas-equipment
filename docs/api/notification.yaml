@@ -19,6 +19,11 @@ info:
     that scope return 404. Customer-facing title/body content must be rendered
     from allowlisted fields or templates, never copied from internal comments,
     technician notes or unrestricted event text.
+    Newly rendered business notifications use Vietnamese text and existing document
+    numbers, not technical event names as titles. Unresolved and partially resolved
+    work are distinguished from resolved work. Service-request-origin completion
+    links to SERVICE_REQUEST for staff and customers; internal unresolvedReason is
+    never copied into notification text. Existing stored notifications are unchanged.
 
     Identity recipient snapshots are the approved local projection contract.
     The API fails closed when the caller's current account/membership projection

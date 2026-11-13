@@ -1,5 +1,33 @@
 # Notification recipient matrix (M3)
 
+## Review update — 12/11/2026
+
+At baseline `771c9fa`, recipient snapshot/bootstrap contracts are present in the
+shared catalog and bound by the existing consumer. Historical "not merged"
+statements below describe the earlier Q3 handoff, not this baseline.
+
+- Existing audiences remain unchanged. No additional CUSTOMER recipient is added.
+- New business notices use Vietnamese labels and existing SR/WO/SKU display codes.
+  No per-recipient synchronous enrichment is introduced. Existing inbox rows are
+  not rewritten. Missing names do not become fabricated names or raw UUID titles.
+- UNRESOLVED and PARTIALLY_RESOLVED completion notices explicitly describe unfinished
+  work. Staff receive an instruction to inspect the result and plan follow-up.
+  SR-origin completion uses `SERVICE_REQUEST` navigation for both audiences;
+  maintenance-origin completion keeps staff-only `WORK_ORDER` navigation.
+- `unresolvedReason` remains excluded from notification storage/templates. Authorized
+  staff retrieve sanitized text from the SR current follow-up projection instead.
+- The durable pending ledger suppresses identical terminal business payloads for
+  the same tenant/WO under different event IDs (transport occurrence time excluded).
+  A transaction advisory lock serializes this check. Conflicting terminal payloads
+  remain manual-review cases; distinct assignments/status changes are not suppressed.
+- A newer locally received Created(B) for the same SR suppresses delayed terminal(A).
+  A later terminal SR snapshot also suppresses delayed WO terminal notices. These
+  checks use local projections; they do not claim knowledge of events not yet delivered.
+- Reading/marking a notification never clears the independent SR business queue.
+
+These rules supersede the older terminal-event/navigation caveats below. Branch
+visibility continues to use ADR 0022 and existing branch-tagged notification reads.
+
 The Q3 recipient projection and public API scope are implemented locally. The
 shared snapshot/bootstrap event definitions and Identity producer are not yet
 in the shared event catalog, so Notification does not bind those event names.

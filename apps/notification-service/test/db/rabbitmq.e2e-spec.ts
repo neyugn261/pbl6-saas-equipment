@@ -106,7 +106,7 @@ describeBroker('Notification consumers (RabbitMQ + PostgreSQL)', () => {
     bus = new RabbitMqEventBus({ url: rabbitUrl, exchange });
     bus.subscribe({
       queue,
-      events: [Events.ServiceRequestCreated],
+      events: [Events.ServiceRequestCreated, Events.WorkOrderCompletedV2],
       handler: async (envelope) => {
         await processor.handle(envelope);
         received.push(envelope.eventId);
@@ -333,6 +333,29 @@ describeBroker('Notification consumers (RabbitMQ + PostgreSQL)', () => {
     expect(
       await db.notification.count({ where: { sourceEventId: eventId } }),
     ).toBe(2);
+  });
+  it('delivers UNRESOLVED v2 once through RabbitMQ without exposing its internal reason', async () => {
+    if (!bus || !db) throw new Error('RabbitMQ test setup did not complete');
+    const workOrderId = randomUUID(), completionId = randomUUID();
+    projectionEventIds.push(completionId);
+    const completion: EventEnvelope = {
+      ...event, eventId: completionId, eventType: Events.WorkOrderCompletedV2.type,
+      eventVersion: 2, producer: Events.WorkOrderCompletedV2.producer,
+      aggregateType: 'WorkOrder', aggregateId: workOrderId, occurredAt: new Date().toISOString(),
+      payload: { workOrderId, workOrderNo: 'WO-RABBIT-UNRESOLVED', serviceRequestId, maintenanceTaskId: null,
+        customerId, equipmentId: (event.payload as { equipmentId: string }).equipmentId,
+        serviceReportId: randomUUID(), completedAt: new Date().toISOString(), result: 'UNRESOLVED',
+        customerSummary: 'Cần kiểm tra thêm', unresolvedReason: 'INTERNAL-REASON-DO-NOT-PUBLISH' },
+    };
+    await bus.publish(completion);
+    await waitFor(() => received.filter((id) => id === completionId).length === 1);
+    await bus.publish(completion);
+    await waitFor(() => received.filter((id) => id === completionId).length === 2);
+    const notices = await db.notification.findMany({ where: { sourceEventId: completionId } });
+    expect(notices).toHaveLength(2);
+    expect(notices.every((n) => n.title === 'Chưa xử lý được')).toBe(true);
+    expect(JSON.stringify(notices)).not.toContain('INTERNAL-REASON');
+    expect(notices.every((n) => (n.payload as { resourceType: string }).resourceType === 'SERVICE_REQUEST')).toBe(true);
   });
 });
 

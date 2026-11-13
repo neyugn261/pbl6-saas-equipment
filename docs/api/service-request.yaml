@@ -70,6 +70,10 @@ paths:
       parameters:
         - { name: branchId, in: query, description: Tenant Admin branch filter; staff cannot widen their own branch, schema: { type: string, format: uuid } }
         - { name: unallocated, in: query, description: Tenant Admin central queue, schema: { type: string, enum: ['true', 'false'] } }
+        - name: followUp
+          in: query
+          description: Staff-only current follow-up queue, with existing tenant and branch scope. UNRESOLVED requires ACCEPTED or REVIEWING and no active WO; PARTIALLY_RESOLVED requires RESOLVED and no active WO. Pagination total uses the same predicate. CUSTOMER receives 403. unallocated=true also returns 403 for non-admin callers.
+          schema: { type: string, enum: [UNRESOLVED, PARTIALLY_RESOLVED] }
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
         - name: q
@@ -751,6 +755,18 @@ components:
           }
         resolvedWorkOrderNo: { type: [string, "null"] }
         resolutionCompletedAt: { type: [string, "null"], format: date-time }
+        followUp:
+          type: [object, "null"]
+          readOnly: true
+          description: Current staff-only follow-up. Null for customers and inactive warnings. Reason requires service_request:comment_internal and is text from the matching applied WO lifecycle occurrence; legacy missing reasons stay null. Reading notifications has no effect on this projection.
+          properties:
+            result: { type: string, enum: [UNRESOLVED, PARTIALLY_RESOLVED] }
+            reason: { type: [string, "null"], maxLength: 2000 }
+            workOrderId: { type: [string, "null"], format: uuid }
+            workOrderNo: { type: [string, "null"] }
+            recordedAt: { type: [string, "null"], format: date-time }
+            responsibleRole: { type: string, enum: [SERVICE_MANAGER, TENANT_ADMIN] }
+            nextAction: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         resolvedAt: { type: [string, "null"], format: date-time }
@@ -773,6 +789,18 @@ components:
         - $ref: "#/components/schemas/ServiceRequest"
         - type: object
           properties:
+            nextAction:
+              type: [string, "null"]
+              readOnly: true
+              description: Vietnamese guidance based on current status, permitted actions and visible estimate. Conditional direct-estimate/inspection guidance does not establish diagnostic readiness or customer consent.
+            confirmation:
+              type: [object, "null"]
+              readOnly: true
+              description: Existing request closure audit only. Does not prove on-site arrival, report receipt, report-revision approval or cost consent. Null unless the request is currently CLOSED.
+              properties:
+                kind: { type: string, const: REQUEST_CLOSURE }
+                actorId: { type: [string, "null"], format: uuid }
+                recordedAt: { type: string, format: date-time }
             warrantyCheck:
               type: [object, "null"]
               properties:

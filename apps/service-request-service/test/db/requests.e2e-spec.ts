@@ -90,6 +90,60 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
     await staff().post(`/service-requests/${requestId}/review`).expect(200);
     await staff().post(`/service-requests/${requestId}/accept`).expect(200);
   };
+  it('enforces queue scope over JWT/HTTP and counts only current unresolved rows', async () => {
+    const row = await prisma.serviceRequest.create({ data: {
+      tenantId: tenantA, branchId: FIXTURE_BRANCH, customerId: customerA, equipmentId,
+      requesterId: randomUUID(), requestNo: 'SR-QUEUE', type: 'REPAIR', title: 'Queue', description: 'Queue',
+      status: 'ACCEPTED', resolutionResult: 'UNRESOLVED',
+    } });
+    const url = '/service-requests?followUp=UNRESOLVED&page=1&pageSize=5';
+    expect((await staff().get(url).expect(200)).body.total).toBe(1);
+    expect((await staff(tenantB).get(url).expect(200)).body.total).toBe(0);
+    await request(app.getHttpServer()).get(url).expect(401);
+    await request(app.getHttpServer()).get(url).set('authorization', authorization('CUSTOMER_USER', tenantA, customerA)).expect(403);
+    await staff().get('/service-requests?unallocated=true').expect(403);
+    await prisma.serviceRequest.update({ where: { id: row.id }, data: { branchId: randomUUID() } });
+    expect((await staff().get(url).expect(200)).body.total).toBe(0);
+    await prisma.serviceRequest.update({ where: { id: row.id }, data: { branchId: null } });
+    const admin = request.agent(app.getHttpServer()).set('authorization', authorization('TENANT_ADMIN', tenantA));
+    expect((await admin.get('/service-requests?unallocated=true').expect(200)).body.total).toBe(1);
+  });
+  it('serializes simultaneous branch allocation and rejects a stale retry without duplicate history', async () => {
+    const row = await prisma.serviceRequest.create({ data: {
+      tenantId: tenantA, customerId: customerA, equipmentId, requesterId: randomUUID(),
+      requestNo: 'SR-ALLOCATE', type: 'REPAIR', title: 'Queue', description: 'Queue', status: 'NEW',
+    } });
+    const allocate = () => request(app.getHttpServer()).patch(`/service-requests/${row.id}/branch`)
+      .set('authorization', authorization('TENANT_ADMIN', tenantA))
+      .send({ branchId: FIXTURE_BRANCH, expectedBranchId: null, reason: 'Phân bổ xử lý' });
+    const responses = await Promise.all([allocate(), allocate()]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect((await allocate()).status).toBe(409);
+    expect(await prisma.requestStatusHistory.count({ where: { requestId: row.id } })).toBe(1);
+    expect((await request(app.getHttpServer()).get('/service-requests?unallocated=true')
+      .set('authorization', authorization('TENANT_ADMIN', tenantA)).expect(200)).body.total).toBe(0);
+  });
+  it('keeps internal event reasons out of customer history and identifies closure actor without claiming report consent', async () => {
+    const row = await prisma.serviceRequest.create({ data: {
+      tenantId: tenantA, branchId: FIXTURE_BRANCH, customerId: customerA, equipmentId,
+      requesterId: randomUUID(), requestNo: 'SR-CLOSURE-AUDIT', type: 'REPAIR', title: 'Closure', description: 'Closure',
+      status: 'RESOLVED', resolutionResult: 'PARTIALLY_RESOLVED',
+    } });
+    await prisma.requestStatusHistory.create({ data: { tenantId: tenantA, requestId: row.id,
+      oldStatus: 'PROCESSING', newStatus: 'RESOLVED', changedBy: null, reason: 'PRIVATE DIAGNOSTIC' } });
+    const history = await request(app.getHttpServer()).get(`/service-requests/${row.id}/history`)
+      .set('authorization', authorization('CUSTOMER_USER', tenantA, customerA)).expect(200);
+    expect(JSON.stringify(history.body)).not.toContain('PRIVATE DIAGNOSTIC');
+    expect(JSON.stringify((await staff().get(`/service-requests/${row.id}/history`).expect(200)).body)).toContain('PRIVATE DIAGNOSTIC');
+    await staff().post(`/service-requests/${row.id}/confirm`).expect(200);
+    const closed = await prisma.serviceRequest.findUniqueOrThrow({ where: { id: row.id } });
+    const detail = (await staff().get(`/service-requests/${row.id}`).expect(200)).body;
+    expect(detail.confirmation).toMatchObject({ kind: 'REQUEST_CLOSURE', actorId: closed.confirmedBy });
+    expect(detail.followUp).toBeNull();
+    expect(detail.confirmation).not.toHaveProperty('customerApproved');
+    await request(app.getHttpServer()).get(`/service-requests/${row.id}`)
+      .set('authorization', authorization('CUSTOMER_USER', tenantA, customerB)).expect(404);
+  });
   const customer = (customerId = customerA, role: RoleCode = 'CUSTOMER_USER') =>
     request
       .agent(app.getHttpServer())

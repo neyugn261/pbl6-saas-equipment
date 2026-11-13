@@ -1,5 +1,6 @@
 import { branchDataScope, branchWhere, assertBranchAccess } from '@pbl6/auth';
 import { coveredIncident, estimateAllowed } from './warranty-coverage';
+import { followUp, needsFollowUp, nextAction } from './follow-up';
 import {
   validWarrantyPolicy,
   type WarrantyPolicyBody,
@@ -219,8 +220,15 @@ export class ServiceRequestsService {
   async list(
     principal: Principal,
     query: ListServiceRequestsDto,
-  ): Promise<Page<ReturnType<typeof publicRequest>>> {
+  ): Promise<Page<ReturnType<typeof publicRequest> & { followUp: ReturnType<typeof followUp> }>> {
     const scope = branchDataScope(principal);
+    if (query.unallocated === 'true' &&
+        (principal.userType !== 'TENANT_STAFF' || !principal.roles.includes('TENANT_ADMIN'))) {
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only Tenant Admin can read the unallocated queue' });
+    }
+    if (query.followUp && principal.userType !== 'TENANT_STAFF') {
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Follow-up queue is staff only' });
+    }
     const statuses = query.status?.split(',').map((status) => status.trim());
     if (
       statuses?.some(
@@ -251,6 +259,10 @@ export class ServiceRequestsService {
       ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
       ...(statuses?.length ? { status: { in: statuses } } : {}),
+      ...(query.followUp ? {
+        AND: [{ resolutionResult: query.followUp, activeWorkOrderId: null,
+          status: { in: query.followUp === 'UNRESOLVED' ? ['ACCEPTED', 'REVIEWING'] : ['RESOLVED'] } }],
+      } : {}),
       ...(query.q
         ? {
             OR: [
@@ -311,12 +323,25 @@ export class ServiceRequestsService {
       ]);
     }
 
+    const followUps = await this.followUps(principal, requests);
     return {
       page: query.page,
       pageSize: query.pageSize,
       total,
-      items: requests.map(publicRequest),
+      items: requests.map((request) => ({ ...publicRequest(request), followUp: followUps.get(request.id) ?? null })),
     };
+  }
+
+  private async followUps(principal: Principal, requests: ServiceRequest[]) {
+    const candidates = principal.userType === 'TENANT_STAFF' ? requests.filter(needsFollowUp) : [];
+    const rows = candidates.length ? await this.prisma.workOrderLifecycle.findMany({
+      where: { tenantId: principal.tenantId!, requestId: { in: candidates.map((r) => r.id) }, appliedPhase: 'COMPLETED' },
+    }) : [];
+    return new Map(candidates.map((request) => {
+      const projection = followUp(request, rows);
+      return [request.id, projection && { ...projection,
+        reason: hasPermission(principal, 'service_request:comment_internal') ? projection.reason : null }];
+    }));
   }
 
   async create(principal: Principal, input: CreateServiceRequestDto) {
@@ -469,8 +494,15 @@ export class ServiceRequestsService {
       },
       include: { items: true },
     });
+    const actions = allowedActions(request, principal, liveEstimate?.status ?? null);
+    const followUps = await this.followUps(principal, [request]);
     return {
       ...publicRequest(request),
+      followUp: followUps.get(request.id) ?? null,
+      nextAction: nextAction(request, actions, liveEstimate?.status ?? null),
+      confirmation: request.status === 'CLOSED' && request.confirmedAt ? {
+        kind: 'REQUEST_CLOSURE', actorId: request.confirmedBy, recordedAt: request.confirmedAt,
+      } : null,
       coverageAssessment: request.coverageAssessment,
       assessmentVersion: request.assessmentVersion,
       assessmentRequired: request.assessmentRequired,
@@ -1177,6 +1209,8 @@ export class ServiceRequestsService {
       ...statusChanges.map((change) => ({
         kind: 'STATUS_CHANGED' as const,
         ...change,
+        // Event-authored reasons may contain internal technical details.
+        ...(!canReadInternal && change.changedBy === null ? { reason: null } : {}),
       })),
       ...comments.map((comment) => ({
         kind: 'COMMENT_ADDED' as const,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import ServiceManagerDashboard from "./ServiceManagerDashboard";
+import RequestFollowUpQueue from "./RequestFollowUpQueue";
 import { equipmentLifecycleLabel } from "./service-detail-data";
 import { Link } from "react-router-dom";
 import {
@@ -357,6 +358,7 @@ function StandardDashboard() {
   }).format(new Date());
   return (
     <div className="ws-page">
+      <RequestFollowUpQueue unallocated />
       <PageHeading
         eyebrow={`${roleNames[role].toUpperCase()} · ${dateLabel}`}
         title={config.title}

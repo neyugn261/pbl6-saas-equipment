@@ -347,6 +347,7 @@ test("customer dashboard switches focus to named equipment records and uses the 
       ),
       "../../auth/session": session,
       "./ServiceManagerDashboard": { default: "ServiceManagerDashboard" },
+      "./RequestFollowUpQueue": { default: "follow-up" },
       "./role-workspace": tab.load("features/workspace/role-workspace.ts"),
       "./service-detail-data": tab.load(
         "features/workspace/service-detail-data.ts",
