@@ -54,13 +54,23 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final user = widget.session.user!;
-    Future<Object?> request(String method, String path, {Json? body}) async {
+    Future<Object?> request(
+      String method,
+      String path, {
+      Json? body,
+      String? idempotencyKey,
+    }) async {
       if (widget.session.user?.id != user.id ||
           widget.session.user?.tenantId != user.tenantId ||
           widget.session.user?.roles.join(',') != user.roles.join(',')) {
         throw const ApiException('SESSION_CHANGED');
       }
-      return widget.session.authorizedRequest(method, path, body: body);
+      return widget.session.authorizedRequest(
+        method,
+        path,
+        body: body,
+        idempotencyKey: idempotencyKey,
+      );
     }
 
     repo = WorkspaceRepository(
@@ -68,7 +78,8 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
       user,
       store: widget.store,
       selection: widget.uploads,
-      write: (path, body) => request('POST', path, body: body),
+      write: (path, body, {idempotencyKey}) =>
+          request('POST', path, body: body, idempotencyKey: idempotencyKey),
       attachments: AttachmentClient(
         api: (method, path, {body, idempotencyKey}) {
           if (widget.session.user?.id != user.id ||

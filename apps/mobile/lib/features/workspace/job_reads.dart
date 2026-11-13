@@ -261,7 +261,8 @@ class _JobReadScreenState extends State<JobReadScreen>
             onSaved: () => unawaited(workflow.load()),
           ),
         ),
-      if (_tab == 4) JobParts(repo: repo, orderId: w.id, revision: _revision),
+      if (_tab == 4)
+        JobParts(repo: repo, orderId: w.id, revision: _revision, order: w),
       const SizedBox(height: 20),
       if (w.terminal)
         const Notice('Công việc đã kết thúc. Chỉ xem dữ liệu và báo cáo.')

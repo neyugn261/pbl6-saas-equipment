@@ -4,6 +4,7 @@ import 'package:pbl6_technician/core/api/api_exception.dart';
 import 'package:pbl6_technician/features/session/session_models.dart';
 import 'package:pbl6_technician/features/workspace/workspace_repository.dart';
 
+import 'parts_fixture.dart';
 import 'workspace_fixture.dart' as fixture;
 
 const workflowUser = SessionUser(
@@ -26,6 +27,27 @@ class WorkflowServer {
   }
   late Json current;
   final history = <Json>[], logs = <Json>[], requests = <String>[];
+  final issuedParts = <Json>[usage()];
+  final partRequests = <Json>[];
+  final returnRequests = <Json>[];
+  final partsCatalog = <Json>[
+    {
+      'id': 'part-1',
+      'name': 'Lọc gió động cơ',
+      'sku': 'AIR-FILTER-01',
+      'unit': 'Cái',
+      'allowFractional': false,
+      'status': 'ACTIVE',
+    },
+    {
+      'id': 'part-2',
+      'name': 'Dầu bôi trơn cao cấp',
+      'sku': 'LUBRICANT-02',
+      'unit': 'Lít',
+      'allowFractional': true,
+      'status': 'ACTIVE',
+    },
+  ];
   Json? report, lastBody;
   int writes = 0, version = 0;
   bool timeoutAfterApply = false, timeoutBeforeApply = false;
@@ -79,6 +101,18 @@ class WorkflowServer {
         if (current['currentAssignment'] != null) current['currentAssignment'],
       ]);
     }
+    if (path.contains('/inventory/work-orders/') && path.endsWith('/parts')) {
+      return clone(issuedParts);
+    }
+    if (path.startsWith('/api/inventory/part-requests')) {
+      return {'items': clone(partRequests), 'total': partRequests.length, 'page': 1, 'pageSize': 20};
+    }
+    if (path.startsWith('/api/inventory/return-requests')) {
+      return {'items': clone(returnRequests), 'total': returnRequests.length, 'page': 1, 'pageSize': 20};
+    }
+    if (path.startsWith('/api/inventory/parts')) {
+      return {'items': clone(partsCatalog), 'total': partsCatalog.length, 'page': 1, 'pageSize': 20};
+    }
     if (path.endsWith('/dossier')) return fixture.dossier();
     if (path.contains('/work-orders/')) return clone(current);
     throw const ApiException('NOT_FOUND', status: 404);
@@ -126,10 +160,89 @@ class WorkflowServer {
     }
   }
 
-  Future<Object?> write(String path, Json body) async {
+  Future<Object?> write(
+    String path,
+    Json body, {
+    String? idempotencyKey,
+  }) async {
     writes++;
     requests.add('POST $path');
     lastBody = object(clone(body));
+    if (path.endsWith('/part-requests')) {
+      final req = {
+        'id': 'pr-${partRequests.length + 1}',
+        'requestNo': 'PR-${1000 + partRequests.length + 1}',
+        'workOrderId': fixture.orderId,
+        'status': 'OPEN',
+        'fulfillmentStatus': 'NOT_ISSUED',
+        'reason': body['reason'] ?? '',
+        'version': 1,
+        'createdAt': '2026-11-13T10:00:00Z',
+        'allowedActions': ['cancel'],
+        'lines': (body['lines'] as List? ?? []).map((l) {
+          final partId = l['partId'] as String;
+          final cat = partsCatalog.firstWhere(
+            (p) => p['id'] == partId,
+            orElse: () => {
+              'id': partId,
+              'name': 'Phụ tùng $partId',
+              'sku': partId,
+              'unit': 'Cái',
+            },
+          );
+          return {
+            'id': 'pr-line-${partRequests.length + 1}',
+            'partId': partId,
+            'partSnapshot': cat,
+            'quantityRequested': l['quantity'].toString(),
+            'quantityIssued': '0',
+            'quantityRemainingToIssue': l['quantity'].toString(),
+          };
+        }).toList(),
+      };
+      partRequests.add(req);
+      return clone(req);
+    }
+    if (path.contains('/part-requests/') && path.endsWith('/cancel')) {
+      final id = path.split('/')[4];
+      final req = partRequests.firstWhere((r) => r['id'] == id);
+      req['status'] = 'CANCELLED';
+      req['allowedActions'] = [];
+      return clone(req);
+    }
+    if (path.endsWith('/return-requests')) {
+      final req = {
+        'id': 'rr-${returnRequests.length + 1}',
+        'requestNo': 'RR-${1000 + returnRequests.length + 1}',
+        'workOrderId': fixture.orderId,
+        'workOrderPartId': path.split('/')[4],
+        'status': 'OPEN',
+        'receiptStatus': 'NOT_RECEIVED',
+        'reason': body['reason'] ?? '',
+        'version': 1,
+        'quantityRequested': body['quantity'].toString(),
+        'quantityReceived': '0',
+        'quantityPendingReceipt': body['quantity'].toString(),
+        'createdAt': '2026-11-13T10:00:00Z',
+        'allowedActions': ['cancel'],
+        'usage': {
+          'partSnapshot': {
+            'name': 'Dầu bảo trì 1',
+            'sku': 'oil-1',
+            'unit': 'Lít',
+          },
+        },
+      };
+      returnRequests.add(req);
+      return clone(req);
+    }
+    if (path.contains('/return-requests/') && path.endsWith('/cancel')) {
+      final id = path.split('/')[4];
+      final req = returnRequests.firstWhere((r) => r['id'] == id);
+      req['status'] = 'CANCELLED';
+      req['allowedActions'] = [];
+      return clone(req);
+    }
     final action = path.split('/').last;
     await beforeWrite?.call(action);
     if (timeoutBeforeApply) throw const ApiException('TIMEOUT');
