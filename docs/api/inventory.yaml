@@ -1,14 +1,15 @@
 openapi: 3.1.0
 info:
   title: Inventory Service API — M3 runtime
-  version: 0.3.0
+  version: 0.4.0
   description: |
     ADR 0022: SERVICE_MANAGER handles reception and dispatch. Branch-bound staff
     routes resolve the active primary branch live from Organization; errors fail closed.
     Customer/Equipment and maintenance plans remain tenant/customer scoped.
     DISPATCHER is retained for existing accounts; new assignment/invitation is rejected.
-    Owner Minh. Local Inventory runtime is implemented; Work Order reservation
-    contract is awaiting Khương's implementation/review. ISSUE fails closed with
+    Owner Minh. Inventory runtime and Work Order reservation (ADR 0016) exist.
+    ADR 0023 adds part/return business requests using that same protocol.
+    ISSUE fails closed with
     503 when that capability is unavailable. Notification audience and UI remain
     Huy/Hatsady responsibilities. See ADR 0014 and inventory-reservations.yaml.
     Tenant comes exclusively from the verified token. Stock/catalog/ledger are
@@ -26,7 +27,32 @@ servers: [{ url: / }]
 security: [{ bearer: [] }]
 x-review-notes: ../plans/minh-m3-inventory-handoff.md
 x-reservation-contract: ./inventory-reservations.yaml
+x-part-requests-contract: ./inventory-part-requests.yaml
 paths:
+  /work-orders/{id}/part-requests:
+    $ref: './inventory-part-requests.yaml#/paths/~1work-orders~1{id}~1part-requests'
+  /part-requests:
+    $ref: './inventory-part-requests.yaml#/paths/~1part-requests'
+  /part-requests/{id}:
+    $ref: './inventory-part-requests.yaml#/paths/~1part-requests~1{id}'
+  /part-requests/{id}/history:
+    $ref: './inventory-part-requests.yaml#/paths/~1part-requests~1{id}~1history'
+  /part-requests/{id}/fulfillments:
+    $ref: './inventory-part-requests.yaml#/paths/~1part-requests~1{id}~1fulfillments'
+  /part-requests/{id}/{action}:
+    $ref: './inventory-part-requests.yaml#/paths/~1part-requests~1{id}~1{action}'
+  /work-order-parts/{id}/return-requests:
+    $ref: './inventory-part-requests.yaml#/paths/~1work-order-parts~1{id}~1return-requests'
+  /return-requests:
+    $ref: './inventory-part-requests.yaml#/paths/~1return-requests'
+  /return-requests/{id}:
+    $ref: './inventory-part-requests.yaml#/paths/~1return-requests~1{id}'
+  /return-requests/{id}/history:
+    $ref: './inventory-part-requests.yaml#/paths/~1return-requests~1{id}~1history'
+  /return-requests/{id}/receipts:
+    $ref: './inventory-part-requests.yaml#/paths/~1return-requests~1{id}~1receipts'
+  /return-requests/{id}/{action}:
+    $ref: './inventory-part-requests.yaml#/paths/~1return-requests~1{id}~1{action}'
   /inventory-audit:
     $ref: './inventory-accountability.yaml#/paths/~1inventory-audit'
   /stock-transactions/{id}/inspect:
@@ -739,6 +765,8 @@ components:
         unitCost:
           { anyOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
         recordedBy: { type: string, format: uuid }
+        custodianUserId: { type: [string, 'null'], format: uuid, description: 'Original physical recipient; remains responsible after technician reassignment. Null for legacy/direct issues without receipt.' }
+        handoverReference: { type: [string, 'null'], maxLength: 150, description: 'Warehouse-recorded reference to the signed physical handover, not an electronic signature' }
         createdAt: { type: string, format: date-time }
     PageFields:
       type: object
