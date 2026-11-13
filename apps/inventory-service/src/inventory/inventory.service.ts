@@ -17,6 +17,7 @@ import {
   type Movement,
   type OperationContext,
   type OperationName,
+  type RequestBusinessContext,
 } from './inventory.repository';
 import { ReferencesClient } from './references.client';
 import {
@@ -43,6 +44,10 @@ import type {
   InspectionInput,
   AuditQuery,
 } from './dto';
+import { requireRequestableWorkOrder } from '../part-requests/requests.policy';
+
+type FulfillmentLink = Required<Pick<RequestBusinessContext, 'partRequestId' | 'partRequestLineId' | 'requestVersion' | 'custodianUserId' | 'handoverReference'>>;
+type ReceiptLink = Required<Pick<RequestBusinessContext, 'returnRequestId' | 'requestVersion'>>;
 
 @Injectable()
 export class InventoryService {
@@ -268,7 +273,7 @@ export class InventoryService {
     await this.scopedWorkOrder(workOrderId, p);
     return this.repo.usages(tenantId, workOrderId, staffBranchId(p));
   }
-  async returnPart(p: Principal, key: string, id: string, input: ReturnInput) {
+  async returnPart(p: Principal, key: string, id: string, input: ReturnInput, link?: ReceiptLink) {
     const tenantId = this.tenant(p);
     const usage = await this.repo.usage(tenantId, id);
     await this.scopedWarehouse(p, usage.warehouseId);
@@ -281,6 +286,7 @@ export class InventoryService {
       note: input.note,
       condition: input.condition,
     });
+    ctx.businessContext = link;
     // Successful retry remains available during an upstream outage; permission
     // is checked afresh by the controller. An uncached return validates scoped WO.
     const cached = await this.repo.cached(ctx);
@@ -444,6 +450,7 @@ export class InventoryService {
     key: string,
     workOrderId: string,
     input: IssueInput,
+    link?: FulfillmentLink,
   ) {
     if (
       (input.unitCost !== undefined) !==
@@ -464,6 +471,7 @@ export class InventoryService {
             unitCostCurrency: input.unitCostCurrency,
           }),
     });
+    ctx.businessContext = link;
     const cached = await this.repo.cached(ctx);
     if (cached && cached.state !== 'PENDING') return this.settle(p, cached);
     const wo = await this.scopedWorkOrder(workOrderId, p);
@@ -472,13 +480,25 @@ export class InventoryService {
         'WAREHOUSE_BRANCH_MISMATCH',
         'Choose a warehouse from the Work Order branch',
       );
+    if (link) await this.validateFulfillmentRecipient(p, ctx);
     await this.repo.prepareIssue(ctx);
     return this.runIssue(p, ctx);
+  }
+  private async validateFulfillmentRecipient(p: Principal, ctx: OperationContext) {
+    const request = ctx.request;
+    const wo = await this.refs.workOrderDetail(request.workOrderId!, p);
+    if (!wo || wo.id.toLowerCase() !== request.workOrderId) throw notFound();
+    assertBranchAccess(p, wo.branchId);
+    requireRequestableWorkOrder(wo.status);
+    if (wo.currentAssignment?.status !== 'ACCEPTED' ||
+      wo.currentAssignment.technicianUserId.toLowerCase() !== ctx.businessContext?.custodianUserId)
+      throw conflict('CUSTODIAN_NOT_CURRENT_TECHNICIAN', 'Record the actual current accepted Technician receiving the parts; reconcile an old pending issue before creating a replacement');
   }
   private async runIssue(p: Principal, ctx: OperationContext) {
     let row: InventoryOperation;
     try {
-      row = await this.repo.issue(ctx, async (operation) => {
+      row = await this.repo.issue({ ...ctx, executedBy: p.userId }, async (operation) => {
+        if (ctx.businessContext?.partRequestId) await this.validateFulfillmentRecipient(p, ctx);
         const reservation = await this.refs.reserve(
           operation.workOrderId!,
           { requestId: operation.key, fingerprint: operation.fingerprint },
@@ -497,7 +517,7 @@ export class InventoryService {
         [400, 404, 409, 422].includes(error.getStatus())
       ) {
         row = await this.repo.abortIssue(
-          ctx,
+          { ...ctx, executedBy: p.userId },
           error.getStatus(),
           json(error.getResponse()),
         );
@@ -520,7 +540,7 @@ export class InventoryService {
       const expected = row.state === 'COMMITTED' ? 'COMMITTED' : 'RELEASED';
       if (result.state !== expected)
         throw new Error('Reservation settlement state mismatch');
-      await this.repo.settled(row);
+      await this.repo.settled(row, p.userId);
       return this.repo.operation(row.tenantId, row.key);
     } catch {
       // Stock success stays success. The proof/read endpoint exposes the durable
@@ -557,6 +577,7 @@ export class InventoryService {
       actorId: row.actorId,
       operation: 'ISSUE',
       request: row.request as unknown as Movement,
+      businessContext: (row.businessContext as RequestBusinessContext | null) ?? undefined,
     });
   }
   async abort(p: Principal, key: string) {
@@ -580,6 +601,8 @@ export class InventoryService {
         actorId: row.actorId,
         operation: 'ISSUE',
         request,
+        businessContext: (row.businessContext as RequestBusinessContext | null) ?? undefined,
+        executedBy: p.userId,
       },
       409,
       {

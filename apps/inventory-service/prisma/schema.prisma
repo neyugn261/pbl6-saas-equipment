@@ -1,5 +1,5 @@
 // Inventory Service — inventory_db (MVP: parts, warehouses, stock, basic
-// low-stock alert; no part-request workflow)
+// low-stock alert, part requests and return requests — ADR 0023)
 //
 // Source of truth for the table structure is prisma/migrations/0001_init
 // (copied from docs/erd/pbl6-schema-v3.1.sql). This file mirrors it for the
@@ -31,6 +31,7 @@ model Part {
   stocks            Stock[]
   stockTransactions StockTransaction[]
   workOrderParts    WorkOrderPart[]
+  requestLines      PartRequestLine[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, id])
@@ -149,6 +150,10 @@ model WorkOrderPart {
   partSnapshot          Json?               @map("part_snapshot")
   warehouseSnapshot     Json?               @map("warehouse_snapshot")
   confirmations         UsageConfirmation[]
+  /// Original physical recipient; never inferred from warehouse recordedBy.
+  custodianUserId       String?             @map("custodian_user_id") @db.Uuid
+  handoverReference     String?             @map("handover_reference") @db.VarChar(150)
+  returnRequests        PartReturnRequest[]
 
   @@unique([tenantId, id])
   @@index([tenantId, workOrderId], map: "idx_work_order_parts_work_order")
@@ -206,6 +211,7 @@ model InventoryOperation {
   operation            String    @db.VarChar(20)
   fingerprint          String    @db.VarChar(64)
   request              Json
+  businessContext      Json?     @map("business_context")
   actorId              String    @map("actor_id") @db.Uuid
   workOrderId          String?   @map("work_order_id") @db.Uuid
   state                String    @default("PENDING") @db.VarChar(20)
@@ -214,10 +220,103 @@ model InventoryOperation {
   reservationSettledAt DateTime? @map("reservation_settled_at") @db.Timestamptz(6)
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  partRequestLineId     String?   @map("part_request_line_id") @db.Uuid
+  returnRequestId       String?   @map("return_request_id") @db.Uuid
+  partRequestLine      PartRequestLine? @relation(fields: [tenantId, partRequestLineId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  returnRequest        PartReturnRequest? @relation(fields: [tenantId, returnRequestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, key])
+  @@index([tenantId, partRequestLineId], map: "idx_inventory_operations_part_request")
+  @@index([tenantId, returnRequestId], map: "idx_inventory_operations_return_request")
   @@index([tenantId, state, createdAt], map: "idx_inventory_operations_recovery")
   @@map("inventory_operations")
+}
+
+/// Business demand only; neither stock reservation nor a WO terminal lock.
+model PartRequest {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  branchId      String   @map("branch_id") @db.Uuid
+  workOrderId   String   @map("work_order_id") @db.Uuid
+  workOrderNo   String   @map("work_order_no") @db.VarChar(100)
+  equipmentId   String   @map("equipment_id") @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  requestNo     String   @map("request_no") @db.VarChar(40)
+  requestedBy   String   @map("requested_by") @db.Uuid
+  reason        String   @db.VarChar(2000)
+  status        String   @default("OPEN") @db.VarChar(20)
+  version       Int      @default(1)
+  closedAt      DateTime? @map("closed_at") @db.Timestamptz(6)
+  closedBy      String?  @map("closed_by") @db.Uuid
+  closingReason String?  @map("closing_reason") @db.VarChar(2000)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lines         PartRequestLine[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestNo])
+  @@index([tenantId, branchId, status, createdAt], map: "idx_part_requests_queue")
+  @@index([tenantId, workOrderId], map: "idx_part_requests_wo")
+  @@map("part_requests")
+}
+
+model PartRequestLine {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  partRequestId     String   @map("part_request_id") @db.Uuid
+  partId            String   @map("part_id") @db.Uuid
+  quantityRequested Decimal  @map("quantity_requested") @db.Decimal(12, 2)
+  partSnapshot      Json     @map("part_snapshot")
+  request           PartRequest @relation(fields: [tenantId, partRequestId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  part              Part @relation(fields: [tenantId, partId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  fulfillments      InventoryOperation[]
+
+  @@unique([tenantId, id])
+  @@unique([partRequestId, partId])
+  @@map("part_request_lines")
+}
+
+model PartReturnRequest {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  branchId          String   @map("branch_id") @db.Uuid
+  workOrderId       String   @map("work_order_id") @db.Uuid
+  workOrderPartId   String   @map("work_order_part_id") @db.Uuid
+  warehouseId       String   @map("warehouse_id") @db.Uuid
+  custodianUserId   String   @map("custodian_user_id") @db.Uuid
+  requestedBy       String   @map("requested_by") @db.Uuid
+  requestNo         String   @map("request_no") @db.VarChar(40)
+  quantityRequested Decimal  @map("quantity_requested") @db.Decimal(12, 2)
+  reason            String   @db.VarChar(2000)
+  status            String   @default("OPEN") @db.VarChar(20)
+  version           Int      @default(1)
+  closedAt          DateTime? @map("closed_at") @db.Timestamptz(6)
+  closedBy          String?  @map("closed_by") @db.Uuid
+  closingReason     String?  @map("closing_reason") @db.VarChar(2000)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  usage             WorkOrderPart @relation(fields: [tenantId, workOrderPartId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  receipts          InventoryOperation[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestNo])
+  @@index([tenantId, branchId, status, createdAt], map: "idx_part_return_requests_queue")
+  @@index([tenantId, workOrderPartId], map: "idx_part_return_requests_usage")
+  @@map("part_return_requests")
+}
+
+/// Idempotent creation commands. No bearer token or secret is persisted.
+model InventoryRequestCommand {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  key         String   @db.Uuid
+  fingerprint String   @db.VarChar(64)
+  actorId     String   @map("actor_id") @db.Uuid
+  response    Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, key])
+  @@map("inventory_request_commands")
 }
 
 /// Transactional outbox; id is the event id sent to consumers.

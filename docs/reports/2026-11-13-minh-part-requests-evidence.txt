@@ -1,0 +1,79 @@
+MINH — PART REQUEST / RETURN REQUEST: EVIDENCE
+Date: 2026-11-13 (Asia/Bangkok)
+Baseline: aaafaa4; branch codex/minh-part-requests-20261113
+Evidence captured before PR submission. Git/PR history records commit and merge status.
+
+CHECKS ACTUALLY RUN
+
+1. pnpm build:packages
+   PASS: event-contracts, service-kit, auth, testing.
+
+2. pnpm --filter inventory-service typecheck
+   PASS: Prisma generation and TypeScript, including new integration test source.
+
+3. pnpm --filter inventory-service lint
+   PASS: oxlint --deny-warnings src/ test/.
+
+4. pnpm --filter inventory-service build
+   PASS: Prisma generation and Nest build.
+
+5. Inventory unit suites (same Jest/VM flags as service package scripts)
+   PASS: 3 suites, 24 tests.
+   Runner: node tmp/run-minh-inventory-checks.cjs unit
+   Runner loads local environment without printing credentials.
+
+6. All Inventory PostgreSQL integration suites on a fresh temporary container
+   PASS: 4 suites, 63 tests.
+   Includes 29 PartRequest tests, existing Inventory regression, seed replay and
+   LowStock producer through real RabbitMQ. Isolated exchange/queue are test-only.
+   Runner: node tmp/check-minh-inventory-isolated.cjs
+   PostgreSQL 17-alpine, random localhost-only published port, inventory_test_db.
+   Migration 0001–0006 applied from an empty database. Container removed in finally.
+   Log: tmp/minh-inventory-isolated-db.log
+
+7. Migration replay and drift
+   PASS: second migrate deploy reported no pending migration.
+   PASS: database -> Prisma schema: No difference detected.
+   PASS: migration history -> Prisma schema using dedicated shadow DB: No difference detected.
+   Logs: tmp/minh-inventory-isolated-migration-replay.log,
+         tmp/minh-inventory-isolated-drift.log
+   Migration was generated additively from baseline/current Prisma datamodel diff,
+   reviewed and supplemented with raw CHECK constraints. No DROP of existing objects,
+   no rewriting of migrations 0001–0005 and no prisma db push.
+
+8. Targeted check after final closed-request quantity projection refinement
+   PASS: 29 PartRequest HTTP/PostgreSQL tests.
+   Runner: node tmp/run-minh-inventory-checks.cjs db test/part-requests.integration.ts
+   Closed requests now expose zero currently fulfillable/receivable quantities,
+   while retaining separately the quantities closed without issue/receipt and
+   the original WorkOrderPart's reconciliation obligation.
+
+Unique passing tests: 87 (24 unit + 63 DB); repeated 29 are not added again.
+
+ENVIRONMENT FAILURES AND RESOLUTION
+
+- Initial direct test command lacked INVENTORY_TEST_DATABASE_URL in local .env.
+  Scoped runner derives an exact inventory_test_db URL from local configuration
+  without editing .env or printing the password; requireTestDatabaseUrl still applies.
+- Initial all-DB run on existing local inventory_test_db: 60 passed / 1 failed.
+  Seed fixture collided with a pre-existing warehouse primary key. No demo reset
+  or change to product seed code was made to hide the failure. All 63 tests then
+  passed on a new temporary PostgreSQL instance with a clean dedicated test DB.
+- Missing Node VM flags in the first helper attempt prevented Jest from loading
+  Nest ESM. Runner was corrected to use the package script's flags.
+- Initial new-code DB run found Prisma rejecting a redundant tenantId in a nested
+  create. Fixed by inheriting tenantId through the composite parent relation;
+  final HTTP/DB runs verify request creation and tenant isolation.
+
+SCOPE AND LIMITS
+
+- Real Inventory HTTP, auth/RBAC/branch guard fixture and real PostgreSQL.
+- WO references/assignment and reservation HTTP transport are explicit fixtures;
+  every fixture reserve/settle executes the existing Work Order owner's actual
+  verifyInventoryProof source against the real persisted Inventory operation.
+- No production claim or full multi-service/browser/mobile E2E claim.
+- No Work Order, shared role/event catalog or Mobile product source changed.
+- No migration applied to demo inventory_db. Test databases only.
+- Existing 12 local dirty files preserved and verified against pre-pull backup hashes.
+- git diff --check, YAML references, Markdown links and ERD/migration consistency
+  are checked separately before handoff.
