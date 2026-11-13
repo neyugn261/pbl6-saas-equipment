@@ -42,8 +42,14 @@ class ChecklistBackend {
     };
   }
 
-  Future<Object?> write(String path, Json body) async {
-    if (!path.endsWith('/checklist')) return server.write(path, body);
+  Future<Object?> write(
+    String path,
+    Json body, {
+    String? idempotencyKey,
+  }) async {
+    if (!path.endsWith('/checklist')) {
+      return server.write(path, body, idempotencyKey: idempotencyKey);
+    }
     saves++;
     await gate?.future;
     if (body['expectedVersion'] != version) {

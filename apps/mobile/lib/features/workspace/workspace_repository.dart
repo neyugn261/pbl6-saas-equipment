@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/api/api_exception.dart';
 import '../session/session_models.dart';
 import 'attachment_client.dart';
+import 'part_request_models.dart';
 import 'workspace_store.dart';
 import 'part_usage.dart';
 
@@ -103,7 +104,14 @@ String label(String code) =>
       'OUT_OF_SERVICE': 'Dừng sử dụng',
       'NEW': 'Mới',
       'PROCESSING': 'Đang xử lý',
+      'OPEN': 'Đang mở',
       'CLOSED': 'Đã đóng',
+      'NOT_ISSUED': 'Chưa xuất kho',
+      'PARTIALLY_ISSUED': 'Đã xuất một phần',
+      'FULLY_ISSUED': 'Đã xuất đủ',
+      'NOT_RECEIVED': 'Chưa nhận kho',
+      'PARTIALLY_RECEIVED': 'Đã nhận một phần',
+      'RECEIVED': 'Đã nhận đủ',
       'REVIEWING': 'Đang xem xét',
       'TENANT_STAFF': 'Nhân viên',
       'TECHNICIAN': 'Kỹ thuật viên',
@@ -299,13 +307,16 @@ class WorkspaceRepository extends ChangeNotifier {
   WorkspaceRepository(
     this.read,
     this.user, {
-    this.write,
+    GatewayWrite? write,
     this.attachments,
     this.selection,
     WorkspaceStore? store,
-  }) : records = WorkspaceRecords(store ?? MemoryWorkspaceStore());
+  })  : _rawWrite = write,
+        records = WorkspaceRecords(store ?? MemoryWorkspaceStore());
   final GatewayRead read;
-  final GatewayWrite? write;
+  final dynamic _rawWrite;
+  GatewayWrite? get write =>
+      _rawWrite == null ? null : (path, body) => _doWrite(path, body);
   final AttachmentClient? attachments;
   final AttachmentSelection? selection;
   final SessionUser user;
@@ -377,6 +388,30 @@ class WorkspaceRepository extends ChangeNotifier {
     super.dispose();
   }
 
+  Future<Object?> _doWrite(
+    String path,
+    Json body, {
+    String? idempotencyKey,
+  }) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (_rawWrite == null) throw const ApiException('READ_ONLY');
+    try {
+      final namedArgs = <Symbol, dynamic>{};
+      if (idempotencyKey != null) {
+        namedArgs[#idempotencyKey] = idempotencyKey;
+      }
+      final res = Function.apply(
+        _rawWrite as Function,
+        [path, body],
+        namedArgs,
+      );
+      return res is Future ? await res : res;
+    } on NoSuchMethodError {
+      final res = Function.apply(_rawWrite as Function, [path, body]);
+      return res is Future ? await res : res;
+    }
+  }
+
   Future<Object?> post(String id, String action, Json body) async {
     if (_closed) throw const ApiException('SESSION_CHANGED');
     if (![
@@ -393,7 +428,7 @@ class WorkspaceRepository extends ChangeNotifier {
       throw const ApiException('INVALID_COMMAND');
     }
     if (write == null) throw const ApiException('READ_ONLY');
-    return write!('$wo/work-orders/$id/$action', body);
+    return _doWrite('$wo/work-orders/$id/$action', body);
   }
 
   static const wo = '/api/workorders';
@@ -478,6 +513,122 @@ class WorkspaceRepository extends ChangeNotifier {
     );
     if (_closed) throw const ApiException('SESSION_CHANGED');
     return PartUsage.forOrder(result, id);
+  }
+
+  Future<PartRequest> createPartRequest(
+    String workOrderId, {
+    required String reason,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (write == null) throw const ApiException('READ_ONLY');
+    final result = await _doWrite(
+      '/api/inventory/work-orders/${Uri.encodeComponent(workOrderId)}/part-requests',
+      {'reason': reason, 'lines': lines},
+      idempotencyKey: newUuid(),
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    return PartRequest.fromJson(object(result));
+  }
+
+  Future<List<PartRequest>> listPartRequests(String workOrderId) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    final result = await read(
+      path('/api/inventory/part-requests', {'workOrderId': workOrderId}),
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (result is List) {
+      return result.map((e) => PartRequest.fromJson(object(e))).toList();
+    }
+    final obj = object(result);
+    final items = obj['items'];
+    if (items is List) {
+      return items.map((e) => PartRequest.fromJson(object(e))).toList();
+    }
+    return const [];
+  }
+
+  Future<PartRequest> cancelPartRequest(
+    String requestId, {
+    required int expectedVersion,
+    required String reason,
+  }) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (write == null) throw const ApiException('READ_ONLY');
+    final result = await _doWrite(
+      '/api/inventory/part-requests/${Uri.encodeComponent(requestId)}/cancel',
+      {'expectedVersion': expectedVersion, 'reason': reason},
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    return PartRequest.fromJson(object(result));
+  }
+
+  Future<PartReturnRequest> createReturnRequest(
+    String workOrderPartId, {
+    required String quantity,
+    required String reason,
+  }) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (write == null) throw const ApiException('READ_ONLY');
+    final result = await _doWrite(
+      '/api/inventory/work-order-parts/${Uri.encodeComponent(workOrderPartId)}/return-requests',
+      {'quantity': quantity, 'reason': reason},
+      idempotencyKey: newUuid(),
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    return PartReturnRequest.fromJson(object(result));
+  }
+
+  Future<List<PartReturnRequest>> listReturnRequests(String workOrderId) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    final result = await read(
+      path('/api/inventory/return-requests', {'workOrderId': workOrderId}),
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (result is List) {
+      return result.map((e) => PartReturnRequest.fromJson(object(e))).toList();
+    }
+    final obj = object(result);
+    final items = obj['items'];
+    if (items is List) {
+      return items.map((e) => PartReturnRequest.fromJson(object(e))).toList();
+    }
+    return const [];
+  }
+
+  Future<PartReturnRequest> cancelReturnRequest(
+    String returnRequestId, {
+    required int expectedVersion,
+    required String reason,
+  }) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (write == null) throw const ApiException('READ_ONLY');
+    final result = await _doWrite(
+      '/api/inventory/return-requests/${Uri.encodeComponent(returnRequestId)}/cancel',
+      {'expectedVersion': expectedVersion, 'reason': reason},
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    return PartReturnRequest.fromJson(object(result));
+  }
+
+  Future<List<CatalogPart>> searchPartsCatalog(String query) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    final queryParams = <String, String>{
+      'status': 'ACTIVE',
+      'pageSize': '50',
+      if (query.trim().isNotEmpty) 'q': query.trim(),
+    };
+    final result = await read(path('/api/inventory/parts', queryParams));
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (result is List) {
+      return result.map((e) => CatalogPart.fromJson(object(e))).toList();
+    }
+    final obj = object(result);
+    final items = obj['items'];
+    if (items is List) {
+      return items.map((e) => CatalogPart.fromJson(object(e))).toList();
+    }
+    return const [];
   }
 
   Future<Equipment> equipment(String id) async =>
