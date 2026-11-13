@@ -73,6 +73,7 @@ export class CreateServiceRequestDto {
 }
 
 export class ListServiceRequestsDto extends PaginationQueryDto {
+  @IsOptional() @IsIn(['UNRESOLVED', 'PARTIALLY_RESOLVED']) followUp?: string;
   @IsOptional() @IsUUID() branchId?: string;
   @IsOptional() @IsIn(['true', 'false']) unallocated?: string;
   @IsOptional()

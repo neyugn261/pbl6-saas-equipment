@@ -321,13 +321,13 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
         resourceType: 'SERVICE_REQUEST',
         resourceId: serviceRequestId,
       },
-      content: 'Work order WO-NOTIFY-1 was created for your service request.',
+      content: 'SR-NOTIFY-1 đã có lệnh WO-NOTIFY-1. Mở yêu cầu để theo dõi.',
     });
     expect(
       workOrderNotices.find((row) => row.userId === users.manager),
     ).toMatchObject({
       payload: { resourceType: 'WORK_ORDER', resourceId: workOrderId },
-      content: 'WO-NOTIFY-1 was created.',
+      content: 'WO-NOTIFY-1 đã được tạo. Bộ phận dịch vụ cần điều phối thực hiện.',
     });
     expect(
       await db.pendingNotificationEvent.findUnique({
@@ -471,15 +471,15 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
         resourceType: 'SERVICE_REQUEST',
         resourceId: serviceRequestId,
       },
-      content: 'Customer-safe completion summary',
+      content: 'SR-NOTIFY-1: Customer-safe completion summary. Mở yêu cầu để xem kết quả hiện tại.',
     });
     expect(
       await db.notification.findFirst({
         where: { sourceEventId: completed.eventId, userId: users.manager },
       }),
     ).toMatchObject({
-      payload: { resourceType: 'WORK_ORDER', resourceId: workOrderId },
-      content: 'WO-NOTIFY-1 was completed (resolved).',
+      payload: { resourceType: 'SERVICE_REQUEST', resourceId: serviceRequestId },
+      content: 'SR-NOTIFY-1 · WO-NOTIFY-1: đã giải quyết. Kiểm tra kết quả trong hồ sơ.',
     });
 
     const cancelled = envelope(
@@ -544,7 +544,7 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
         resourceType: 'WORK_ORDER',
         resourceId: cancellationEvent.payload.workOrderId,
       },
-      content: 'WO-NOTIFY-CANCELLED was cancelled.',
+      content: 'WO-NOTIFY-CANCELLED đã hủy. Mở hồ sơ để kiểm tra phương án tiếp theo.',
     });
     expect(
       cancellationNotices.some((row) => row.userId === users.customer),
@@ -585,7 +585,7 @@ describe('Notification event projections and fan-out (notification_test_db)', ()
         resourceType: 'WORK_ORDER',
         resourceId: reopenedWorkOrderId,
       },
-      content: 'WO-NOTIFY-REOPENED was cancelled.',
+      content: 'WO-NOTIFY-REOPENED đã hủy. Mở hồ sơ để kiểm tra phương án tiếp theo.',
     });
     expect(
       reopenedWorkOrderNotices.some((row) => row.userId === users.customer),

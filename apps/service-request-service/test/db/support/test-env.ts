@@ -5,7 +5,10 @@ loadEnv({ path: '.env', quiet: true });
 loadEnv({ path: '../../.env', quiet: true });
 
 export function testDatabaseUrl(): string {
-  return requireTestDatabaseUrl('SERVICE_REQUEST_TEST_DATABASE_URL');
+  // Isolate a review baseline from local test databases containing other branches' migrations.
+  // The shared guard still enforces an exact dedicated database name.
+  return requireTestDatabaseUrl(process.env.SERVICE_REQUEST_REVIEW_TEST_DATABASE_URL
+    ? 'SERVICE_REQUEST_REVIEW_TEST_DATABASE_URL' : 'SERVICE_REQUEST_TEST_DATABASE_URL');
 }
 
 export function applyTestEnv(): void {

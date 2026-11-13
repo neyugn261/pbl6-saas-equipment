@@ -10,6 +10,9 @@ import type {
 import { WorkOrderEventsConsumer } from '../../src/events/work-order-events.consumer';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { createTestApp, resetDatabase } from './support/test-app';
+import { ServiceRequestsService } from '../../src/service-requests/service-requests.service';
+import { ListServiceRequestsDto } from '../../src/service-requests/dto';
+import type { Principal } from '@pbl6/auth';
 
 describe('durable Work Order lifecycle', () => {
   let app: INestApplication<App>;
@@ -26,6 +29,7 @@ describe('durable Work Order lifecycle', () => {
     return db.serviceRequest.create({
       data: {
         tenantId: randomUUID(),
+        branchId: randomUUID(),
         customerId: randomUUID(),
         equipmentId: randomUUID(),
         requesterId: randomUUID(),
@@ -37,6 +41,48 @@ describe('durable Work Order lifecycle', () => {
       },
     });
   }
+  function manager(row: Awaited<ReturnType<typeof fixture>>): Principal {
+    return { userId: row.requesterId, tenantId: row.tenantId, customerId: null, branchId: row.branchId,
+      roles: ['SERVICE_MANAGER'], userType: 'TENANT_STAFF', permissions: new Set(['service_request:read', 'service_request:comment_internal']),
+      sessionId: randomUUID(), accessToken: 'test', expiresAt: new Date(Date.now() + 60000) };
+  }
+  it.each(['RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED'] as const)('projects %s into the correct current queue without notification dependency', async (result) => {
+    const row = await fixture();
+    const a = created(row);
+    await consumer.handle(a);
+    const event = completed(a, result);
+    event.payload.unresolvedReason = result === 'UNRESOLVED' ? 'Thiếu linh kiện' : null;
+    await consumer.handle(event);
+    await consumer.handle(event);
+    await consumer.handle({ ...event, eventId: randomUUID() });
+    const service = app.get(ServiceRequestsService);
+    const query = Object.assign(new ListServiceRequestsDto(), { followUp: 'UNRESOLVED', page: 1, pageSize: 5 });
+    const queue = await service.list(manager(row), query);
+    expect(queue.total).toBe(result === 'UNRESOLVED' ? 1 : 0);
+    if (result === 'UNRESOLVED') {
+      expect(queue.items[0].followUp?.reason).toBe('Thiếu linh kiện');
+      expect(await db.requestStatusHistory.count({ where: { requestId: row.id, reason: 'Thiếu linh kiện' } })).toBe(1);
+      const b = created(row);
+      await consumer.handle(b);
+      expect((await service.list(manager(row), query)).total).toBe(0);
+      await consumer.handle({ ...event, eventId: randomUUID() });
+      expect((await service.list(manager(row), query)).total).toBe(0);
+      await consumer.handle(completed(b, 'RESOLVED'));
+      expect((await service.list(manager(row), query)).total).toBe(0);
+    }
+  });
+  it.each(['RESOLVED', 'UNRESOLVED'] as const)('returns INSPECTION %s to REVIEWING and does not close the request', async (result) => {
+    const row = await fixture();
+    await db.serviceRequest.update({ where: { id: row.id }, data: { status: 'REVIEWING' } });
+    const a = created(row); a.payload.type = 'INSPECTION';
+    await consumer.handle(a);
+    const end = completed(a, result);
+    await consumer.handle(end);
+    await consumer.handle({ ...end, eventId: randomUUID() });
+    expect(await state(row.id)).toEqual({ status: 'REVIEWING', activeWorkOrderId: null });
+    expect((await db.serviceRequest.findUniqueOrThrow({ where: { id: row.id } })).resolvedAt).toBeNull();
+    expect(await db.costEstimate.count()).toBe(0);
+  });
   function created(
     row: Awaited<ReturnType<typeof fixture>>,
     id = randomUUID(),

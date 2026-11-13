@@ -1,5 +1,16 @@
 # Service Request Service
 
+Review 12/11: current follow-up queues are available through the existing list API
+with `followUp=UNRESOLVED|PARTIALLY_RESOLVED`. They retain tenant/branch scope and
+do not depend on Notification. Detail adds read-only `nextAction`, `followUp` and
+closure-audit `confirmation`; this is not a report-version consent contract.
+See [implementation and verification handoff](REVIEW-2026-11-12.md).
+
+DB regression may use `SERVICE_REQUEST_REVIEW_TEST_DATABASE_URL` pointing exactly
+to `service_request_review_test_db`, to isolate this baseline from another branch's
+local test migrations. The shared exact-name guard remains mandatory. Normal CI
+continues to use `SERVICE_REQUEST_TEST_DATABASE_URL` / `service_request_test_db`.
+
 Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
 
 Service requests, warranty review, comments, cost estimates (state machine: `docs/architecture/state-machines.md`). Publishes `ServiceRequestCreated`, `ServiceRequestStatusChanged`.

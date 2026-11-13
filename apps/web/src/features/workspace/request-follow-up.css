@@ -1,0 +1,11 @@
+.request-follow-up { border: 2px solid #b91c1c; border-radius: 12px; background: #fff7f7; padding: 20px; margin: 16px 0; color: #7f1d1d; overflow-wrap: anywhere; }
+.request-follow-up h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 18px; }
+.request-follow-up h2 span { border-radius: 16px; background: #b91c1c; color: white; padding: 2px 10px; }
+.request-follow-up ul { padding: 0; list-style: none; }
+.request-follow-up li { padding: 12px 0; border-bottom: 1px solid #fecaca; }
+.request-follow-up p { margin: 8px 0; }
+.request-follow-up a { color: inherit; text-decoration: underline; }
+.request-follow-up select { max-width: 100%; margin: 8px; padding: 6px; }
+.request-follow-up--amber { border-color: #b45309; color: #78350f; background: #fffbeb; }
+.request-follow-up--amber h2 span { background: #b45309; }
+@media (max-width: 600px) { .request-follow-up { padding: 12px; } .request-follow-up .ws-pagination { flex-wrap: wrap; gap: 8px; } }

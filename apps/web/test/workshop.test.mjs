@@ -139,6 +139,7 @@ test("Field Desk selection is scoped to current queue rows and unavailable respo
       "../../components/Badges": { PriorityBadge: "PriorityBadge" },
       "./WorkspaceUI": ui,
       "./RequestCoveragePreview": { default: "coverage" },
+      "./RequestFollowUpQueue": { default: "follow-up" },
       "./decision-queues": queues,
       "./service-detail-data": tab.load(
         "features/workspace/service-detail-data.ts",

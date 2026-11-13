@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { permissionsOf } from '@pbl6/auth';
+import { statusText, resultText } from './notification-text';
 import {
   Events,
   backoffDelay,
@@ -457,6 +458,9 @@ export class NotificationEventsService {
       return;
     }
 
+    if (payload.kind === 'WORK_ORDER_COMPLETED' || payload.kind === 'WORK_ORDER_CANCELLED') {
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`${row.tenantId}:${payload.workOrderId}`}, 0))`;
+    }
     const terminalResult = await this.checkTerminalConflict(tx, row, payload);
     if (terminalResult) {
       if (terminalResult.kind === 'STALE') {
@@ -746,8 +750,8 @@ export class NotificationEventsService {
           recipients,
         );
         rendered = {
-          title: 'New service request',
-          body: `${payload.requestNo} was created.`,
+          title: 'Yêu cầu dịch vụ mới',
+          body: `${payload.requestNo} đã được tạo. Bộ phận dịch vụ cần tiếp nhận và đánh giá.`,
           resourceType: 'SERVICE_REQUEST',
           resourceId: payload.serviceRequestId,
         };
@@ -774,8 +778,8 @@ export class NotificationEventsService {
           recipients,
         );
         rendered = {
-          title: 'Service request updated',
-          body: `${payload.requestNo} is now ${payload.toStatus.replaceAll('_', ' ').toLowerCase()}.`,
+          title: payload.fromStatus === 'RESOLVED' && ['REVIEWING', 'ACCEPTED'].includes(payload.toStatus) ? 'Yêu cầu được mở lại' : 'Cập nhật yêu cầu dịch vụ',
+          body: `${payload.requestNo}: ${statusText(payload.toStatus)}.`,
           resourceType: 'SERVICE_REQUEST',
           resourceId: payload.serviceRequestId,
         };
@@ -795,10 +799,10 @@ export class NotificationEventsService {
           });
         }
         rendered = {
-          title: 'Work order assigned',
+          title: 'Bạn được phân công công việc',
           body: payload.scheduledStart
-            ? `${payload.workOrderNo} is scheduled for ${payload.scheduledStart}.`
-            : `${payload.workOrderNo} was assigned to you.`,
+            ? `${payload.workOrderNo} dự kiến bắt đầu lúc ${new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(payload.scheduledStart))}. Mở lệnh để tiếp nhận.`
+            : `${payload.workOrderNo} được phân công cho bạn. Mở lệnh để tiếp nhận.`,
           resourceType: 'WORK_ORDER',
           resourceId: payload.workOrderId,
         };
@@ -824,8 +828,8 @@ export class NotificationEventsService {
             this.add(recipients, requester.recipient);
             if (requester.recipient.customerId) {
               customerRendered = {
-                title: 'Service request update',
-                body: `Work order ${payload.workOrderNo} was created for your service request.`,
+                title: 'Yêu cầu đã có lệnh công việc',
+                body: `${serviceRequest.requestNo} đã có lệnh ${payload.workOrderNo}. Mở yêu cầu để theo dõi.`,
                 resourceType: 'SERVICE_REQUEST',
                 resourceId: serviceRequest.serviceRequestId,
               };
@@ -833,8 +837,8 @@ export class NotificationEventsService {
           }
         }
         rendered = {
-          title: 'Work order created',
-          body: `${payload.workOrderNo} was created.`,
+          title: 'Lệnh công việc mới',
+          body: `${payload.workOrderNo} đã được tạo. Bộ phận dịch vụ cần điều phối thực hiện.`,
           resourceType: 'WORK_ORDER',
           resourceId: payload.workOrderId,
         };
@@ -865,8 +869,8 @@ export class NotificationEventsService {
             this.add(recipients, requester.recipient);
             if (requester.recipient.customerId) {
               customerRendered = {
-                title: 'Service request completed',
-                body: payload.customerSummary.slice(0, 1000),
+                title: resultText(payload.result),
+                body: `${serviceRequest.requestNo}: ${payload.customerSummary.slice(0, 1000)}. Mở yêu cầu để xem kết quả hiện tại.`,
                 resourceType: 'SERVICE_REQUEST',
                 resourceId: serviceRequest.serviceRequestId,
               };
@@ -874,10 +878,10 @@ export class NotificationEventsService {
           }
         }
         rendered = {
-          title: 'Work order completed',
-          body: `${payload.workOrderNo} was completed (${payload.result.replaceAll('_', ' ').toLowerCase()}).`,
-          resourceType: 'WORK_ORDER',
-          resourceId: payload.workOrderId,
+          title: resultText(payload.result),
+          body: `${serviceRequest?.requestNo ?? payload.workOrderNo} · ${payload.workOrderNo}: ${resultText(payload.result).toLowerCase()}. ${payload.result === 'RESOLVED' ? 'Kiểm tra kết quả trong hồ sơ.' : 'Bộ phận dịch vụ cần kiểm tra kết quả và lập phương án xử lý tiếp theo.'}`,
+          resourceType: serviceRequest ? 'SERVICE_REQUEST' : 'WORK_ORDER',
+          resourceId: serviceRequest?.serviceRequestId ?? payload.workOrderId,
         };
         return {
           kind: 'READY',
@@ -894,8 +898,8 @@ export class NotificationEventsService {
           recipients,
         );
         rendered = {
-          title: 'Work order cancelled',
-          body: `${payload.workOrderNo} was cancelled.`,
+          title: 'Lệnh công việc đã hủy',
+          body: `${payload.workOrderNo} đã hủy. Mở hồ sơ để kiểm tra phương án tiếp theo.`,
           resourceType: 'WORK_ORDER',
           resourceId: payload.workOrderId,
         };
@@ -909,8 +913,8 @@ export class NotificationEventsService {
           recipients,
         );
         rendered = {
-          title: 'Low stock detected',
-          body: `${payload.partSku}: ${payload.quantity} available; minimum ${payload.minQuantity}.`,
+          title: 'Phụ tùng dưới mức tồn tối thiểu',
+          body: `${payload.partSku}: còn ${payload.quantity}; mức tối thiểu ${payload.minQuantity}. Nhân viên kho cần kiểm tra tồn kho.`,
           resourceType: 'STOCK',
           resourceId: payload.stockId,
         };
@@ -1036,12 +1040,33 @@ export class NotificationEventsService {
     ) {
       return undefined;
     }
+    if (payload.serviceRequestId) {
+      // Use the durable local event ledger, including pending Created(B), so
+      // replay of Completed(A) cannot announce A as the current occurrence.
+      const replacement = await tx.pendingNotificationEvent.findFirst({
+        where: {
+          tenantId: row.tenantId, eventType: 'WorkOrderCreated',
+          AND: [
+            { payload: { path: ['serviceRequestId'], equals: payload.serviceRequestId } },
+            { NOT: { payload: { path: ['workOrderId'], equals: payload.workOrderId } } },
+            { payload: { path: ['occurredAt'], gt: payload.occurredAt } },
+          ],
+        },
+      });
+      if (replacement) return { kind: 'STALE' };
+      const current = await tx.serviceRequestSnapshot.findUnique({
+        where: { tenantId_serviceRequestId: { tenantId: row.tenantId, serviceRequestId: payload.serviceRequestId } },
+      });
+      if (current && ['CLOSED', 'CANCELLED', 'REJECTED'].includes(current.status ?? '') &&
+          current.sourceOccurredAt.getTime() > Date.parse(payload.occurredAt)) return { kind: 'STALE' };
+    }
     const priorEvents = await tx.pendingNotificationEvent.findMany({
       where: {
         tenantId: row.tenantId,
         eventType: { in: ['WorkOrderCompleted', 'WorkOrderCancelled'] },
         status: 'RESOLVED',
         sourceEventId: { not: row.sourceEventId },
+        payload: { path: ['workOrderId'], equals: payload.workOrderId },
       },
       select: {
         eventType: true,
@@ -1059,6 +1084,9 @@ export class NotificationEventsService {
       ) {
         continue;
       }
+      const { occurredAt: _priorTime, ...priorBusiness } = priorPayload;
+      const { occurredAt: _currentTime, ...currentBusiness } = payload;
+      if (this.hash(priorBusiness) === this.hash(currentBusiness)) return { kind: 'STALE' };
       if (
         Date.parse(priorPayload.occurredAt) > Date.parse(payload.occurredAt)
       ) {
