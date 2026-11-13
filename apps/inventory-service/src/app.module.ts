@@ -16,6 +16,9 @@ import { InventoryService } from './inventory/inventory.service';
 import { InventoryRepository } from './inventory/inventory.repository';
 import { ReferencesClient } from './inventory/references.client';
 import { EventsService } from './events/events.service';
+import { InventoryRequestsController } from './part-requests/requests.controller';
+import { InventoryRequestsRepository } from './part-requests/requests.repository';
+import { InventoryRequestsService } from './part-requests/requests.service';
 
 @Module({
   imports: [
@@ -37,12 +40,15 @@ import { EventsService } from './events/events.service';
     }),
   ],
   controllers: [
+    InventoryRequestsController,
     InventoryController,
     InternalInventoryController,
     UsageConfirmationController,
     ServicePartsController,
   ],
   providers: [
+    InventoryRequestsRepository,
+    InventoryRequestsService,
     { provide: DisplayNameLookup, inject: [ConfigService], useFactory: (config: ConfigService) =>
       new DisplayNameLookup({ organization: config.get<string>('ORGANIZATION_SERVICE_URL'),
         }),

@@ -27,6 +27,12 @@ Notes for this database:
   together. New parts default to whole quantities; existing fractional data remains.
 - `0005_internal_cost_currency` pairs new internal reference costs with currency;
   existing costs with unknown currency stay nullable. See ADR 0015.
+- `0006_inventory_requests` adds PartRequest/lines, return proposals, idempotent
+  creation commands, operation links/business context and original recipient fields.
+  It preserves the strict WO proof request and all existing stock constraints.
+  New tenant-composite FKs stay within Inventory. Legacy custody remains NULL;
+  no user or warehouse is invented. See ADR 0023. SQL checks enforce request
+  lifecycle, closure metadata, positive quantities and compatible operation links.
 
 ## Commands (run in `apps/inventory-service`)
 

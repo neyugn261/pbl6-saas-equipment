@@ -19,7 +19,7 @@ export interface WorkOrderReference {
   customerId?: string;
   workOrderNo?: string;
   currentTechnicianId?: string;
-  currentAssignment?: { technicianUserId: string } | null;
+  currentAssignment?: { technicianUserId: string; status?: string } | null;
 }
 export interface ReservationRequest {
   requestId: string;

@@ -13,12 +13,17 @@ import type {
 } from './dto';
 import {
   conflict,
+  canonical,
   fingerprint,
   invalid,
   json,
   lowStockPolicy,
   notFound,
 } from './policy';
+import {
+  fulfillmentOutcome, lockFulfillment, prepareFulfillment,
+  prepareReturnReceipt, returnReceiptOutcome, requestAudit,
+} from '../part-requests/requests.transactions';
 
 type Tx = Prisma.TransactionClient;
 export type OperationName =
@@ -50,6 +55,15 @@ export interface Movement {
   removedPartNote?: string;
   reversesId?: string;
 }
+/** Inventory-only metadata; never enters the strict WO reservation proof request. */
+export interface RequestBusinessContext {
+  partRequestId?: string;
+  partRequestLineId?: string;
+  returnRequestId?: string;
+  requestVersion?: number;
+  custodianUserId?: string;
+  handoverReference?: string;
+}
 export interface ConfirmationSource {
   workOrderId: string;
   equipmentId: string;
@@ -63,6 +77,8 @@ export interface OperationContext {
   actorId: string;
   operation: OperationName;
   request: Movement;
+  businessContext?: RequestBusinessContext;
+  executedBy?: string;
 }
 const maxQuantity = new Prisma.Decimal('9999999999.99');
 
@@ -714,7 +730,8 @@ export class InventoryRepository {
     const row = await tx.inventoryOperation.findUnique({
       where: { tenantId_key: { tenantId: ctx.tenantId, key: ctx.key } },
     });
-    if (row && row.fingerprint !== fingerprint(ctx.operation, ctx.request))
+    if (row && (row.fingerprint !== fingerprint(ctx.operation, ctx.request) ||
+      canonical(row.businessContext ?? null) !== canonical(ctx.businessContext ?? null)))
       throw conflict(
         'IDEMPOTENCY_KEY_REUSED',
         'Idempotency key belongs to a different operation or payload',
@@ -725,7 +742,8 @@ export class InventoryRepository {
     const row = await this.db.inventoryOperation.findUnique({
       where: { tenantId_key: { tenantId: ctx.tenantId, key: ctx.key } },
     });
-    if (row && row.fingerprint !== fingerprint(ctx.operation, ctx.request))
+    if (row && (row.fingerprint !== fingerprint(ctx.operation, ctx.request) ||
+      canonical(row.businessContext ?? null) !== canonical(ctx.businessContext ?? null)))
       throw conflict(
         'IDEMPOTENCY_KEY_REUSED',
         'Idempotency key belongs to a different operation or payload',
@@ -737,6 +755,7 @@ export class InventoryRepository {
       await this.keyLock(tx, ctx.tenantId, ctx.key);
       const row = await this.existing(tx, ctx);
       if (row) return row;
+      await prepareFulfillment(tx, ctx);
       return tx.inventoryOperation.create({
         data: {
           tenantId: ctx.tenantId,
@@ -746,6 +765,8 @@ export class InventoryRepository {
           fingerprint: fingerprint('ISSUE', ctx.request),
           request: json(ctx.request),
           workOrderId: ctx.request.workOrderId,
+          partRequestLineId: ctx.businessContext?.partRequestLineId,
+          businessContext: ctx.businessContext ? json(ctx.businessContext) : Prisma.DbNull,
         },
       });
     });
@@ -761,12 +782,15 @@ export class InventoryRepository {
         const row = await this.existing(tx, ctx);
         if (!row) throw notFound();
         if (row.state !== 'PENDING') return row;
+        await lockFulfillment(tx, ctx);
         await reserve(row);
         const response = await this.move(tx, { ...ctx, actorId: row.actorId });
-        return tx.inventoryOperation.update({
+        const committed = await tx.inventoryOperation.update({
           where: { id: row.id },
           data: { state: 'COMMITTED', response, httpStatus: 201 },
         });
+        await fulfillmentOutcome(tx, { ...ctx, actorId: row.actorId }, 'COMMITTED');
+        return committed;
       },
       { timeout: 15000, maxWait: 15000 },
     );
@@ -783,23 +807,37 @@ export class InventoryRepository {
         const row = await this.existing(tx, ctx);
         if (!row) throw notFound();
         if (row.state !== 'PENDING') return row;
-        return tx.inventoryOperation.update({
+        await lockFulfillment(tx, ctx);
+        const aborted = await tx.inventoryOperation.update({
           where: { id: row.id },
           data: { state: 'ABORTED', httpStatus, response },
         });
+        await fulfillmentOutcome(tx, { ...ctx, actorId: row.actorId }, 'ABORTED');
+        return aborted;
       },
       { maxWait: 15000 },
     );
   }
-  async settled(row: InventoryOperation) {
-    await this.db.inventoryOperation.updateMany({
-      where: {
-        id: row.id,
-        tenantId: row.tenantId,
-        state: row.state,
-        reservationSettledAt: null,
-      },
-      data: { reservationSettledAt: new Date() },
+  async settled(row: InventoryOperation, actorId = row.actorId) {
+    await this.db.$transaction(async (tx) => {
+      const changed = await tx.inventoryOperation.updateMany({
+        where: {
+          id: row.id,
+          tenantId: row.tenantId,
+          state: row.state,
+          reservationSettledAt: null,
+        },
+        data: { reservationSettledAt: new Date() },
+      });
+      if (changed.count && row.partRequestLineId) {
+        const line = await tx.partRequestLine.findFirstOrThrow({
+          where: { tenantId: row.tenantId, id: row.partRequestLineId },
+        });
+        await requestAudit(tx, row.tenantId, actorId, 'PART_REQUEST',
+          line.partRequestId, 'RESERVATION_SETTLED', null,
+          { operationKey: row.key, state: row.state, originalActorId: row.actorId },
+        );
+      }
     });
   }
   transact(ctx: OperationContext) {
@@ -808,8 +846,9 @@ export class InventoryRepository {
         await this.keyLock(tx, ctx.tenantId, ctx.key);
         const existing = await this.existing(tx, ctx);
         if (existing) return existing;
+        await prepareReturnReceipt(tx, ctx);
         const response = await this.move(tx, ctx);
-        return tx.inventoryOperation.create({
+        const committed = await tx.inventoryOperation.create({
           data: {
             tenantId: ctx.tenantId,
             key: ctx.key,
@@ -820,8 +859,12 @@ export class InventoryRepository {
             state: 'COMMITTED',
             response,
             httpStatus: ctx.operation === 'RETURN' ? 200 : 201,
+            returnRequestId: ctx.businessContext?.returnRequestId,
+            businessContext: ctx.businessContext ? json(ctx.businessContext) : Prisma.DbNull,
           },
         });
+        await returnReceiptOutcome(tx, ctx);
+        return committed;
       },
       { timeout: 15000, maxWait: 15000 },
     );
@@ -1120,6 +1163,8 @@ export class InventoryRepository {
               r.unitCost === undefined ? null : new Prisma.Decimal(r.unitCost),
             unitCostCurrency: r.unitCostCurrency,
             recordedBy: ctx.actorId,
+            custodianUserId: ctx.businessContext?.custodianUserId,
+            handoverReference: ctx.businessContext?.handoverReference,
             partSnapshot,
             warehouseSnapshot,
           },

@@ -1,5 +1,9 @@
 # Bàn giao phần Minh theo review ngày 12/11/2026
 
+> Cập nhật 13/11: Task 1.4 đã được triển khai backend local sau bàn giao Khương.
+> Xem [bản bàn giao PartRequest/ReturnRequest mới](2026-11-13-minh-part-requests-handoff.md).
+> Các kết quả và giới hạn bên dưới là lịch sử lượt 12/11. Task 1.3 vẫn chưa thêm ngày dự kiến.
+
 Ngày thực hiện: 12/11/2026. Nguồn phân công: bản review làm việc local `2026-11-12-review-loi-va-phan-cong.md`, đã được người dùng yêu cầu thực hiện phần Minh. Bản review local được giữ ngoài nhóm thay đổi triển khai này.
 
 Baseline đầu lượt: `develop` tại `48f86d5` theo lần kiểm tra Git ngay trước công việc. Các chỉnh sửa Web và các tài liệu chưa commit đã có từ trước được giữ nguyên. Lượt triển khai bổ sung code Asset, kiểm thử và tài liệu. Người dùng sau đó yêu cầu commit riêng phần đã hoàn thành; chưa yêu cầu push/merge.

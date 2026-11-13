@@ -2,7 +2,13 @@
 
 Ngày: 12/11/2026. Liên quan task 1.3 và 1.4 trong bản review làm việc local `2026-11-12-review-loi-va-phan-cong.md`. Tài liệu nguồn này được giữ ngoài nhóm commit triển khai; proposal dưới đây tự mô tả phạm vi và các quyết định còn mở.
 
-**Trạng thái: ĐỀ XUẤT ĐỂ CHỐT CONTRACT, CHƯA TRIỂN KHAI.** Những API/model/trạng thái mới trong tài liệu này chưa tồn tại trên server. Task 1.3 yêu cầu xác định nhu cầu trước khi sửa schema; task 1.4 yêu cầu thiết kế và phối hợp Work Order trước khi triển khai. Tài liệu là đầu ra thiết kế cho hai task này, không phải xác nhận backend đã phục vụ các luồng mới.
+**Bản đề xuất gốc ngày 12/11; cập nhật tiến độ ngày 13/11:** Task 1.4 đã có code
+backend local theo bàn giao Khương, [ADR 0023](../decisions/0023-inventory-part-and-return-requests.md),
+[OpenAPI hiện hành](../api/inventory-part-requests.yaml) và
+[bàn giao triển khai](../reports/2026-11-13-minh-part-requests-handoff.md).
+Các cụm “đề xuất/chưa triển khai” trong phần 2–8 bên dưới ghi lại trạng thái thiết kế
+ngày 12/11; dùng các tài liệu ngày 13/11 để tích hợp. Trạng thái PR/merge xem trên GitHub.
+Task 1.3 về ngày dự kiến vẫn là đề xuất chưa chốt; giữ validate ngày thực tế.
 
 Giữ nguyên giới hạn dự án: phụ tùng phục vụ dịch vụ sau bán hàng, không có procurement, hóa đơn/thanh toán hoặc điều động liên chi nhánh. Mobile thuộc đầu mối riêng.
 

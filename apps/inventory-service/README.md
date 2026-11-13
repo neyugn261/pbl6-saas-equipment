@@ -4,6 +4,10 @@ Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ li
 
 M3 runtime owned by Minh. Part/Warehouse, stock/threshold reads, immutable ledger,
 receive/adjust, issue/return, durable idempotency and LowStockDetected outbox/relay.
+PartRequest and return-proposal/receipt workflows are implemented under
+[ADR 0023](../../docs/decisions/0023-inventory-part-and-return-requests.md), with
+[API contract](../../docs/api/inventory-part-requests.yaml) and
+[handoff](../../docs/reports/2026-11-13-minh-part-requests-handoff.md).
 ISSUE uses the durable WO reservation API implemented under ADR 0016. Missing
 reservation/proof services still fail closed. On 07/11/2026 the
 [mobile stage 3 fixture](../../docs/testing/mobile-stage-3.md) verified real
@@ -30,6 +34,10 @@ Gateway prefix: `/api/inventory`. Business paths:
 - `POST /work-order-parts/:id/confirm-use` — report Technician only
 - `POST /usage-confirmations/:id/reverse` — Inventory Staff
 - `GET /equipment/:id/service-parts` — equipment-scoped safe service history
+- `POST /work-orders/:id/part-requests`, `GET /part-requests`, `GET /part-requests/:id`
+- `GET /part-requests/:id/history`, `POST /part-requests/:id/fulfillments`, `/reject`, `/cancel`, `/close`
+- `POST /work-order-parts/:id/return-requests`, `GET /return-requests`, `GET /return-requests/:id`
+- `GET /return-requests/:id/history`, `POST /return-requests/:id/receipts`, `/cancel`, `/close`
 
 Stock/catalog/ledger are TENANT_STAFF only. Shared catalog: inventory:read,
 inventory:manage, inventory:issue; no new role/permission. Tenant comes only from
@@ -94,6 +102,24 @@ lock the same usage; confirmed + returned <= issued. Staff may reverse an errone
 confirmation once through /usage-confirmations/:id/reverse, preserving both records.
 The technician supplies customerReason and the disposition of old removed components;
 an old component never counts as returning a newly issued part.
+
+Part requests accept only ACCEPTED/TRAVELLING/IN_PROGRESS/ON_HOLD WOs. A current
+accepted Technician or Service Manager may request; only Inventory Staff fulfills.
+Requests do not reserve physical stock. Fulfillment links a durable operation
+before invoking the existing ISSUE/reservation path. COMMITTED counts as issued
+even when settlement is pending; PENDING consumes the outstanding request limit.
+Do not change keys after timeouts. Reload the request after mutations; version
+can advance during preparation and outcome. Recovery uses existing operation routes.
+
+Each fulfillment requires the current Technician's `custodianUserId` and a
+`handoverReference` to a signed physical receipt. This is not a digital signature.
+Reassignment never transfers this recorded custody. The new report Technician can
+confirm use of physically handed-over parts; the original recipient proposes
+return of the remainder, including after WO completion. Warehouse receipts reuse
+RETURN atomically, including partial receipt and quarantine rules. Pending return
+proposals do not reserve against confirm-use; recheck currently receivable quantity.
+Closing a proposal never deletes stock obligations. Legacy issues with unknown
+recipient remain explicitly unknown and may be returned by staff through direct RETURN.
 
 GET /inventory-audit exposes catalog/threshold before/after history. New transactions
 and usage retain immutable catalog snapshots; legacy missing snapshots stay null.
