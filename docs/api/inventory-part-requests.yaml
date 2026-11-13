@@ -1,0 +1,403 @@
+openapi: 3.0.3
+info:
+  title: Inventory Part Request and Return Request API
+  version: 1.0.0
+  description: >-
+    ADR 0023. Tenant staff only, existing RBAC and branch scope. Customer cannot
+    access these internal records. Quantities are decimal strings. No stock
+    movement when requesting. Fulfillment reuses ISSUE/reservation; receipt reuses
+    RETURN. Do not interpret an open request as reserved stock.
+servers:
+  - url: /api/inventory
+security:
+  - bearerAuth: []
+paths:
+  /work-orders/{id}/part-requests:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      summary: Current accepted Technician or Service Manager requests parts
+      description: WO allowlist ACCEPTED, TRAVELLING, IN_PROGRESS, ON_HOLD. Idempotent by tenant/key and actor/payload.
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePartRequest'
+      responses:
+        '201':
+          description: Persisted request; no stock change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartRequest' }
+        '403': { description: Not current accepted Technician or Service Manager }
+        '404': { description: WO outside tenant/branch/access scope }
+        '409': { description: Idempotency key reused or WO not eligible }
+  /part-requests:
+    get:
+      summary: Paginated scoped queue
+      description: >-
+        Filters workOrderId, status, page, pageSize. Inventory Staff/SM see their
+        branch; Tenant Admin has read only across tenant. Technician without a WO
+        filter sees own requests; with a currently assigned WO may see its requests.
+      parameters:
+        - $ref: '#/components/parameters/WorkOrder'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: items, total, page, pageSize
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Page' }
+                  - properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/PartRequest' } }
+  /part-requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      summary: Request with per-line committed, pending and remaining quantities
+      responses:
+        '200':
+          description: Request, allowedActions, lines and operations; audit history available at /history
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartRequest' }
+        '404': { description: Outside data scope }
+  /part-requests/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      summary: Complete request audit through pagination, ascending time/id
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { description: 'items, total, page, pageSize; each item includes action, actorId, before, after and createdAt' }
+        '404': { description: Outside data scope }
+  /part-requests/{id}/fulfillments:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      summary: Inventory Staff fulfills one line from a warehouse of the WO branch
+      description: >-
+        Requires inventory:issue. Header version and quantity are checked under
+        lock before durable PENDING operation creation. The custodian must be the
+        current accepted Technician. handoverReference records the signed physical
+        receipt. It is not an electronic signature. Response/status and recovery
+        follow inventory-reservations.yaml. Use the original key after timeout.
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Fulfillment'
+      responses:
+        '201': { description: Committed WorkOrderPart, including custodian and handover reference }
+        '409': { description: Version, quantity, request lifecycle, or WO reservation conflict; inspect error code }
+        '503': { description: Dependency unavailable; inspect original operation, never retry with a new key }
+  /part-requests/{id}/{action}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [reject, cancel, close] }
+    post:
+      summary: Reasoned optimistic decision preserving all issued stock obligations
+      description: >-
+        reject/close requires inventory:issue or work_order:manage; cancel requires
+        original requester with execute permission or Service Manager. Reject and
+        cancel require zero committed issues. Any PENDING or unsettled ABORTED
+        issue blocks the decision. Same completed decision/version/reason can replay.
+      requestBody:
+        $ref: '#/components/requestBodies/Decision'
+      responses:
+        '200': { description: Updated detail }
+        '409': { description: REQUEST_VERSION_CONFLICT, REQUEST_NOT_OPEN, REQUEST_PENDING_ISSUE, or REQUEST_ALREADY_ISSUED }
+  /work-order-parts/{id}/return-requests:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      summary: Original recorded custodian or Service Manager proposes a return
+      description: >-
+        Allowed after WO completion or reassignment, including inactive inventory.
+        Does not change stock. Legacy usage with no recorded custodian requires
+        staff reconciliation through existing direct RETURN, not an invented owner.
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnRequest'
+      responses:
+        '201':
+          description: Persisted proposal and immutable original custodian
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartReturnRequest' }
+        '409': { description: Excess open requested return or CUSTODY_NOT_RECORDED }
+  /return-requests:
+    get:
+      summary: Paginated return queue scoped by tenant, branch and custodian
+      parameters:
+        - $ref: '#/components/parameters/WorkOrder'
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { description: Paginated requests; Technician sees own/custodial records only }
+  /return-requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      summary: Original warehouse, proposed, received, pending and currently receivable quantity
+      responses:
+        '200':
+          description: Detail, operation-linked receipts and allowedActions; audit at /history
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartReturnRequest' }
+        '404': { description: Outside data scope }
+  /return-requests/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      summary: Complete scoped return audit through pagination
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { description: 'items, total, page, pageSize; append-only create/decision/receipt history' }
+        '404': { description: Outside data scope }
+  /return-requests/{id}/receipts:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      summary: Inventory Staff records actual goods received, allowing partial receipt
+      parameters:
+        - $ref: '#/components/parameters/Key'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Receipt'
+      responses:
+        '200': { description: Updated WorkOrderPart; receipt and RETURN atomic, original warehouse only }
+        '409': { description: Version, proposed quantity, or current unreconciled usage conflict }
+  /return-requests/{id}/{action}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [cancel, close] }
+    post:
+      summary: Cancel before receipt or close the outstanding proposal with reason
+      requestBody:
+        $ref: '#/components/requestBodies/Decision'
+      responses:
+        '200': { description: Updated request; never changes the original usage obligations }
+        '409': { description: Request closed, stale version, or cancel after receipt }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Key:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    WorkOrder:
+      name: workOrderId
+      in: query
+      schema: { type: string, format: uuid }
+    Status:
+      name: status
+      in: query
+      schema: { type: string, enum: [OPEN, CLOSED, CANCELLED, REJECTED] }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  requestBodies:
+    Decision:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Decision'
+  schemas:
+    Page:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: {} }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+    OperationSummary:
+      type: object
+      properties:
+        key: { type: string, format: uuid }
+        state: { type: string, enum: [PENDING, COMMITTED, ABORTED] }
+        actorId: { type: string, format: uuid }
+        request:
+          type: object
+          description: Original ISSUE/RETURN movement; the WO proof allowlist is unchanged.
+        businessContext:
+          type: object
+          description: Inventory-only immutable phiếu/version/custodian/handover metadata; not part of WO proof.
+          properties:
+            partRequestId: { type: string, format: uuid }
+            partRequestLineId: { type: string, format: uuid }
+            returnRequestId: { type: string, format: uuid }
+            requestVersion: { type: integer }
+            custodianUserId: { type: string, format: uuid }
+            handoverReference: { type: string }
+        response: { type: object, nullable: true }
+        httpStatus: { type: integer, nullable: true }
+        reservationSettledAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    PartRequest:
+      type: object
+      required: [id, requestNo, branchId, workOrderId, workOrderNo, requestedBy, reason, status, version, lines, fulfillmentStatus]
+      properties:
+        id: { type: string, format: uuid }
+        requestNo: { type: string }
+        branchId: { type: string, format: uuid }
+        workOrderId: { type: string, format: uuid }
+        workOrderNo: { type: string }
+        equipmentId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        requestedBy: { type: string, format: uuid }
+        reason: { type: string }
+        version: { type: integer, minimum: 1, description: Reload after prepare/commit/abort/decision; do not assume one increment per click. Retry uses original payload/version or operation recovery. }
+        status: { type: string, enum: [OPEN, CLOSED, CANCELLED, REJECTED] }
+        fulfillmentStatus: { type: string, enum: [NOT_ISSUED, PARTIALLY_ISSUED, FULLY_ISSUED] }
+        stockReservedByRequest: { type: boolean, enum: [false] }
+        pendingRecovery: { type: boolean }
+        allowedActions: { type: array, items: { type: string, enum: [fulfill, close, reject, cancel] }, description: Detail hints; API still checks current WO/permissions/version. }
+        fulfillmentRequiresLiveWorkOrderValidation: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time, nullable: true }
+        closedBy: { type: string, format: uuid, nullable: true }
+        closingReason: { type: string, nullable: true }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              partId: { type: string, format: uuid }
+              partSnapshot: { type: object, description: Immutable sku/name/unit/allowFractional }
+              quantityRequested: { $ref: '#/components/schemas/Quantity' }
+              quantityIssued: { $ref: '#/components/schemas/Quantity' }
+              quantityPendingIssue: { $ref: '#/components/schemas/Quantity' }
+              quantityRemainingToIssue: { $ref: '#/components/schemas/Quantity' }
+              quantityAvailableToFulfill: { $ref: '#/components/schemas/Quantity' }
+              quantityClosedWithoutIssue: { $ref: '#/components/schemas/Quantity', description: Unfulfilled quantity closed by a reasoned decision; not an active queue item }
+              pendingRecovery: { type: boolean }
+              fulfillments: { type: array, items: { $ref: '#/components/schemas/OperationSummary' } }
+    PartReturnRequest:
+      type: object
+      required: [id, requestNo, workOrderId, workOrderPartId, warehouseId, custodianUserId, requestedBy, reason, status, version, quantityRequested, quantityReceived, quantityPendingReceipt]
+      properties:
+        id: { type: string, format: uuid }
+        requestNo: { type: string }
+        branchId: { type: string, format: uuid }
+        workOrderId: { type: string, format: uuid }
+        workOrderPartId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid, description: Immutable original issue warehouse }
+        custodianUserId: { type: string, format: uuid, description: Original recipient; reassignment never overwrites this }
+        requestedBy: { type: string, format: uuid, description: May be Service Manager acting for the custodian }
+        reason: { type: string }
+        version: { type: integer, minimum: 1 }
+        status: { type: string, enum: [OPEN, CLOSED, CANCELLED] }
+        receiptStatus: { type: string, enum: [NOT_RECEIVED, PARTIALLY_RECEIVED, RECEIVED] }
+        quantityRequested: { $ref: '#/components/schemas/Quantity' }
+        quantityReceived: { $ref: '#/components/schemas/Quantity' }
+        quantityPendingReceipt: { $ref: '#/components/schemas/Quantity' }
+        quantityUnreceived: { $ref: '#/components/schemas/Quantity' }
+        quantityClosedWithoutReceipt: { $ref: '#/components/schemas/Quantity', description: Unreceived quantity closed from this proposal; original usage obligations remain }
+        quantityReceivableNow: { $ref: '#/components/schemas/Quantity' }
+        usageQuantityUnreconciled: { $ref: '#/components/schemas/Quantity' }
+        custodyMeaning: { type: string, enum: [ORIGINAL_RECIPIENT_REMAINS_RESPONSIBLE] }
+        usage: { type: object, description: Original issued WorkOrderPart with snapshots and custody fields; internal staff only. }
+        allowedActions: { type: array, items: { type: string, enum: [receive, close, cancel] } }
+        receipts: { type: array, items: { $ref: '#/components/schemas/OperationSummary' } }
+    Quantity:
+      type: string
+      pattern: '^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$'
+      description: Nonnegative decimal string in projections; mutation inputs must be positive at runtime. Whole units cannot have fractions.
+    Decision:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+    CreatePartRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, lines]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [partId, quantity]
+            properties:
+              partId: { type: string, format: uuid }
+              quantity: { $ref: '#/components/schemas/Quantity' }
+    Fulfillment:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, lineId, warehouseId, quantity, custodianUserId, handoverReference]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        lineId: { type: string, format: uuid }
+        warehouseId: { type: string, format: uuid }
+        quantity: { $ref: '#/components/schemas/Quantity' }
+        custodianUserId: { type: string, format: uuid }
+        handoverReference: { type: string, minLength: 1, maxLength: 150 }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    ReturnRequest:
+      type: object
+      additionalProperties: false
+      required: [quantity, reason]
+      properties:
+        quantity: { $ref: '#/components/schemas/Quantity' }
+        reason: { type: string, minLength: 1, maxLength: 2000 }
+    Receipt:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, quantity, condition, note]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        quantity: { $ref: '#/components/schemas/Quantity' }
+        condition: { type: string, enum: [GOOD, DAMAGED, PENDING_INSPECTION] }
+        note: { type: string, minLength: 1, maxLength: 2000 }
