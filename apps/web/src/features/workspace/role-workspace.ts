@@ -182,6 +182,13 @@ const links: NavigationItem[] = [
     roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "TECHNICIAN", "INVENTORY_STAFF"],
   },
   {
+    path: "/app/inventory/requests",
+    label: "Phiếu phụ tùng",
+    group: "Kho phụ tùng",
+    icon: "Package",
+    roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "INVENTORY_STAFF"],
+  },
+  {
     path: "/app/inventory/transactions",
     label: "Giao dịch & đối soát",
     group: "Kho phụ tùng",

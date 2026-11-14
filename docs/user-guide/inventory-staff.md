@@ -14,6 +14,13 @@ Inventory is not a purchasing, procurement, or accounting system.
    Quantities are decimal strings; preserve the displayed precision and do not
    round through a spreadsheet float conversion.
 
+## Phiếu phụ tùng trên Web
+
+- Vào **Kho phụ tùng → Phiếu phụ tùng**, chọn **Xin cấp phụ tùng** hoặc **Đề nghị trả kho**. Có thể lọc theo trạng thái và lệnh công việc. Service Manager cũng có thể mở phiếu theo lệnh từ hồ sơ công việc và lập phiếu xin cấp khi lệnh đủ điều kiện.
+- Khi cấp, chọn dòng phụ tùng, kho thuộc chi nhánh, số lượng giao và mã biên nhận đã ký. Người nhận lấy từ kỹ thuật viên hiện tại đã nhận lệnh. Nếu cấp thiếu, phiếu tiếp tục hiển thị lượng có thể cấp. Từ chối hoặc đóng phần còn lại cần lý do.
+- Khi nhận trả, kiểm tra kho xuất gốc rồi ghi số lượng thực nhận và tình trạng. Hàng hỏng hoặc cần kiểm tra vào tồn cách ly. Đóng phần chưa nhận giữ phần còn phải đối soát trên lệnh.
+- Nếu chưa rõ kết quả sau khi gửi, dùng **Thử lại thao tác đã lưu**. Nếu phiếu báo cần đối soát, mở **Giao dịch & đối soát** của lệnh. Mở **Lịch sử phiếu** để xem các lần cấp, nhận hoặc quyết định đóng.
+
 ## Receive, issue, return, and adjust
 
 - **Receive:** choose an active warehouse and part, enter a positive quantity,

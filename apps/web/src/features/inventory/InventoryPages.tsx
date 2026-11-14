@@ -1186,7 +1186,7 @@ export function InventoryTransactionsPage({
           </p>
           <p>
             Số lượng: {quantityText(pending.body.quantity)} ·{" "}
-            {pending.body.note || pending.body.documentReference}
+            {String(pending.body.note || pending.body.documentReference || "")}
           </p>
           <button disabled={busy} onClick={() => void sendStock()}>
             Thử lại giao dịch đã lưu

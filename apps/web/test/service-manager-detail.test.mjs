@@ -33,6 +33,7 @@ function setup(order, mutation = async () => ({})) {
     "../../display-names": tab.load("display-names.ts"),
     "../../routes/ModelPolicyPanels": { WorkOrderChecklist: "checklist" },
     "../attachments/AttachmentsPanel": { AttachmentsPanel: "attachments" },
+    "../inventory/PartRequests": { WorkOrderPartRequests: "part-requests" },
     "./WorkspaceUI": {
       Badge: "badge",
       DataState: "data-state",

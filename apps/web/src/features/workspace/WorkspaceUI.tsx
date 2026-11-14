@@ -118,7 +118,7 @@ export function DataState({
         <div>
           <strong>Chưa thể hiển thị dữ liệu</strong>
           <p>{error}</p>
-          <button className="ws-button ws-button--secondary" onClick={retry}>
+          <button type="button" className="ws-button ws-button--secondary" onClick={retry}>
             <RefreshCw size={14} />
             Thử lại
           </button>
@@ -154,6 +154,7 @@ export function Pagination({
       </span>
       <div>
         <button
+          type="button"
           className="ws-button ws-button--secondary"
           disabled={page <= 1}
           onClick={() => onChange(page - 1)}
@@ -161,6 +162,7 @@ export function Pagination({
           Trước
         </button>
         <button
+          type="button"
           className="ws-button ws-button--secondary"
           disabled={total === undefined || page >= pages}
           onClick={() => onChange(page + 1)}

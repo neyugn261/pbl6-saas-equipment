@@ -2,9 +2,10 @@ import { ApiError, api } from '../../api/client'
 import { getSessionGeneration } from '../../auth/session'
 
 export type StockRequest = {
-  readonly mode: 'RECEIVE' | 'ADJUST' | 'ISSUE' | 'RETURN'
+  readonly mode: 'RECEIVE' | 'ADJUST' | 'ISSUE' | 'RETURN' | 'REQUEST_PARTS' | 'FULFILL' | 'RECEIPT'
+  readonly label?: string
   readonly path: string
-  readonly body: Readonly<Record<string, string>>
+  readonly body: Readonly<Record<string, unknown>>
 }
 type Intent = StockRequest & { key: string }
 
@@ -16,12 +17,17 @@ function validIntent(value: unknown): value is Intent {
     ADJUST: /^\/stock-transactions\/adjust$/,
     ISSUE: /^\/work-orders\/[^/]+\/parts$/,
     RETURN: /^\/work-order-parts\/[^/]+\/return$/,
+    REQUEST_PARTS: /^\/work-orders\/[\da-f-]{36}\/part-requests$/i,
+    FULFILL: /^\/part-requests\/[\da-f-]{36}\/fulfillments$/i,
+    RECEIPT: /^\/return-requests\/[\da-f-]{36}\/receipts$/i,
   }
   return typeof item.key === 'string' && /^[\da-f-]{36}$/i.test(item.key)
     && typeof item.mode === 'string' && Object.hasOwn(paths, item.mode)
+    && (item.label === undefined || typeof item.label === 'string')
     && typeof item.path === 'string' && paths[item.mode].test(item.path)
-    && Boolean(item.body && typeof item.body === 'object' && !Array.isArray(item.body)
-      && Object.values(item.body).every((value) => typeof value === 'string'))
+    && item.body !== undefined && item.body !== null && typeof item.body === 'object' && !Array.isArray(item.body)
+    && (['REQUEST_PARTS', 'FULFILL', 'RECEIPT'].includes(item.mode)
+      || Object.values(item.body).every((value) => typeof value === 'string'))
 }
 
 // One unresolved stock intent per tab and tenant/user. Persist BEFORE sending so
@@ -33,8 +39,8 @@ export class StockMutation {
   private running = false
   readonly storageError: string
 
-  constructor(scope: string, generation: number) {
-    this.storageKey = `pbl6.inventory.intent.${encodeURIComponent(scope)}`
+  constructor(scope: string, generation: number, area?: 'requests') {
+    this.storageKey = `pbl6.inventory.intent.${encodeURIComponent(scope)}${area ? '.requests' : ''}`
     this.generation = generation
     let error = ''
     try {
@@ -75,6 +81,12 @@ export class StockMutation {
     this.assertSession()
     if (this.storageError) throw new Error(this.storageError)
     if (this.running) throw new Error('Đang xử lý giao dịch kho.')
+    const raw = sessionStorage.getItem(this.storageKey)
+    if (raw !== null) {
+      const saved: unknown = JSON.parse(raw)
+      if (!validIntent(saved)) throw new Error('Không đọc được giao dịch đang chờ.')
+      this.intent = saved
+    } else this.intent = null
     if (request && this.intent) throw new Error('Cần xác nhận giao dịch đang chờ trước khi tạo giao dịch khác.')
     const retry = Boolean(this.intent)
     if (request) {
@@ -95,8 +107,16 @@ export class StockMutation {
       this.assertSession()
       // A first, explicit rejection permits correction. Once the outcome was
       // unknown, a later 403/404 cannot prove the earlier POST did not commit.
-      if (!retry && cause instanceof ApiError && [400, 403, 404, 409, 422].includes(cause.status)
-        && !['IDEMPOTENCY_KEY_REUSED', 'SESSION_CHANGED'].includes(cause.code))
+      if (intent.mode === 'FULFILL') {
+        const state = await this.reconcileIssue(intent.key)
+        if (state === 'COMMITTED') return
+        if (state === 'PENDING') throw cause
+      }
+      const explicitRejection = cause instanceof ApiError && [400, 403, 404, 409, 422].includes(cause.status)
+        && !['IDEMPOTENCY_KEY_REUSED', 'SESSION_CHANGED'].includes(cause.code)
+      // A successful receipt would have replayed before its version was checked.
+      const staleReceipt = intent.mode === 'RECEIPT' && cause instanceof ApiError && cause.code === 'REQUEST_VERSION_CONFLICT'
+      if (explicitRejection && (!retry || staleReceipt))
         this.clear(intent.key)
       else if (intent.mode === 'ISSUE' && await this.reconcileIssue(intent.key) === 'COMMITTED') return
       throw cause
@@ -108,10 +128,9 @@ export class StockMutation {
       const proof = await api.inventory<{ key: string; operation: string; state: string }>(
         `/inventory-operations/${encodeURIComponent(key)}`,
       )
-      if (proof.key === key && proof.operation === 'ISSUE' && ['COMMITTED', 'ABORTED'].includes(proof.state)) {
-        this.clear(key)
-        return proof.state
-      }
+      if (proof.key !== key || proof.operation !== 'ISSUE') return
+      if (['COMMITTED', 'ABORTED'].includes(proof.state)) this.clear(key)
+      return proof.state
     } catch {
       // Lookup failure (including 404) leaves the original intent recoverable.
     }

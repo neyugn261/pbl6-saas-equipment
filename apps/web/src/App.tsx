@@ -13,8 +13,13 @@ import {
   requestResponsibility,
 } from "./features/workspace/service-detail-data";
 import RequestCloseoutSummary from "./features/workspace/RequestCloseoutSummary";
-import { requestIntake } from "./features/workspace/request-intake";
+import {
+  canCreateInspection,
+  requestIntake,
+} from "./features/workspace/request-intake";
+import { useWorkspaceData } from "./features/workspace/workspace-data";
 import { recordLabel } from "./display-names";
+import { PartRequestDetail, PartRequestQueue } from "./features/inventory/PartRequests";
 import { ModelPolicyPage } from "./routes/ModelPolicyPage";
 import { WarrantyAssessmentPanel } from "./routes/ModelPolicyPanels";
 import { useDirectory } from "./routes/registration-data";
@@ -266,7 +271,7 @@ const requestTypeLabels: Record<string, string> = {
   WARRANTY: "Bảo hành",
   REPAIR: "Sửa chữa",
   MAINTENANCE: "Bảo trì",
-  INSPECTION: "Kiểm tra",
+  INSPECTION: "Khảo sát",
 };
 function Problem({ error }: { error: unknown }) {
   const summary = useRef<HTMLParagraphElement>(null);
@@ -986,6 +991,27 @@ function RequestDetailPage() {
   const current =
     currentOverride?.id === data.value?.id ? currentOverride : data.value;
   const intake = current && isManager ? requestIntake(current) : null;
+  const inspectionEligible = isManager && canCreateInspection(current, 0);
+  const activeOrders = useWorkspaceData<Page<{ id: string; workOrderNo: string }>>(
+    "workorders",
+    inspectionEligible
+      ? `/work-orders?serviceRequestId=${current?.id}&status=CREATED,ASSIGNED,ACCEPTED,TRAVELLING,IN_PROGRESS,ON_HOLD&pageSize=1`
+      : null,
+    version,
+  );
+  const inspectionAllowed = isManager && canCreateInspection(current, activeOrders.data?.total);
+  const activeOrder = activeOrders.data?.items[0];
+  const completedOrderNo = isManager && current?.status === "REVIEWING" ? current.resolvedWorkOrderNo : null;
+  const completedOrderState = useWorkspaceData<Page<{ id: string; workOrderNo: string; type: string }>>(
+    "workorders",
+    completedOrderNo
+      ? `/work-orders?serviceRequestId=${current?.id}&q=${encodeURIComponent(completedOrderNo)}&pageSize=10`
+      : null,
+    version,
+  );
+  const completedOrder = completedOrderState.data?.items.find((item) => item.workOrderNo === completedOrderNo);
+  const completedInspection = completedOrder?.type === "INSPECTION" ? completedOrder : null;
+  const showRepairResult = !completedInspection && !completedOrderState.loading;
   useEffect(() => {
     if (
       busy || !nextFocus || nextFocus.id !== current?.id ||
@@ -1039,11 +1065,13 @@ function RequestDetailPage() {
       setBusy(false);
     }
   }
-  async function createWorkOrder() {
+  const inspectionDialog = useRef<HTMLDialogElement>(null);
+  async function createWorkOrder(type?: "INSPECTION") {
     if (
       !current ||
       actionLock.current ||
-      current.status !== "ACCEPTED" ||
+      !isManager ||
+      (type ? !inspectionAllowed : current.status !== "ACCEPTED") ||
       getSessionGeneration() !== sessionGeneration
     )
       return;
@@ -1053,7 +1081,7 @@ function RequestDetailPage() {
     try {
       const order = await api.workorders<{ id: string }>("/work-orders", {
         method: "POST",
-        body: { serviceRequestId: current.id },
+        body: { serviceRequestId: current.id, ...(type && { type }) },
       });
       if (getSessionGeneration() !== sessionGeneration) return;
       navigate(`/app/work-orders/${order.id}`);
@@ -1217,10 +1245,17 @@ function RequestDetailPage() {
             </ServiceNotice>
             {(current.status === "RESOLVED" ||
               current.status === "CLOSED" ||
-              Boolean(current.resolutionResult)) && (
+              (Boolean(current.resolutionResult) && showRepairResult)) && (
               <RequestCloseoutSummary request={current} />
             )}
-            {isManager && current.resolutionResult === "UNRESOLVED" && (
+            {completedInspection && (
+              <ServiceNotice title="Đã hoàn tất khảo sát">
+                <p>{current.resolutionSummary || "Xem báo cáo khảo sát để xác định phạm vi sửa chữa."}</p>
+                <p>Lập dự toán khi đã xác định được công việc và chi phí.</p>
+                <Link to={`/app/work-orders/${completedInspection.id}`}>Mở lệnh {completedInspection.workOrderNo}</Link>
+              </ServiceNotice>
+            )}
+            {isManager && showRepairResult && current.resolutionResult === "UNRESOLVED" && (
               <section className="m1-card workshop-outcome-warning" aria-label="Kết quả xử lý trước">
                 <strong>Lần xử lý trước chưa giải quyết được sự cố</strong>
                 <p>{current.resolutionSummary || "Chưa có tóm tắt kết quả kỹ thuật."}</p>
@@ -1247,6 +1282,11 @@ function RequestDetailPage() {
               <button disabled={busy} onClick={() => void refreshRequest()}>
                 Làm mới trạng thái
               </button>
+              {inspectionAllowed && (
+                <button type="button" disabled={busy} onClick={() => inspectionDialog.current?.showModal()}>
+                  Tạo lệnh khảo sát
+                </button>
+              )}
               {current.status === "ACCEPTED" &&
                 isManager && (
                   <button
@@ -1276,6 +1316,23 @@ function RequestDetailPage() {
                   </button>
                 ))}
             </div>
+            {inspectionEligible && activeOrders.error && <p role="alert">Chưa kiểm tra được lệnh đang mở. Dùng Làm mới trạng thái để thử lại.</p>}
+            {activeOrder && (
+              <p><Link to={`/app/work-orders/${activeOrder.id}`}>Mở lệnh đang xử lý {activeOrder.workOrderNo}</Link></p>
+            )}
+            <dialog ref={inspectionDialog} aria-label="Xác nhận tạo lệnh khảo sát">
+              <form method="dialog" className="m1-form">
+                <h2>Tạo lệnh khảo sát</h2>
+                <p>Xác nhận đã thống nhất phạm vi khảo sát với khách. Sau khảo sát, xem lại yêu cầu để thẩm định và lập dự toán nếu đủ điều kiện.</p>
+                <div className="m1-actions">
+                  <button type="submit">Quay lại</button>
+                  <button type="button" disabled={busy || !inspectionAllowed} onClick={() => {
+                    inspectionDialog.current?.close();
+                    void createWorkOrder("INSPECTION");
+                  }}>Xác nhận tạo lệnh</button>
+                </div>
+              </form>
+            </dialog>
             {current.status === "PROCESSING" && (
               <p role="status">
                 Đang chờ kết quả từ Work Order. Kết quả có thể xuất hiện sau ít
@@ -1828,6 +1885,16 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
         "TECHNICIAN",
         "INVENTORY_STAFF",
       ],
+    },
+    {
+      path: "/app/inventory/requests",
+      element: <PartRequestQueue />,
+      roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "INVENTORY_STAFF"],
+    },
+    {
+      path: "/app/inventory/requests/:kind/:id",
+      element: <PartRequestDetail />,
+      roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "INVENTORY_STAFF"],
     },
     {
       path: "/app/inventory/transactions",

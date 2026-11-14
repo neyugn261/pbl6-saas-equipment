@@ -15,6 +15,7 @@ import { getSessionGeneration, useSession } from "../../auth/session";
 import { technicianName } from "../../display-names";
 import type { Page } from "../../types/domain";
 import { WorkOrderChecklist } from "../../routes/ModelPolicyPanels";
+import { WorkOrderPartRequests } from "../inventory/PartRequests";
 import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
 import { Badge, DataState, EmptyState, RelatedName } from "./WorkspaceUI";
 import {
@@ -511,6 +512,7 @@ export function ManagerOrderActions({
 }
 export default function ServiceManagerWorkOrder() {
   const { id = "" } = useParams();
+  const { profile } = useSession();
   const [revision, setRevision] = useState(0);
   const refresh = () => setRevision((v) => v + 1);
   const order = useWorkspaceData<Row>(
@@ -606,6 +608,9 @@ export default function ServiceManagerWorkOrder() {
               partsUnavailable={Boolean(parts.error)}
               revision={revision}
             />
+            {profile?.roles.includes("SERVICE_MANAGER") && (
+              <WorkOrderPartRequests key={`${id}:${getSessionGeneration()}`} workOrderId={id} workOrderNo={value(row.workOrderNo, "Lệnh đang mở")} status={row.status} />
+            )}
             <ServiceNotice title={next[0]}>
               <p>{next[1]}</p>
             </ServiceNotice>
