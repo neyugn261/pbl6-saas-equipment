@@ -8,7 +8,7 @@ function setup(roles = ['SERVICE_MANAGER'], response = { loading: false, data: {
   const realData = tab.load('features/workspace/workspace-data.ts', { react: h.react, '../../api/client': tab.client, '../../auth/session': tab.session });
   const { default: Queue } = tab.load('features/workspace/RequestFollowUpQueue.tsx', {
     react: h.react, 'react/jsx-runtime': h.jsx, 'react-router-dom': { Link: 'a' },
-    'lucide-react': { AlertTriangle: 'warning-icon' },
+    'lucide-react': { AlertTriangle: 'warning-icon', RefreshCw: 'refresh-icon' },
     '../../auth/session': { useSession: () => ({ profile: { roles, userType: roles.includes('CUSTOMER_USER') ? 'CUSTOMER' : 'TENANT_STAFF' } }) },
     './WorkspaceUI': { DataState: 'DataState', Pagination: 'Pagination' },
     './workspace-data': { ...realData, useWorkspaceData: (_area, path) => { calls.push(path); return response; } },
@@ -21,6 +21,7 @@ test('red queue uses server count, scoped filter, exact SR link and text-only re
   const f = setup(), tree = f.render();
   assert.match(f.calls[0], /followUp=UNRESOLVED/);
   assert.match(text(tree), /Cảnh báo: Yêu cầu chưa xử lý được/);
+  assert.match(tree.props.className, /--red/);
   assert.equal(nodes(tree, n => n.type === 'a')[0].props.to, '/app/service-requests/sr-1');
   assert.equal(nodes(tree, n => n.type === 'Pagination')[0].props.total, 8);
   assert.equal(nodes(tree, n => 'dangerouslySetInnerHTML' in n.props).length, 0);
@@ -52,5 +53,20 @@ test('passes loading/error/retry to existing DataState and removes resolved warn
   }
   const empty = setup(undefined, { loading: false, data: { total: 0, items: [] } }).render();
   assert.match(text(empty), /Không có yêu cầu/);
+  assert.match(empty.props.className, /--neutral/);
+  assert.equal(nodes(empty, n => n.type === 'Pagination').length, 0);
   assert.equal(nodes(empty, n => n.type === 'a').length, 0);
+});
+
+test('a single page needs no controls and an emptied later page can return to the first page', () => {
+  const response = { loading: false, data: { total: 1, items: [{ id: 'sr-1' }] } };
+  const f = setup(undefined, response);
+  assert.equal(nodes(f.render(), n => n.type === 'Pagination').length, 0);
+  response.data.total = 6;
+  nodes(f.render(), n => n.type === 'Pagination')[0].props.onChange(2);
+  response.data = { total: 1, items: [] };
+  const back = nodes(f.render(), n => n.type === 'button' && n.props.children === 'Về trang đầu')[0];
+  back.props.onClick();
+  f.render();
+  assert.match(f.calls.at(-1), /page=1&/);
 });
