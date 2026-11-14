@@ -358,7 +358,6 @@ function StandardDashboard() {
   }).format(new Date());
   return (
     <div className="ws-page">
-      <RequestFollowUpQueue unallocated />
       <PageHeading
         eyebrow={`${roleNames[role].toUpperCase()} · ${dateLabel}`}
         title={config.title}
@@ -388,6 +387,7 @@ function StandardDashboard() {
           </>
         }
       />
+      <RequestFollowUpQueue unallocated />
       <div className="ws-stats">
         {cards.map((metric, index) => (
           <MetricCard

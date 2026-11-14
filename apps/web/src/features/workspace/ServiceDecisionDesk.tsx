@@ -363,7 +363,6 @@ export default function ServiceDecisionDesk() {
   const refresh = () => setRevision((v) => v + 1);
   return (
     <div className="ws-page workshop-desk">
-      <RequestFollowUpQueue />
       <PageHeading
         eyebrow="BÀN ĐIỀU HÀNH DỊCH VỤ"
         title="Việc cần quyết định."
@@ -384,6 +383,7 @@ export default function ServiceDecisionDesk() {
           </>
         }
       />
+      <RequestFollowUpQueue />
       <div
         className="workshop-signals workshop-signals--categories"
         role="group"
