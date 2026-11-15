@@ -220,8 +220,15 @@ export class WorkOrderWorkflowService {
                   'Signer name is required when sign-off status is SIGNED',
                 );
               }
+              const title = signOffInput.signerTitle?.trim();
+              if (!title) {
+                throw invalid(
+                  'SIGNER_TITLE_REQUIRED',
+                  'Signer title is required when sign-off status is SIGNED',
+                );
+              }
               signerName = name;
-              signerTitle = signOffInput.signerTitle?.trim() || null;
+              signerTitle = title;
               signerPhone = signOffInput.signerPhone?.trim() || null;
               signedAt = now;
               signatureAttachmentId = signOffInput.signatureAttachmentId || null;
@@ -521,8 +528,15 @@ export class WorkOrderWorkflowService {
             'Signer name is required when sign-off status is SIGNED',
           );
         }
+        const title = input.signerTitle?.trim();
+        if (!title) {
+          throw invalid(
+            'SIGNER_TITLE_REQUIRED',
+            'Signer title is required when sign-off status is SIGNED',
+          );
+        }
         signerName = name;
-        signerTitle = input.signerTitle?.trim() || null;
+        signerTitle = title;
         signerPhone = input.signerPhone?.trim() || null;
         signedAt = now;
         signatureAttachmentId = input.signatureAttachmentId || null;

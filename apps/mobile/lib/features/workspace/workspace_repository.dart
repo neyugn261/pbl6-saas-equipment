@@ -189,6 +189,7 @@ class WorkOrder {
       status = jsonString(data, 'status');
   final Json data;
   final String id, number, title, equipmentId, status;
+  String? get serviceReportId => data['serviceReportId'] as String?;
   bool get terminal => ['COMPLETED', 'CANCELLED'].contains(status);
   DateTime? get start => wallTime(data['scheduledStart']);
   DateTime? get end => wallTime(data['scheduledEnd']);
@@ -629,6 +630,38 @@ class WorkspaceRepository extends ChangeNotifier {
       return items.map((e) => CatalogPart.fromJson(object(e))).toList();
     }
     return const [];
+  }
+
+  Future<Json> serviceReport(String workOrderId) async =>
+      object(await get('$wo/work-orders/$workOrderId/service-report'));
+
+  Future<Json> confirmPartUse(
+    String workOrderPartId, {
+    required String quantity,
+    required String serviceReportId,
+    required String customerReason,
+    required String removedPartDisposition,
+    String? removedPartNote,
+    String? note,
+    String? idempotencyKey,
+  }) async {
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    if (write == null) throw const ApiException('READ_ONLY');
+    final result = await _doWrite(
+      '/api/inventory/work-order-parts/${Uri.encodeComponent(workOrderPartId)}/confirm-use',
+      {
+        'quantity': quantity,
+        'serviceReportId': serviceReportId,
+        'customerReason': customerReason,
+        'removedPartDisposition': removedPartDisposition,
+        if (removedPartNote != null && removedPartNote.isNotEmpty)
+          'removedPartNote': removedPartNote,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+      idempotencyKey: idempotencyKey ?? newUuid(),
+    );
+    if (_closed) throw const ApiException('SESSION_CHANGED');
+    return object(result);
   }
 
   Future<Equipment> equipment(String id) async =>
