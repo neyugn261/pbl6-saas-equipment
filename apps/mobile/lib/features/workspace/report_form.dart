@@ -337,15 +337,31 @@ class _LiveReportFormState extends State<LiveReportForm>
   void _next() {
     if (!_ready) return;
     if (!_form.currentState!.validate()) return;
-    if (_step == 2 &&
-        _signOffStatus == 'SIGNED' &&
-        _signatureController.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng yêu cầu khách hàng ký nhận vào ô chữ ký.'),
-        ),
-      );
-      return;
+    if (_step == 2 && _signOffStatus == 'SIGNED') {
+      if (_signerName.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vui lòng nhập họ tên người ký.'),
+          ),
+        );
+        return;
+      }
+      if (_signerTitle.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vui lòng nhập chức danh / vai trò người ký.'),
+          ),
+        );
+        return;
+      }
+      if (_signatureController.isEmpty && _signatureAttachmentId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vui lòng yêu cầu khách hàng ký nhận vào ô chữ ký.'),
+          ),
+        );
+        return;
+      }
     }
     setState(() {
       if (_step < 2) {
@@ -739,8 +755,9 @@ class _LiveReportFormState extends State<LiveReportForm>
                                     child: _textField(
                                       'report-signer-title',
                                       _signerTitle,
-                                      'Chức danh / vai trò',
+                                      'Chức danh / vai trò *',
                                       255,
+                                      required: true,
                                     ),
                                   ),
                                   const SizedBox(width: 12),

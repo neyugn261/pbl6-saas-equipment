@@ -815,3 +815,277 @@ class _CancelReturnRequestDialogState extends State<CancelReturnRequestDialog> {
     ],
   );
 }
+
+/// Modal dialog for confirming actual part usage on a completed Work Order.
+class ConfirmPartUseDialog extends StatefulWidget {
+  const ConfirmPartUseDialog({
+    super.key,
+    required this.repo,
+    required this.item,
+    required this.workOrderId,
+    this.serviceReportId,
+    required this.onConfirmed,
+  });
+
+  final WorkspaceRepository repo;
+  final PartUsage item;
+  final String workOrderId;
+  final String? serviceReportId;
+  final VoidCallback onConfirmed;
+
+  static Future<void> show(
+    BuildContext context, {
+    required WorkspaceRepository repo,
+    required PartUsage item,
+    required String workOrderId,
+    String? serviceReportId,
+    required VoidCallback onConfirmed,
+  }) => showDialog<void>(
+    context: context,
+    builder: (ctx) => ConfirmPartUseDialog(
+      repo: repo,
+      item: item,
+      workOrderId: workOrderId,
+      serviceReportId: serviceReportId,
+      onConfirmed: onConfirmed,
+    ),
+  );
+
+  @override
+  State<ConfirmPartUseDialog> createState() => _ConfirmPartUseDialogState();
+}
+
+class _ConfirmPartUseDialogState extends State<ConfirmPartUseDialog> {
+  final _reasonController = TextEditingController();
+  final _removedPartNoteController = TextEditingController();
+  final _noteController = TextEditingController();
+  late final TextEditingController _quantityController;
+
+  late final String _idempotencyKey;
+  String _disposition = 'NOT_APPLICABLE';
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _idempotencyKey = newUuid();
+    _quantityController = TextEditingController(text: widget.item.unreconciled.value);
+  }
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    _removedPartNoteController.dispose();
+    _noteController.dispose();
+    _quantityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final qtyText = _quantityController.text.trim();
+    if (qtyText.isEmpty) {
+      setState(() => _error = 'Vui lòng nhập số lượng đã dùng.');
+      return;
+    }
+
+    final PartQuantity inputQty;
+    try {
+      inputQty = PartQuantity(qtyText);
+      if (!inputQty.positive) {
+        setState(() => _error = 'Số lượng phải lớn hơn 0.');
+        return;
+      }
+      if (inputQty.hundredths > widget.item.unreconciled.hundredths) {
+        setState(() => _error = 'Số lượng vượt quá phần chưa đối soát (${widget.item.unreconciled.value}).');
+        return;
+      }
+    } catch (_) {
+      setState(() => _error = 'Số lượng không hợp lệ (tối đa 2 chữ số thập phân).');
+      return;
+    }
+
+    final reason = _reasonController.text.trim();
+    if (reason.isEmpty) {
+      setState(() => _error = 'Vui lòng nhập lý do thay thế / mục đích sử dụng.');
+      return;
+    }
+
+    final disposition = _disposition;
+    final removedNote = _removedPartNoteController.text.trim();
+    if (disposition != 'NOT_APPLICABLE' && removedNote.isEmpty) {
+      setState(() => _error = 'Vui lòng nhập ghi chú tình trạng bộ phận tháo ra.');
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
+    try {
+      String? reportId = widget.serviceReportId;
+      if (reportId == null || reportId.isEmpty) {
+        final rep = await widget.repo.serviceReport(widget.workOrderId);
+        reportId = rep['id'] as String?;
+      }
+      if (reportId == null || reportId.isEmpty) {
+        throw const ApiException('SERVICE_REPORT_NOT_FOUND');
+      }
+
+      await widget.repo.confirmPartUse(
+        widget.item.id,
+        quantity: inputQty.value,
+        serviceReportId: reportId,
+        customerReason: reason,
+        removedPartDisposition: disposition,
+        removedPartNote: removedNote.isNotEmpty ? removedNote : null,
+        note: _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : null,
+        idempotencyKey: _idempotencyKey,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Xác nhận đã dùng phụ tùng thành công.')),
+        );
+        widget.onConfirmed();
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = 'Không thể xác nhận (${e.code}). Vui lòng kiểm tra lại.';
+        });
+      }
+    } catch (e, st) {
+      debugPrint('ConfirmPartUse error: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = 'Đã có lỗi xảy ra. Vui lòng thử lại sau.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Xác nhận phụ tùng đã dùng'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.item.name ?? widget.item.sku ?? 'Linh kiện',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Text(
+            'Chưa đối soát: ${widget.item.unreconciled.value} ${widget.item.unit ?? ''}',
+            style: const TextStyle(fontSize: 13, color: AppColors.muted),
+          ),
+          const SizedBox(height: 12),
+          if (_error != null) ...[
+            Text(
+              _error!,
+              style: const TextStyle(color: AppColors.berry, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+          ],
+          TextField(
+            key: const Key('confirm-use-quantity-input'),
+            controller: _quantityController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Số lượng đã dùng thực tế *',
+              hintText: 'Tối đa ${widget.item.unreconciled.value}',
+              suffixText: widget.item.unit,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('confirm-use-reason-input'),
+            controller: _reasonController,
+            maxLines: 2,
+            maxLength: 2000,
+            decoration: const InputDecoration(
+              labelText: 'Lý do thay thế / mục đích sử dụng *',
+              hintText: 'Ví dụ: Thay thế bộ lọc cũ bị tắc...',
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            key: const Key('confirm-use-disposition-dropdown'),
+            initialValue: _disposition,
+            decoration: const InputDecoration(
+              labelText: 'Tình trạng bộ phận tháo ra *',
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'NOT_APPLICABLE',
+                child: Text('Không có / Không áp dụng'),
+              ),
+              DropdownMenuItem(
+                value: 'RETURNED_TO_CUSTOMER',
+                child: Text('Bàn giao lại cho khách hàng'),
+              ),
+              DropdownMenuItem(
+                value: 'RETAINED_FOR_REVIEW',
+                child: Text('Giữ lại để giám định'),
+              ),
+              DropdownMenuItem(
+                value: 'DISPOSED_WITH_CONSENT',
+                child: Text('Tiêu hủy theo thỏa thuận với khách'),
+              ),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _disposition = val);
+            },
+          ),
+          if (_disposition != 'NOT_APPLICABLE') ...[
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('confirm-use-removed-note-input'),
+              controller: _removedPartNoteController,
+              maxLines: 2,
+              maxLength: 2000,
+              decoration: const InputDecoration(
+                labelText: 'Ghi chú bộ phận tháo ra *',
+                hintText: 'Nhập tình trạng bộ phận tháo ra...',
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('confirm-use-note-input'),
+            controller: _noteController,
+            maxLines: 2,
+            maxLength: 2000,
+            decoration: const InputDecoration(
+              labelText: 'Ghi chú nội bộ (tùy chọn)',
+              hintText: 'Nhập ghi chú thêm nếu có...',
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+        child: const Text('Bỏ qua'),
+      ),
+      FilledButton(
+        key: const Key('confirm-use-submit-button'),
+        onPressed: _submitting ? null : _submit,
+        child: _submitting
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+            : const Text('Xác nhận đã dùng'),
+      ),
+    ],
+  );
+}

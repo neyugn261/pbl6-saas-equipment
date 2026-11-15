@@ -378,6 +378,35 @@ describe('Work Order week 2 — workflows, transactions and SR cancellation', ()
       .expect((res) => {
         expect(res.body.code).toBe('REFUSAL_REASON_REQUIRED');
       });
+
+    // 5. Reject SIGNED with missing/empty signerTitle
+    await request(app.getHttpServer())
+      .post(`/work-orders/${wo.id}/service-report/sign-off`)
+      .set('Authorization', `Bearer ${technician}`)
+      .send({
+        status: 'SIGNED',
+        signerName: 'Tran Van A',
+        signerTitle: '   ',
+      })
+      .expect(422)
+      .expect((res) => {
+        expect(res.body.code).toBe('SIGNER_TITLE_REQUIRED');
+      });
+
+    // 6. Reject SIGNED with foreign/nonexistent signatureAttachmentId
+    await request(app.getHttpServer())
+      .post(`/work-orders/${wo.id}/service-report/sign-off`)
+      .set('Authorization', `Bearer ${technician}`)
+      .send({
+        status: 'SIGNED',
+        signerName: 'Tran Van A',
+        signerTitle: 'Site Supervisor',
+        signatureAttachmentId: randomUUID(),
+      })
+      .expect(422)
+      .expect((res) => {
+        expect(res.body.code).toBe('SIGNATURE_ATTACHMENT_NOT_FOUND');
+      });
   });
   it('supports direct start, rejection and reassignment without erasing assignment history', async () => {
     const wo = await create();

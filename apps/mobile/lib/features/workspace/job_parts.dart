@@ -30,6 +30,7 @@ class _JobPartsState extends State<JobParts> {
   int _subTab = 0; // 0: Linh kiện đã cấp, 1: Phiếu xin cấp, 2: Phiếu trả kho
   int _partRequestsRevision = 0;
   int _returnRequestsRevision = 0;
+  int _issuedPartsRevision = 0;
 
   // Search & filter state for subTab 0
   String _query = '';
@@ -80,7 +81,7 @@ class _JobPartsState extends State<JobParts> {
   );
 
   Widget _buildIssuedParts() => ReadView<List<PartUsage>>(
-    requestKey: '${widget.orderId}/${widget.revision}',
+    requestKey: '${widget.orderId}/${widget.revision}/$_issuedPartsRevision',
     load: () => widget.repo.workOrderParts(widget.orderId),
     builder: (items) {
       if (items.isEmpty) {
@@ -151,16 +152,39 @@ class _JobPartsState extends State<JobParts> {
                   ),
                   if (item.unreconciled.positive) ...[
                     const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      key: Key('return-part-${item.id}'),
-                      icon: const Icon(Icons.assignment_return_outlined, size: 18),
-                      label: const Text('Đề nghị trả kho'),
-                      onPressed: () => CreateReturnRequestDialog.show(
-                        context,
-                        repo: widget.repo,
-                        item: item,
-                        onCreated: () => setState(() => _returnRequestsRevision++),
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (widget.order?.status == 'COMPLETED')
+                          FilledButton.icon(
+                            key: Key('confirm-use-part-${item.id}'),
+                            icon: const Icon(Icons.check_circle_outline, size: 18),
+                            label: const Text('Xác nhận đã dùng'),
+                            onPressed: () => ConfirmPartUseDialog.show(
+                              context,
+                              repo: widget.repo,
+                              item: item,
+                              workOrderId: widget.orderId,
+                              serviceReportId: widget.order?.serviceReportId,
+                              onConfirmed: () => setState(() => _issuedPartsRevision++),
+                            ),
+                          ),
+                        OutlinedButton.icon(
+                          key: Key('return-part-${item.id}'),
+                          icon: const Icon(Icons.assignment_return_outlined, size: 18),
+                          label: const Text('Đề nghị trả kho'),
+                          onPressed: () => CreateReturnRequestDialog.show(
+                            context,
+                            repo: widget.repo,
+                            item: item,
+                            onCreated: () => setState(() {
+                              _returnRequestsRevision++;
+                              _issuedPartsRevision++;
+                            }),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   if (item.incompleteHistory)
