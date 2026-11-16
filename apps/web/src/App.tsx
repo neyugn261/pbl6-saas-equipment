@@ -42,12 +42,13 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
-import { Boxes, Building2, ChevronRight, Search, Wrench } from "lucide-react";
+import { Boxes, Building2, ChevronRight, Search } from "lucide-react";
 import { api, ApiError } from "./api/client";
 import { creators, has, home, menu } from "./auth/access";
 import { PriorityBadge, StatusBadge } from "./components/Badges";
 import ActivatePage from "./routes/ActivatePage";
 import { ForgotPasswordPage } from "./routes/PasswordPages";
+import AuthStory from "./routes/AuthStory";
 import DashboardPage from "./features/workspace/RoleDashboard";
 import DemoPage from "./routes/DemoPage";
 
@@ -358,25 +359,7 @@ function LoginPage() {
   }
   return (
     <div className="m1-login">
-      <div className="login-story">
-        <div className="login-story__brand">
-          <span>
-            <Wrench size={22} />
-          </span>
-          <strong>Servio</strong>
-        </div>
-        <div>
-          <span className="m1-eyebrow">FIELD SERVICE CLOUD</span>
-          <h2 style={{ color: "#ffffff" }}>
-            Quản lý dịch vụ thiết bị trong một không gian.
-          </h2>
-          <p>
-            Theo dõi thiết bị, bảo hành và yêu cầu hỗ trợ xuyên suốt hành trình
-            sau bàn giao.
-          </p>
-        </div>
-        <small>PBL6 · SaaS Equipment Management</small>
-      </div>
+      <AuthStory />
       <form className="m1-card m1-form" onSubmit={submit}>
         <span className="m1-eyebrow">CHÀO MỪNG TRỞ LẠI</span>
         <h1>Đăng nhập</h1>
@@ -778,7 +761,7 @@ function EquipmentPage() {
                   <option value="COMPLETED">Đã hoàn tất</option>
                 </select>
               )}
-              <button>Tìm</button>
+              <button type="submit" className="ws-button ws-button--secondary">Tìm</button>
             </form>
             {!data.value?.items.length ? (
               <div className="m1-list-empty">
@@ -855,21 +838,27 @@ function EquipmentPage() {
                     ))}
                   </tbody>
                 </table>
-                <div className="m1-table-pagination">
-                  Trang {page} · {data.value?.total ?? 0} thiết bị{" "}
-                  <button
-                    disabled={page === 1}
-                    onClick={() => setPage(page - 1)}
-                  >
-                    Trước
-                  </button>
-                  <button
-                    disabled={page * 20 >= (data.value?.total ?? 0)}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Sau
-                  </button>
-                </div>
+                <footer className="m1-table-pagination ws-pagination">
+                  <span>Trang {page} · {data.value?.total ?? 0} thiết bị</span>
+                  <div>
+                    <button
+                      type="button"
+                      className="ws-button ws-button--secondary"
+                      disabled={page === 1}
+                      onClick={() => setPage(page - 1)}
+                    >
+                      Trước
+                    </button>
+                    <button
+                      type="button"
+                      className="ws-button ws-button--secondary"
+                      disabled={page * 20 >= (data.value?.total ?? 0)}
+                      onClick={() => setPage(page + 1)}
+                    >
+                      Sau
+                    </button>
+                  </div>
+                </footer>
               </>
             )}
           </div>

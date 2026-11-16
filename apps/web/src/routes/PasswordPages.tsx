@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useSession } from '../auth/session'
 import { changePassword, forgotPassword, passwordProblem, resetPassword } from '../auth/password'
+import AuthStory from './AuthStory'
 import './password-pages.css'
 
 function errorMessage(error: unknown) {
@@ -56,28 +57,40 @@ export function ForgotPasswordPage() {
     finally { setBusy(false) }
   }
 
-  return <div className="m1-login password-recovery"><div className="m1-card m1-form">
-    <h1>Quên mật khẩu</h1>
-    {error && <p role="alert" className="m1-error">{error}</p>}
-    {done ? <p role="status">Đã đặt lại mật khẩu. Vui lòng đăng nhập bằng mật khẩu mới.</p> : <>
-      <form onSubmit={requestCode} className="m2-editor password-form">
-        <label><input type="checkbox" checked={platform} onChange={e => { setPlatform(e.target.checked); setChallengeId('') }} /> Tài khoản nền tảng</label>
-        {!platform && <label>Mã doanh nghiệp<input required maxLength={50} value={tenantCode} onChange={e => { setTenantCode(e.target.value); setChallengeId('') }} /></label>}
-        <label>Email<input required type="email" value={email} onChange={e => { setEmail(e.target.value); setChallengeId('') }} /></label>
-        <button type="submit" disabled={busy}>{challengeId ? 'Gửi mã mới' : 'Gửi mã xác nhận'}</button>
-      </form>
-      {challengeId && <>
-        <p role="status">Nếu tài khoản đủ điều kiện, mã xác nhận sẽ được gửi qua email. Mã mới sẽ thay thế mã cũ.</p>
-        <form onSubmit={submitReset} className="m2-editor password-form">
-          <label>Mã xác nhận 6 chữ số<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={otp} onChange={e => setOtp(e.target.value)} /></label>
-          <label>Mật khẩu mới<input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} /></label>
-          <label>Nhập lại mật khẩu<input required type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} /></label>
-          <button type="submit" disabled={busy}>Đặt lại mật khẩu</button>
-        </form>
+  return <div className="m1-login password-recovery">
+    <AuthStory />
+    <main className="m1-card m1-form password-recovery__card">
+      <span className="m1-eyebrow">KHÔI PHỤC TÀI KHOẢN</span>
+      <h1>Quên mật khẩu?</h1>
+      <p className="password-recovery__intro">Nhập email đăng nhập để yêu cầu mã xác nhận và đặt mật khẩu mới.</p>
+      {error && <p role="alert" className="m1-error">{error}</p>}
+      {done ? <div className="password-recovery__success" role="status">
+        <strong>Đã đặt lại mật khẩu</strong>
+        <p>Đăng nhập lại bằng mật khẩu mới để tiếp tục công việc.</p>
+      </div> : <>
+        <section className="password-recovery__step" aria-label="Yêu cầu mã xác nhận">
+          <h2><span>01</span> Nhận mã xác nhận</h2>
+          <form onSubmit={requestCode} className="m2-editor password-form">
+            <label className="password-recovery__checkbox"><input type="checkbox" checked={platform} onChange={e => { setPlatform(e.target.checked); setChallengeId('') }} /> Tài khoản nền tảng</label>
+            {!platform && <label>Mã doanh nghiệp<input required maxLength={50} value={tenantCode} onChange={e => { setTenantCode(e.target.value); setChallengeId('') }} /></label>}
+            <label>Email<input required type="email" autoComplete="email" value={email} onChange={e => { setEmail(e.target.value); setChallengeId('') }} /></label>
+            <button type="submit" disabled={busy}>{challengeId ? 'Gửi mã mới' : 'Gửi mã xác nhận'}</button>
+          </form>
+        </section>
+        {challengeId && <section className="password-recovery__step password-recovery__step--reset" aria-label="Đặt lại mật khẩu">
+          <h2><span>02</span> Đặt lại mật khẩu</h2>
+          <p role="status">Nếu tài khoản đủ điều kiện, mã xác nhận sẽ được gửi qua email. Mã mới sẽ thay thế mã cũ.</p>
+          <form onSubmit={submitReset} className="m2-editor password-form">
+            <label>Mã xác nhận 6 chữ số<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={otp} onChange={e => setOtp(e.target.value)} /></label>
+            <label>Mật khẩu mới<input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} /></label>
+            <label>Nhập lại mật khẩu<input required type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} /></label>
+            <button type="submit" disabled={busy}>Đặt lại mật khẩu</button>
+          </form>
+        </section>}
       </>}
-    </>}
-    <Link to="/login">Về đăng nhập</Link>
-  </div></div>
+      <Link className="password-recovery__back" to="/login">← Về đăng nhập</Link>
+    </main>
+  </div>
 }
 
 export function ChangePasswordPanel() {

@@ -1516,6 +1516,7 @@ body:has(.workshop-shell) {
   background: #293b33;
   border-right: 5px solid #a74b26;
 }
+.m1-login .login-story h2 { color: #fff; }
 .m1-login .login-story__brand > span {
   border-radius: 3px;
   background: #a74b26;
