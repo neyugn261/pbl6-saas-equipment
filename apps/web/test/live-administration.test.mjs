@@ -17,6 +17,7 @@ function setup(fetch, profile = { id: 'admin', tenantId: 'tenant-a', customerId:
       },
     '../api/client': tab.client, '../auth/session': tab.session,
     '../components/Badges': { StatusBadge: 'badge' }, './registration-data': directory,
+    './PasswordPages': { ChangePasswordPanel: 'ChangePasswordPanel' },
     './live-administration.css': {},
       '../features/workspace/BranchManagement': {
         StaffBranchAssignment: 'StaffBranchAssignment',

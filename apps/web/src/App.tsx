@@ -47,6 +47,7 @@ import { api, ApiError } from "./api/client";
 import { creators, has, home, menu } from "./auth/access";
 import { PriorityBadge, StatusBadge } from "./components/Badges";
 import ActivatePage from "./routes/ActivatePage";
+import { ForgotPasswordPage } from "./routes/PasswordPages";
 import DashboardPage from "./features/workspace/RoleDashboard";
 import DemoPage from "./routes/DemoPage";
 
@@ -420,6 +421,7 @@ function LoginPage() {
         <button disabled={busy}>
           {busy ? "Đang đăng nhập…" : "Đăng nhập"}
         </button>
+        <Link to="/forgot-password">Quên mật khẩu?</Link>
       </form>
     </div>
   );
@@ -2221,6 +2223,7 @@ function Content() {
   ) : (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       {WorkshopDesignStudio && (
         <Route
           path="/design/workshop"

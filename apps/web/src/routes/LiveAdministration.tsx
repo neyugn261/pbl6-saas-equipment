@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useSession, getSessionGeneration, type Profile } from '../auth/session'
 import { StatusBadge } from '../components/Badges'
+import { ChangePasswordPanel } from './PasswordPages'
 import { useDirectory, errorText } from './registration-data'
 import type { Page } from '../types/domain'
 import { roleNames as workspaceRoleNames, type WorkspaceRole,
@@ -1001,6 +1002,7 @@ export function ProfilePage() {
           <p>Để thay đổi thông tin liên hệ, vui lòng liên hệ quản trị viên.</p>
         </section>
       )}
+      <ChangePasswordPanel />
     </Screen>
   )
 }

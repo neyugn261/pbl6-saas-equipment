@@ -26,6 +26,9 @@ Set `IDENTITY_ACTIVATION_ENCRYPTION_KEY` to 32 random bytes encoded as 64 hex
 characters (`openssl rand -hex 32`). Keep it stable until pending deliveries
 have drained or expired. Identity sends activation mail through private
 Mailpit SMTP; links open `DEMO_PUBLIC_URL/activate#token=...`.
+Set `IDENTITY_OTP_SECRET` to a different random value of at least 32 characters
+(`openssl rand -hex 32`). Keep it stable while password reset challenges are
+active. Without this value the password recovery endpoint returns 503.
 Set `DEMO_STORAGE_PUBLIC_URL` to the S3 origin reachable by the browser and
 Android client (host plus `MINIO_PUBLIC_PORT`). The Work Order storage adapter
 uses this exact origin when signing URLs. Its container runs in development
@@ -78,6 +81,10 @@ no active Work Order, and a partial part issue and return receipt from the
 Inventory queue. Check one signed file upload/download and activation email in
 Mailpit. Record results for the Web, Gateway and APK separately. Use disposable
 demo records for writes and record the APK build commit and Gateway origin.
+Also check change password and email OTP reset through Web/Gateway, sign in with
+the new password, and compare technician KPI for a known completion date and
+branch with Work Order records. Bulk handover needs Minh's batch API contract
+and per-row retry semantics before its Web acceptance can run.
 
 To deploy the same code again, select the recorded tag and rerun Compose. To
 restore an earlier app image, confirm it supports the current database schema
