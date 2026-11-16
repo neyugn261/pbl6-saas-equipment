@@ -1,0 +1,71 @@
+.m2-page .inventory-parts-directory {
+  padding: 0;
+  overflow: hidden;
+}
+.m2-page .inventory-parts-directory__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  margin: 0;
+  padding: 15px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--shop-line, #dce4ed);
+  border-radius: 0;
+  box-shadow: none;
+}
+.m2-page .inventory-parts-directory__search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(380px, 100%);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--shop-line, #dce4ed);
+  border-radius: 4px;
+  color: var(--shop-muted, #607083);
+  background: #fff;
+}
+.m2-page .inventory-parts-directory__search:focus-within {
+  border-color: var(--shop-accent, #a74b26);
+  box-shadow: 0 0 0 3px rgb(167 75 38 / 12%);
+}
+.m2-page .inventory-parts-directory__search input {
+  flex: 1;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+.m2-page .inventory-parts-directory .inventory-parts-directory__toolbar button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--shop-line, #dce4ed);
+  border-radius: 4px;
+  color: var(--shop-ink, #242e2d);
+  background: #fff;
+  font-size: 12px;
+}
+.m2-page .inventory-parts-directory .inventory-parts-directory__toolbar button:hover:not(:disabled) {
+  background: var(--shop-soft, #f2f4ee);
+}
+.inventory-parts-directory .m2-inventory-table { margin: 0; }
+.inventory-parts-directory .m2-inventory-table table { min-width: 660px; }
+.inventory-parts-directory .m2-inventory-table th,
+.inventory-parts-directory .m2-inventory-table td { padding: 14px 20px; }
+.inventory-parts-directory > p { margin: 0; padding: 20px; }
+.inventory-parts-directory .registration-pagination {
+  min-height: 62px;
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--shop-line, #dce4ed);
+  font-size: 12px;
+}
+.inventory-parts-directory .registration-pagination button { min-height: 34px; border-radius: 4px; }
+@media (max-width: 600px) {
+  .m2-page .inventory-parts-directory__toolbar { flex-wrap: wrap; }
+  .m2-page .inventory-parts-directory__search { width: 100%; }
+}

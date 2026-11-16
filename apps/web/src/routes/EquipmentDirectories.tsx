@@ -6,11 +6,13 @@ import {
 } from "../features/workspace/ServiceDetailUI";
 import CustomerServicePanel from "../features/workspace/CustomerServicePanel";
 import { useState } from "react";
+import { Search } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../auth/session";
+import { StatusBadge } from "../components/Badges";
 import type { Page } from "../types/domain";
-import { LoadState, QuickForm, SetupPage } from "./registration-shared";
+import { DirectoryPagination, LoadState, QuickForm, SetupPage } from "./registration-shared";
 import {
   type DirectoryRow,
   errorText,
@@ -40,27 +42,27 @@ export function CustomerDirectoryPage() {
         )
       }
     >
-      <section className="m1-card">
+      <section className="m1-card registration-directory">
         <form
-          className="registration-actions"
+          className="registration-directory__toolbar"
           onSubmit={(e) => {
             e.preventDefault();
             setQ(draft);
             setPage(1);
           }}
         >
-          <input
+          <label className="registration-directory__search"><Search size={17} aria-hidden="true" /><input
             aria-label="Tìm khách hàng"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Tìm tên hoặc mã khách hàng…"
-          />
-          <button>Tìm</button>
+          /></label>
+          <button type="submit" className="registration-directory__search-button">Tìm</button>
         </form>
         <LoadState {...state} />
         {state.value && (
           <>
-            <table>
+            <div className="registration-directory__table"><table>
               <thead>
                 <tr>
                   <th>Khách hàng</th>
@@ -77,11 +79,7 @@ export function CustomerDirectoryPage() {
                       <small>{row.code}</small>
                     </td>
                     <td>{row.email || row.phone || "Chưa có"}</td>
-                    <td>
-                      {row.status === "ACTIVE"
-                        ? "Đang hoạt động"
-                        : "Ngừng hoạt động"}
-                    </td>
+                    <td><StatusBadge status={row.status || "INACTIVE"} label={row.status === "ACTIVE" ? "Đang hoạt động" : "Ngừng hoạt động"} /></td>
                     <td>
                       {manage && row.status === "ACTIVE" && (
                         <Link
@@ -94,22 +92,11 @@ export function CustomerDirectoryPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
             {state.value.items.length === 0 && (
-              <p>Chưa có khách hàng phù hợp.</p>
+              <p className="registration-directory__empty">Chưa có khách hàng phù hợp.</p>
             )}
-            <div className="registration-pagination">
-              <span>{state.value.total} khách hàng</span>
-              <button disabled={page === 1} onClick={() => setPage(page - 1)}>
-                Trước
-              </button>
-              <button
-                disabled={page * 20 >= state.value.total}
-                onClick={() => setPage(page + 1)}
-              >
-                Sau
-              </button>
-            </div>
+            <DirectoryPagination page={page} total={state.value.total} label="khách hàng" onChange={setPage} />
           </>
         )}
       </section>
@@ -387,7 +374,7 @@ export function EquipmentModelsPage() {
     <SetupPage
       title="Danh mục model thiết bị"
       description="Mỗi model là một dòng sản phẩm. Serial và chính sách thực tế được ghi riêng cho từng máy."
-      actions={<button onClick={() => setForm("new")}>+ Thêm model</button>}
+      actions={<button type="button" className="registration-primary" onClick={() => setForm("new")}>+ Thêm model</button>}
     >
       {edit && (
         <QuickForm
@@ -406,17 +393,17 @@ export function EquipmentModelsPage() {
           onCancel={() => setForm(null)}
         />
       )}
-      <section className="m1-card">
+      <section className="m1-card registration-directory registration-directory--models">
         <form
-          className="registration-actions"
+          className="registration-directory__toolbar"
           onSubmit={(e) => {
             e.preventDefault();
             setPage(1);
             setQ(String(new FormData(e.currentTarget).get("q") || ""));
           }}
         >
-          <input name="q" placeholder="Tìm hãng, mã model hoặc tên…" />
-          <button>Tìm</button>
+          <label className="registration-directory__search"><Search size={17} aria-hidden="true" /><input name="q" aria-label="Tìm model thiết bị" placeholder="Tìm hãng, mã model hoặc tên…" /></label>
+          <button type="submit" className="registration-directory__search-button">Tìm</button>
         </form>
         <LoadState {...state} />
         {error && (
@@ -426,7 +413,7 @@ export function EquipmentModelsPage() {
         )}
         {state.value && (
           <>
-            <table>
+            <div className="registration-directory__table"><table>
               <thead>
                 <tr>
                   <th>Model</th>
@@ -447,11 +434,9 @@ export function EquipmentModelsPage() {
                     </td>
                     <td>{row.manufacturer}</td>
                     <td>{row.category || "Chưa phân nhóm"}</td>
+                    <td><StatusBadge status={row.status || "INACTIVE"} label={row.status === "ACTIVE" ? "Đang dùng" : "Ngừng dùng"} /></td>
                     <td>
-                      {row.status === "ACTIVE" ? "Đang dùng" : "Ngừng dùng"}
-                    </td>
-                    <td>
-                      <div className="registration-actions">
+                      <div className="registration-actions registration-directory__row-actions">
                         <Link to={`/app/equipment-models/${row.id}`}>
                           Chính sách dịch vụ
                         </Link>
@@ -469,25 +454,14 @@ export function EquipmentModelsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
             {state.value.items.length === 0 && (
-              <p>
+              <p className="registration-directory__empty">
                 Chưa có model phù hợp. Thêm model từ catalogue của doanh nghiệp
                 hoặc hãng.
               </p>
             )}
-            <div className="registration-pagination">
-              <span>{state.value.total} model</span>
-              <button disabled={page === 1} onClick={() => setPage(page - 1)}>
-                Trước
-              </button>
-              <button
-                disabled={page * 20 >= state.value.total}
-                onClick={() => setPage(page + 1)}
-              >
-                Sau
-              </button>
-            </div>
+            <DirectoryPagination page={page} total={state.value.total} label="model" onChange={setPage} />
           </>
         )}
       </section>

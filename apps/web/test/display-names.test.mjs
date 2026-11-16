@@ -88,6 +88,7 @@ test('ledger component renders inactive rows outside dropdowns, preserving histo
   }
   const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
+    'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
     './stock-mutation': tab.stock, '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
   h.render(InventoryTransactionsPage); await settle(); const tree = expand(h.render(InventoryTransactionsPage))
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Inactive warehouse').length)
@@ -107,6 +108,7 @@ test('warehouse list uses scoped branch name and keeps branch ID as form value',
   } : empty }
   const { InventoryWarehousesPage } = tab.load('features/inventory/InventoryPages.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
+    'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
     './stock-mutation': tab.stock, '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
   h.render(InventoryWarehousesPage); await settle(); const tree = expand(h.render(InventoryWarehousesPage))
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Chi nhánh Hà Nội').length)

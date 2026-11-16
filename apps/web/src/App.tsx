@@ -683,7 +683,7 @@ function EquipmentPage() {
         </p>
       ) : (
         <>
-          <div className="m1-summary-strip">
+          <div className="m1-summary-strip m1-summary-strip--equipment">
             <div>
               <strong>{data.value?.total ?? 0}</strong>
               <span>Tổng thiết bị</span>
@@ -719,7 +719,7 @@ function EquipmentPage() {
                 setSearch(query);
                 setPage(1);
               }}
-              className="m1-table-toolbar"
+              className="m1-table-toolbar equipment-directory__toolbar"
             >
               <label className="m1-table-search">
                 <Search size={17} />

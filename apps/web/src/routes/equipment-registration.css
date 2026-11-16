@@ -118,6 +118,105 @@
 .registration-pagination span {
   margin-right: auto;
 }
+.registration-page .m1-card.registration-directory {
+  padding: 0;
+  overflow: hidden;
+}
+.registration-directory__toolbar {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  min-height: 72px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--shop-line, #dce4ed);
+}
+.registration-page .registration-directory__search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(380px, 100%);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--shop-line, #dce4ed);
+  border-radius: 4px;
+  color: var(--shop-muted, #607083);
+  background: #fff;
+}
+.registration-page .registration-directory__search:focus-within {
+  border-color: var(--shop-accent, #a74b26);
+  box-shadow: 0 0 0 3px rgb(167 75 38 / 12%);
+}
+.registration-page .registration-directory__search input {
+  flex: 1;
+  width: 100%;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+.registration-page .registration-directory__search-button,
+.registration-page .registration-directory__pagination button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--shop-line, #dce4ed);
+  border-radius: 4px;
+  color: var(--shop-ink, #242e2d);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+.registration-page .registration-directory__search-button:hover:not(:disabled),
+.registration-page .registration-directory__pagination button:hover:not(:disabled) {
+  background: var(--shop-soft, #f2f4ee);
+}
+.registration-page .registration-directory__filter {
+  width: min(260px, 100%);
+  font-size: 12px;
+}
+.registration-page .registration-directory__filter select { min-height: 40px; }
+.registration-directory__table { overflow-x: auto; }
+.registration-directory__table table { min-width: 680px; }
+.registration-directory--models .registration-directory__table table { min-width: 900px; }
+.registration-directory__table th,
+.registration-directory__table td { padding: 14px 20px; }
+.registration-directory__table td:last-child { text-align: right; }
+.registration-directory__row-actions { justify-content: flex-end; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
+.registration-directory__row-actions button { min-height: 34px; padding: 6px 10px; font-size: 12px; }
+.registration-directory__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 4px;
+  background: var(--shop-soft, #f2f4ee);
+  color: var(--shop-ink, #242e2d);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.registration-directory__status--completed { background: #e4f0e7; color: #286448; }
+.registration-directory__status--pending_maintenance,
+.registration-directory__status--pending_customer_confirmation { background: #fff1e8; color: #995029; }
+.registration-directory__empty { margin: 0; padding: 20px; }
+.registration-directory__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--shop-line, #dce4ed);
+  color: var(--shop-muted, #607083);
+  font-size: 12px;
+}
+.registration-directory__pagination > div { display: flex; gap: 8px; }
+.registration-page .registration-directory__pagination button { min-height: 34px; }
+@media (max-width: 600px) {
+  .registration-directory__toolbar { flex-wrap: wrap; }
+  .registration-page .registration-directory__search { width: 100%; }
+}
 .registration-steps {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

@@ -6,7 +6,9 @@ import {
   type ReactNode,
 } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Search } from "lucide-react";
 import { ApiError, api } from "../../api/client";
+import { StatusBadge } from "../../components/Badges";
 import { getSessionGeneration, useSession } from "../../auth/session";
 import type { Page } from "../../types/domain";
 import { StockMutation, type StockRequest } from "./stock-mutation";
@@ -17,6 +19,7 @@ import {
   quantityInput,
   stockLabels,
 } from "../workspace/ui-values";
+import "./inventory-parts.css";
 
 type Part = {
   id: string;
@@ -307,22 +310,25 @@ export function InventoryPartsPage() {
           {error}
         </p>
       )}
+      <section className="m1-card inventory-parts-directory">
       <form
-        className="m2-filters"
+        className="m2-filters inventory-parts-directory__toolbar"
         onSubmit={(event) => {
           event.preventDefault();
           setPage(1);
           setQuery(search.trim());
         }}
       >
-        <label>
-          Tìm SKU hoặc tên
+        <label className="inventory-parts-directory__search">
+          <Search size={17} aria-hidden="true" />
           <input
+            aria-label="Tìm SKU hoặc tên phụ tùng"
+            placeholder="Tìm SKU hoặc tên phụ tùng…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
-        <button>Tìm</button>
+        <button type="submit">Tìm</button>
       </form>
       <PageStatus loading={state.loading} error={state.error}>
         {state.data && (
@@ -350,9 +356,7 @@ export function InventoryPartsPage() {
                       <td>{part.unit}</td>
                       <td>{part.allowFractional ? "Có" : "Không"}</td>
                       <td>
-                        {part.status === "ACTIVE"
-                          ? "Đang sử dụng"
-                          : "Ngừng sử dụng"}
+                        <StatusBadge status={part.status} label={part.status === "ACTIVE" ? "Đang sử dụng" : "Ngừng sử dụng"} />
                       </td>
                     </tr>
                   ))}
@@ -364,6 +368,7 @@ export function InventoryPartsPage() {
           </>
         )}
       </PageStatus>
+      </section>
     </div>
   );
 }
