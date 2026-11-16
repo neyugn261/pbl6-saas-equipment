@@ -866,7 +866,7 @@ export function WorkOrderPartRequests({
     });
   }
   return (
-    <section className="m1-card m1-section-card part-request-page">
+    <section className="m1-card m1-section-card part-request-page part-request-workorder">
       <div className="part-request-section-header">
         <div>
           <h2>Phiếu phụ tùng của công việc</h2>
@@ -876,18 +876,22 @@ export function WorkOrderPartRequests({
       </div>
       <DataState {...recent} retry={reload}>
         {recent.data?.items.length ? (
-          <ul className="part-request-list">
+          <ul className="part-request-list part-request-workorder-list">
             {recent.data.items.map((item) => (
               <li key={item.id}>
-                <Link to={queue + "/part-requests/" + item.id + filter}>
-                  {item.requestNo}
-                </Link>{" "}
-                · {labels[item.fulfillmentStatus]}
+                <div className="part-request-row-header">
+                  <Link to={queue + "/part-requests/" + item.id + filter}>
+                    {item.requestNo}
+                  </Link>
+                  <span className="part-request-badge">{labels[item.fulfillmentStatus]}</span>
+                </div>
+                <p className="part-request-row-meta">{formatDate(item.createdAt, true)}</p>
+                <p className="part-request-row-reason">{item.reason}</p>
               </li>
             ))}
           </ul>
         ) : (
-          <p>Chưa có phiếu xin cấp.</p>
+          <p className="part-request-workorder-empty">Chưa có phiếu xin cấp.</p>
         )}
       </DataState>
       <MutationStatus state={operation} />
