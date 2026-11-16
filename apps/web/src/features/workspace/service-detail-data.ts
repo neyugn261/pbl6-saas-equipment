@@ -58,7 +58,7 @@ export const serviceLabels: Record<string, string> = {
   WARRANTY: "Bảo hành",
   REPAIR: "Sửa chữa",
   MAINTENANCE: "Bảo trì",
-  INSPECTION: "Kiểm tra",
+  INSPECTION: "Khảo sát",
   RESOLVED: "Đã xử lý",
   PARTIALLY_RESOLVED: "Xử lý một phần",
   UNRESOLVED: "Chưa xử lý được",

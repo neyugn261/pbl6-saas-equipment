@@ -2,6 +2,10 @@ import type { RequestDetail } from "../../types/domain";
 
 type IntakeRequest = Pick<RequestDetail, "status" | "allowedActions" | "warrantyCheck" | "assessmentRequired" | "coverageAssessment" | "resolutionResult">;
 
+export function canCreateInspection(request: Pick<RequestDetail, "status" | "branchId"> | null, activeOrders?: number) {
+  return request?.status === "REVIEWING" && Boolean(request.branchId) && activeOrders === 0;
+}
+
 export function requestIntake(request: IntakeRequest) {
   const allows = (action: string) => request.allowedActions.includes(action);
   if (allows("review")) return {
@@ -26,7 +30,7 @@ export function requestIntake(request: IntakeRequest) {
   };
   if (["create-estimate", "edit-estimate", "send-estimate"].some(allows)) return {
     stage: 2, target: "request-estimate", title: "Chuẩn bị dự toán sửa chữa",
-    detail: "Lập dự toán khi đã đủ căn cứ. Nếu chưa rõ nguyên nhân hoặc phạm vi, ghi nhận nhu cầu khảo sát và phối hợp xác minh trước khi báo giá.",
+    detail: "Lập dự toán khi đã đủ căn cứ. Nếu chưa rõ nguyên nhân hoặc phạm vi, tạo lệnh khảo sát để xác minh trước khi báo giá.",
   };
   if (request.status === "AWAITING_CUSTOMER_APPROVAL") return {
     stage: 2, target: "request-estimate", title: "Chờ khách hàng phản hồi dự toán",

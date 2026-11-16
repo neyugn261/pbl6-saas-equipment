@@ -606,6 +606,15 @@
 .sm-workspace .m1-form {
   gap: 18px;
 }
+.workshop-shell .m1-actions .request-refresh-action {
+  background: var(--shop-paper, #fff);
+  border: 1px solid var(--shop-line, #dce4ed);
+  color: var(--shop-ink, #253b2d);
+}
+.workshop-shell .m1-actions .request-refresh-action:hover:not(:disabled) {
+  background: var(--shop-soft, #f5f7f4);
+  color: var(--shop-ink, #253b2d);
+}
 .sm-workspace .m2-page details > summary {
   padding: 12px 0;
   font-size: 13px;

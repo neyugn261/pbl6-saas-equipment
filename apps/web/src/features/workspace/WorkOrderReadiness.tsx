@@ -76,7 +76,7 @@ export default function WorkOrderReadiness({
         </span>
       </div>
       <div>
-        <small>Kết quả sửa chữa</small>
+        <small>{order.type === "INSPECTION" ? "Kết quả khảo sát" : "Kết quả sửa chữa"}</small>
         <strong>
           {report.loading
             ? "Đang tải kết quả…"
@@ -154,7 +154,10 @@ export default function WorkOrderReadiness({
           </span>
         )}
       </div>
-      {(report.data?.result === "PARTIALLY_RESOLVED" ||
+      {order.type === "INSPECTION" && order.status === "COMPLETED" && Boolean(order.serviceRequestId) && (
+        <p className="workshop-readiness-wide">Đã hoàn tất khảo sát. Mở yêu cầu liên quan để xem kết quả và lập dự toán khi đủ điều kiện.</p>
+      )}
+      {order.type !== "INSPECTION" && (report.data?.result === "PARTIALLY_RESOLVED" ||
         report.data?.result === "UNRESOLVED") && (
         <p className="workshop-outcome-warning">
           {report.data.result === "PARTIALLY_RESOLVED"

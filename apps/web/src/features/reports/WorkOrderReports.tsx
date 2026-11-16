@@ -2,6 +2,10 @@ import { statusNames } from '../workspace/workspace-data'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ApiError, api } from '../../api/client'
 import { getSessionGeneration } from '../../auth/session'
+import { useSession } from '../../auth/session'
+import type { Page } from '../../types/domain'
+import '../../routes/live-administration.css'
+import './workorder-reports.css'
 
 const statuses = [
   'CREATED',
@@ -54,12 +58,138 @@ function useCurrentMonth() {
 
 export function WorkOrderReportsPage() {
   return (
-    <div className="m2-page">
+    <div className="m2-page workorder-reports">
       <h1>Báo cáo dịch vụ</h1>
       <p>Theo dõi khối lượng và trạng thái công việc theo khoảng thời gian. Số lệnh hoàn tất chưa thể hiện tỷ lệ sửa chữa thành công hoặc mức hài lòng của khách hàng.</p>
       <WorkOrderSummaryPanel />
+      <TechnicianKpiPanel />
     </div>
   )
+}
+
+type TechnicianKpi = {
+  technicianId: string
+  employeeCode: string
+  fullName: string | null
+  branchId: string
+  branchName: string | null
+  branchCode: string | null
+  completedCount: number
+  resolvedRepairCount: number
+  eligibleRepairCount: number
+  repairSuccessRate: number | null
+  onTimeCount: number
+  scheduledCount: number
+  onTimeRate: number | null
+}
+type KpiReport = {
+  from: string
+  to: string
+  timezone: 'Asia/Ho_Chi_Minh'
+  items: TechnicianKpi[]
+  summary: {
+    totalTechnicians: number
+    totalCompletedCount: number
+    overallRepairSuccessRate: number | null
+    overallOnTimeRate: number | null
+  }
+}
+type Branch = { id: string; code: string; name: string }
+
+function rate(value: number | null) {
+  return value === null ? 'Chưa đủ dữ liệu' : `${(value * 100).toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%`
+}
+
+export function TechnicianKpiPanel() {
+  const { profile } = useSession()
+  const canFilterBranch = profile?.roles.includes('TENANT_ADMIN') ?? false
+  const sessionGeneration = getSessionGeneration()
+  const initial = useCurrentMonth()
+  const [from, setFrom] = useState(initial.from)
+  const [to, setTo] = useState(initial.to)
+  const [branchId, setBranchId] = useState('')
+  const [branchSearch, setBranchSearch] = useState('')
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [branchError, setBranchError] = useState('')
+  const [query, setQuery] = useState({ from: initial.from, to: initial.to, branchId: '' })
+  const [state, setState] = useState<{ key: string; data: KpiReport | null; error: string }>({ key: '', data: null, error: '' })
+  const [validationError, setValidationError] = useState('')
+  const key = `${query.from}:${query.to}:${query.branchId}:session-${sessionGeneration}`
+  const loading = state.key !== key
+
+  useEffect(() => {
+    if (!canFilterBranch) return
+    let active = true
+    const search = new URLSearchParams({ pageSize: '100', status: 'ACTIVE', q: branchSearch })
+    api.organization<Page<Branch>>(`/branches?${search}`).then(
+      page => { if (active) { setBranches(page.items); setBranchError(page.total > 100 ? 'Chỉ hiển thị 100 chi nhánh. Tìm theo tên hoặc mã để lọc.' : '') } },
+      cause => { if (active) { setBranches([]); setBranchError(apiError(cause)) } },
+    )
+    return () => { active = false }
+  }, [canFilterBranch, branchSearch, sessionGeneration])
+
+  useEffect(() => {
+    let active = true
+    const search = new URLSearchParams({
+      from: `${query.from}T00:00:00+07:00`,
+      to: `${addDay(query.to)}T00:00:00+07:00`,
+    })
+    if (canFilterBranch && query.branchId) search.set('branchId', query.branchId)
+    api.workorders<KpiReport>(`/reports/technicians?${search}`).then(
+      data => { if (active) setState({ key, data, error: '' }) },
+      cause => { if (active) setState({ key, data: null, error: apiError(cause) }) },
+    )
+    return () => { active = false }
+  }, [query, key, canFilterBranch])
+
+  function apply(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!from || !to || from > to) { setValidationError('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.'); return }
+    setValidationError('')
+    setQuery({ from, to, branchId: canFilterBranch ? branchId : '' })
+  }
+
+  return <section className="m1-card m1-section-card technician-kpi">
+    <div className="m1-section-header"><h2>KPI kỹ thuật viên</h2></div>
+    <div className="m1-section-body">
+      <p>Đếm theo ngày hoàn tất Work Order, giờ Việt Nam. Tỷ lệ sửa thành công chỉ tính lệnh sửa có kết quả kỹ thuật; tỷ lệ đúng hạn chỉ tính lệnh có lịch kết thúc.</p>
+      <form className="m2-editor technician-kpi-filters" onSubmit={apply}>
+        <label>Từ ngày<input type="date" required value={from} onChange={e => setFrom(e.target.value)} /></label>
+        <label>Đến ngày (bao gồm)<input type="date" required value={to} onChange={e => setTo(e.target.value)} /></label>
+        {canFilterBranch && <>
+          <label>Tìm chi nhánh<input value={branchSearch} onChange={e => setBranchSearch(e.target.value)} /></label>
+          <label>Chi nhánh<select value={branchId} onChange={e => setBranchId(e.target.value)} disabled={!!branchError && branches.length === 0}>
+            <option value="">Tất cả chi nhánh được phép</option>
+            {branchId && !branches.some(branch => branch.id === branchId) && <option value={branchId}>Chi nhánh đang chọn</option>}
+            {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>)}
+          </select></label>
+          {branchError && <p role="alert">{branchError}</p>}
+        </>}
+        <button type="submit">Áp dụng</button>
+      </form>
+      {validationError && <p role="alert" className="m1-error">{validationError}</p>}
+      {loading && <p role="status">Đang tải KPI.</p>}
+      {!loading && state.error && <p role="alert" className="m1-error">{state.error}</p>}
+      {!loading && state.data && <>
+        <div className="technician-kpi-summary" aria-label="Tổng quan KPI">
+          <div><strong>{state.data.summary.totalTechnicians}</strong><span>Kỹ thuật viên</span></div>
+          <div><strong>{state.data.summary.totalCompletedCount}</strong><span>Lệnh hoàn tất</span></div>
+          <div><strong>{rate(state.data.summary.overallRepairSuccessRate)}</strong><span>Sửa thành công</span></div>
+          <div><strong>{rate(state.data.summary.overallOnTimeRate)}</strong><span>Đúng hạn</span></div>
+        </div>
+        {state.data.items.length === 0 ? <p>Không có kết quả trong khoảng ngày đã chọn.</p> : <div className="live-table technician-kpi-table"><table>
+          <thead><tr><th>Kỹ thuật viên</th><th>Chi nhánh</th><th>Hoàn tất</th><th>Sửa thành công</th><th>Đúng hạn</th></tr></thead>
+          <tbody>{state.data.items.map(item => <tr key={item.technicianId}>
+            <td>{item.fullName || item.employeeCode} ({item.employeeCode})</td>
+            <td>{item.branchName || item.branchCode || item.branchId}</td>
+            <td>{item.completedCount}</td>
+            <td>{rate(item.repairSuccessRate)} ({item.resolvedRepairCount}/{item.eligibleRepairCount})</td>
+            <td>{rate(item.onTimeRate)} ({item.onTimeCount}/{item.scheduledCount})</td>
+          </tr>)}</tbody>
+        </table></div>}
+      </>}
+    </div>
+  </section>
 }
 
 export function WorkOrderSummaryPanel() {
@@ -108,7 +238,7 @@ export function WorkOrderSummaryPanel() {
   }
 
   return (
-    <section className="m1-card m1-section-card">
+    <section className="m1-card m1-section-card workorder-summary-panel">
       <div className="m1-section-header"><h2>Khối lượng công việc đã ghi nhận</h2></div>
       <div className="m1-section-body">
         <form className="m2-editor" onSubmit={apply}>
@@ -124,8 +254,8 @@ export function WorkOrderSummaryPanel() {
         {error && <p role="alert" className="m1-error">{error}</p>}
         {!loading && !error && data && (
           <>
-            <p>Từ {new Date(data.from).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} đến {new Date(new Date(data.to).getTime() - 1).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} · Giờ Việt Nam (UTC+7).</p>
-            <div className="m1-summary-strip">
+            <p className="workorder-summary-range">Từ {new Date(data.from).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} đến {new Date(new Date(data.to).getTime() - 1).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} · Giờ Việt Nam (UTC+7).</p>
+            <div className="technician-kpi-summary" aria-label="Tổng quan lệnh công việc">
               <div><strong>{data.createdCount}</strong><span>WO được tạo trong kỳ</span></div>
               <div><strong>{data.completedCount}</strong><span>WO hoàn tất trong kỳ</span></div>
               <div><strong>{data.createdByStatus.COMPLETED}</strong><span>Đã hoàn tất trong nhóm được tạo kỳ này</span></div>

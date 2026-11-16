@@ -73,6 +73,7 @@ export interface RequestRecord {
   createdAt: string
 }
 export interface RequestDetail extends RequestRecord {
+  branchId?: string | null;
   resolutionChecklist?:
     { itemId: string; title: string; status: string }[] | null;
   assessmentRequired?: boolean;

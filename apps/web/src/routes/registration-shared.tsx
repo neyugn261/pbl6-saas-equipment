@@ -46,6 +46,27 @@ export function LoadState({
     </p>
   ) : null
 }
+
+export function DirectoryPagination({
+  page,
+  total,
+  label,
+  onChange,
+}: {
+  page: number
+  total: number
+  label: string
+  onChange: (page: number) => void
+}) {
+  const pages = Math.max(1, Math.ceil(total / 20))
+  return <footer className="registration-directory__pagination">
+    <span>Trang {page}/{pages} · {total} {label}</span>
+    <div>
+      <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>Trước</button>
+      <button type="button" disabled={page >= pages} onClick={() => onChange(page + 1)}>Sau</button>
+    </div>
+  </footer>
+}
 type Field = {
   key: string
   label: string

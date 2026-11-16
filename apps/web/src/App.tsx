@@ -13,8 +13,13 @@ import {
   requestResponsibility,
 } from "./features/workspace/service-detail-data";
 import RequestCloseoutSummary from "./features/workspace/RequestCloseoutSummary";
-import { requestIntake } from "./features/workspace/request-intake";
+import {
+  canCreateInspection,
+  requestIntake,
+} from "./features/workspace/request-intake";
+import { useWorkspaceData } from "./features/workspace/workspace-data";
 import { recordLabel } from "./display-names";
+import { PartRequestDetail, PartRequestQueue } from "./features/inventory/PartRequests";
 import { ModelPolicyPage } from "./routes/ModelPolicyPage";
 import { WarrantyAssessmentPanel } from "./routes/ModelPolicyPanels";
 import { useDirectory } from "./routes/registration-data";
@@ -37,11 +42,13 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
-import { Boxes, Building2, ChevronRight, Search, Wrench } from "lucide-react";
+import { Boxes, Building2, ChevronRight, Search } from "lucide-react";
 import { api, ApiError } from "./api/client";
 import { creators, has, home, menu } from "./auth/access";
 import { PriorityBadge, StatusBadge } from "./components/Badges";
 import ActivatePage from "./routes/ActivatePage";
+import { ForgotPasswordPage } from "./routes/PasswordPages";
+import AuthStory from "./routes/AuthStory";
 import DashboardPage from "./features/workspace/RoleDashboard";
 import DemoPage from "./routes/DemoPage";
 
@@ -266,7 +273,7 @@ const requestTypeLabels: Record<string, string> = {
   WARRANTY: "Bảo hành",
   REPAIR: "Sửa chữa",
   MAINTENANCE: "Bảo trì",
-  INSPECTION: "Kiểm tra",
+  INSPECTION: "Khảo sát",
 };
 function Problem({ error }: { error: unknown }) {
   const summary = useRef<HTMLParagraphElement>(null);
@@ -352,25 +359,7 @@ function LoginPage() {
   }
   return (
     <div className="m1-login">
-      <div className="login-story">
-        <div className="login-story__brand">
-          <span>
-            <Wrench size={22} />
-          </span>
-          <strong>Servio</strong>
-        </div>
-        <div>
-          <span className="m1-eyebrow">FIELD SERVICE CLOUD</span>
-          <h2 style={{ color: "#ffffff" }}>
-            Quản lý dịch vụ thiết bị trong một không gian.
-          </h2>
-          <p>
-            Theo dõi thiết bị, bảo hành và yêu cầu hỗ trợ xuyên suốt hành trình
-            sau bàn giao.
-          </p>
-        </div>
-        <small>PBL6 · SaaS Equipment Management</small>
-      </div>
+      <AuthStory />
       <form className="m1-card m1-form" onSubmit={submit}>
         <span className="m1-eyebrow">CHÀO MỪNG TRỞ LẠI</span>
         <h1>Đăng nhập</h1>
@@ -415,6 +404,7 @@ function LoginPage() {
         <button disabled={busy}>
           {busy ? "Đang đăng nhập…" : "Đăng nhập"}
         </button>
+        <Link to="/forgot-password">Quên mật khẩu?</Link>
       </form>
     </div>
   );
@@ -693,7 +683,7 @@ function EquipmentPage() {
         </p>
       ) : (
         <>
-          <div className="m1-summary-strip">
+          <div className="m1-summary-strip m1-summary-strip--equipment">
             <div>
               <strong>{data.value?.total ?? 0}</strong>
               <span>Tổng thiết bị</span>
@@ -729,7 +719,7 @@ function EquipmentPage() {
                 setSearch(query);
                 setPage(1);
               }}
-              className="m1-table-toolbar"
+              className="m1-table-toolbar equipment-directory__toolbar"
             >
               <label className="m1-table-search">
                 <Search size={17} />
@@ -771,7 +761,7 @@ function EquipmentPage() {
                   <option value="COMPLETED">Đã hoàn tất</option>
                 </select>
               )}
-              <button>Tìm</button>
+              <button type="submit" className="ws-button ws-button--secondary">Tìm</button>
             </form>
             {!data.value?.items.length ? (
               <div className="m1-list-empty">
@@ -848,21 +838,27 @@ function EquipmentPage() {
                     ))}
                   </tbody>
                 </table>
-                <div className="m1-table-pagination">
-                  Trang {page} · {data.value?.total ?? 0} thiết bị{" "}
-                  <button
-                    disabled={page === 1}
-                    onClick={() => setPage(page - 1)}
-                  >
-                    Trước
-                  </button>
-                  <button
-                    disabled={page * 20 >= (data.value?.total ?? 0)}
-                    onClick={() => setPage(page + 1)}
-                  >
-                    Sau
-                  </button>
-                </div>
+                <footer className="m1-table-pagination ws-pagination">
+                  <span>Trang {page} · {data.value?.total ?? 0} thiết bị</span>
+                  <div>
+                    <button
+                      type="button"
+                      className="ws-button ws-button--secondary"
+                      disabled={page === 1}
+                      onClick={() => setPage(page - 1)}
+                    >
+                      Trước
+                    </button>
+                    <button
+                      type="button"
+                      className="ws-button ws-button--secondary"
+                      disabled={page * 20 >= (data.value?.total ?? 0)}
+                      onClick={() => setPage(page + 1)}
+                    >
+                      Sau
+                    </button>
+                  </div>
+                </footer>
               </>
             )}
           </div>
@@ -986,6 +982,27 @@ function RequestDetailPage() {
   const current =
     currentOverride?.id === data.value?.id ? currentOverride : data.value;
   const intake = current && isManager ? requestIntake(current) : null;
+  const inspectionEligible = isManager && canCreateInspection(current, 0);
+  const activeOrders = useWorkspaceData<Page<{ id: string; workOrderNo: string }>>(
+    "workorders",
+    inspectionEligible
+      ? `/work-orders?serviceRequestId=${current?.id}&status=CREATED,ASSIGNED,ACCEPTED,TRAVELLING,IN_PROGRESS,ON_HOLD&pageSize=1`
+      : null,
+    version,
+  );
+  const inspectionAllowed = isManager && canCreateInspection(current, activeOrders.data?.total);
+  const activeOrder = activeOrders.data?.items[0];
+  const completedOrderNo = isManager && current?.status === "REVIEWING" ? current.resolvedWorkOrderNo : null;
+  const completedOrderState = useWorkspaceData<Page<{ id: string; workOrderNo: string; type: string }>>(
+    "workorders",
+    completedOrderNo
+      ? `/work-orders?serviceRequestId=${current?.id}&q=${encodeURIComponent(completedOrderNo)}&pageSize=10`
+      : null,
+    version,
+  );
+  const completedOrder = completedOrderState.data?.items.find((item) => item.workOrderNo === completedOrderNo);
+  const completedInspection = completedOrder?.type === "INSPECTION" ? completedOrder : null;
+  const showRepairResult = !completedInspection && !completedOrderState.loading;
   useEffect(() => {
     if (
       busy || !nextFocus || nextFocus.id !== current?.id ||
@@ -1039,11 +1056,13 @@ function RequestDetailPage() {
       setBusy(false);
     }
   }
-  async function createWorkOrder() {
+  const inspectionDialog = useRef<HTMLDialogElement>(null);
+  async function createWorkOrder(type?: "INSPECTION") {
     if (
       !current ||
       actionLock.current ||
-      current.status !== "ACCEPTED" ||
+      !isManager ||
+      (type ? !inspectionAllowed : current.status !== "ACCEPTED") ||
       getSessionGeneration() !== sessionGeneration
     )
       return;
@@ -1053,7 +1072,7 @@ function RequestDetailPage() {
     try {
       const order = await api.workorders<{ id: string }>("/work-orders", {
         method: "POST",
-        body: { serviceRequestId: current.id },
+        body: { serviceRequestId: current.id, ...(type && { type }) },
       });
       if (getSessionGeneration() !== sessionGeneration) return;
       navigate(`/app/work-orders/${order.id}`);
@@ -1217,10 +1236,17 @@ function RequestDetailPage() {
             </ServiceNotice>
             {(current.status === "RESOLVED" ||
               current.status === "CLOSED" ||
-              Boolean(current.resolutionResult)) && (
+              (Boolean(current.resolutionResult) && showRepairResult)) && (
               <RequestCloseoutSummary request={current} />
             )}
-            {isManager && current.resolutionResult === "UNRESOLVED" && (
+            {completedInspection && (
+              <ServiceNotice title="Đã hoàn tất khảo sát">
+                <p>{current.resolutionSummary || "Xem báo cáo khảo sát để xác định phạm vi sửa chữa."}</p>
+                <p>Lập dự toán khi đã xác định được công việc và chi phí.</p>
+                <Link to={`/app/work-orders/${completedInspection.id}`}>Mở lệnh {completedInspection.workOrderNo}</Link>
+              </ServiceNotice>
+            )}
+            {isManager && showRepairResult && current.resolutionResult === "UNRESOLVED" && (
               <section className="m1-card workshop-outcome-warning" aria-label="Kết quả xử lý trước">
                 <strong>Lần xử lý trước chưa giải quyết được sự cố</strong>
                 <p>{current.resolutionSummary || "Chưa có tóm tắt kết quả kỹ thuật."}</p>
@@ -1244,9 +1270,14 @@ function RequestDetailPage() {
               </section>
             )}
             <div className="m1-actions">
-              <button disabled={busy} onClick={() => void refreshRequest()}>
+              <button className="request-refresh-action" disabled={busy} onClick={() => void refreshRequest()}>
                 Làm mới trạng thái
               </button>
+              {inspectionAllowed && (
+                <button type="button" disabled={busy} onClick={() => inspectionDialog.current?.showModal()}>
+                  Tạo lệnh khảo sát
+                </button>
+              )}
               {current.status === "ACCEPTED" &&
                 isManager && (
                   <button
@@ -1276,6 +1307,23 @@ function RequestDetailPage() {
                   </button>
                 ))}
             </div>
+            {inspectionEligible && activeOrders.error && <p role="alert">Chưa kiểm tra được lệnh đang mở. Dùng Làm mới trạng thái để thử lại.</p>}
+            {activeOrder && (
+              <p><Link to={`/app/work-orders/${activeOrder.id}`}>Mở lệnh đang xử lý {activeOrder.workOrderNo}</Link></p>
+            )}
+            <dialog ref={inspectionDialog} aria-label="Xác nhận tạo lệnh khảo sát">
+              <form method="dialog" className="m1-form">
+                <h2>Tạo lệnh khảo sát</h2>
+                <p>Xác nhận đã thống nhất phạm vi khảo sát với khách. Sau khảo sát, xem lại yêu cầu để thẩm định và lập dự toán nếu đủ điều kiện.</p>
+                <div className="m1-actions">
+                  <button type="submit">Quay lại</button>
+                  <button type="button" disabled={busy || !inspectionAllowed} onClick={() => {
+                    inspectionDialog.current?.close();
+                    void createWorkOrder("INSPECTION");
+                  }}>Xác nhận tạo lệnh</button>
+                </div>
+              </form>
+            </dialog>
             {current.status === "PROCESSING" && (
               <p role="status">
                 Đang chờ kết quả từ Work Order. Kết quả có thể xuất hiện sau ít
@@ -1830,6 +1878,16 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
       ],
     },
     {
+      path: "/app/inventory/requests",
+      element: <PartRequestQueue />,
+      roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "INVENTORY_STAFF"],
+    },
+    {
+      path: "/app/inventory/requests/:kind/:id",
+      element: <PartRequestDetail />,
+      roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "INVENTORY_STAFF"],
+    },
+    {
       path: "/app/inventory/transactions",
       element: <InventoryTransactionsRoute />,
       roles: ["TENANT_ADMIN", "INVENTORY_STAFF"],
@@ -2154,6 +2212,7 @@ function Content() {
   ) : (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       {WorkshopDesignStudio && (
         <Route
           path="/design/workshop"

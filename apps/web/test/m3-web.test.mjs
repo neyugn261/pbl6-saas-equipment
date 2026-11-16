@@ -161,11 +161,11 @@ test('Notification inbox, filters, pagination, mark-read and bell use the config
     calls.push({ url, method: options.method })
     if (url.endsWith('/unread-count')) return ok({ unreadCount: 21 })
     if (options.method === 'PATCH') return ok({})
-    return ok({ items: [{ id: 'notice /1', title: 'Thông báo', body: 'Nội dung', createdAt: '2026-11-03T00:00:00Z', readAt: null }], total: 21, pageSize: 20 })
+    return ok({ items: [{ id: 'notice /1', title: 'Work order created', body: 'WO-2026-0004 was created.', createdAt: '2026-11-03T00:00:00Z', readAt: null }], total: 21, pageSize: 20 })
   }, { VITE_GATEWAY_API_URL: 'https://example.test/gateway/' })
   const inbox = hooks(), bell = hooks()
   const imports = (h) => ({ react: h.react, 'react/jsx-runtime': h.jsx, 'lucide-react': { Bell: 'bell' },
-    'react-router-dom': { Link: 'link' }, '../../api/client': tab.client, '../../auth/session': tab.session,
+    'react-router-dom': { Link: 'link' }, './notifications.css': {}, '../../api/client': tab.client, '../../auth/session': tab.session,
     '../../display-names': tab.load('display-names.ts'),
     '../workspace/workspace-data': tab.load('features/workspace/workspace-data.ts', {
       react: h.react, '../../api/client': tab.client, '../../auth/session': tab.session,
@@ -177,6 +177,8 @@ test('Notification inbox, filters, pagination, mark-read and bell use the config
   bell.render(NotificationBell, { href: '/app/notifications' })
   await settle()
   let tree = inbox.render(NotificationInbox)
+  assert.ok(nodes(tree, (node) => node.type === 'strong' && node.props.children === 'Lệnh công việc mới').length)
+  assert.ok(nodes(tree, (node) => node.type === 'p' && node.props.children === 'Lệnh WO-2026-0004 đã được tạo.').length)
   const filter = nodes(tree, (node) => node.type === 'select')[0]
   filter.props.onChange({ target: { value: 'UNREAD' } })
   inbox.render(NotificationInbox); await settle()
@@ -220,6 +222,7 @@ for (const mode of ['RECEIVE', 'ADJUST', 'ISSUE', 'RETURN']) {
     const h = hooks()
     const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', {
       react: h.react, 'react/jsx-runtime': h.jsx, 'react-router-dom': { Link: 'link' },
+      'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
       '../../api/client': tab.client, '../../auth/session': tab.session, './stock-mutation': tab.stock,
       '../../display-names': tab.load('display-names.ts'),
       '../workspace/ui-values':tab.load('features/workspace/ui-values.ts'),

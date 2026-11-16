@@ -26,6 +26,9 @@ Set `IDENTITY_ACTIVATION_ENCRYPTION_KEY` to 32 random bytes encoded as 64 hex
 characters (`openssl rand -hex 32`). Keep it stable until pending deliveries
 have drained or expired. Identity sends activation mail through private
 Mailpit SMTP; links open `DEMO_PUBLIC_URL/activate#token=...`.
+Set `IDENTITY_OTP_SECRET` to a different random value of at least 32 characters
+(`openssl rand -hex 32`). Keep it stable while password reset challenges are
+active. Without this value the password recovery endpoint returns 503.
 Set `DEMO_STORAGE_PUBLIC_URL` to the S3 origin reachable by the browser and
 Android client (host plus `MINIO_PUBLIC_PORT`). The Work Order storage adapter
 uses this exact origin when signing URLs. Its container runs in development
@@ -50,6 +53,43 @@ volume, PostgreSQL init creates the eight logical databases. On an existing
 volume, init scripts are not replayed; use migration output to diagnose schema
 issues rather than deleting the volume.
 
+## Build and verify a release candidate
+
+From a clean checkout of the candidate commit, record the SHA and use it as the
+image tag. The same tag must be available to Docker for initial deployment and
+redeployment. In PowerShell:
+
+```powershell
+$releaseTag = git rev-parse --short=12 HEAD
+$env:DEMO_IMAGE_TAG = $releaseTag
+docker build -f infrastructure/docker/backend.Dockerfile -t "pbl6-backend:$releaseTag" .
+docker build -f infrastructure/docker/web.Dockerfile -t "pbl6-web:$releaseTag" .
+docker compose --env-file .env.demo -f compose.demo.yml config --quiet
+docker compose --env-file .env.demo -f compose.demo.yml up -d --wait --wait-timeout 180
+docker compose --env-file .env.demo -f compose.demo.yml ps --all
+```
+
+Check each command's exit status. Record the commit, image tags, migration
+completion, and PR CI results against the same commit. The workflow includes checks
+for code, databases and Gateway, and Android. If a job cannot start, record the
+reason shown in GitHub Checks and rerun the same commit once the cause is resolved.
+
+Check the Web origin opens, and `/gateway/health` on Web and `/health` on the
+published Gateway both return 200. Use designated demo accounts to check login,
+branch allocation and follow-up, a new inspection from a reviewing request with
+no active Work Order, and a partial part issue and return receipt from the
+Inventory queue. Check one signed file upload/download and activation email in
+Mailpit. Record results for the Web, Gateway and APK separately. Use disposable
+demo records for writes and record the APK build commit and Gateway origin.
+Also check change password and email OTP reset through Web/Gateway, sign in with
+the new password, and compare technician KPI for a known completion date and
+branch with Work Order records. Bulk handover needs Minh's batch API contract
+and per-row retry semantics before its Web acceptance can run.
+
+To deploy the same code again, select the recorded tag and rerun Compose. To
+restore an earlier app image, confirm it supports the current database schema
+before changing tags. Keep the backup and migration results with the release record.
+
 ## Check and operate
 
 ```bash
@@ -69,10 +109,8 @@ host browser, normally the host LAN address and MinIO port. `localhost` in a
 signed URL points back to the Android device. Recreate Work Order after changing
 this endpoint and request a fresh ticket. Debug Android permits local HTTP;
 release requires HTTPS. The Gateway `/health`
-checks the M1 service chain; Compose
-also checks individual service processes. Inventory and Notification currently
-have only scaffold root handlers, so their Compose probes check `/` and do not
-prove M3 business API readiness.
+checks the M1 service chain. Compose probes each backend at `/health`, including
+Inventory and Notification. Check the business flows separately after the stack is healthy.
 
 To create disposable demo users, use the Identity owner’s development seed
 **only on an isolated demo stack**, with a separately supplied

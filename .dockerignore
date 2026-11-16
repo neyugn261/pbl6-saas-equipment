@@ -1,4 +1,5 @@
 .git
+**/tmp
 .env
 .env.*
 !.env.example

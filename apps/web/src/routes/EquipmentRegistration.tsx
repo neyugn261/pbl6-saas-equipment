@@ -8,6 +8,7 @@ import { locationOptions } from '../display-names'
 import { EquipmentIdentity } from '../features/workspace/WorkspaceUI'
 import {
   DirectoryPicker,
+  DirectoryPagination,
   LoadState,
   QuickForm,
   type QuickKind,
@@ -181,35 +182,37 @@ export function RegistrationListPage() {
         </Link>
       }
     >
-      <section className="m1-card">
-        <label>
-          Trạng thái
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value)
-              setPage(1)
-            }}
-          >
-            <option value="">Tất cả</option>
-            {(
-              [
-                'DRAFT',
-                'PENDING_MAINTENANCE',
-                'PENDING_CUSTOMER_CONFIRMATION',
-                'COMPLETED',
-              ] as const
-            ).map((s) => (
-              <option key={s} value={s}>
-                {statusNames[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+      <section className="m1-card registration-directory">
+        <div className="registration-directory__toolbar">
+          <label className="registration-directory__filter">
+            Trạng thái
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value)
+                setPage(1)
+              }}
+            >
+              <option value="">Tất cả</option>
+              {(
+                [
+                  'DRAFT',
+                  'PENDING_MAINTENANCE',
+                  'PENDING_CUSTOMER_CONFIRMATION',
+                  'COMPLETED',
+                ] as const
+              ).map((s) => (
+                <option key={s} value={s}>
+                  {statusNames[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <LoadState {...state} />
         {state.value && (
           <>
-            <table>
+            <div className="registration-directory__table"><table>
               <thead>
                 <tr>
                   <th>Hồ sơ</th>
@@ -225,7 +228,7 @@ export function RegistrationListPage() {
                         <EquipmentIdentity equipmentId={row.equipmentId} />
                       </Link>
                     </td>
-                    <td>{statusNames[row.status]}</td>
+                    <td><span className={`registration-directory__status registration-directory__status--${row.status.toLowerCase()}`}>{statusNames[row.status]}</span></td>
                     <td>
                       <Link to={`/app/equipment/${row.equipmentId}`}>
                         Thiết bị
@@ -237,20 +240,9 @@ export function RegistrationListPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-            {!state.value.items.length && <p>Chưa có hồ sơ phù hợp.</p>}
-            <div className="registration-pagination">
-              <span>{state.value.total} hồ sơ</span>
-              <button disabled={page === 1} onClick={() => setPage(page - 1)}>
-                Trước
-              </button>
-              <button
-                disabled={page * 20 >= state.value.total}
-                onClick={() => setPage(page + 1)}
-              >
-                Sau
-              </button>
-            </div>
+            </table></div>
+            {!state.value.items.length && <p className="registration-directory__empty">Chưa có hồ sơ phù hợp.</p>}
+            <DirectoryPagination page={page} total={state.value.total} label="hồ sơ" onChange={setPage} />
           </>
         )}
       </section>

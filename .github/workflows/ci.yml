@@ -87,6 +87,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:packages
+      - name: Validate demo Compose configuration
+        env:
+          DEMO_IMAGE_TAG: ${{ github.sha }}
+        run: docker compose --env-file infrastructure/demo.env.example -f compose.demo.yml config --quiet
       - name: Start PostgreSQL and RabbitMQ with Compose
         run: |
           docker compose up -d postgres rabbitmq

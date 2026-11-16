@@ -130,6 +130,7 @@ export function RequestLinkedOrders({ requestId }: { requestId: string }) {
                   <Link to={`/app/work-orders/${row.id}`}>
                     {value(row.workOrderNo)}
                   </Link>
+                  {row.type === "INSPECTION" && <span>Khảo sát</span>}
                   <Badge status={row.status} />
                 </li>
               ))}

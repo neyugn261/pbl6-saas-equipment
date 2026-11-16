@@ -1,14 +1,14 @@
 name: pbl6-demo
 
 x-app: &app
-  image: pbl6-backend:local
+  image: pbl6-backend:${DEMO_IMAGE_TAG:-local}
   restart: unless-stopped
   networks: [private]
   depends_on:
     migrate:
       condition: service_completed_successfully
   healthcheck:
-    test: [CMD-SHELL, "node -e \"fetch('http://127.0.0.1:'+process.env.HEALTH_PORT+(process.env.HEALTH_PATH||'/health')).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+    test: [CMD-SHELL, "node -e \"fetch('http://127.0.0.1:'+process.env.HEALTH_PORT+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
     interval: 10s
     timeout: 3s
     retries: 15
@@ -128,6 +128,7 @@ services:
       IDENTITY_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/identity_db
       IDENTITY_EXPOSE_ACTIVATION_TOKEN: 'false'
       IDENTITY_ACTIVATION_ENCRYPTION_KEY: ${IDENTITY_ACTIVATION_ENCRYPTION_KEY:?Set a random 32-byte hex key}
+      IDENTITY_OTP_SECRET: ${IDENTITY_OTP_SECRET:?Set a separate random secret of at least 32 characters}
       IDENTITY_ACTIVATION_URL_BASE: ${DEMO_PUBLIC_URL:?}/activate#token=
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
@@ -203,7 +204,6 @@ services:
     environment:
       <<: *app-env
       HEALTH_PORT: '3008'
-      HEALTH_PATH: /
       INVENTORY_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/inventory_db
 
   notification-service:
@@ -213,7 +213,6 @@ services:
     environment:
       <<: *app-env
       HEALTH_PORT: '3005'
-      HEALTH_PATH: /
       NOTIFICATION_DATABASE_URL: postgresql://pbl6:${POSTGRES_PASSWORD:?}@postgres:5432/notification_db
 
   api-gateway:
@@ -228,7 +227,7 @@ services:
       CORS_ORIGINS: ${DEMO_PUBLIC_URL:?}
 
   web:
-    image: pbl6-web:local
+    image: pbl6-web:${DEMO_IMAGE_TAG:-local}
     restart: unless-stopped
     ports:
       - '${DEMO_WEB_PORT:-8080}:80'
