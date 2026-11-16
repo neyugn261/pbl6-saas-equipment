@@ -281,7 +281,8 @@
 .part-request-workorder .part-request-create[open] > summary::before { transform: rotate(45deg); }
 .part-request-workorder .part-request-create > summary:hover { background: var(--shop-soft, #f5f7f4); }
 .part-request-workorder .part-request-create-form {
-  max-width: 760px;
+  width: min(100%, 760px);
+  margin-inline: auto;
   box-sizing: border-box;
   padding: 14px 16px 16px;
   background: var(--shop-paper, #fff);
