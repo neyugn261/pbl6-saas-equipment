@@ -1,5 +1,10 @@
 .workorder-reports { max-width: 1120px; }
 .workorder-reports > p { max-width: 75ch; line-height: 1.6; }
+.workorder-summary-panel .workorder-summary-range {
+  margin: 4px 0 14px;
+  color: var(--shop-muted, #607083);
+  font-size: 12px;
+}
 .technician-kpi .m1-section-body { display: grid; gap: 18px; }
 .technician-kpi .m1-section-body > p { margin: 0; line-height: 1.6; }
 .technician-kpi .technician-kpi-filters {

@@ -238,7 +238,7 @@ export function WorkOrderSummaryPanel() {
   }
 
   return (
-    <section className="m1-card m1-section-card">
+    <section className="m1-card m1-section-card workorder-summary-panel">
       <div className="m1-section-header"><h2>Khối lượng công việc đã ghi nhận</h2></div>
       <div className="m1-section-body">
         <form className="m2-editor" onSubmit={apply}>
@@ -254,8 +254,8 @@ export function WorkOrderSummaryPanel() {
         {error && <p role="alert" className="m1-error">{error}</p>}
         {!loading && !error && data && (
           <>
-            <p>Từ {new Date(data.from).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} đến {new Date(new Date(data.to).getTime() - 1).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} · Giờ Việt Nam (UTC+7).</p>
-            <div className="m1-summary-strip">
+            <p className="workorder-summary-range">Từ {new Date(data.from).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} đến {new Date(new Date(data.to).getTime() - 1).toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})} · Giờ Việt Nam (UTC+7).</p>
+            <div className="technician-kpi-summary" aria-label="Tổng quan lệnh công việc">
               <div><strong>{data.createdCount}</strong><span>WO được tạo trong kỳ</span></div>
               <div><strong>{data.completedCount}</strong><span>WO hoàn tất trong kỳ</span></div>
               <div><strong>{data.createdByStatus.COMPLETED}</strong><span>Đã hoàn tất trong nhóm được tạo kỳ này</span></div>
