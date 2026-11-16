@@ -205,7 +205,8 @@ async function drain(predicate) {
 }
 async function main() {
   for (const name of services)
-    execFileSync("pnpm", ["--filter", name + "-service", "db:migrate"], {
+    execFileSync(process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'pnpm',
+      process.platform === 'win32' ? ['/d', '/s', '/c', `pnpm.cmd --filter ${name}-service db:migrate`] : ["--filter", name + "-service", "db:migrate"], {
       cwd: root,
       env: process.env,
       stdio: "inherit",
@@ -901,6 +902,12 @@ async function main() {
     201,
   );
   assert.equal(quoteWo.branchId, branchB.id);
+  if (process.env.HUY_ACCEPTANCE === 'true') {
+    evidence.push(...await require('./huy-gateway-scenarios.cjs')({
+      call, drain, dbs, bus, tenantId, a, b, admin, customerToken, otherCustomerToken,
+      users, technicianA, technicianB, eqA, quoteEquipment, requestFor, fixtureUser, tenantCodeA, password, S, W, N,
+    }));
+  }
   const plan = await call(
     "POST",
     M + "/maintenance-plans",

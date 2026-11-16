@@ -6,6 +6,13 @@ const valid = {
 };
 
 describe('validateEnv', () => {
+  it('bounds OTP expiry and rejects weak keys or incomplete SMTP auth', () => {
+    expect(validateEnv(valid).IDENTITY_OTP_TTL_SECONDS).toBe(300);
+    expect(() => validateEnv({ ...valid, IDENTITY_OTP_SECRET: 'short' })).toThrow('IDENTITY_OTP_SECRET');
+    expect(() => validateEnv({ ...valid, IDENTITY_OTP_TTL_SECONDS: '301' })).toThrow('IDENTITY_OTP_TTL_SECONDS');
+    expect(() => validateEnv({ ...valid, SMTP_USER: 'user' })).toThrow('SMTP_USER');
+    expect(() => validateEnv({ ...valid, SMTP_REQUIRE_TLS: 'maybe' })).toThrow('SMTP_REQUIRE_TLS');
+  });
   it('applies defaults for optional settings', () => {
     expect(validateEnv(valid)).toMatchObject({
       NODE_ENV: 'development',

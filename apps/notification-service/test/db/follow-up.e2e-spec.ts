@@ -76,4 +76,22 @@ describe('follow-up notification regression (PostgreSQL)', () => {
     await db.notification.updateMany({ where: { sourceEventId: end.eventId }, data: { readAt: new Date() } });
     expect(await db.notification.count({ where: { sourceEventId: end.eventId } })).toBe(2);
   });
+  it('routes explicitly unallocated requests to Tenant Admin, not branch managers', async () => {
+    const adminId = randomUUID();
+    const projection = new RecipientProjectionService(db as PrismaService, service);
+    await projection.applySnapshot(envelope(Events.NotificationRecipientSnapshot, adminId, {
+      userId: adminId, userType: 'TENANT_STAFF', roles: ['TENANT_ADMIN'], accountStatus: 'ACTIVE',
+      revision: '1', bootstrapRunId: null, customerMembership: null,
+    }));
+    const id = randomUUID();
+    const event = envelope(Events.ServiceRequestCreated, id, {
+      serviceRequestId: id, requestNo: 'SR-UNALLOCATED', customerId, equipmentId,
+      requesterId: customerUser, branchId: null, type: 'REPAIR', priority: 'NORMAL',
+    });
+    await service.handle(event);
+    await service.handle(event);
+    const notices = await db.notification.findMany({ where: { sourceEventId: event.eventId } });
+    expect(notices.map((n) => n.userId).sort()).toEqual([adminId, customerUser].sort());
+    expect(notices.find((n) => n.userId === adminId)?.content).toContain('phân bổ chi nhánh');
+  });
 });

@@ -40,6 +40,7 @@ describe('next action without implicit approvals', () => {
     expect(hint).toContain('Đủ thông tin: lập dự toán');
     expect(hint).toContain('Chưa đủ thông tin');
     expect(hint).toContain('không thay thế duyệt chi phí sửa chữa');
+    expect(hint).toContain('khảo sát không phát sinh phí');
   });
   it('honors current draft, sent and approved actions', () => {
     expect(nextAction(request, ['edit-estimate'], 'DRAFT')).toContain('bản nháp');

@@ -1,5 +1,20 @@
 # Notification recipient matrix (M3)
 
+## HU-02 update — 14/11/2026
+
+- `ServiceRequestCreated.v1` with explicit `branchId: null`: keep the exact
+  eligible requester, route the staff action to active TENANT_ADMIN recipients.
+  Branch managers are not added for this unallocated event. Omitted branchId on
+  legacy events retains the existing audience; do not guess historical routing.
+- Branch-tagged SR notifications retain SERVICE_MANAGER/DISPATCHER compatibility;
+  list/count/read enforce current branch context per ADR 0022. Recipient snapshots
+  do not contain branch membership, so filtering occurs at the read boundary.
+- `WorkOrderCompleted.v2.type=INSPECTION` renders “Đã có kết quả khảo sát” and asks
+  for assessment, never announces a resolved repair. Optional workOrderType is
+  retained in the private pending payload; old payloads still parse unchanged.
+- No raw unresolvedReason is sent to CUSTOMER. Authorized staff use SR followUp.
+  [HU evidence](../testing/2026-11-14-huy-hu01-hu04.md) records real Gateway/broker tests.
+
 ## Review update — 12/11/2026
 
 At baseline `771c9fa`, recipient snapshot/bootstrap contracts are present in the

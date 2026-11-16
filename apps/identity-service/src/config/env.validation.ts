@@ -16,6 +16,12 @@ export interface IdentityEnv extends JwtEnv {
   SMTP_HOST: string | undefined;
   SMTP_PORT: number;
   SMTP_FROM: string | undefined;
+  SMTP_USER: string | undefined;
+  SMTP_PASSWORD: string | undefined;
+  SMTP_SECURE: boolean;
+  SMTP_REQUIRE_TLS: boolean;
+  IDENTITY_OTP_SECRET: string | undefined;
+  IDENTITY_OTP_TTL_SECONDS: number;
 }
 
 export const PORT_VARIABLE = 'IDENTITY_SERVICE_PORT';
@@ -49,6 +55,14 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
   ]);
   const smtpHost = env.optionalString('SMTP_HOST');
   const smtpFrom = env.optionalString('SMTP_FROM');
+  const otpSecret = env.optionalString('IDENTITY_OTP_SECRET');
+  if (otpSecret && otpSecret.length < 32) env.fail('IDENTITY_OTP_SECRET must contain at least 32 characters');
+  const smtpUser = env.optionalString('SMTP_USER');
+  const smtpPassword = env.optionalString('SMTP_PASSWORD');
+  if (Boolean(smtpUser) !== Boolean(smtpPassword)) env.fail('SMTP_USER and SMTP_PASSWORD must be configured together');
+  for (const name of ['SMTP_SECURE', 'SMTP_REQUIRE_TLS']) {
+    if (raw[name] !== undefined && raw[name] !== 'true' && raw[name] !== 'false') env.fail(`${name} must be true or false`);
+  }
   if (mailKey && !/^[a-f0-9]{64}$/i.test(mailKey)) {
     env.fail('IDENTITY_ACTIVATION_ENCRYPTION_KEY must be 32 bytes in hex');
   }
@@ -97,5 +111,11 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
     SMTP_HOST: smtpHost,
     SMTP_PORT: env.port('SMTP_PORT', 1025),
     SMTP_FROM: smtpFrom,
+    SMTP_USER: smtpUser,
+    SMTP_PASSWORD: smtpPassword,
+    SMTP_SECURE: raw.SMTP_SECURE === 'true',
+    SMTP_REQUIRE_TLS: raw.SMTP_REQUIRE_TLS === 'true',
+    IDENTITY_OTP_SECRET: otpSecret,
+    IDENTITY_OTP_TTL_SECONDS: env.int('IDENTITY_OTP_TTL_SECONDS', { default: 300, min: 60, max: 300 }),
   });
 }
