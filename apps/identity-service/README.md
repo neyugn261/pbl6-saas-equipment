@@ -22,12 +22,24 @@ against a real PostgreSQL.
 
 ## API
 
+HU-04 bổ sung `POST /auth/change-password`, `/auth/forgot-password` (cũng dùng resend)
+và `/auth/reset-password`: **PENDING_OWNER_APPROVAL**. Xem
+[changeset và cấu hình](../../docs/planning/hu04-identity-review.md),
+[schema delta](../../docs/erd/hu04-password-recovery.md),
+[contract Web/Gateway](../../docs/api/identity-password-otp.md),
+[OpenAPI](../../docs/api/identity.yaml). Migration mới phải chạy trước Identity.
+Đổi/reset thu hồi refresh sessions; access JWT tại service khác hết hiệu lực theo
+TTL của ADR 0004. Không hỗ trợ SMS trong changeset này.
+
 | Method | Path | Auth | Body | Result |
 |---|---|---|---|---|
 | `GET` | `/health` | — | — | `200 {status, database}` / `503` |
 | `POST` | `/auth/login` | — | `{email, password, tenantCode?}` | `200` tokens + profile |
 | `POST` | `/auth/refresh` | — | `{refreshToken}` | `200` new token pair |
 | `POST` | `/auth/logout` | — | `{refreshToken}` | `204` (always) |
+| `POST` | `/auth/change-password` | Bearer | `{currentPassword, newPassword}` | `204` / revoke Identity sessions |
+| `POST` | `/auth/forgot-password` | — | `{email, tenantCode?}` | `202` generic response + challengeId |
+| `POST` | `/auth/reset-password` | — | `{challengeId, otp, newPassword}` | `204` / revoke Identity sessions |
 | `GET` | `/auth/me` | Bearer | — | `200` profile |
 | `GET` | `/users` | Bearer + `user:read` | Query filters | Tenant or customer-scoped page |
 | `POST` | `/users` | Bearer + `user:manage` | Invite input | `201` INVITED user; token only when local exposure is enabled |
@@ -51,9 +63,11 @@ key; see ADR 0017 and the M3 demo runbook.
 | `GET` | `/internal/users/:id` | Tenant staff or scoped Customer Admin token | — | Tenant-scoped identity snapshot |
 | `GET` | `/internal/users` | Tenant staff token | `role`, `status`, pagination | Tenant-scoped minimal user page |
 
-`/health`, the three `/auth` POST routes, and `/users/activate` are `@Public()`;
-every other route needs a token (global guards of `@pbl6/auth`). The profile returned by
-login and `/auth/me` includes `customerId` (ADR 0003).
+`/health`, `/auth/login`, `/auth/refresh`, `/auth/logout`,
+`/auth/forgot-password`, `/auth/reset-password`, and `/users/activate` are
+`@Public()`; `/auth/change-password` and every other route need a token (global
+guards of `@pbl6/auth`). The profile returned by login and `/auth/me` includes
+`customerId` (ADR 0003).
 
 Errors carry a stable `code`: `INVALID_CREDENTIALS` (401), `ACCOUNT_NOT_ACTIVE`
 (403), `TENANT_NOT_ACTIVE` (403), `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED`,
@@ -160,5 +174,6 @@ its Identity sessions. The OpenAPI contract is
 [`docs/api/identity.yaml`](../../docs/api/identity.yaml).
 
 The gateway enforces the login rate limit and returns 404 for external
-`/internal/*` requests. Password reset and Identity event outbox are not part
-of this M1 implementation.
+`/internal/*` requests. Password recovery is tracked separately under HU-04 and
+is pending owner review; Identity event outbox is not part of this M1
+implementation.

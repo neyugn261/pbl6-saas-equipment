@@ -43,6 +43,93 @@ tags:
       NOT exposed by the gateway.
 
 paths:
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change own local password (HU-04 pending owner approval)
+      description: |
+        Requires an active session and the current password. Revokes all refresh sessions
+        atomically; /auth/me rejects old sessions. Other services accept already issued
+        JWTs until expiry per ADR 0004. No userId or passwordHash input is accepted.
+        Budget per 15 minutes: 5/user and 30/IP. Requires IDENTITY_OTP_SECRET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, minLength: 1, maxLength: 128, writeOnly: true }
+                newPassword: { $ref: '#/components/schemas/RecoveryPassword' }
+      responses:
+        '204': { description: Password changed; client must clear tokens and log in again }
+        '400': { description: Validation failure, CURRENT_PASSWORD_INVALID, PASSWORD_UNCHANGED or PASSWORD_TOO_LONG }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: PASSWORD_RATE_LIMITED; retry after the 15 minute window }
+        '503': { description: PASSWORD_RECOVERY_UNAVAILABLE }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request or resend email OTP (HU-04 pending owner approval)
+      security: []
+      description: |
+        Same login scope as /auth/login. Always returns a random challengeId and the
+        same message, including unknown, disabled or non-local accounts. Resend uses
+        this endpoint and invalidates earlier challenges. Six digit OTP, at most
+        300 seconds, five wrong attempts. Budget per 15 minutes: 5/scope-email and 20/IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 255 }
+                tenantCode: { type: string, minLength: 1, maxLength: 50 }
+      responses:
+        '202':
+          description: Generic response; does not confirm mailbox receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, challengeId]
+                properties:
+                  message: { type: string }
+                  challengeId: { type: string, format: uuid }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { description: PASSWORD_RATE_LIMITED }
+        '503': { description: PASSWORD_RECOVERY_UNAVAILABLE }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Consume email OTP and reset password (HU-04 pending owner approval)
+      security: []
+      description: |
+        Consumes OTP and updates password/revokes sessions in one transaction.
+        Concurrent redemption succeeds at most once. Budget per 15 minutes: 10/challenge,
+        30/IP, plus five wrong guesses per persisted challenge. No automatic login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [challengeId, otp, newPassword]
+              properties:
+                challengeId: { type: string, format: uuid }
+                otp: { type: string, pattern: '^\d{6}$', writeOnly: true }
+                newPassword: { $ref: '#/components/schemas/RecoveryPassword' }
+      responses:
+        '204': { description: Password reset; client must log in again }
+        '400': { description: Validation failure, INVALID_PASSWORD_RESET or PASSWORD_TOO_LONG }
+        '429': { description: PASSWORD_RATE_LIMITED }
+        '503': { description: PASSWORD_RECOVERY_UNAVAILABLE }
   # ──────────────────────────────────────────────────────────────────
   # Auth
   # ──────────────────────────────────────────────────────────────────
@@ -628,6 +715,12 @@ components:
       schema: { type: string, maxLength: 100 }
 
   schemas:
+    RecoveryPassword:
+      type: string
+      writeOnly: true
+      minLength: 8
+      maxLength: 128
+      description: Uppercase, lowercase, digit and special character; maximum 72 UTF-8 bytes (bcrypt); must differ from current password.
     # ── Enums ──────────────────────────────────────────────────────
     UserType:
       type: string

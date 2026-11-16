@@ -48,7 +48,7 @@ export function nextAction(request: ServiceRequest, actions: string[], estimateS
   if (estimateStatus === 'SENT') return 'Đang chờ khách hàng phản hồi dự toán đã gửi.';
   if (actions.includes('edit-estimate')) return 'Hoàn thiện bản nháp và gửi dự toán để khách hàng xem xét.';
   if (actions.includes('create-estimate') && estimateAllowed(request))
-    return 'Đủ thông tin: lập dự toán sửa chữa. Chưa đủ thông tin: thống nhất phạm vi và phí khảo sát với khách trước khi thực hiện INSPECTION; đồng ý khảo sát không thay thế duyệt chi phí sửa chữa.';
+    return 'Đủ thông tin: lập dự toán sửa chữa. Chưa đủ thông tin: thực hiện INSPECTION để bổ sung kết quả chẩn đoán; khảo sát không phát sinh phí và không thay thế duyệt chi phí sửa chữa.';
   if (actions.includes('accept')) return 'Tiếp nhận yêu cầu thuộc phạm vi bảo hành.';
   if (actions.includes('assess-warranty')) return 'Đánh giá phạm vi bảo hành sự cố trước khi chọn phương án xử lý.';
   if (request.status === 'ACCEPTED') return 'Bộ phận dịch vụ lập và điều phối lệnh công việc theo phạm vi đã được chấp thuận.';

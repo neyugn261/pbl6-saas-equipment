@@ -1,0 +1,22 @@
+{
+  "command": "node scripts/run-huy-verification.cjs lint",
+  "delegatedCommand": "pnpm --filter identity-service --filter service-request-service --filter notification-service lint",
+  "startedAt": "2026-11-14T15:30:43.625Z",
+  "finishedAt": "2026-11-14T15:30:44.621Z",
+  "exitCode": 0,
+  "error": null,
+  "databaseHost": "127.0.0.1",
+  "databasePort": "55432",
+  "databases": [
+    "identity_test_db",
+    "organization_test_db",
+    "asset_test_db",
+    "service_request_test_db",
+    "workorder_test_db",
+    "maintenance_test_db",
+    "inventory_test_db",
+    "notification_test_db"
+  ],
+  "baseline": "70829ff",
+  "workingTree": "uncommitted HU changes"
+}

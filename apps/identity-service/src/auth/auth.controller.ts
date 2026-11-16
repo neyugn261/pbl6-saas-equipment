@@ -18,6 +18,8 @@ import {
 } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ChangePasswordDto, ForgotPasswordDto, ResetPasswordDto } from './dto/password.dto';
+import { PasswordRecoveryService } from './password-recovery.service';
 
 function clientContext(request: Request): ClientContext {
   const userAgent = request.headers['user-agent'];
@@ -29,7 +31,28 @@ function clientContext(request: Request): ClientContext {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly auth: AuthService, private readonly recovery: PasswordRecoveryService) {}
+
+  /** Self-service: active session + current password, no administrative permission. */
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  changePassword(@CurrentUser() principal: Principal, @Body() body: ChangePasswordDto, @Req() request: Request) {
+    return this.recovery.change(principal, body, request.ip ?? 'unknown');
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  forgotPassword(@Body() body: ForgotPasswordDto, @Req() request: Request) {
+    return this.recovery.forgot(body, request.ip ?? 'unknown');
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  resetPassword(@Body() body: ResetPasswordDto, @Req() request: Request) {
+    return this.recovery.reset(body, request.ip ?? 'unknown');
+  }
 
   @Public()
   @Post('login')

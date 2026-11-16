@@ -1,0 +1,1410 @@
+diff --git a/apps/identity-service/README.md b/apps/identity-service/README.md
+index 9be9f62..dac6378 100644
+--- a/apps/identity-service/README.md
++++ b/apps/identity-service/README.md
+@@ -22,6 +22,14 @@ against a real PostgreSQL.
+ 
+ ## API
+ 
++HU-04 bổ sung `POST /auth/change-password`, `/auth/forgot-password` (cũng dùng resend)
++và `/auth/reset-password`: **PENDING_OWNER_APPROVAL**. Xem
++[changeset và cấu hình](../../docs/planning/hu04-identity-review.md),
++[schema delta](../../docs/erd/hu04-password-recovery.md),
++[OpenAPI](../../docs/api/identity.yaml). Migration mới phải chạy trước Identity.
++Đổi/reset thu hồi refresh sessions; access JWT tại service khác hết hiệu lực theo
++TTL của ADR 0004. Không hỗ trợ SMS trong changeset này.
++
+ | Method | Path | Auth | Body | Result |
+ |---|---|---|---|---|
+ | `GET` | `/health` | — | — | `200 {status, database}` / `503` |
+diff --git a/apps/identity-service/prisma/schema.prisma b/apps/identity-service/prisma/schema.prisma
+index 8b85653..1767403 100644
+--- a/apps/identity-service/prisma/schema.prisma
++++ b/apps/identity-service/prisma/schema.prisma
+@@ -121,6 +121,7 @@ model AccountToken {
+   tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+   expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+   usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
++  failedAttempts Int @default(0) @map("failed_attempts")
+   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+   activationDelivery ActivationDelivery?
+@@ -129,6 +130,15 @@ model AccountToken {
+   @@map("account_tokens")
+ }
+ 
++/// HMAC keys; never stores email/IP or an OTP. Fixed-window request budgets.
++model PasswordRateLimit {
++  key       String   @id @db.VarChar(64)
++  windowAt  DateTime @map("window_at") @db.Timestamptz(6)
++  attempts  Int      @default(0)
++
++  @@map("password_rate_limits")
++}
++
+ /// Private activation delivery. Secret is AES-256-GCM ciphertext and is
+ /// cleared after delivery, expiry or permanent failure.
+ model ActivationDelivery {
+diff --git a/apps/identity-service/src/auth/auth.controller.ts b/apps/identity-service/src/auth/auth.controller.ts
+index ffd7ecc..16f45ae 100644
+--- a/apps/identity-service/src/auth/auth.controller.ts
++++ b/apps/identity-service/src/auth/auth.controller.ts
+@@ -18,6 +18,8 @@ import {
+ } from './auth.types';
+ import { LoginDto } from './dto/login.dto';
+ import { RefreshTokenDto } from './dto/refresh-token.dto';
++import { ChangePasswordDto, ForgotPasswordDto, ResetPasswordDto } from './dto/password.dto';
++import { PasswordRecoveryService } from './password-recovery.service';
+ 
+ function clientContext(request: Request): ClientContext {
+   const userAgent = request.headers['user-agent'];
+@@ -29,7 +31,28 @@ function clientContext(request: Request): ClientContext {
+ 
+ @Controller('auth')
+ export class AuthController {
+-  constructor(private readonly auth: AuthService) {}
++  constructor(private readonly auth: AuthService, private readonly recovery: PasswordRecoveryService) {}
++
++  /** Self-service: active session + current password, no administrative permission. */
++  @Post('change-password')
++  @HttpCode(HttpStatus.NO_CONTENT)
++  changePassword(@CurrentUser() principal: Principal, @Body() body: ChangePasswordDto, @Req() request: Request) {
++    return this.recovery.change(principal, body, request.ip ?? 'unknown');
++  }
++
++  @Public()
++  @Post('forgot-password')
++  @HttpCode(HttpStatus.ACCEPTED)
++  forgotPassword(@Body() body: ForgotPasswordDto, @Req() request: Request) {
++    return this.recovery.forgot(body, request.ip ?? 'unknown');
++  }
++
++  @Public()
++  @Post('reset-password')
++  @HttpCode(HttpStatus.NO_CONTENT)
++  resetPassword(@Body() body: ResetPasswordDto, @Req() request: Request) {
++    return this.recovery.reset(body, request.ip ?? 'unknown');
++  }
+ 
+   @Public()
+   @Post('login')
+diff --git a/apps/identity-service/src/auth/auth.module.ts b/apps/identity-service/src/auth/auth.module.ts
+index 043429d..a632060 100644
+--- a/apps/identity-service/src/auth/auth.module.ts
++++ b/apps/identity-service/src/auth/auth.module.ts
+@@ -7,6 +7,7 @@ import { AuthRepository } from './auth.repository';
+ import { AuthService } from './auth.service';
+ import { PasswordService } from './password.service';
+ import { TokenService } from './token.service';
++import { PasswordRecoveryService } from './password-recovery.service';
+ 
+ /** Issues tokens; verification is done by the global guard of @pbl6/auth. */
+ @Module({
+@@ -40,6 +41,7 @@ import { TokenService } from './token.service';
+     AuthRepository,
+     PasswordService,
+     TokenService,
++    PasswordRecoveryService,
+   ],
+   exports: [AuthRepository, PasswordService, TokenService, JwtModule],
+ })
+diff --git a/apps/identity-service/src/auth/auth.repository.ts b/apps/identity-service/src/auth/auth.repository.ts
+index 20f1c39..728b949 100644
+--- a/apps/identity-service/src/auth/auth.repository.ts
++++ b/apps/identity-service/src/auth/auth.repository.ts
+@@ -1,4 +1,4 @@
+-import { Injectable } from '@nestjs/common';
++import { Injectable, UnauthorizedException } from '@nestjs/common';
+ import {
+   AuthSession,
+   Prisma,
+@@ -68,15 +68,21 @@ export class AuthRepository {
+   }
+ 
+   /** Creates the session of a successful login and records the login time. */
+-  async createLoginSession(session: NewSession): Promise<AuthSession> {
+-    const [created] = await this.prisma.$transaction([
+-      this.prisma.authSession.create({ data: session }),
+-      this.prisma.user.update({
++  async createLoginSession(session: NewSession, expectedPasswordHash: string | null): Promise<AuthSession> {
++    return this.prisma.$transaction(async (tx) => {
++      // Same lock as password mutation: a login verified before reset must not
++      // create a fresh session after reset has revoked the old sessions.
++      await tx.$queryRaw`SELECT id FROM users WHERE id = ${session.userId}::uuid FOR UPDATE`;
++      const user = await tx.user.findUniqueOrThrow({ where: { id: session.userId } });
++      if (user.status !== 'ACTIVE' || user.passwordHash !== expectedPasswordHash)
++        throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Credentials changed; log in again' });
++      const created = await tx.authSession.create({ data: session });
++      await tx.user.update({
+         where: { id: session.userId },
+         data: { lastLoginAt: new Date() },
+-      }),
+-    ]);
+-    return created;
++      });
++      return created;
++    });
+   }
+ 
+   findSessionByHash(refreshTokenHash: string): Promise<SessionWithUser | null> {
+@@ -100,6 +106,7 @@ export class AuthRepository {
+     replacement: NewSession,
+   ): Promise<AuthSession> {
+     return this.prisma.$transaction(async (tx) => {
++      await tx.$queryRaw`SELECT id FROM users WHERE id = ${replacement.userId}::uuid FOR UPDATE`;
+       const revoked = await tx.authSession.updateMany({
+         where: { id: currentId, revokedAt: null },
+         data: { revokedAt: new Date() },
+diff --git a/apps/identity-service/src/auth/auth.service.ts b/apps/identity-service/src/auth/auth.service.ts
+index 901a292..8a847bd 100644
+--- a/apps/identity-service/src/auth/auth.service.ts
++++ b/apps/identity-service/src/auth/auth.service.ts
+@@ -111,7 +111,7 @@ export class AuthService {
+       expiresAt: this.tokens.refreshTokenExpiry(),
+       ipAddress: client.ipAddress,
+       userAgent: client.userAgent,
+-    });
++    }, user.passwordHash);
+ 
+     const pair = await this.issueTokens(
+       user,
+diff --git a/apps/identity-service/src/config/env.validation.spec.ts b/apps/identity-service/src/config/env.validation.spec.ts
+index f147c55..5b43549 100644
+--- a/apps/identity-service/src/config/env.validation.spec.ts
++++ b/apps/identity-service/src/config/env.validation.spec.ts
+@@ -6,6 +6,13 @@ const valid = {
+ };
+ 
+ describe('validateEnv', () => {
++  it('bounds OTP expiry and rejects weak keys or incomplete SMTP auth', () => {
++    expect(validateEnv(valid).IDENTITY_OTP_TTL_SECONDS).toBe(300);
++    expect(() => validateEnv({ ...valid, IDENTITY_OTP_SECRET: 'short' })).toThrow('IDENTITY_OTP_SECRET');
++    expect(() => validateEnv({ ...valid, IDENTITY_OTP_TTL_SECONDS: '301' })).toThrow('IDENTITY_OTP_TTL_SECONDS');
++    expect(() => validateEnv({ ...valid, SMTP_USER: 'user' })).toThrow('SMTP_USER');
++    expect(() => validateEnv({ ...valid, SMTP_REQUIRE_TLS: 'maybe' })).toThrow('SMTP_REQUIRE_TLS');
++  });
+   it('applies defaults for optional settings', () => {
+     expect(validateEnv(valid)).toMatchObject({
+       NODE_ENV: 'development',
+diff --git a/apps/identity-service/src/config/env.validation.ts b/apps/identity-service/src/config/env.validation.ts
+index f774359..304659e 100644
+--- a/apps/identity-service/src/config/env.validation.ts
++++ b/apps/identity-service/src/config/env.validation.ts
+@@ -16,6 +16,12 @@ export interface IdentityEnv extends JwtEnv {
+   SMTP_HOST: string | undefined;
+   SMTP_PORT: number;
+   SMTP_FROM: string | undefined;
++  SMTP_USER: string | undefined;
++  SMTP_PASSWORD: string | undefined;
++  SMTP_SECURE: boolean;
++  SMTP_REQUIRE_TLS: boolean;
++  IDENTITY_OTP_SECRET: string | undefined;
++  IDENTITY_OTP_TTL_SECONDS: number;
+ }
+ 
+ export const PORT_VARIABLE = 'IDENTITY_SERVICE_PORT';
+@@ -49,6 +55,14 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
+   ]);
+   const smtpHost = env.optionalString('SMTP_HOST');
+   const smtpFrom = env.optionalString('SMTP_FROM');
++  const otpSecret = env.optionalString('IDENTITY_OTP_SECRET');
++  if (otpSecret && otpSecret.length < 32) env.fail('IDENTITY_OTP_SECRET must contain at least 32 characters');
++  const smtpUser = env.optionalString('SMTP_USER');
++  const smtpPassword = env.optionalString('SMTP_PASSWORD');
++  if (Boolean(smtpUser) !== Boolean(smtpPassword)) env.fail('SMTP_USER and SMTP_PASSWORD must be configured together');
++  for (const name of ['SMTP_SECURE', 'SMTP_REQUIRE_TLS']) {
++    if (raw[name] !== undefined && raw[name] !== 'true' && raw[name] !== 'false') env.fail(`${name} must be true or false`);
++  }
+   if (mailKey && !/^[a-f0-9]{64}$/i.test(mailKey)) {
+     env.fail('IDENTITY_ACTIVATION_ENCRYPTION_KEY must be 32 bytes in hex');
+   }
+@@ -97,5 +111,11 @@ export function validateEnv(raw: Record<string, unknown>): IdentityEnv {
+     SMTP_HOST: smtpHost,
+     SMTP_PORT: env.port('SMTP_PORT', 1025),
+     SMTP_FROM: smtpFrom,
++    SMTP_USER: smtpUser,
++    SMTP_PASSWORD: smtpPassword,
++    SMTP_SECURE: raw.SMTP_SECURE === 'true',
++    SMTP_REQUIRE_TLS: raw.SMTP_REQUIRE_TLS === 'true',
++    IDENTITY_OTP_SECRET: otpSecret,
++    IDENTITY_OTP_TTL_SECONDS: env.int('IDENTITY_OTP_TTL_SECONDS', { default: 300, min: 60, max: 300 }),
+   });
+ }
+diff --git a/apps/identity-service/src/users/activation-delivery.worker.ts b/apps/identity-service/src/users/activation-delivery.worker.ts
+index 40bc21f..c9e5253 100644
+--- a/apps/identity-service/src/users/activation-delivery.worker.ts
++++ b/apps/identity-service/src/users/activation-delivery.worker.ts
+@@ -68,7 +68,8 @@ export class ActivationDeliveryWorker
+       include: { token: true },
+     });
+     if (!job || job.status !== 'PENDING' || !job.ciphertext) return;
+-    if (job.token.usedAt || job.token.expiresAt.getTime() <= Date.now()) {
++    if (job.token.usedAt || job.token.failedAttempts >= 5 || job.token.expiresAt.getTime() <= Date.now() ||
++      (job.token.purpose === 'PASSWORD_RESET' && job.attempts > 5)) {
+       await this.prisma.activationDelivery.update({
+         where: { id },
+         data: { status: 'EXPIRED', ciphertext: null },
+@@ -85,7 +86,12 @@ export class ActivationDeliveryWorker
+       const transport = nodemailer.createTransport({
+         host: this.config.getOrThrow('SMTP_HOST', { infer: true }),
+         port: this.config.get('SMTP_PORT', { infer: true }),
+-        secure: false,
++        secure: this.config.get('SMTP_SECURE', { infer: true }),
++        requireTLS: this.config.get('SMTP_REQUIRE_TLS', { infer: true }),
++        ...(this.config.get('SMTP_USER', { infer: true }) ? { auth: {
++          user: this.config.get('SMTP_USER', { infer: true }),
++          pass: this.config.get('SMTP_PASSWORD', { infer: true }),
++        } } : {}),
+         connectionTimeout: 30_000,
+         greetingTimeout: 30_000,
+         socketTimeout: 30_000,
+@@ -94,8 +100,10 @@ export class ActivationDeliveryWorker
+         await transport.sendMail({
+           from: this.config.getOrThrow('SMTP_FROM', { infer: true }),
+           to: job.email,
+-          subject: 'Kích hoạt tài khoản PBL6',
+-          text: `Mở liên kết sau để kích hoạt tài khoản (hết hạn sau 24 giờ):\n${link}`,
++          subject: job.token.purpose === 'PASSWORD_RESET' ? 'Mã đặt lại mật khẩu PBL6' : 'Kích hoạt tài khoản PBL6',
++          text: job.token.purpose === 'PASSWORD_RESET'
++            ? `Mã đặt lại mật khẩu của bạn: ${link}\nHết hạn lúc ${job.token.expiresAt.toISOString()}. Không chia sẻ mã này. Nếu bạn không yêu cầu, hãy bỏ qua email.`
++            : `Mở liên kết sau để kích hoạt tài khoản (hết hạn sau 24 giờ):\n${link}`,
+         });
+       } finally {
+         transport.close();
+diff --git a/apps/identity-service/src/users/users.service.ts b/apps/identity-service/src/users/users.service.ts
+index fde93d5..9391fa5 100644
+--- a/apps/identity-service/src/users/users.service.ts
++++ b/apps/identity-service/src/users/users.service.ts
+@@ -269,7 +269,7 @@ export class UsersService {
+       expiresAt: this.tokens.refreshTokenExpiry(),
+       ipAddress: client.ipAddress,
+       userAgent: client.userAgent,
+-    });
++    }, passwordHash);
+ 
+     const accessToken = await this.tokens.signAccessToken({
+       sub: user.id,
+diff --git a/apps/identity-service/test/support/test-app.ts b/apps/identity-service/test/support/test-app.ts
+index e1965b0..a1b955b 100644
+--- a/apps/identity-service/test/support/test-app.ts
++++ b/apps/identity-service/test/support/test-app.ts
+@@ -22,7 +22,7 @@ export async function createTestApp(): Promise<{
+ /** Clears all identity data except the role and permission catalogs. */
+ export async function resetDatabase(prisma: PrismaService): Promise<void> {
+   await prisma.$executeRawUnsafe(
+-    'TRUNCATE auth_sessions, activation_deliveries, account_tokens, user_customer_links, user_roles, users, tenant_directory, processed_events, outbox_events, recipient_bootstrap_users, recipient_bootstrap_runs',
++    'TRUNCATE password_rate_limits, auth_sessions, activation_deliveries, account_tokens, user_customer_links, user_roles, users, tenant_directory, processed_events, outbox_events, recipient_bootstrap_users, recipient_bootstrap_runs',
+   );
+ }
+ 
+diff --git a/docs/api/identity.yaml b/docs/api/identity.yaml
+index c9cf530..c6b11ed 100644
+--- a/docs/api/identity.yaml
++++ b/docs/api/identity.yaml
+@@ -43,6 +43,93 @@ tags:
+       NOT exposed by the gateway.
+ 
+ paths:
++  /auth/change-password:
++    post:
++      tags: [Auth]
++      summary: Change own local password (HU-04 pending owner approval)
++      description: |
++        Requires an active session and the current password. Revokes all refresh sessions
++        atomically; /auth/me rejects old sessions. Other services accept already issued
++        JWTs until expiry per ADR 0004. No userId or passwordHash input is accepted.
++        Budget per 15 minutes: 5/user and 30/IP. Requires IDENTITY_OTP_SECRET.
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              type: object
++              additionalProperties: false
++              required: [currentPassword, newPassword]
++              properties:
++                currentPassword: { type: string, minLength: 1, maxLength: 128, writeOnly: true }
++                newPassword: { $ref: '#/components/schemas/RecoveryPassword' }
++      responses:
++        '204': { description: Password changed; client must clear tokens and log in again }
++        '400': { description: Validation failure, CURRENT_PASSWORD_INVALID, PASSWORD_UNCHANGED or PASSWORD_TOO_LONG }
++        '401': { $ref: '#/components/responses/Unauthorized' }
++        '429': { description: PASSWORD_RATE_LIMITED; retry after the 15 minute window }
++        '503': { description: PASSWORD_RECOVERY_UNAVAILABLE }
++  /auth/forgot-password:
++    post:
++      tags: [Auth]
++      summary: Request or resend email OTP (HU-04 pending owner approval)
++      security: []
++      description: |
++        Same login scope as /auth/login. Always returns a random challengeId and the
++        same message, including unknown, disabled or non-local accounts. Resend uses
++        this endpoint and invalidates earlier challenges. Six digit OTP, at most
++        300 seconds, five wrong attempts. Budget per 15 minutes: 5/scope-email and 20/IP.
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              type: object
++              additionalProperties: false
++              required: [email]
++              properties:
++                email: { type: string, format: email, maxLength: 255 }
++                tenantCode: { type: string, minLength: 1, maxLength: 50 }
++      responses:
++        '202':
++          description: Generic response; does not confirm mailbox receipt
++          content:
++            application/json:
++              schema:
++                type: object
++                required: [message, challengeId]
++                properties:
++                  message: { type: string }
++                  challengeId: { type: string, format: uuid }
++        '400': { $ref: '#/components/responses/ValidationFailed' }
++        '429': { description: PASSWORD_RATE_LIMITED }
++        '503': { description: PASSWORD_RECOVERY_UNAVAILABLE }
++  /auth/reset-password:
++    post:
++      tags: [Auth]
++      summary: Consume email OTP and reset password (HU-04 pending owner approval)
++      security: []
++      description: |
++        Consumes OTP and updates password/revokes sessions in one transaction.
++        Concurrent redemption succeeds at most once. Budget per 15 minutes: 10/challenge,
++        30/IP, plus five wrong guesses per persisted challenge. No automatic login.
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              type: object
++              additionalProperties: false
++              required: [challengeId, otp, newPassword]
++              properties:
++                challengeId: { type: string, format: uuid }
++                otp: { type: string, pattern: '^\d{6}$', writeOnly: true }
++                newPassword: { $ref: '#/components/schemas/RecoveryPassword' }
++      responses:
++        '204': { description: Password reset; client must log in again }
++        '400': { description: Validation failure, INVALID_PASSWORD_RESET or PASSWORD_TOO_LONG }
++        '429': { description: PASSWORD_RATE_LIMITED }
++        '503': { description: PASSWORD_RECOVERY_UNAVAILABLE }
+   # ──────────────────────────────────────────────────────────────────
+   # Auth
+   # ──────────────────────────────────────────────────────────────────
+@@ -628,6 +715,12 @@ components:
+       schema: { type: string, maxLength: 100 }
+ 
+   schemas:
++    RecoveryPassword:
++      type: string
++      writeOnly: true
++      minLength: 8
++      maxLength: 128
++      description: Uppercase, lowercase, digit and special character; maximum 72 UTF-8 bytes (bcrypt); must differ from current password.
+     # ── Enums ──────────────────────────────────────────────────────
+     UserType:
+       type: string
+diff --git a/apps/identity-service/prisma/migrations/20261114090000_password_recovery/migration.sql b/apps/identity-service/prisma/migrations/20261114090000_password_recovery/migration.sql
+new file mode 100644
+index 0000000..ae7cd2c
+--- /dev/null
++++ b/apps/identity-service/prisma/migrations/20261114090000_password_recovery/migration.sql
+@@ -0,0 +1,8 @@
++-- HU-04: additive, pending Identity owner review. Existing tokens remain valid.
++ALTER TABLE account_tokens ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0
++  CHECK (failed_attempts >= 0);
++CREATE TABLE password_rate_limits (
++  key VARCHAR(64) PRIMARY KEY,
++  window_at TIMESTAMPTZ(6) NOT NULL,
++  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)
++);
+diff --git a/apps/identity-service/src/auth/dto/password.dto.ts b/apps/identity-service/src/auth/dto/password.dto.ts
+new file mode 100644
+index 0000000..7cb275b
+--- /dev/null
++++ b/apps/identity-service/src/auth/dto/password.dto.ts
+@@ -0,0 +1,52 @@
++import { Transform } from 'class-transformer';
++import {
++  IsEmail,
++  IsOptional,
++  IsString,
++  IsUUID,
++  Length,
++  Matches,
++  MaxLength,
++  MinLength,
++} from 'class-validator';
++
++export class NewPasswordDto {
++  @IsString()
++  @MinLength(8)
++  @MaxLength(128)
++  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9])/, {
++    message:
++      'password must contain uppercase, lowercase, digit and special character',
++  })
++  newPassword!: string;
++}
++
++export class ChangePasswordDto extends NewPasswordDto {
++  @IsString()
++  @Length(1, 128)
++  currentPassword!: string;
++}
++
++export class ForgotPasswordDto {
++  @Transform(({ value }: { value: unknown }) =>
++    typeof value === 'string' ? value.trim() : value,
++  )
++  @IsEmail()
++  @MaxLength(255)
++  email!: string;
++
++  /** Same scope selection as login. Omit only for platform accounts. */
++  @IsOptional()
++  @IsString()
++  @Length(1, 50)
++  tenantCode?: string;
++}
++
++export class ResetPasswordDto extends NewPasswordDto {
++  @IsUUID()
++  challengeId!: string;
++
++  @IsString()
++  @Matches(/^\d{6}$/)
++  otp!: string;
++}
+diff --git a/apps/identity-service/src/auth/password-recovery.service.spec.ts b/apps/identity-service/src/auth/password-recovery.service.spec.ts
+new file mode 100644
+index 0000000..0133303
+--- /dev/null
++++ b/apps/identity-service/src/auth/password-recovery.service.spec.ts
+@@ -0,0 +1,168 @@
++import { createHmac } from 'node:crypto';
++import { ConfigService } from '@nestjs/config';
++import { PasswordRecoveryService } from './password-recovery.service';
++import type { PrismaService } from '../prisma/prisma.service';
++import type { AuthRepository } from './auth.repository';
++import type { PasswordService } from './password.service';
++import type { IdentityEnv } from '../config/env.validation';
++import { decryptActivationUrl } from '../users/activation-secret';
++
++const secret = 'unit-test-only-otp-key'.repeat(3);
++const key = 'ab'.repeat(32);
++function setup(extra = {}) {
++  const user = {
++    id: 'user',
++    tenantId: null,
++    status: 'ACTIVE',
++    passwordHash: 'hash',
++    email: 'user@example.com',
++  };
++  const token = {
++    id: 'challenge',
++    userId: user.id,
++    purpose: 'PASSWORD_RESET',
++    usedAt: null,
++    expiresAt: new Date(Date.now() + 300000),
++    failedAttempts: 0,
++    tokenHash: createHmac('sha256', secret)
++      .update('otp:user:challenge:123456')
++      .digest('hex'),
++    ...extra,
++  };
++  const db = {
++    $queryRaw: jest.fn().mockResolvedValue([{ attempts: 1 }]),
++    user: { findUnique: jest.fn().mockResolvedValue(user), update: jest.fn() },
++    accountToken: {
++      findUnique: jest.fn().mockResolvedValue(token),
++      update: jest.fn(),
++      updateMany: jest.fn(),
++      create: jest.fn(),
++    },
++    authSession: { updateMany: jest.fn(), findUnique: jest.fn() },
++    activationDelivery: { updateMany: jest.fn() },
++    $transaction: jest.fn(),
++  };
++  db.$transaction.mockImplementation((fn: (tx: typeof db) => unknown) =>
++    fn(db),
++  );
++  const passwords = {
++    hash: jest.fn().mockResolvedValue('new-hash'),
++    verify: jest.fn().mockResolvedValue(false),
++  };
++  const repository = {
++    findLoginCandidate: jest.fn().mockResolvedValue(user),
++    findTenantByCode: jest.fn(),
++  };
++  const config = new ConfigService({
++    IDENTITY_OTP_SECRET: secret,
++    IDENTITY_ACTIVATION_ENCRYPTION_KEY: key,
++    SMTP_HOST: 'localhost',
++    IDENTITY_OTP_TTL_SECONDS: 300,
++  });
++  const service = new PasswordRecoveryService(
++    db as unknown as PrismaService,
++    repository as unknown as AuthRepository,
++    passwords as unknown as PasswordService,
++    config as unknown as ConfigService<IdentityEnv, true>,
++  );
++  return { db, passwords, repository, service, user };
++}
++
++describe('password recovery security', () => {
++  it('persists a wrong attempt without changing the password', async () => {
++    const { service, db } = setup();
++    await expect(
++      service.reset(
++        {
++          challengeId: 'challenge',
++          otp: '999999',
++          newPassword: 'New#Password1',
++        },
++        'ip',
++      ),
++    ).rejects.toMatchObject({ response: { code: 'INVALID_PASSWORD_RESET' } });
++    expect(db.accountToken.update).toHaveBeenCalledWith({
++      where: { id: 'challenge' },
++      data: { failedAttempts: { increment: 1 } },
++    });
++    expect(db.user.update).not.toHaveBeenCalled();
++  });
++  it.each([
++    { usedAt: new Date() },
++    { expiresAt: new Date(0) },
++    { failedAttempts: 5 },
++    { purpose: 'ACCOUNT_ACTIVATION' },
++  ])('rejects invalid challenge %j', async (extra) => {
++    const { service, db } = setup(extra);
++    await expect(
++      service.reset(
++        {
++          challengeId: 'challenge',
++          otp: '123456',
++          newPassword: 'New#Password1',
++        },
++        'ip',
++      ),
++    ).rejects.toThrow();
++    expect(db.user.update).not.toHaveBeenCalled();
++  });
++  it('consumes challenges and revokes only the account sessions on success', async () => {
++    const { service, db } = setup();
++    await service.reset(
++      { challengeId: 'challenge', otp: '123456', newPassword: 'New#Password1' },
++      'ip',
++    );
++    expect(db.user.update).toHaveBeenCalledWith({
++      where: { id: 'user' },
++      data: { passwordHash: 'new-hash' },
++    });
++    expect(db.authSession.updateMany).toHaveBeenCalledWith({
++      where: { userId: 'user', revokedAt: null },
++      data: { revokedAt: expect.any(Date) },
++    });
++    expect(db.accountToken.updateMany).toHaveBeenCalled();
++  });
++  it('returns the same public shape for known and unknown accounts and encrypts delivery', async () => {
++    const { service, db, repository } = setup();
++    const known = await service.forgot({ email: 'user@example.com' }, 'ip');
++    const data = db.accountToken.create.mock.calls[0][0].data;
++    const otp = decryptActivationUrl(
++      data.activationDelivery.create.ciphertext,
++      key,
++    );
++    expect(otp).toMatch(/^\d{6}$/);
++    expect(data.tokenHash).not.toContain(otp);
++    expect(JSON.stringify(known)).not.toContain(otp);
++    repository.findLoginCandidate.mockResolvedValue(null);
++    const unknown = await service.forgot(
++      { email: 'missing@example.com' },
++      'ip',
++    );
++    expect(Object.keys(known)).toEqual(Object.keys(unknown));
++    expect(known.message).toBe(unknown.message);
++    expect(known.challengeId).not.toBe(unknown.challengeId);
++    expect(db.accountToken.create).toHaveBeenCalledTimes(1);
++  });
++  it('rate limits unknown accounts before lookup', async () => {
++    const { service, db, repository } = setup();
++    db.$queryRaw.mockResolvedValue([{ attempts: 100 }]);
++    await expect(
++      service.forgot({ email: 'missing@example.com' }, 'ip'),
++    ).rejects.toMatchObject({ status: 429 });
++    expect(repository.findLoginCandidate).not.toHaveBeenCalled();
++  });
++  it('rejects passwords that bcrypt would truncate', async () => {
++    const { service, db } = setup();
++    await expect(
++      service.reset(
++        {
++          challengeId: 'challenge',
++          otp: '123456',
++          newPassword: 'é'.repeat(40),
++        },
++        'ip',
++      ),
++    ).rejects.toMatchObject({ response: { code: 'PASSWORD_TOO_LONG' } });
++    expect(db.user.update).not.toHaveBeenCalled();
++  });
++});
+diff --git a/apps/identity-service/src/auth/password-recovery.service.ts b/apps/identity-service/src/auth/password-recovery.service.ts
+new file mode 100644
+index 0000000..44c3961
+--- /dev/null
++++ b/apps/identity-service/src/auth/password-recovery.service.ts
+@@ -0,0 +1,309 @@
++import {
++  createHmac,
++  randomInt,
++  randomUUID,
++  timingSafeEqual,
++} from 'node:crypto';
++import {
++  BadRequestException,
++  HttpException,
++  Injectable,
++  Logger,
++  ServiceUnavailableException,
++  UnauthorizedException,
++} from '@nestjs/common';
++import { ConfigService } from '@nestjs/config';
++import type { Principal } from '@pbl6/auth';
++import type { IdentityEnv } from '../config/env.validation';
++import { PrismaService } from '../prisma/prisma.service';
++import type { Prisma, User } from '../generated/prisma/client.js';
++import { encryptActivationUrl } from '../users/activation-secret';
++import { AuthRepository } from './auth.repository';
++import { PasswordService } from './password.service';
++import {
++  ChangePasswordDto,
++  ForgotPasswordDto,
++  ResetPasswordDto,
++} from './dto/password.dto';
++
++type Tx = Prisma.TransactionClient;
++const MESSAGE =
++  'Nếu tài khoản đủ điều kiện, mã xác nhận sẽ được gửi qua email.';
++
++@Injectable()
++export class PasswordRecoveryService {
++  private readonly logger = new Logger(PasswordRecoveryService.name);
++  constructor(
++    private readonly db: PrismaService,
++    private readonly repository: AuthRepository,
++    private readonly passwords: PasswordService,
++    private readonly config: ConfigService<IdentityEnv, true>,
++  ) {}
++
++  private secret(): string {
++    const secret = this.config.get('IDENTITY_OTP_SECRET', { infer: true });
++    if (!secret)
++      throw new ServiceUnavailableException({
++        code: 'PASSWORD_RECOVERY_UNAVAILABLE',
++        message: 'Password recovery is unavailable',
++      });
++    return secret;
++  }
++
++  private digest(value: string): string {
++    return createHmac('sha256', this.secret()).update(value).digest('hex');
++  }
++
++  /** Commits rejected attempts too. Shared across processes, including unknown accounts. */
++  private async budget(keys: [string, number][]): Promise<void> {
++    const allowed = await this.db.$transaction(async (tx) => {
++      let ok = true;
++      for (const [label, limit] of keys) {
++        const key = this.digest(`rate:${label}`);
++        const rows = await tx.$queryRaw<{ attempts: number }[]>`
++          INSERT INTO password_rate_limits (key, window_at, attempts)
++          VALUES (${key}, now(), 1)
++          ON CONFLICT (key) DO UPDATE SET
++            attempts = CASE WHEN password_rate_limits.window_at <= now() - interval '15 minutes'
++              THEN 1 ELSE password_rate_limits.attempts + 1 END,
++            window_at = CASE WHEN password_rate_limits.window_at <= now() - interval '15 minutes'
++              THEN now() ELSE password_rate_limits.window_at END
++          RETURNING attempts`;
++        ok = rows[0].attempts <= limit && ok;
++      }
++      return ok;
++    });
++    if (!allowed)
++      throw new HttpException(
++        { code: 'PASSWORD_RATE_LIMITED', message: 'Please retry later' },
++        429,
++      );
++  }
++
++  private async eligible(tx: Tx, user: User | null): Promise<boolean> {
++    if (!user || user.status !== 'ACTIVE' || !user.passwordHash) return false;
++    return (
++      user.tenantId === null ||
++      (
++        await tx.tenantDirectory.findUnique({
++          where: { tenantId: user.tenantId },
++        })
++      )?.status === 'ACTIVE'
++    );
++  }
++
++  private async invalidate(tx: Tx, userId: string): Promise<void> {
++    const now = new Date();
++    await tx.authSession.updateMany({
++      where: { userId, revokedAt: null },
++      data: { revokedAt: now },
++    });
++    await tx.accountToken.updateMany({
++      where: { userId, purpose: 'PASSWORD_RESET', usedAt: null },
++      data: { usedAt: now },
++    });
++    await tx.activationDelivery.updateMany({
++      where: {
++        token: { userId, purpose: 'PASSWORD_RESET' },
++        status: 'PENDING',
++      },
++      data: { status: 'EXPIRED', ciphertext: null },
++    });
++  }
++
++  async change(
++    principal: Principal,
++    input: ChangePasswordDto,
++    ip: string,
++  ): Promise<void> {
++    this.checkPassword(input.newPassword);
++    await this.budget([
++      [`change-ip:${ip}`, 30],
++      [`change-user:${principal.userId}`, 5],
++    ]);
++    await this.db.$transaction(async (tx) => {
++      await tx.$queryRaw`SELECT id FROM users WHERE id = ${principal.userId}::uuid FOR UPDATE`;
++      const user = await tx.user.findUnique({
++        where: { id: principal.userId },
++      });
++      const session = await tx.authSession.findUnique({
++        where: { id: principal.sessionId },
++      });
++      if (
++        !user ||
++        user.tenantId !== principal.tenantId ||
++        !(await this.eligible(tx, user)) ||
++        !session ||
++        session.userId !== user.id ||
++        session.revokedAt ||
++        session.expiresAt.getTime() <= Date.now()
++      )
++        throw new UnauthorizedException({
++          code: 'INVALID_ACCESS_TOKEN',
++          message: 'Session is no longer valid',
++        });
++      if (
++        !(await this.passwords.verify(input.currentPassword, user.passwordHash))
++      )
++        throw new BadRequestException({
++          code: 'CURRENT_PASSWORD_INVALID',
++          message: 'Current password is incorrect',
++        });
++      if (await this.passwords.verify(input.newPassword, user.passwordHash))
++        throw new BadRequestException({
++          code: 'PASSWORD_UNCHANGED',
++          message: 'Choose a different password',
++        });
++      await tx.user.update({
++        where: { id: user.id },
++        data: { passwordHash: await this.passwords.hash(input.newPassword) },
++      });
++      await this.invalidate(tx, user.id);
++    });
++    this.logger.log({
++      msg: 'Password changed; sessions revoked',
++      userId: principal.userId,
++    });
++  }
++
++  async forgot(input: ForgotPasswordDto, ip: string) {
++    this.secret();
++    const key = this.config.get('IDENTITY_ACTIVATION_ENCRYPTION_KEY', {
++      infer: true,
++    });
++    if (!key || !this.config.get('SMTP_HOST', { infer: true }))
++      throw new ServiceUnavailableException({
++        code: 'PASSWORD_RECOVERY_UNAVAILABLE',
++        message: 'Password recovery is unavailable',
++      });
++    await this.budget([
++      [`forgot-ip:${ip}`, 20],
++      [
++        `forgot-account:${JSON.stringify([input.tenantCode ?? null, input.email.toLowerCase()])}`,
++        5,
++      ],
++    ]);
++    const challengeId = randomUUID();
++    const tenant =
++      input.tenantCode === undefined
++        ? null
++        : await this.repository.findTenantByCode(input.tenantCode);
++    const candidate =
++      input.tenantCode !== undefined && !tenant
++        ? null
++        : await this.repository.findLoginCandidate(
++            tenant?.tenantId ?? null,
++            input.email,
++          );
++    const otp = randomInt(0, 1_000_000).toString().padStart(6, '0');
++    if (candidate)
++      await this.db.$transaction(async (tx) => {
++        await tx.$queryRaw`SELECT id FROM users WHERE id = ${candidate.id}::uuid FOR UPDATE`;
++        const user = await tx.user.findUnique({ where: { id: candidate.id } });
++        if (!user || !(await this.eligible(tx, user))) return;
++        // Resend invalidates earlier challenges, without revoking login sessions yet.
++        await tx.accountToken.updateMany({
++          where: { userId: user.id, purpose: 'PASSWORD_RESET', usedAt: null },
++          data: { usedAt: new Date() },
++        });
++        await tx.activationDelivery.updateMany({
++          where: {
++            token: { userId: user.id, purpose: 'PASSWORD_RESET' },
++            status: 'PENDING',
++          },
++          data: { status: 'EXPIRED', ciphertext: null },
++        });
++        await tx.accountToken.create({
++          data: {
++            id: challengeId,
++            userId: user.id,
++            purpose: 'PASSWORD_RESET',
++            tokenHash: this.digest(`otp:${user.id}:${challengeId}:${otp}`),
++            expiresAt: new Date(
++              Date.now() +
++                this.config.get('IDENTITY_OTP_TTL_SECONDS', { infer: true }) *
++                  1000,
++            ),
++            activationDelivery: {
++              create: {
++                email: user.email,
++                ciphertext: encryptActivationUrl(otp, key),
++              },
++            },
++          },
++        });
++      });
++    return { message: MESSAGE, challengeId };
++  }
++
++  async reset(input: ResetPasswordDto, ip: string): Promise<void> {
++    this.checkPassword(input.newPassword);
++    await this.budget([
++      [`reset-ip:${ip}`, 30],
++      [`reset-challenge:${input.challengeId}`, 10],
++    ]);
++    const token = await this.db.accountToken.findUnique({
++      where: { id: input.challengeId },
++    });
++    const success =
++      token &&
++      (await this.db.$transaction(async (tx) => {
++        await tx.$queryRaw`SELECT id FROM users WHERE id = ${token.userId}::uuid FOR UPDATE`;
++        const current = await tx.accountToken.findUnique({
++          where: { id: input.challengeId },
++        });
++        const user = await tx.user.findUnique({ where: { id: token.userId } });
++        if (
++          !current ||
++          !user ||
++          current.purpose !== 'PASSWORD_RESET' ||
++          current.usedAt ||
++          current.expiresAt.getTime() <= Date.now() ||
++          current.failedAttempts >= 5 ||
++          !(await this.eligible(tx, user))
++        )
++          return false;
++        const expected = Buffer.from(current.tokenHash, 'hex');
++        const actual = Buffer.from(
++          this.digest(`otp:${user.id}:${current.id}:${input.otp}`),
++          'hex',
++        );
++        if (
++          expected.length !== actual.length ||
++          !timingSafeEqual(expected, actual)
++        ) {
++          await tx.accountToken.update({
++            where: { id: current.id },
++            data: { failedAttempts: { increment: 1 } },
++          });
++          return false; // commit attempt before returning a generic error
++        }
++        if (await this.passwords.verify(input.newPassword, user.passwordHash))
++          return false;
++        await tx.user.update({
++          where: { id: user.id },
++          data: { passwordHash: await this.passwords.hash(input.newPassword) },
++        });
++        await this.invalidate(tx, user.id);
++        return true;
++      }));
++    if (!success)
++      throw new BadRequestException({
++        code: 'INVALID_PASSWORD_RESET',
++        message: 'Invalid or expired password reset challenge',
++      });
++    this.logger.log({
++      msg: 'Password reset; sessions revoked',
++      userId: token!.userId,
++    });
++  }
++
++  private checkPassword(password: string): void {
++    // bcrypt only uses the first 72 bytes; never accept silently truncated secrets.
++    if (Buffer.byteLength(password, 'utf8') > 72)
++      throw new BadRequestException({
++        code: 'PASSWORD_TOO_LONG',
++        message: 'Password must not exceed 72 UTF-8 bytes',
++      });
++  }
++}
+diff --git a/apps/identity-service/test/password-mailpit.e2e-spec.ts b/apps/identity-service/test/password-mailpit.e2e-spec.ts
+new file mode 100644
+index 0000000..0c04230
+--- /dev/null
++++ b/apps/identity-service/test/password-mailpit.e2e-spec.ts
+@@ -0,0 +1,131 @@
++import { randomUUID } from 'node:crypto';
++import { ConfigService } from '@nestjs/config';
++import type { INestApplication } from '@nestjs/common';
++import request from 'supertest';
++import type { PrismaService } from '../src/prisma/prisma.service';
++import {
++  createTenant,
++  createTestApp,
++  createUser,
++  resetDatabase,
++} from './support/test-app';
++import { ActivationDeliveryWorker } from '../src/users/activation-delivery.worker';
++
++const live =
++  process.env.IDENTITY_MAILPIT_SMOKE === '1' ? describe : describe.skip;
++live('HU-04 OTP through real SMTP and Mailpit', () => {
++  let app: INestApplication, db: PrismaService;
++  beforeAll(async () => {
++    ({ app, prisma: db } = await createTestApp());
++    app
++      .get(ConfigService)
++      .set('IDENTITY_OTP_SECRET', 'mailpit-test-only-secret'.repeat(3));
++    await resetDatabase(db);
++  });
++  afterAll(async () => app?.close());
++  it('delivers a usable OTP, clears ciphertext, rejects replay and logs in with new password', async () => {
++    const email = `otp-${randomUUID()}@mail-smoke.local`;
++    const tenantCode = 'OTP-MAILPIT';
++    const tenantId = await createTenant(db, tenantCode);
++    await createUser(db, {
++      tenantId,
++      userType: 'TENANT_STAFF',
++      email,
++      password: 'Original#Pass1',
++      roles: ['TECHNICIAN'],
++    });
++    const http = request(app.getHttpServer());
++    const response = await http
++      .post('/auth/forgot-password')
++      .send({ tenantCode, email })
++      .expect(202);
++    const api = process.env.MAILPIT_API_URL;
++    if (!api) throw new Error('MAILPIT_API_URL is required');
++    let otp: string | undefined;
++    const deadline = Date.now() + 25000;
++    while (Date.now() < deadline) {
++      const response = await fetch(`${api}/api/v1/messages`);
++      if (!response.ok) throw new Error('Cannot read Mailpit messages');
++      const inbox = (await response.json()) as {
++        messages: { ID: string; To: { Address: string }[] }[];
++      };
++      const message = inbox.messages.find((m) =>
++        m.To.some((to) => to.Address === email),
++      );
++      if (message) {
++        const detail = (await (
++          await fetch(`${api}/api/v1/message/${message.ID}`)
++        ).json()) as { Text: string };
++        otp = detail.Text.match(/mật khẩu của bạn: (\d{6})/)?.[1];
++        if (otp) break;
++      }
++      await new Promise((resolve) => setTimeout(resolve, 300));
++    }
++    expect(otp).toMatch(/^\d{6}$/);
++    const job = await db.activationDelivery.findUniqueOrThrow({
++      where: { tokenId: response.body.challengeId },
++    });
++    expect(job.status).toBe('SENT');
++    expect(job.ciphertext).toBeNull();
++    expect(JSON.stringify(response.body)).not.toContain(otp);
++    const reset = {
++      challengeId: response.body.challengeId,
++      otp,
++      newPassword: 'Updated#Pass2',
++    };
++    await http.post('/auth/reset-password').send(reset).expect(204);
++    await http.post('/auth/reset-password').send(reset).expect(400);
++    await http
++      .post('/auth/login')
++      .send({ tenantCode, email, password: reset.newPassword })
++      .expect(200);
++    await http
++      .post('/auth/login')
++      .send({ tenantCode, email, password: 'Original#Pass1' })
++      .expect(401);
++  }, 35000);
++  it('retains encrypted delivery on SMTP failure and retries through the same worker', async () => {
++    const config = app.get(ConfigService),
++      worker = app.get(ActivationDeliveryWorker);
++    const tenantCode = 'OTP-MAIL-RETRY',
++      email = `retry-${randomUUID()}@mail-smoke.local`;
++    const tenantId = await createTenant(db, tenantCode);
++    await createUser(db, {
++      tenantId,
++      userType: 'TENANT_STAFF',
++      email,
++      password: 'Original#Pass1',
++      roles: ['TECHNICIAN'],
++    });
++    const port = config.get('SMTP_PORT');
++    // Closed local port: real connection failure, no mocked SMTP transport.
++    config.set('SMTP_PORT', 1126);
++    try {
++      const response = await request(app.getHttpServer())
++        .post('/auth/forgot-password')
++        .send({ tenantCode, email })
++        .expect(202);
++      await worker['tick']();
++      const pending = await db.activationDelivery.findUniqueOrThrow({
++        where: { tokenId: response.body.challengeId },
++      });
++      expect(pending.status).toBe('PENDING');
++      expect(pending.attempts).toBeGreaterThan(0);
++      expect(pending.ciphertext).not.toBeNull();
++      expect(pending.lastError).not.toBeNull();
++      config.set('SMTP_PORT', port);
++      await db.activationDelivery.update({
++        where: { id: pending.id },
++        data: { availableAt: new Date() },
++      });
++      await worker['tick']();
++      const sent = await db.activationDelivery.findUniqueOrThrow({
++        where: { id: pending.id },
++      });
++      expect(sent.status).toBe('SENT');
++      expect(sent.ciphertext).toBeNull();
++    } finally {
++      config.set('SMTP_PORT', port);
++    }
++  }, 35000);
++});
+diff --git a/apps/identity-service/test/password-recovery.e2e-spec.ts b/apps/identity-service/test/password-recovery.e2e-spec.ts
+new file mode 100644
+index 0000000..ce870ff
+--- /dev/null
++++ b/apps/identity-service/test/password-recovery.e2e-spec.ts
+@@ -0,0 +1,201 @@
++import { randomBytes } from 'node:crypto';
++import { ConfigService } from '@nestjs/config';
++import type { INestApplication } from '@nestjs/common';
++import request from 'supertest';
++import type { PrismaService } from '../src/prisma/prisma.service';
++import { decryptActivationUrl } from '../src/users/activation-secret';
++import { AuthRepository } from '../src/auth/auth.repository';
++import {
++  createTenant,
++  createTestApp,
++  createUser,
++  resetDatabase,
++} from './support/test-app';
++
++describe('HU-04 password recovery (real PostgreSQL, SMTP separately)', () => {
++  let app: INestApplication, db: PrismaService, userId: string;
++  const oldPassword = 'Old#Password1',
++    newPassword = 'New#Password2';
++  const key = randomBytes(32).toString('hex');
++  const http = () => request(app.getHttpServer());
++  const credentials = {
++    tenantCode: 'OTP-TEST',
++    email: 'otp@example.test',
++    password: oldPassword,
++  };
++  const forgot = () =>
++    http()
++      .post('/auth/forgot-password')
++      .send({ tenantCode: credentials.tenantCode, email: credentials.email });
++  const reset = (challengeId: string, otp: string) =>
++    http().post('/auth/reset-password').send({ challengeId, otp, newPassword });
++  async function challenge() {
++    const response = await forgot().expect(202);
++    const job = await db.activationDelivery.findUniqueOrThrow({
++      where: { tokenId: response.body.challengeId },
++    });
++    return {
++      id: response.body.challengeId as string,
++      otp: decryptActivationUrl(job.ciphertext!, key),
++    };
++  }
++  beforeAll(async () => {
++    ({ app, prisma: db } = await createTestApp());
++    // No worker is started here: this suite checks DB/HTTP, not SMTP delivery.
++    const config = app.get(ConfigService);
++    config.set('IDENTITY_OTP_SECRET', randomBytes(32).toString('hex'));
++    config.set('IDENTITY_ACTIVATION_ENCRYPTION_KEY', key);
++    config.set('SMTP_HOST', 'localhost');
++  });
++  afterAll(async () => app?.close());
++  beforeEach(async () => {
++    await resetDatabase(db);
++    const tenantId = await createTenant(db, credentials.tenantCode);
++    userId = await createUser(db, {
++      tenantId,
++      userType: 'TENANT_STAFF',
++      email: credentials.email,
++      password: oldPassword,
++      roles: ['TECHNICIAN'],
++    });
++  });
++  it('changes only the current account and invalidates old credentials and sessions', async () => {
++    const login = await http()
++      .post('/auth/login')
++      .send(credentials)
++      .expect(200);
++    const auth = `Bearer ${login.body.accessToken}`;
++    await http()
++      .post('/auth/change-password')
++      .set('Authorization', auth)
++      .send({ currentPassword: 'wrong', newPassword })
++      .expect(400);
++    await http()
++      .post('/auth/change-password')
++      .set('Authorization', auth)
++      .send({ currentPassword: oldPassword, newPassword, userId })
++      .expect(400);
++    await http()
++      .post('/auth/change-password')
++      .set('Authorization', auth)
++      .send({ currentPassword: oldPassword, newPassword })
++      .expect(204);
++    await http().get('/auth/me').set('Authorization', auth).expect(401);
++    await http()
++      .post('/auth/refresh')
++      .send({ refreshToken: login.body.refreshToken })
++      .expect(401);
++    await http().post('/auth/login').send(credentials).expect(401);
++    await http()
++      .post('/auth/login')
++      .send({ ...credentials, password: newPassword })
++      .expect(200);
++  });
++  it('validates policy and JWT at HTTP boundary', async () => {
++    await http()
++      .post('/auth/change-password')
++      .send({ currentPassword: oldPassword, newPassword })
++      .expect(401);
++    await http()
++      .post('/auth/reset-password')
++      .send({ challengeId: 'not-a-uuid', otp: '123456', newPassword })
++      .expect(400);
++    const c = await challenge();
++    await http()
++      .post('/auth/reset-password')
++      .send({ challengeId: c.id, otp: c.otp, newPassword: 'weak' })
++      .expect(400);
++  });
++  it('allows exactly one concurrent redemption and rejects replay', async () => {
++    const prior = await db.user.findUniqueOrThrow({ where: { id: userId } });
++    const login = await http()
++      .post('/auth/login')
++      .send(credentials)
++      .expect(200);
++    const c = await challenge();
++    const responses = await Promise.all([
++      reset(c.id, c.otp),
++      reset(c.id, c.otp),
++    ]);
++    expect(responses.map((r) => r.status).sort()).toEqual([204, 400]);
++    await reset(c.id, c.otp).expect(400);
++    await http()
++      .get('/auth/me')
++      .set('Authorization', `Bearer ${login.body.accessToken}`)
++      .expect(401);
++    await http().post('/auth/login').send(credentials).expect(401);
++    await http()
++      .post('/auth/login')
++      .send({ ...credentials, password: newPassword })
++      .expect(200);
++    const token = await db.accountToken.findUniqueOrThrow({
++      where: { id: c.id },
++    });
++    expect(token.usedAt).not.toBeNull();
++    expect(token.tokenHash).not.toBe(c.otp);
++    // Simulates a login/activation that verified before reset, then tried to
++    // create its session after reset committed.
++    await expect(
++      app.get(AuthRepository).createLoginSession(
++        {
++          userId,
++          refreshTokenHash: 'stale-login-test-hash',
++          expiresAt: new Date(Date.now() + 60000),
++          ipAddress: null,
++          userAgent: null,
++        },
++        prior.passwordHash,
++      ),
++    ).rejects.toMatchObject({ response: { code: 'INVALID_CREDENTIALS' } });
++  });
++  it('invalidates old OTP on resend and enforces five wrong attempts', async () => {
++    const old = await challenge(),
++      current = await challenge();
++    await reset(old.id, old.otp).expect(400);
++    const wrong = current.otp === '000000' ? '000001' : '000000';
++    for (let i = 0; i < 5; i++) await reset(current.id, wrong).expect(400);
++    await reset(current.id, current.otp).expect(400);
++    expect(
++      (await db.accountToken.findUniqueOrThrow({ where: { id: current.id } }))
++        .failedAttempts,
++    ).toBe(5);
++  });
++  it('rejects expired and disabled-account challenges', async () => {
++    const expired = await challenge();
++    await db.accountToken.update({
++      where: { id: expired.id },
++      data: {
++        createdAt: new Date(Date.now() - 600000),
++        expiresAt: new Date(Date.now() - 300000),
++      },
++    });
++    await reset(expired.id, expired.otp).expect(400);
++    const disabled = await challenge();
++    await db.user.update({
++      where: { id: userId },
++      data: { status: 'DISABLED' },
++    });
++    await reset(disabled.id, disabled.otp).expect(400);
++  });
++  it('does not expose account existence and rate limits unknown email', async () => {
++    const known = await forgot().expect(202);
++    const missing = {
++      tenantCode: credentials.tenantCode,
++      email: 'missing@example.test',
++    };
++    const unknown = await http()
++      .post('/auth/forgot-password')
++      .send(missing)
++      .expect(202);
++    expect(unknown.body.message).toBe(known.body.message);
++    expect(Object.keys(unknown.body)).toEqual(Object.keys(known.body));
++    expect(
++      await db.accountToken.findUnique({
++        where: { id: unknown.body.challengeId },
++      }),
++    ).toBeNull();
++    for (let i = 0; i < 4; i++)
++      await http().post('/auth/forgot-password').send(missing).expect(202);
++    await http().post('/auth/forgot-password').send(missing).expect(429);
++  });
++});
+diff --git a/docs/erd/hu04-password-recovery.md b/docs/erd/hu04-password-recovery.md
+new file mode 100644
+index 0000000..f924cfe
+--- /dev/null
++++ b/docs/erd/hu04-password-recovery.md
+@@ -0,0 +1,29 @@
++# HU-04 Identity schema delta — PENDING_OWNER_APPROVAL
++
++Owner review: Nguyên. Base schema: ERD v3.1 + ADR 0017. This is a proposed,
++additive Identity-only changeset; no cross-service keys or new business events.
++
++- `account_tokens.failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK >= 0`:
++  counts wrong OTP attempts. Reuses existing `PASSWORD_RESET` purpose, UUID ID,
++  expiry and used_at. Hash is HMAC-SHA256(account ID, challenge ID, OTP) with
++  a dedicated environment key; raw OTP is never persisted in this column.
++- `password_rate_limits(key VARCHAR(64) PRIMARY KEY, window_at TIMESTAMPTZ,
++  attempts INTEGER DEFAULT 0 CHECK >= 0)`: HMAC of purpose/account scope/IP;
++  no plaintext account/IP. Atomic upsert enforces fixed 15-minute budgets across replicas.
++- Existing `activation_deliveries` stores the encrypted OTP for PASSWORD_RESET
++  jobs. Same AES-256-GCM and SMTP worker as activation; no second mail pipeline.
++
++Apply new migration `20261114090000_password_recovery` before deploying Identity.
++No historical migration is edited. No backfill is needed. Roll forward is preferred;
++rolling application code back can leave the added column/table in place. Never drop
++them to roll back an application release. Drain jobs before rotating encryption key;
++rotating OTP HMAC key invalidates pending challenges and resets rate-key namespaces.
++Operations may delete rate-limit rows older than one day on Identity DB only;
++deploy a scheduled cleanup before exposing recovery publicly at scale.
++
++Concurrency: user-row lock serializes reset, resend, change, login session creation
++and refresh rotation. Wrong attempts commit before the generic HTTP error. Password,
++challenge consumption and session revocation commit atomically. Login checks the
++password hash again under the lock, preventing a pre-reset password check from
++creating a post-reset session. No claim of immediate JWT revocation across services:
++ADR 0004 retains signature-only verification until JWT expiry.
+diff --git a/docs/planning/hu04-identity-review.md b/docs/planning/hu04-identity-review.md
+new file mode 100644
+index 0000000..91ed4d0
+--- /dev/null
++++ b/docs/planning/hu04-identity-review.md
+@@ -0,0 +1,54 @@
++# HU-04 — changeset Identity độc lập
++
++**PENDING_OWNER_APPROVAL — Nguyên review trước merge/phát hành.**
++
++Phạm vi changeset: `apps/identity-service/**`, `docs/api/identity.yaml`,
++`docs/erd/hu04-password-recovery.md`, file này. HU-01/HU-02 và báo cáo nghiệm thu
++tổng hợp nằm ngoài changeset Identity. Không commit/push/merge trong phiên triển khai.
++
++Patch độc lập: [hu04-identity.patch](../changesets/hu04-identity.patch), tái tạo bằng
++`node scripts/export-hu04-changeset.cjs`. Script chỉ đọc git diff và file untracked
++trong scope trên; kiểm tra reverse-apply bằng `--check`, không sửa index/working tree.
++Không apply patch lại lên working tree hiện tại vì thay đổi đã ở đây.
++
++## Cấu hình và triển khai
++
++1. Review [schema delta](../erd/hu04-password-recovery.md) và [OpenAPI](../api/identity.yaml).
++2. Chạy migration Identity trên DB test riêng, migration lần hai và drift trước release.
++3. Cấu hình `IDENTITY_OTP_SECRET` ngẫu nhiên ≥32 ký tự, riêng với JWT/encryption key.
++   `IDENTITY_OTP_TTL_SECONDS` mặc định 300, cho phép 60–300. Không cấu hình key thì
++   cả ba endpoint trả 503; không có fallback secret.
++4. Tái sử dụng `IDENTITY_ACTIVATION_ENCRYPTION_KEY` (64 hex),
++   `IDENTITY_ACTIVATION_URL_BASE`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` theo ADR 0017.
++   SMTP có thể thêm `SMTP_USER` + `SMTP_PASSWORD`, `SMTP_SECURE=true` cho implicit TLS
++   hoặc `SMTP_REQUIRE_TLS=true` cho STARTTLS. Không tắt xác minh chứng chỉ.
++   Local Mailpit không cần authentication/TLS. SMTP ngoài máy cần Nguyên xác nhận
++   cấu hình TLS, sender và provider. Không ghi credentials vào source.
++5. Worker có tối đa 5 lần thử cho OTP, dừng khi hết hạn/đã dùng, xóa ciphertext.
++   SMTP at-least-once: crash sau send có thể gửi lại cùng mã, không tạo mã mới.
++6. JWT cũ: `/auth/me` và các endpoint đổi mật khẩu kiểm tra phiên trực tiếp;
++   refresh bị thu hồi. Service khác vẫn chấp nhận access JWT đến expiry theo ADR 0004
++   (mặc định 900 giây). Không tuyên bố logout tức thì trên toàn hệ thống.
++
++## Nguyên: Web/Gateway
++
++- Endpoint, DTO, status và budgets: OpenAPI. Password mới có policy activation,
++  thêm giới hạn 72 byte UTF-8 do bcrypt; UI nhập lại để xác nhận, chỉ gửi `newPassword`.
++- Forgot/resend gửi email và `tenantCode` như login; lưu `challengeId` mới, thay mã cũ.
++  Không suy diễn account tồn tại từ 202. Không tự đăng nhập sau reset.
++- 204 change/reset: xóa token phía client, chuyển về login. 400 hiện thông báo phù hợp,
++  429 yêu cầu thử lại sau cửa sổ 15 phút, 503 báo tạm chưa khả dụng.
++- Giữ route Identity hiện có; xác minh public route recovery qua Gateway thật.
++  `request.ip` hiện dùng peer IP của Express; không tin X-Forwarded-For tùy ý.
++  Cần owner cấu hình trusted proxy cụ thể trước production để IP budgets hoạt động
++  theo client thật; nếu chưa cấu hình, các client qua Gateway dùng chung budget IP.
++- Root `.env.example`, Gateway/Web, CI/Compose chưa sửa vì thuộc owner khác.
++  Các biến ở trên là phần cần owner đưa vào cấu hình triển khai.
++
++## Nghiệm thu
++
++Unit tests kiểm tra hash/encryption, response chung, rate limit, hết hạn, replay guard.
++`test/password-recovery.e2e-spec.ts` dùng PostgreSQL thật: API boundary, đổi mật khẩu,
++revocation, concurrent redemption, resend, năm lần sai, expiry, disabled account.
++Suite này không kiểm SMTP; cần nghiệm thu riêng Mailpit bằng email thật và Gateway.
++Các giá trị budget, TTL, giới hạn thử và hành vi JWT cần owner duyệt trước release.

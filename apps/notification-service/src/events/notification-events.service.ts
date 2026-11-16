@@ -97,6 +97,7 @@ type PendingPayload = { branchId?: string | null } & (
       customerId: string;
       result: string;
       customerSummary: string;
+      workOrderType?: string;
     }
   | {
       kind: 'WORK_ORDER_CANCELLED';
@@ -746,12 +747,14 @@ export class NotificationEventsService {
         await this.addStaffByRoles(
           tx,
           row.tenantId,
-          ['SERVICE_MANAGER', 'DISPATCHER'],
+          payload.branchId === null ? ['TENANT_ADMIN'] : ['SERVICE_MANAGER', 'DISPATCHER'],
           recipients,
         );
         rendered = {
           title: 'Yêu cầu dịch vụ mới',
-          body: `${payload.requestNo} đã được tạo. Bộ phận dịch vụ cần tiếp nhận và đánh giá.`,
+          body: payload.branchId === null
+            ? `${payload.requestNo} chưa được phân bổ chi nhánh. Quản trị viên cần phân bổ để bộ phận dịch vụ tiếp nhận.`
+            : `${payload.requestNo} đã được tạo. Bộ phận dịch vụ cần tiếp nhận và đánh giá.`,
           resourceType: 'SERVICE_REQUEST',
           resourceId: payload.serviceRequestId,
         };
@@ -850,6 +853,7 @@ export class NotificationEventsService {
         };
       }
       case 'WORK_ORDER_COMPLETED': {
+        const inspection = payload.workOrderType === 'INSPECTION';
         await this.addStaffByRoles(
           tx,
           row.tenantId,
@@ -869,7 +873,7 @@ export class NotificationEventsService {
             this.add(recipients, requester.recipient);
             if (requester.recipient.customerId) {
               customerRendered = {
-                title: resultText(payload.result),
+                title: inspection ? 'Đã có kết quả khảo sát' : resultText(payload.result),
                 body: `${serviceRequest.requestNo}: ${payload.customerSummary.slice(0, 1000)}. Mở yêu cầu để xem kết quả hiện tại.`,
                 resourceType: 'SERVICE_REQUEST',
                 resourceId: serviceRequest.serviceRequestId,
@@ -878,8 +882,10 @@ export class NotificationEventsService {
           }
         }
         rendered = {
-          title: resultText(payload.result),
-          body: `${serviceRequest?.requestNo ?? payload.workOrderNo} · ${payload.workOrderNo}: ${resultText(payload.result).toLowerCase()}. ${payload.result === 'RESOLVED' ? 'Kiểm tra kết quả trong hồ sơ.' : 'Bộ phận dịch vụ cần kiểm tra kết quả và lập phương án xử lý tiếp theo.'}`,
+          title: inspection ? 'Đã có kết quả khảo sát' : resultText(payload.result),
+          body: inspection
+            ? `${serviceRequest?.requestNo ?? payload.workOrderNo} · ${payload.workOrderNo}: khảo sát hoàn tất. Bộ phận dịch vụ cần thẩm định kết quả và lập dự toán sửa chữa nếu cần; sự cố chưa được xác nhận giải quyết.`
+            : `${serviceRequest?.requestNo ?? payload.workOrderNo} · ${payload.workOrderNo}: ${resultText(payload.result).toLowerCase()}. ${payload.result === 'RESOLVED' ? 'Kiểm tra kết quả trong hồ sơ.' : 'Bộ phận dịch vụ cần kiểm tra kết quả và lập phương án xử lý tiếp theo.'}`,
           resourceType: serviceRequest ? 'SERVICE_REQUEST' : 'WORK_ORDER',
           resourceId: serviceRequest?.serviceRequestId ?? payload.workOrderId,
         };
@@ -1286,6 +1292,7 @@ export class NotificationEventsService {
         customerId: envelope.payload.customerId,
         result: envelope.payload.result,
         customerSummary: envelope.payload.customerSummary,
+        ...(envelope.payload.type ? { workOrderType: envelope.payload.type } : {}),
       };
     }
     if (isEvent(envelope, Events.WorkOrderCancelledV2)) {
@@ -1544,6 +1551,7 @@ export class NotificationEventsService {
             'customerId',
             'result',
             'customerSummary',
+            'workOrderType',
           ) &&
           uuid(raw.workOrderId) &&
           text(raw.workOrderNo, 50) &&
@@ -1552,7 +1560,8 @@ export class NotificationEventsService {
           hasOneOrigin(raw.serviceRequestId, raw.maintenanceTaskId) &&
           uuid(raw.customerId) &&
           oneOf(raw.result, REPORT_RESULTS) &&
-          text(raw.customerSummary, 2_000)
+          text(raw.customerSummary, 2_000) &&
+          (raw.workOrderType === undefined || oneOf(raw.workOrderType, ['REPAIR', 'WARRANTY', 'MAINTENANCE', 'INSPECTION']))
         ) {
           return {
             branchId,
@@ -1565,6 +1574,7 @@ export class NotificationEventsService {
             customerId: raw.customerId,
             result: raw.result,
             customerSummary: raw.customerSummary,
+            ...(typeof raw.workOrderType === 'string' ? { workOrderType: raw.workOrderType } : {}),
           };
         }
         return undefined;

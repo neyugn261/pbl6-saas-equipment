@@ -62,6 +62,9 @@ export class RequestBranchController {
           code: 'BRANCH_VERSION_CONFLICT',
           message: 'Reload the request before allocating',
         });
+      // A no-op must not append a second allocation history/event.
+      if (row.branchId === body.branchId)
+        return { id: row.id, branchId: row.branchId };
       if (
         ['RESOLVED', 'CLOSED', 'REJECTED', 'CANCELLED'].includes(row.status) ||
         (row.branchId !== null &&
