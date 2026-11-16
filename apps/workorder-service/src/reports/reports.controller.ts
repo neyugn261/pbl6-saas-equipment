@@ -6,7 +6,7 @@ import {
   RequirePermissions,
   type Principal,
 } from '@pbl6/auth';
-import { WorkOrderSummaryQueryDto } from './dto';
+import { TechnicianKpiQueryDto, WorkOrderSummaryQueryDto } from './dto';
 import { ReportsService } from './reports.service';
 
 @BranchScoped()
@@ -15,6 +15,7 @@ import { ReportsService } from './reports.service';
 @RequirePermissions('report:read')
 export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
+
   @Get('summary')
   @Header('Cache-Control', 'no-store')
   summary(
@@ -22,5 +23,31 @@ export class ReportsController {
     @Query() query: WorkOrderSummaryQueryDto,
   ) {
     return this.reports.summary(p, query);
+  }
+
+  @Get(['technicians', 'kpi'])
+  @Header('Cache-Control', 'no-store')
+  technicianKpi(
+    @CurrentUser() p: Principal,
+    @Query() query: TechnicianKpiQueryDto,
+  ) {
+    return this.reports.technicianKpi(p, query);
+  }
+}
+
+@BranchScoped()
+@Controller('reports/technicians')
+@AllowUserTypes('TENANT_STAFF')
+@RequirePermissions('report:read')
+export class TechnicianReportsController {
+  constructor(private readonly reports: ReportsService) {}
+
+  @Get()
+  @Header('Cache-Control', 'no-store')
+  technicianKpi(
+    @CurrentUser() p: Principal,
+    @Query() query: TechnicianKpiQueryDto,
+  ) {
+    return this.reports.technicianKpi(p, query);
   }
 }

@@ -18,10 +18,11 @@ void main() {
     WorkspaceRepository repo, {
     String id = work.orderId,
     int revision = 0,
+    WorkOrder? order,
   }) => MaterialApp(
     home: Scaffold(
       body: SingleChildScrollView(
-        child: JobParts(repo: repo, orderId: id, revision: revision),
+        child: JobParts(repo: repo, orderId: id, revision: revision, order: order),
       ),
     ),
   );
@@ -245,6 +246,90 @@ void main() {
         true,
       );
       expect(t.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'confirm-use button does not appear when order is IN_PROGRESS',
+    (t) async {
+      final u = usage();
+      final inProgressWo = WorkOrder(work.workOrder(status: 'IN_PROGRESS'));
+      final repo = WorkspaceRepository((_) async => [u], workflowUser);
+      addTearDown(repo.dispose);
+      await t.pumpWidget(panel(repo, order: inProgressWo));
+      await t.pumpAndSettle();
+      await tap(t, find.text('Dầu bảo trì 1'));
+      expect(find.byKey(Key('confirm-use-part-${u['id']}')), findsNothing);
+      expect(find.byKey(Key('return-part-${u['id']}')), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'confirm-use button appears when order is COMPLETED and part has unreconciled quantity',
+    (t) async {
+      final u = usage();
+      final completedWo = WorkOrder(work.workOrder(status: 'COMPLETED'));
+      final repo = WorkspaceRepository((_) async => [u], workflowUser);
+      addTearDown(repo.dispose);
+      await t.pumpWidget(panel(repo, order: completedWo));
+      await t.pumpAndSettle();
+      await tap(t, find.text('Dầu bảo trì 1'));
+      expect(find.byKey(Key('confirm-use-part-${u['id']}')), findsOneWidget);
+      expect(find.byKey(Key('return-part-${u['id']}')), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'submits confirm-use with quantity, report id, customer reason, and idempotency key',
+    (t) async {
+      final u = usage();
+      final completedWo = WorkOrder(work.workOrder(status: 'COMPLETED'));
+      String? writePath;
+      Map<String, dynamic>? writeBody;
+      String? writeKey;
+
+      final repo = WorkspaceRepository(
+        (path) async => [u],
+        workflowUser,
+        write: (path, body, {idempotencyKey}) async {
+          writePath = path;
+          writeBody = body;
+          writeKey = idempotencyKey;
+          return {'id': u['id'], 'confirmed': true};
+        },
+      );
+      addTearDown(repo.dispose);
+
+      await t.pumpWidget(panel(repo, order: completedWo));
+      await t.pumpAndSettle();
+      await tap(t, find.text('Dầu bảo trì 1'));
+
+      // Tap confirm-use button
+      await tap(t, find.byKey(Key('confirm-use-part-${u['id']}')));
+      expect(find.text('Xác nhận phụ tùng đã dùng'), findsOneWidget);
+      expect(find.byKey(const Key('confirm-use-quantity-input')), findsOneWidget);
+      expect(find.byKey(const Key('confirm-use-reason-input')), findsOneWidget);
+
+      // Enter customer reason
+      await t.enterText(
+        find.byKey(const Key('confirm-use-reason-input')),
+        'Thay thế dầu bôi trơn cũ bị biến chất',
+      );
+      await t.pumpAndSettle();
+
+      // Submit
+      await tap(t, find.byKey(const Key('confirm-use-submit-button')));
+
+      // Assert payload and headers
+      expect(writePath, '/api/inventory/work-order-parts/${u['id']}/confirm-use');
+      expect(writeBody, isNotNull);
+      expect(writeBody!['quantity'], '3.75');
+      expect(writeBody!['serviceReportId'], 'report-a');
+      expect(writeBody!['customerReason'], 'Thay thế dầu bôi trơn cũ bị biến chất');
+      expect(writeBody!['removedPartDisposition'], 'NOT_APPLICABLE');
+      expect(writeKey, isNotNull);
+      expect(writeKey, isNotEmpty);
+
+      // Dialog is closed and snackbar shown
+      expect(find.text('Xác nhận phụ tùng đã dùng'), findsNothing);
+      expect(find.text('Xác nhận đã dùng phụ tùng thành công.'), findsOneWidget);
     },
   );
 }

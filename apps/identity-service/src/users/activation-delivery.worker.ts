@@ -68,7 +68,8 @@ export class ActivationDeliveryWorker
       include: { token: true },
     });
     if (!job || job.status !== 'PENDING' || !job.ciphertext) return;
-    if (job.token.usedAt || job.token.expiresAt.getTime() <= Date.now()) {
+    if (job.token.usedAt || job.token.failedAttempts >= 5 || job.token.expiresAt.getTime() <= Date.now() ||
+      (job.token.purpose === 'PASSWORD_RESET' && job.attempts > 5)) {
       await this.prisma.activationDelivery.update({
         where: { id },
         data: { status: 'EXPIRED', ciphertext: null },
@@ -85,7 +86,12 @@ export class ActivationDeliveryWorker
       const transport = nodemailer.createTransport({
         host: this.config.getOrThrow('SMTP_HOST', { infer: true }),
         port: this.config.get('SMTP_PORT', { infer: true }),
-        secure: false,
+        secure: this.config.get('SMTP_SECURE', { infer: true }),
+        requireTLS: this.config.get('SMTP_REQUIRE_TLS', { infer: true }),
+        ...(this.config.get('SMTP_USER', { infer: true }) ? { auth: {
+          user: this.config.get('SMTP_USER', { infer: true }),
+          pass: this.config.get('SMTP_PASSWORD', { infer: true }),
+        } } : {}),
         connectionTimeout: 30_000,
         greetingTimeout: 30_000,
         socketTimeout: 30_000,
@@ -94,8 +100,10 @@ export class ActivationDeliveryWorker
         await transport.sendMail({
           from: this.config.getOrThrow('SMTP_FROM', { infer: true }),
           to: job.email,
-          subject: 'Kích hoạt tài khoản PBL6',
-          text: `Mở liên kết sau để kích hoạt tài khoản (hết hạn sau 24 giờ):\n${link}`,
+          subject: job.token.purpose === 'PASSWORD_RESET' ? 'Mã đặt lại mật khẩu PBL6' : 'Kích hoạt tài khoản PBL6',
+          text: job.token.purpose === 'PASSWORD_RESET'
+            ? `Mã đặt lại mật khẩu của bạn: ${link}\nHết hạn lúc ${job.token.expiresAt.toISOString()}. Không chia sẻ mã này. Nếu bạn không yêu cầu, hãy bỏ qua email.`
+            : `Mở liên kết sau để kích hoạt tài khoản (hết hạn sau 24 giờ):\n${link}`,
         });
       } finally {
         transport.close();

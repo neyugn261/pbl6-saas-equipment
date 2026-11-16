@@ -269,7 +269,7 @@ export class UsersService {
       expiresAt: this.tokens.refreshTokenExpiry(),
       ipAddress: client.ipAddress,
       userAgent: client.userAgent,
-    });
+    }, passwordHash);
 
     const accessToken = await this.tokens.signAccessToken({
       sub: user.id,

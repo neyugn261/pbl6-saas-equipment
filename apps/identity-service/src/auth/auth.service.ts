@@ -111,7 +111,7 @@ export class AuthService {
       expiresAt: this.tokens.refreshTokenExpiry(),
       ipAddress: client.ipAddress,
       userAgent: client.userAgent,
-    });
+    }, user.passwordHash);
 
     const pair = await this.issueTokens(
       user,

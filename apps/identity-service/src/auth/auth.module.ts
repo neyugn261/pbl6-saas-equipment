@@ -7,6 +7,7 @@ import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
+import { PasswordRecoveryService } from './password-recovery.service';
 
 /** Issues tokens; verification is done by the global guard of @pbl6/auth. */
 @Module({
@@ -40,6 +41,7 @@ import { TokenService } from './token.service';
     AuthRepository,
     PasswordService,
     TokenService,
+    PasswordRecoveryService,
   ],
   exports: [AuthRepository, PasswordService, TokenService, JwtModule],
 })

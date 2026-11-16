@@ -1,10 +1,16 @@
 import { Module } from '@nestjs/common';
-import { ReportsController } from './reports.controller';
+import { ReferencesModule } from '../references/references.module';
+import {
+  ReportsController,
+  TechnicianReportsController,
+} from './reports.controller';
 import { ReportsRepository } from './reports.repository';
 import { ReportsService } from './reports.service';
 
 @Module({
-  controllers: [ReportsController],
+  imports: [ReferencesModule],
+  controllers: [ReportsController, TechnicianReportsController],
   providers: [ReportsRepository, ReportsService],
+  exports: [ReportsService],
 })
 export class ReportsModule {}

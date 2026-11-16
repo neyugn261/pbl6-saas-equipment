@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   AuthSession,
   Prisma,
@@ -68,15 +68,21 @@ export class AuthRepository {
   }
 
   /** Creates the session of a successful login and records the login time. */
-  async createLoginSession(session: NewSession): Promise<AuthSession> {
-    const [created] = await this.prisma.$transaction([
-      this.prisma.authSession.create({ data: session }),
-      this.prisma.user.update({
+  async createLoginSession(session: NewSession, expectedPasswordHash: string | null): Promise<AuthSession> {
+    return this.prisma.$transaction(async (tx) => {
+      // Same lock as password mutation: a login verified before reset must not
+      // create a fresh session after reset has revoked the old sessions.
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${session.userId}::uuid FOR UPDATE`;
+      const user = await tx.user.findUniqueOrThrow({ where: { id: session.userId } });
+      if (user.status !== 'ACTIVE' || user.passwordHash !== expectedPasswordHash)
+        throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Credentials changed; log in again' });
+      const created = await tx.authSession.create({ data: session });
+      await tx.user.update({
         where: { id: session.userId },
         data: { lastLoginAt: new Date() },
-      }),
-    ]);
-    return created;
+      });
+      return created;
+    });
   }
 
   findSessionByHash(refreshTokenHash: string): Promise<SessionWithUser | null> {
@@ -100,6 +106,7 @@ export class AuthRepository {
     replacement: NewSession,
   ): Promise<AuthSession> {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${replacement.userId}::uuid FOR UPDATE`;
       const revoked = await tx.authSession.updateMany({
         where: { id: currentId, revokedAt: null },
         data: { revokedAt: new Date() },
