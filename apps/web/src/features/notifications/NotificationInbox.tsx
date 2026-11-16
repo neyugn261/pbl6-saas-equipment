@@ -6,6 +6,7 @@ import { getSessionGeneration, useSession } from '../../auth/session'
 import type { Page } from '../../types/domain'
 import { hideTechnicalIds, recordLabel } from '../../display-names'
 import { useWorkspaceData } from '../workspace/workspace-data'
+import './notifications.css'
 
 type Notification = {
   id: string
@@ -18,6 +19,34 @@ type Notification = {
   readAt: string | null
 }
 type ReadFilter = 'ALL' | 'UNREAD' | 'READ'
+
+const legacyTitles: Record<string, string> = {
+  'Work order created': 'Lệnh công việc mới',
+  'Work order completed': 'Lệnh công việc hoàn tất',
+  'Service request updated': 'Cập nhật yêu cầu dịch vụ',
+  'New service request': 'Yêu cầu dịch vụ mới',
+}
+
+const legacyStatuses: Record<string, string> = {
+  new: 'mới', reviewing: 'đang thẩm định', accepted: 'đã tiếp nhận',
+  processing: 'đang xử lý', resolved: 'đã có kết quả', closed: 'đã đóng',
+  cancelled: 'đã hủy', rejected: 'đã từ chối',
+}
+
+function displayCopy(item: Notification) {
+  const title = legacyTitles[item.title.trim()] ?? item.title
+  const body = item.body.trim()
+  const created = /^(WO-[\w-]+) was created\.?$/i.exec(body)
+  const completed = /^(WO-[\w-]+) was completed \((resolved|unresolved|partially_resolved)\)\.?$/i.exec(body)
+  const requestCreated = /^(SR-[\w-]+) was created\.?$/i.exec(body)
+  const requestStatus = /^(SR-[\w-]+) is now ([a-z_]+)\.?$/i.exec(body)
+  let localizedBody = body
+  if (created) localizedBody = `Lệnh ${created[1]} đã được tạo.`
+  else if (completed) localizedBody = `Lệnh ${completed[1]} đã hoàn tất (${({ resolved: 'đã xử lý', unresolved: 'chưa xử lý được', partially_resolved: 'xử lý một phần' } as Record<string, string>)[completed[2].toLowerCase()]}).`
+  else if (requestCreated) localizedBody = `Yêu cầu ${requestCreated[1]} đã được tạo.`
+  else if (requestStatus && legacyStatuses[requestStatus[2].toLowerCase()]) localizedBody = `Yêu cầu ${requestStatus[1]} ${legacyStatuses[requestStatus[2].toLowerCase()]}.`
+  return { title: hideTechnicalIds(title), body: hideTechnicalIds(localizedBody, 'hồ sơ liên quan') }
+}
 
 function errorText(error: unknown) {
   if (error instanceof ApiError) {
@@ -128,37 +157,47 @@ export function NotificationInbox() {
   }
 
   return (
-    <div className="m2-page">
-      <h1>Thông báo</h1><p>Theo dõi cập nhật liên quan đến công việc, yêu cầu dịch vụ và bàn giao thiết bị.</p>
-      <label>Lọc
-        <select value={filter} onChange={(event) => { setFilter(event.target.value as ReadFilter); setPage(1) }}>
-          <option value="ALL">Tất cả</option>
-          <option value="UNREAD">Chưa đọc</option>
-          <option value="READ">Đã đọc</option>
-        </select>
-      </label>
+    <div className="m2-page notification-inbox">
+      <header className="notification-inbox-header">
+        <div>
+          <h1>Thông báo</h1>
+          <p>Theo dõi cập nhật liên quan đến công việc, yêu cầu dịch vụ và bàn giao thiết bị.</p>
+        </div>
+      </header>
+      <div className="notification-inbox-toolbar">
+        <label>Lọc thông báo
+          <select value={filter} onChange={(event) => { setFilter(event.target.value as ReadFilter); setPage(1) }}>
+            <option value="ALL">Tất cả</option>
+            <option value="UNREAD">Chưa đọc</option>
+            <option value="READ">Đã đọc</option>
+          </select>
+        </label>
+        {result && <span>{result.total} thông báo</span>}
+      </div>
       {error && <section className="m1-card sd-notification-state" role="alert"><h2>Chưa thể hiển thị thông báo</h2><p>{error}</p><button onClick={() => setRevision(v => v + 1)}>Thử tải lại</button></section>}
       {actionError?.generation === sessionGeneration && <p className="m1-error" role="alert">{actionError.message}</p>}
       {loading ? <p role="status">Đang tải thông báo…</p>
         : error ? null
         : result && result.items.length === 0 ? <section className="m1-card sd-notification-state"><h2>Chưa có thông báo phù hợp</h2><p>Các cập nhật sẽ xuất hiện tại đây khi có sự kiện trong phạm vi tài khoản. Thử chọn “Tất cả” để xem các thông báo đã đọc.</p></section>
-          : <ul className="m2-linked-list">
+          : <ul className="m2-linked-list notification-inbox-list">
               {result?.items.map((item) => {
                 const path = resourcePath(item, customer)
                 const label = item.resourceType ? resourceLabel[item.resourceType] : 'Hồ sơ liên quan'
-                const title = hideTechnicalIds(item.title) || label
-                const body = hideTechnicalIds(item.body, 'hồ sơ liên quan')
-                return <li key={item.id}>
-                  <span>
+                const { title, body } = displayCopy(item)
+                return <li key={item.id} className={item.readAt ? 'notification-card' : 'notification-card notification-card--unread'}>
+                  <div className="notification-card-content">
+                    <div className="notification-card-meta">
+                      <span className="notification-card-kind">{label}</span>
+                      <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</time>
+                    </div>
                     <strong>{title}</strong>
                     {body && <p>{body}</p>}
-                    <small>{new Date(item.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</small>
-                  </span>
-                  <span>
-                    {path && <NotificationResourceLink item={item} path={path} fallback={label} />}
+                    {path && <div className="notification-card-resource"><NotificationResourceLink item={item} path={path} fallback={label} /></div>}
+                  </div>
+                  <div className="notification-card-actions">
                     {!item.readAt && <button disabled={busyId === item.id} onClick={() => void markRead(item.id)}>Đánh dấu đã đọc</button>}
-                    {item.readAt && <small>Đã đọc</small>}
-                  </span>
+                    {item.readAt && <span className="notification-card-read">Đã đọc</span>}
+                  </div>
                 </li>
               })}
             </ul>}
