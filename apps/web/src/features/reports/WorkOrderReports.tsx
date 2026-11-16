@@ -5,6 +5,7 @@ import { getSessionGeneration } from '../../auth/session'
 import { useSession } from '../../auth/session'
 import type { Page } from '../../types/domain'
 import '../../routes/live-administration.css'
+import './workorder-reports.css'
 
 const statuses = [
   'CREATED',
@@ -57,7 +58,7 @@ function useCurrentMonth() {
 
 export function WorkOrderReportsPage() {
   return (
-    <div className="m2-page">
+    <div className="m2-page workorder-reports">
       <h1>Báo cáo dịch vụ</h1>
       <p>Theo dõi khối lượng và trạng thái công việc theo khoảng thời gian. Số lệnh hoàn tất chưa thể hiện tỷ lệ sửa chữa thành công hoặc mức hài lòng của khách hàng.</p>
       <WorkOrderSummaryPanel />
@@ -148,11 +149,11 @@ export function TechnicianKpiPanel() {
     setQuery({ from, to, branchId: canFilterBranch ? branchId : '' })
   }
 
-  return <section className="m1-card m1-section-card">
+  return <section className="m1-card m1-section-card technician-kpi">
     <div className="m1-section-header"><h2>KPI kỹ thuật viên</h2></div>
     <div className="m1-section-body">
       <p>Đếm theo ngày hoàn tất Work Order, giờ Việt Nam. Tỷ lệ sửa thành công chỉ tính lệnh sửa có kết quả kỹ thuật; tỷ lệ đúng hạn chỉ tính lệnh có lịch kết thúc.</p>
-      <form className="m2-editor" onSubmit={apply}>
+      <form className="m2-editor technician-kpi-filters" onSubmit={apply}>
         <label>Từ ngày<input type="date" required value={from} onChange={e => setFrom(e.target.value)} /></label>
         <label>Đến ngày (bao gồm)<input type="date" required value={to} onChange={e => setTo(e.target.value)} /></label>
         {canFilterBranch && <>
@@ -170,8 +171,13 @@ export function TechnicianKpiPanel() {
       {loading && <p role="status">Đang tải KPI.</p>}
       {!loading && state.error && <p role="alert" className="m1-error">{state.error}</p>}
       {!loading && state.data && <>
-        <p>{state.data.summary.totalTechnicians} kỹ thuật viên · {state.data.summary.totalCompletedCount} lệnh hoàn tất · Sửa thành công: {rate(state.data.summary.overallRepairSuccessRate)} · Đúng hạn: {rate(state.data.summary.overallOnTimeRate)}</p>
-        {state.data.items.length === 0 ? <p>Không có kết quả trong khoảng ngày đã chọn.</p> : <div className="live-table"><table>
+        <div className="technician-kpi-summary" aria-label="Tổng quan KPI">
+          <div><strong>{state.data.summary.totalTechnicians}</strong><span>Kỹ thuật viên</span></div>
+          <div><strong>{state.data.summary.totalCompletedCount}</strong><span>Lệnh hoàn tất</span></div>
+          <div><strong>{rate(state.data.summary.overallRepairSuccessRate)}</strong><span>Sửa thành công</span></div>
+          <div><strong>{rate(state.data.summary.overallOnTimeRate)}</strong><span>Đúng hạn</span></div>
+        </div>
+        {state.data.items.length === 0 ? <p>Không có kết quả trong khoảng ngày đã chọn.</p> : <div className="live-table technician-kpi-table"><table>
           <thead><tr><th>Kỹ thuật viên</th><th>Chi nhánh</th><th>Hoàn tất</th><th>Sửa thành công</th><th>Đúng hạn</th></tr></thead>
           <tbody>{state.data.items.map(item => <tr key={item.technicianId}>
             <td>{item.fullName || item.employeeCode} ({item.employeeCode})</td>

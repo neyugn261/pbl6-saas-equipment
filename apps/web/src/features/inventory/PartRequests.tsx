@@ -248,7 +248,7 @@ export function PartRequestQueue() {
   return (
     <div className="m2-page part-request-page">
       <h1>Phiếu phụ tùng</h1>
-      <div className="part-request-fields">
+      <div className="part-request-fields part-request-toolbar">
         <label>
           Loại phiếu
           <select
@@ -295,34 +295,28 @@ export function PartRequestQueue() {
         </button>
       </div>
       {workOrderId && (
-        <p>
+        <p className="part-request-filter-note">
           Lệnh {order.data?.workOrderNo ?? "đã chọn"} ·{" "}
           <Link to={queue}>Bỏ lọc theo lệnh</Link>
         </p>
       )}
       <DataState {...state} retry={reload}>
         {state.data?.items.length ? (
-          <ul className="part-request-list">
+          <ul className="part-request-list part-request-queue-list">
             {state.data.items.map((item) => (
               <li key={item.id}>
-                <Link to={queue + "/" + kind + "/" + item.id + "?" + query}>
-                  {item.requestNo}
-                </Link>
-                <p>
-                  {labels[item.status]} ·{" "}
-                  {
-                    labels[
-                      "lines" in item
-                        ? item.fulfillmentStatus
-                        : item.receiptStatus
-                    ]
-                  }
+                <div className="part-request-row-header">
+                  <Link to={queue + "/" + kind + "/" + item.id + "?" + query}>
+                    {item.requestNo}
+                  </Link>
+                  <span className="part-request-badge">{labels[item.status]}</span>
+                </div>
+                <p className="part-request-row-meta">
+                  {item.workOrderNo && <>Lệnh {item.workOrderNo} <span aria-hidden="true">·</span> </>}
+                  {labels["lines" in item ? item.fulfillmentStatus : item.receiptStatus]}
+                  <span aria-hidden="true">·</span> {formatDate(item.createdAt, true)}
                 </p>
-                <p>
-                  {item.workOrderNo && item.workOrderNo + " · "}
-                  {item.reason}
-                </p>
-                <small>{formatDate(item.createdAt, true)}</small>
+                <p className="part-request-row-reason">{item.reason}</p>
               </li>
             ))}
           </ul>
@@ -521,10 +515,10 @@ function MovementForm({
     }
   }
   return (
-    <form className="part-request-fields" onSubmit={send}>
+    <form className="part-request-fields part-request-movement-form" onSubmit={send}>
       {issuing && (
         <>
-          <p>
+          <p className="part-request-recipient">
             Người nhận{" "}
             <strong>
               {technicianName(
@@ -613,36 +607,38 @@ function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
   return (
     <div className="m2-page part-request-page">
       <Link to={queue + "?" + query}>← Hàng chờ phiếu phụ tùng</Link>
-      <h1>
-        {kind === "part-requests" ? "Phiếu xin cấp" : "Đề nghị trả kho"}{" "}
-        {item?.requestNo}
-      </h1>
+      <div className="part-request-detail-header">
+        <h1>
+          {kind === "part-requests" ? "Phiếu xin cấp" : "Đề nghị trả kho"}{" "}
+          {item?.requestNo}
+        </h1>
+        <button type="button" disabled={operation.busy} onClick={reload}>
+          Làm mới phiếu
+        </button>
+      </div>
       <MutationStatus state={operation} />
-      <button type="button" disabled={operation.busy} onClick={reload}>
-        Làm mới phiếu
-      </button>
       <DataState {...state} retry={reload}>
         {item && (
           <>
-            <p>
-              {labels[item.status]} · {formatDate(item.createdAt, true)}
-            </p>
-            <p>
-              Lệnh{" "}
-              {item.workOrderNo ??
-                order.data?.workOrderNo ??
-                "chưa tải được mã"}
-            </p>
-            <p>{item.reason}</p>
-            {item.closingReason && (
+            <section className="part-request-summary" aria-label="Thông tin phiếu">
+              <div className="part-request-row-header">
+                <span className="part-request-badge">{labels[item.status]}</span>
+                <span className="part-request-row-meta">{formatDate(item.createdAt, true)}</span>
+              </div>
               <p>
-                Lý do đóng phiếu ·{" "}
-                {labels[item.closingReason] ?? item.closingReason}
+                Lệnh <strong>{item.workOrderNo ?? order.data?.workOrderNo ?? "chưa tải được mã"}</strong>
               </p>
-            )}
+              <p>{item.reason}</p>
+              {item.closingReason && (
+                <p>
+                  Lý do đóng phiếu ·{" "}
+                  {labels[item.closingReason] ?? item.closingReason}
+                </p>
+              )}
+            </section>
             <fieldset
               disabled={operation.blocked}
-              className="part-request-actions"
+              className="part-request-actions part-request-detail-actions"
             >
               <legend>Xử lý phiếu</legend>
               {"lines" in item ? (
@@ -664,7 +660,7 @@ function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
                       )}
                     </p>
                   )}
-                  <ul className="part-request-list">
+                  <ul className="part-request-list part-request-detail-lines">
                     {item.lines.map((line) => (
                       <li key={line.id}>
                         <strong>
@@ -691,6 +687,7 @@ function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
                             <>
                               <button
                                 type="button"
+                                className="part-request-line-toggle"
                                 onClick={() =>
                                   setLineId(
                                     lineId === line.id ? undefined : line.id,
@@ -760,7 +757,7 @@ function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
                   )}
                 </>
               )}
-              <div className="part-request-fields">
+              <div className="part-request-fields part-request-decision-actions">
                 {(Object.keys(decisions) as (keyof typeof decisions)[])
                   .filter((action) => item.allowedActions?.includes(action))
                   .map((action) => (
@@ -778,7 +775,7 @@ function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
               {decision && item.allowedActions?.includes(decision) && (
                 <form
                   key={item.version + ":" + decision}
-                  className="part-request-fields"
+                  className="part-request-fields part-request-decision-form"
                   onSubmit={(event) => {
                     event.preventDefault();
                     const reason = String(
@@ -801,7 +798,7 @@ function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
                     Lý do
                     <textarea name="reason" required maxLength={2000} />
                   </label>
-                  <button type="submit">
+                  <button type="submit" className="part-request-primary">
                     Xác nhận {decisions[decision].toLowerCase()}
                   </button>
                 </form>
@@ -870,10 +867,13 @@ export function WorkOrderPartRequests({
   }
   return (
     <section className="m1-card m1-section-card part-request-page">
-      <h2>Phiếu phụ tùng của công việc</h2>
-      <p>
-        <Link to={queue + filter}>Xem phiếu xin cấp và đề nghị trả</Link>
-      </p>
+      <div className="part-request-section-header">
+        <div>
+          <h2>Phiếu phụ tùng của công việc</h2>
+          <p>Theo dõi yêu cầu cấp phụ tùng cho lệnh {workOrderNo}.</p>
+        </div>
+        <Link to={queue + filter}>Xem tất cả phiếu</Link>
+      </div>
       <DataState {...recent} retry={reload}>
         {recent.data?.items.length ? (
           <ul className="part-request-list">
@@ -892,12 +892,12 @@ export function WorkOrderPartRequests({
       </DataState>
       <MutationStatus state={operation} />
       {requestable && (
-        <details>
+        <details className="part-request-create">
           <summary>Lập phiếu xin cấp</summary>
-          <form onSubmit={save}>
+          <form className="part-request-create-form" onSubmit={save}>
             <fieldset
               disabled={operation.blocked}
-              className="part-request-actions"
+              className="part-request-actions part-request-create-actions"
             >
               <legend>Phụ tùng cần cấp</legend>
               <p>
@@ -905,7 +905,7 @@ export function WorkOrderPartRequests({
                 lượng tồn.
               </p>
               {lines.map((line, index) => (
-                <div className="part-request-fields" key={line.key}>
+                <div className="part-request-fields part-request-create-line" key={line.key}>
                   <CatalogSelect<Part>
                     path="/parts?status=ACTIVE"
                     label={"Phụ tùng " + (index + 1)}
@@ -969,7 +969,7 @@ export function WorkOrderPartRequests({
                 <textarea name="reason" required maxLength={2000} />
               </label>
               {error && <p role="alert">{error}</p>}
-              <button type="submit">Gửi phiếu xin cấp</button>
+              <button type="submit" className="part-request-primary">Gửi phiếu xin cấp</button>
             </fieldset>
           </form>
         </details>

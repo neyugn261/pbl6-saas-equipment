@@ -1,0 +1,38 @@
+.workorder-reports { max-width: 1120px; }
+.workorder-reports > p { max-width: 75ch; line-height: 1.6; }
+.technician-kpi .m1-section-body { display: grid; gap: 18px; }
+.technician-kpi .m1-section-body > p { margin: 0; line-height: 1.6; }
+.technician-kpi .technician-kpi-filters {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  max-width: 720px;
+  margin: 0;
+}
+.technician-kpi .technician-kpi-filters button { justify-self: start; }
+.technician-kpi-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.technician-kpi-summary > div {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 15px;
+  background: var(--shop-soft, #f5f7f4);
+  border: 1px solid var(--shop-line, #dce4ed);
+  border-radius: 8px;
+}
+.technician-kpi-summary strong { overflow-wrap: anywhere; font-size: 18px; line-height: 1.3; }
+.technician-kpi-summary span { color: var(--shop-muted, #607083); font-size: 12px; }
+.technician-kpi-table { max-width: 100%; overflow-x: auto; }
+.technician-kpi-table table { min-width: 680px; }
+.technician-kpi-table td { line-height: 1.5; }
+@media (max-width: 760px) {
+  .technician-kpi-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .technician-kpi .technician-kpi-filters { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 460px) {
+  .technician-kpi-summary { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1281,7 +1281,7 @@ function RequestDetailPage() {
               </section>
             )}
             <div className="m1-actions">
-              <button disabled={busy} onClick={() => void refreshRequest()}>
+              <button className="request-refresh-action" disabled={busy} onClick={() => void refreshRequest()}>
                 Làm mới trạng thái
               </button>
               {inspectionAllowed && (

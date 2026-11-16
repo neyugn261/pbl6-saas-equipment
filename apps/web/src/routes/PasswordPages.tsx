@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useSession } from '../auth/session'
 import { changePassword, forgotPassword, passwordProblem, resetPassword } from '../auth/password'
+import './password-pages.css'
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiError) {
@@ -55,11 +56,11 @@ export function ForgotPasswordPage() {
     finally { setBusy(false) }
   }
 
-  return <div className="m1-login"><div className="m1-card m1-form">
+  return <div className="m1-login password-recovery"><div className="m1-card m1-form">
     <h1>Quên mật khẩu</h1>
     {error && <p role="alert" className="m1-error">{error}</p>}
     {done ? <p role="status">Đã đặt lại mật khẩu. Vui lòng đăng nhập bằng mật khẩu mới.</p> : <>
-      <form onSubmit={requestCode} className="m2-editor">
+      <form onSubmit={requestCode} className="m2-editor password-form">
         <label><input type="checkbox" checked={platform} onChange={e => { setPlatform(e.target.checked); setChallengeId('') }} /> Tài khoản nền tảng</label>
         {!platform && <label>Mã doanh nghiệp<input required maxLength={50} value={tenantCode} onChange={e => { setTenantCode(e.target.value); setChallengeId('') }} /></label>}
         <label>Email<input required type="email" value={email} onChange={e => { setEmail(e.target.value); setChallengeId('') }} /></label>
@@ -67,7 +68,7 @@ export function ForgotPasswordPage() {
       </form>
       {challengeId && <>
         <p role="status">Nếu tài khoản đủ điều kiện, mã xác nhận sẽ được gửi qua email. Mã mới sẽ thay thế mã cũ.</p>
-        <form onSubmit={submitReset} className="m2-editor">
+        <form onSubmit={submitReset} className="m2-editor password-form">
           <label>Mã xác nhận 6 chữ số<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={otp} onChange={e => setOtp(e.target.value)} /></label>
           <label>Mật khẩu mới<input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} /></label>
           <label>Nhập lại mật khẩu<input required type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} /></label>
@@ -97,9 +98,9 @@ export function ChangePasswordPanel() {
     } catch (cause) { setError(errorMessage(cause)) }
     finally { setBusy(false) }
   }
-  return <section className="m1-card"><h2>Đổi mật khẩu</h2>
+  return <section className="m1-card password-change"><h2>Đổi mật khẩu</h2>
     <p>Sau khi đổi mật khẩu, bạn cần đăng nhập lại.</p>
-    <form onSubmit={submit} className="m2-editor">
+    <form onSubmit={submit} className="m2-editor password-form">
       {error && <p role="alert" className="m1-error">{error}</p>}
       <label>Mật khẩu hiện tại<input required type="password" autoComplete="current-password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} /></label>
       <label>Mật khẩu mới<input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={newPassword} onChange={e => setNewPassword(e.target.value)} /></label>
