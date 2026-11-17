@@ -1,12 +1,4 @@
 .notification-inbox { max-width: 1000px; }
-.notification-inbox-header { margin-bottom: 18px; }
-.notification-inbox-header h1 { margin-bottom: 8px; }
-.notification-inbox-header p {
-  margin: 0;
-  color: var(--shop-muted, #607083);
-  font-size: 14px;
-  line-height: 1.6;
-}
 .notification-inbox-toolbar {
   display: flex;
   align-items: end;

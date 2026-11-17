@@ -6,6 +6,7 @@ import { getSessionGeneration, useSession } from '../../auth/session'
 import type { Page } from '../../types/domain'
 import { hideTechnicalIds, recordLabel } from '../../display-names'
 import { useWorkspaceData } from '../workspace/workspace-data'
+import { PageHeading } from '../workspace/WorkspaceUI'
 import './notifications.css'
 
 type Notification = {
@@ -158,12 +159,10 @@ export function NotificationInbox() {
 
   return (
     <div className="m2-page notification-inbox">
-      <header className="notification-inbox-header">
-        <div>
-          <h1>Thông báo</h1>
-          <p>Theo dõi cập nhật liên quan đến công việc, yêu cầu dịch vụ và bàn giao thiết bị.</p>
-        </div>
-      </header>
+      <PageHeading
+        title="Thông báo"
+        description="Theo dõi cập nhật liên quan đến công việc, yêu cầu dịch vụ và bàn giao thiết bị."
+      />
       <div className="notification-inbox-toolbar">
         <label>Lọc thông báo
           <select value={filter} onChange={(event) => { setFilter(event.target.value as ReadFilter); setPage(1) }}>

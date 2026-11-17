@@ -167,6 +167,7 @@ test('Notification inbox, filters, pagination, mark-read and bell use the config
   const imports = (h) => ({ react: h.react, 'react/jsx-runtime': h.jsx, 'lucide-react': { Bell: 'bell' },
     'react-router-dom': { Link: 'link' }, './notifications.css': {}, '../../api/client': tab.client, '../../auth/session': tab.session,
     '../../display-names': tab.load('display-names.ts'),
+    '../workspace/WorkspaceUI': { PageHeading: 'page-heading' },
     '../workspace/workspace-data': tab.load('features/workspace/workspace-data.ts', {
       react: h.react, '../../api/client': tab.client, '../../auth/session': tab.session,
     }),

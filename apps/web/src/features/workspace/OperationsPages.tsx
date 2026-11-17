@@ -18,6 +18,7 @@ import { PriorityBadge } from "../../components/Badges";
 import WorkOrderBoard from "./WorkOrderBoard";
 import { recordAge, requestResponsibility } from "./service-detail-data";
 import { maintenanceDates } from "./calendar-preview";
+import { BusinessChanges } from "./ServiceDetailUI";
 import {
   Badge,
   DataState,
@@ -631,7 +632,6 @@ export function WorkspaceHandoverPage() {
   return (
     <div className="ws-page">
       <PageHeading
-        eyebrow={customer ? "CỔNG KHÁCH HÀNG" : undefined}
         title={
           customer ? "Bàn giao thiết bị của chúng tôi" : "Bàn giao thiết bị"
         }
@@ -1039,7 +1039,6 @@ export function WorkspaceMaintenancePage() {
   return (
     <div className="ws-page">
       <PageHeading
-        eyebrow={customer ? "CHĂM SÓC THIẾT BỊ" : undefined}
         title="Bảo trì định kỳ"
         description="Chủ động theo dõi các kỳ bảo trì và công việc cần thực hiện cho thiết bị."
         actions={
@@ -1295,47 +1294,21 @@ const historyNames: Record<string, string> = {
   PLAN_UPDATED: "Cập nhật kế hoạch",
   PLAN_STATUS_CHANGED: "Thay đổi trạng thái kế hoạch",
   PLAN_TERM_ENDED: "Hết thời hạn bảo trì",
-  TASK_GENERATED: "Sinh công việc bảo trì",
+  TASK_GENERATED: "Tạo công việc bảo trì",
   SCHEDULE_ADVANCED: "Chuyển kỳ bảo trì tiếp theo",
-  WORK_ORDER_CREATED: "Tạo lệnh thực hiện",
+  WORK_ORDER_CREATED: "Tạo lệnh công việc",
   WORK_ORDER_COMPLETED: "Hoàn tất lệnh công việc",
   WORK_ORDER_CANCELLED: "Hủy lệnh công việc",
   REPLACEMENT_REQUESTED: "Yêu cầu lệnh thay thế",
   EQUIPMENT_SNAPSHOT_REFRESHED: "Cập nhật liên kết thiết bị",
+  EQUIPMENT_SNAPSHOT_UPDATED: "Cập nhật thông tin thiết bị liên quan",
+  INITIAL_SETUP_LINKED: "Liên kết kế hoạch khi thiết lập dịch vụ",
 };
-const fieldNames: Record<string, string> = {
-  name: "Tên kế hoạch",
-  description: "Nội dung",
-  status: "Trạng thái",
-  frequencyValue: "Số chu kỳ",
-  frequencyUnit: "Đơn vị chu kỳ",
-  nextDueDate: "Kỳ đến hạn tiếp theo",
-  endDate: "Ngày kết thúc bảo trì",
-  termMode: "Cách kết thúc bảo trì",
-  termYears: "Số năm bảo trì",
-  anchorDate: "Ngày gốc",
-  scheduledDate: "Ngày đến hạn",
-  lastCompletedAt: "Lần hoàn tất gần nhất",
-};
-function changeValue(input: unknown) {
-  if (input == null) return "Chưa có";
-  if (typeof input === "string")
-    return (
-      statusNames[input] ??
-      {
-        DAY: "Ngày",
-        WEEK: "Tuần",
-        MONTH: "Tháng",
-        YEAR: "Năm",
-        UNLIMITED: "Vĩnh viễn",
-        YEARS: "Theo số năm",
-        WARRANTY_END: "Hết cùng bảo hành",
-      }[input] ??
-      input
-    );
-  if (typeof input === "object") return "Có cập nhật trong hồ sơ liên quan";
-  return String(input);
-}
+const historyChangeFields = new Set([
+  "name", "description", "status", "frequencyValue", "frequencyUnit",
+  "nextDueDate", "endDate", "termMode", "termYears", "anchorDate",
+  "scheduledDate", "lastCompletedAt",
+]);
 export function WorkspaceMaintenanceHistoryPage({
   equipmentId,
 }: {
@@ -1365,9 +1338,8 @@ export function WorkspaceMaintenanceHistoryPage({
     query.revision,
   );
   return (
-    <div className="ws-page">
+    <div className="ws-page maintenance-history-page">
       <PageHeading
-        eyebrow="HÀNH TRÌNH CHĂM SÓC THIẾT BỊ"
         title="Lịch sử bảo trì"
         description="Theo dõi từng thay đổi, lần thực hiện và hồ sơ liên quan theo thời gian."
         actions={
@@ -1382,25 +1354,27 @@ export function WorkspaceMaintenanceHistoryPage({
           </>
         }
       />
-      <section className="ws-card">
+      <section className="ws-card maintenance-history-filters">
         <div className="ws-card-header">
           <div>
             <h2>Tra cứu lịch sử</h2>
-            <p>Chọn thiết bị theo tên hoặc mã; không cần ghi nhớ ID.</p>
+            <p>Chọn thiết bị, loại hoạt động hoặc khoảng thời gian cần xem.</p>
           </div>
         </div>
         <div className="ws-card-body">
-          <div className="ws-form-grid">
+          <div className={`maintenance-history-filter-grid${equipmentId ? " maintenance-history-filter-grid--scoped" : ""}`}>
             {!equipmentId && (
-              <EntityPicker
-                label="Thiết bị"
-                area="assetM2"
-                path="/equipment"
-                selected={selectedEquipment}
-                onChange={(equipmentId) =>
-                  query.change({ equipmentId, planId: "", taskId: "" })
-                }
-              />
+              <div className="maintenance-history-equipment">
+                <EntityPicker
+                  label="Thiết bị"
+                  area="assetM2"
+                  path="/equipment"
+                  selected={selectedEquipment}
+                  onChange={(equipmentId) =>
+                    query.change({ equipmentId, planId: "", taskId: "" })
+                  }
+                />
+              </div>
             )}
             <label className="ws-label">
               Loại hoạt động
@@ -1435,13 +1409,16 @@ export function WorkspaceMaintenanceHistoryPage({
               />
             </label>
           </div>
-          <div className="ws-actions" style={{ marginTop: 17 }}>
+          <div className="maintenance-history-filter-actions">
             <button
-              className="ws-button ws-button--secondary"
+              type="button"
+              className="ws-button ws-button--secondary maintenance-history-advanced-toggle"
               aria-expanded={advanced}
+              aria-controls="maintenance-history-advanced"
               onClick={() => setAdvanced(!advanced)}
             >
               Lọc theo kế hoạch / công việc
+              <ArrowRight size={14} aria-hidden="true" />
             </button>
             {query.params.toString() && (
               <button
@@ -1462,7 +1439,7 @@ export function WorkspaceMaintenanceHistoryPage({
             )}
           </div>
           {advanced && (
-            <div className="ws-form-grid" style={{ marginTop: 18 }}>
+            <div className="ws-form-grid maintenance-history-advanced" id="maintenance-history-advanced">
               <EntityPicker
                 key={`plan:${selectedEquipment}`}
                 label="Kế hoạch"
@@ -1492,7 +1469,7 @@ export function WorkspaceMaintenanceHistoryPage({
           )}
         </div>
       </section>
-      <section className="ws-card">
+      <section className="ws-card maintenance-history-results">
         <div className="ws-card-header">
           <div>
             <h2>Dòng thời gian bảo trì</h2>
@@ -1503,22 +1480,24 @@ export function WorkspaceMaintenanceHistoryPage({
         {!invalidRange && (
           <DataState {...state} retry={query.refresh}>
             {state.data?.items.length ? (
-              <ol className="ws-history">
+              <ol className="ws-history maintenance-history-timeline">
                 {state.data.items.map((row, i) => (
                   <li key={String(row.id ?? i)}>
-                    <h3>
-                      {historyNames[String(row.eventType)] ??
-                        "Cập nhật hồ sơ bảo trì"}
-                    </h3>
-                    <time>
-                      {formatDate(
-                        row.occurredAt ?? row.changedAt ?? row.createdAt,
-                        true,
-                      )}
-                    </time>
-                    <p>
+                    <div className="maintenance-history-event-heading">
+                      <h3>
+                        {historyNames[String(row.eventType)] ??
+                          "Cập nhật hồ sơ bảo trì"}
+                      </h3>
+                      <time dateTime={String(row.occurredAt ?? row.changedAt ?? row.createdAt ?? "")}>
+                        {formatDate(
+                          row.occurredAt ?? row.changedAt ?? row.createdAt,
+                          true,
+                        )}
+                      </time>
+                    </div>
+                    <p className="maintenance-history-actor">
                       Người thực hiện:{" "}
-                      {value(
+                      {row.actorType === "SYSTEM" ? "Hệ thống" : value(
                         row.actorName ?? row.createdByName,
                         "Chưa có tên được công bố",
                       )}
@@ -1540,7 +1519,7 @@ export function WorkspaceMaintenanceHistoryPage({
                         )}
                       </p>
                     )}
-                    <div className="ws-actions">
+                    <div className="ws-actions maintenance-history-event-links">
                       {Boolean(row.planId) && (
                         <Link
                           className="ws-text-link"
@@ -1561,26 +1540,18 @@ export function WorkspaceMaintenanceHistoryPage({
                       )}
                     </div>
                     {Object.keys(asRow(row.changes)).some(
-                      (key) => key in fieldNames,
+                      (key) => historyChangeFields.has(key),
                     ) && (
-                      <details>
+                      <details className="sd-history-details maintenance-history-changes">
                         <summary>Thông tin đã thay đổi</summary>
-                        <dl>
-                          {Object.entries(asRow(row.changes))
-                            .filter(([key]) => key in fieldNames)
-                            .map(([key, change]) => {
-                              const detail = asRow(change);
-                              return (
-                                <div key={key}>
-                                  <dt>{fieldNames[key]}</dt>
-                                  <dd>
-                                    {changeValue(detail.before ?? detail.old)} →{" "}
-                                    {changeValue(detail.after ?? detail.new)}
-                                  </dd>
-                                </div>
-                              );
-                            })}
-                        </dl>
+                        <p className="sd-history-explanation">
+                          So sánh giá trị cũ và giá trị mới của từng thông tin.
+                        </p>
+                        <BusinessChanges
+                          data={Object.fromEntries(
+                            Object.entries(asRow(row.changes)).filter(([key]) => historyChangeFields.has(key)),
+                          )}
+                        />
                       </details>
                     )}
                     {row.completeness === "LEGACY_SUMMARY" && (
@@ -1655,7 +1626,6 @@ export function WorkspaceRequestsPage() {
   return (
     <div className="ws-page">
       <PageHeading
-        eyebrow={customer ? "CỔNG KHÁCH HÀNG" : undefined}
         title={customer ? "Yêu cầu hỗ trợ" : "Yêu cầu dịch vụ"}
         description={
           customer

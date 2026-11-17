@@ -22,7 +22,6 @@ import {
   navigationFor,
   primaryRole,
   roleDescriptions,
-  roleNames,
   type WorkspaceRole,
 } from "./role-workspace";
 import { Badge, DataState, EmptyState, PageHeading } from "./WorkspaceUI";
@@ -352,14 +351,9 @@ function StandardDashboard() {
       (item) => !["Tiện ích", "Quản trị doanh nghiệp"].includes(item.group),
     )
     .slice(0, 4);
-  const dateLabel = new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "full",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(new Date());
   return (
     <div className="ws-page">
       <PageHeading
-        eyebrow={`${roleNames[role].toUpperCase()} · ${dateLabel}`}
         title={config.title}
         description={`Chào ${profile.fullName}. ${config.description}`}
         actions={

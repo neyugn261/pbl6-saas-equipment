@@ -51,24 +51,19 @@ export function Badge({ status, label }: { status: unknown; label?: string }) {
   );
 }
 export function PageHeading({
-  eyebrow = "KHÔNG GIAN DỊCH VỤ",
   title,
   description,
   actions,
 }: {
-  eyebrow?: string;
   title: string;
   description: string;
   actions?: ReactNode;
 }) {
   return (
-    <header className="ws-heading">
-      <div>
-        <span className="ws-eyebrow">{eyebrow}</span>
-        <h1>{title}</h1>
-        <p>{description}</p>
-      </div>
-      <div className="ws-actions">{actions}</div>
+    <header className="ws-heading page-title-header">
+      <h1>{title}</h1>
+      {actions && <div className="ws-actions page-title-actions">{actions}</div>}
+      <p className="page-title-description">{description}</p>
     </header>
   );
 }

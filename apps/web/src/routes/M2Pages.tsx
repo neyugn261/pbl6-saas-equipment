@@ -10,12 +10,13 @@ import { useFormDraft } from "../features/workspace/use-form-draft";
 import { vietnamInstant } from "../features/workspace/ui-values";
 import {
   BusinessValues,
+  BusinessChanges,
   ServiceSections,
   ServiceNotice,
   ServiceHeader,
   ServiceFacts,
 } from "../features/workspace/ServiceDetailUI";
-import { EntityPicker, RelatedName } from "../features/workspace/WorkspaceUI";
+import { EntityPicker, RelatedName, Pagination, PageHeading } from "../features/workspace/WorkspaceUI";
 import {
   MaintenancePolicyDetails,
   WorkOrderChecklist,
@@ -100,6 +101,10 @@ const historyEventLabel: Record<string, string> = {
   PLAN_CREATED: "Tạo kế hoạch",
   PLAN_UPDATED: "Cập nhật kế hoạch",
   PLAN_STATUS_CHANGED: "Đổi trạng thái kế hoạch",
+  INITIAL_SETUP_LINKED: "Liên kết kế hoạch khi thiết lập dịch vụ",
+  EQUIPMENT_SNAPSHOT_UPDATED: "Cập nhật thông tin thiết bị liên quan",
+  EQUIPMENT_SNAPSHOT_REFRESHED: "Đồng bộ thông tin thiết bị liên quan",
+  PLAN_TERM_ENDED: "Kết thúc thời hạn kế hoạch",
   TASK_GENERATED: "Tạo công việc bảo trì",
   SCHEDULE_ADVANCED: "Chuyển kỳ bảo trì",
   REPLACEMENT_REQUESTED: "Yêu cầu lệnh thay thế",
@@ -276,11 +281,17 @@ function Fields({ row, fields }: { row: Row; fields: [string, string][] }) {
   );
 }
 
-function HistoryRows({ items }: { items: Row[] }) {
+function HistoryRows({
+  items,
+  compact = false,
+}: {
+  items: Row[];
+  compact?: boolean;
+}) {
   const { profile } = useSession();
   const base = profile?.userType === "CUSTOMER" ? "/portal" : "/app";
   return items.length ? (
-    <ul className="m1-timeline">
+    <ul className={`m1-timeline service-history${compact ? " equipment-maintenance-history" : ""}`}>
       {items.map((item, index) => (
         <li key={asText(item.id ?? index)}>
           <strong>
@@ -372,14 +383,20 @@ function HistoryRows({ items }: { items: Row[] }) {
             typeof item.changes === "object" &&
             Object.keys(item.changes).length > 0,
           ) && (
-            <details>
-              <summary>Trước / sau</summary>
-              <BusinessValues data={item.changes} />
+            <details className="sd-history-details sd-history-details--changes">
+              <summary>Thông tin đã thay đổi</summary>
+              <p className="sd-history-explanation">
+                Giá trị cũ là thông tin trước sự kiện; giá trị mới là thông tin sau sự kiện.
+              </p>
+              <BusinessChanges data={item.changes} />
             </details>
           )}
           {Boolean(item.context && typeof item.context === "object") && (
-            <details>
-              <summary>Bối cảnh ghi nhận</summary>
+            <details className="sd-history-details sd-history-details--context">
+              <summary>Thông tin tại thời điểm xảy ra sự kiện</summary>
+              <p className="sd-history-explanation">
+                Thông tin được lưu cùng sự kiện, có thể khác với thông tin hiện tại.
+              </p>
               <BusinessValues data={item.context} />
             </details>
           )}
@@ -995,7 +1012,7 @@ export function DossierPage() {
                   key: "services",
                   label: "Dịch vụ & bảo trì",
                   content: (
-                    <div className="m2-grid">
+                    <div className="m2-grid equipment-services">
                       <Card title="Yêu cầu dịch vụ">
                         <Source section={dossier.requests}>
                           {(page) => (
@@ -1031,50 +1048,76 @@ export function DossierPage() {
                         </Source>
                       </Card>
                       <Card title="Bảo trì">
-                        <Source section={dossier.maintenance}>
-                          {(row) => (
-                            <>
-                              <p>
-                                Lần kế tiếp:{" "}
-                                {date((row.nextDue as Row | null)?.date)}
-                              </p>
-                              <p>
-                                Công việc đang quá hạn:{" "}
-                                {asText(row.overdueOpenTaskCount)}
-                              </p>
-                              <h3>Tình trạng kế hoạch</h3>
-                              <BusinessValues data={row.planCounts ?? {}} />
-                            </>
-                          )}
-                        </Source>
-                        <Source section={dossier.maintenanceHistory}>
-                          {(page) => (
-                            <>
-                              <HistoryRows items={page.items} />
+                        <div className="equipment-maintenance">
+                          <Source section={dossier.maintenance}>
+                            {(row) => (
+                              <>
+                                <div
+                                  className="equipment-maintenance-summary"
+                                  role="group"
+                                  aria-label="Tổng quan bảo trì"
+                                >
+                                  <div>
+                                    <span>Kỳ đến hạn kế tiếp</span>
+                                    <strong>
+                                      {date((row.nextDue as Row | null)?.date)}
+                                    </strong>
+                                  </div>
+                                  <div data-warning={Number(row.overdueOpenTaskCount) > 0}>
+                                    <span>Công việc quá hạn</span>
+                                    <strong>{asText(row.overdueOpenTaskCount)}</strong>
+                                  </div>
+                                </div>
+                                <h3>Tình trạng kế hoạch</h3>
+                                {Object.keys((row.planCounts as Row | null) ?? {}).length ? (
+                                  <ul className="equipment-maintenance-plans">
+                                    {Object.entries((row.planCounts as Row | null) ?? {}).map(([status, count]) => (
+                                      <li key={status}>
+                                        <span>{statusLabel[status] ?? status}</span>
+                                        <span className="equipment-maintenance-count">
+                                          {asText(count)}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : <p>Chưa có kế hoạch bảo trì.</p>}
+                              </>
+                            )}
+                          </Source>
+                          <section
+                            className="equipment-maintenance-activity"
+                            aria-label="Lịch sử bảo trì"
+                          >
+                            <h3>Hoạt động gần đây</h3>
+                            <Source section={dossier.maintenanceHistory}>
+                              {(page) => (
+                                <>
+                                  <HistoryRows items={page.items} compact />
+                                  <div className="equipment-maintenance-links">
+                                    <Link to={`${base}/equipment/${id}/maintenance-history`}>
+                                      Xem toàn bộ lịch sử bảo trì ({page.total})
+                                    </Link>
+                                  </div>
+                                </>
+                              )}
+                            </Source>
+                          </section>
+                          {(profile?.userType !== "CUSTOMER" ||
+                            profile.roles.includes("CUSTOMER_ADMIN")) && (
+                            <nav className="equipment-maintenance-links" aria-label="Tra cứu bảo trì">
                               <Link
-                                to={`${base}/equipment/${id}/maintenance-history`}
+                                to={`${base}/equipment/${id}/maintenance-plans`}
                               >
-                                Xem toàn bộ lịch sử bảo trì ({page.total})
+                                Xem kế hoạch
                               </Link>
-                            </>
+                              <Link
+                                to={`${base}/equipment/${id}/maintenance-tasks`}
+                              >
+                                Xem công việc
+                              </Link>
+                            </nav>
                           )}
-                        </Source>
-                        {(profile?.userType !== "CUSTOMER" ||
-                          profile.roles.includes("CUSTOMER_ADMIN")) && (
-                          <>
-                            <Link
-                              to={`${base}/equipment/${id}/maintenance-plans`}
-                            >
-                              Xem kế hoạch
-                            </Link>{" "}
-                            ·{" "}
-                            <Link
-                              to={`${base}/equipment/${id}/maintenance-tasks`}
-                            >
-                              Xem công việc
-                            </Link>
-                          </>
-                        )}
+                        </div>
                       </Card>
                       <Card title="Dịch vụ ghi nhận gần nhất">
                         <p>
@@ -1296,63 +1339,98 @@ export function HistoryFeedPage({ equipmentId }: { equipmentId?: string }) {
   ];
   const base = pathname.startsWith("/portal") ? "/portal" : "/app";
   return (
-    <div className="m2-page">
+    <div className="m2-page equipment-history-page">
       {equipmentId && (
         <Link to={`${base}/equipment/${equipmentId}`}>← Hồ sơ thiết bị</Link>
       )}
-      <h1>Lịch sử thiết bị</h1>
-      <form
-        className="m2-filters"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setFilter(draft);
-          setPage(1);
-        }}
-      >
-        {fields
-          .filter(
-            ([key]) =>
-              !(equipmentId && key === "equipmentId") &&
-              !(profile?.userType === "CUSTOMER" && key === "actorId") &&
-              !(
-                profile?.roles.includes("SERVICE_MANAGER") &&
-                ["actorId", "referenceId", "referenceType"].includes(key)
-              ),
-          )
-          .map(([key, label]) =>
-            ["equipmentId", "customerId", "siteId"].includes(key) ? (
-              <EntityPicker
-                key={key}
-                label={
-                  key === "equipmentId"
-                    ? "Thiết bị"
-                    : key === "customerId"
-                      ? "Khách hàng"
-                      : "Địa điểm"
-                }
-                area={key === "equipmentId" ? "assetM2" : "organization"}
-                path={
-                  key === "equipmentId"
-                    ? "/equipment"
-                    : key === "customerId"
-                      ? "/customers"
-                      : draft.customerId
-                        ? `/customers/${draft.customerId}/sites`
-                        : null
-                }
-                selected={draft[key]}
-                onChange={(id) =>
-                  setDraft((current) => ({
-                    ...current,
-                    [key]: id,
-                    ...(key === "customerId" ? { siteId: "" } : {}),
-                  }))
-                }
-              />
-            ) : (
-              <label key={key}>
-                {label}
-                <select
+      <PageHeading
+        title="Lịch sử thiết bị"
+        description="Theo dõi thay đổi hồ sơ, bảo hành và hoạt động dịch vụ của thiết bị theo thời gian."
+      />
+      <section className="ws-card equipment-history-filters">
+        <div className="ws-card-header">
+          <div>
+            <h2>Tra cứu lịch sử</h2>
+            <p>Chọn thiết bị, khách hàng hoặc khoảng thời gian cần xem.</p>
+          </div>
+        </div>
+        <form
+          className="equipment-history-filter-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setFilter(draft);
+            setPage(1);
+          }}
+        >
+          <div className="equipment-history-filter-grid">
+            {fields
+              .filter(
+                ([key]) =>
+                  !(equipmentId && key === "equipmentId") &&
+                  !(profile?.userType === "CUSTOMER" && key === "actorId") &&
+                  !(
+                    profile?.roles.includes("SERVICE_MANAGER") &&
+                    ["actorId", "referenceId", "referenceType"].includes(key)
+                  ),
+              )
+              .map(([key, label]) =>
+                ["equipmentId", "customerId", "siteId"].includes(key) ? (
+                  <div className="equipment-history-picker" key={key}>
+                    <EntityPicker
+                      label={
+                        key === "equipmentId"
+                          ? "Thiết bị"
+                          : key === "customerId"
+                            ? "Khách hàng"
+                            : "Địa điểm"
+                      }
+                      area={key === "equipmentId" ? "assetM2" : "organization"}
+                      path={
+                        key === "equipmentId"
+                          ? "/equipment"
+                          : key === "customerId"
+                            ? "/customers"
+                            : draft.customerId
+                              ? `/customers/${draft.customerId}/sites`
+                              : null
+                      }
+                      selected={draft[key]}
+                      onChange={(id) =>
+                        setDraft((current) => ({
+                          ...current,
+                          [key]: id,
+                          ...(key === "customerId" ? { siteId: "" } : {}),
+                        }))
+                      }
+                    />
+                  </div>
+                ) : (
+                  <label className="ws-label" key={key}>
+                    {label}
+                    <select
+                      value={draft[key]}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          [key]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Tất cả</option>
+                      {Object.entries(historyEventLabel).map(([code, label]) => (
+                        <option key={code} value={code}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ),
+              )}
+            {(["from", "to"] as const).map((key) => (
+              <label className="ws-label" key={key}>
+                {key === "from" ? "Từ thời điểm" : "Đến thời điểm"}
+                <input
+                  type="datetime-local"
                   value={draft[key]}
                   onChange={(event) =>
                     setDraft((current) => ({
@@ -1360,65 +1438,46 @@ export function HistoryFeedPage({ equipmentId }: { equipmentId?: string }) {
                       [key]: event.target.value,
                     }))
                   }
-                >
-                  <option value="">Tất cả</option>
-                  {Object.entries(historyEventLabel).map(([code, label]) => (
-                    <option key={code} value={code}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
-            ),
+            ))}
+            <label className="ws-label">
+              Sắp xếp
+              <select
+                value={draft.sort}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, sort: event.target.value }))
+                }
+              >
+                <option value="-occurredAt">Mới nhất</option>
+                <option value="occurredAt">Cũ nhất</option>
+              </select>
+            </label>
+          </div>
+          <div className="equipment-history-filter-actions">
+            <button type="submit" className="ws-button">Áp dụng bộ lọc</button>
+          </div>
+        </form>
+      </section>
+      <section className="ws-card equipment-history-results">
+        <div className="ws-card-header">
+          <div>
+            <h2>Dòng thời gian thiết bị</h2>
+            <p>{filter.sort === "occurredAt" ? "Cũ nhất trước" : "Mới nhất trước"} · Thời gian hiển thị theo Việt Nam</p>
+          </div>
+          <span className="ws-pill">{state.value?.total ?? "—"} hoạt động</span>
+        </div>
+        <Result state={state}>
+          {state.value && (
+            <>
+              <div className="equipment-history-timeline">
+                <HistoryRows items={state.value.items} />
+              </div>
+              <Pagination page={page} total={state.value.total} onChange={setPage} />
+            </>
           )}
-        {(["from", "to"] as const).map((key) => (
-          <label key={key}>
-            {key === "from" ? "Từ" : "Đến"}
-            <input
-              type="datetime-local"
-              value={draft[key]}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  [key]: event.target.value,
-                }))
-              }
-            />
-          </label>
-        ))}
-        <label>
-          Sắp xếp
-          <select
-            value={draft.sort}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, sort: event.target.value }))
-            }
-          >
-            <option value="-occurredAt">Mới nhất</option>
-            <option value="occurredAt">Cũ nhất</option>
-          </select>
-        </label>
-        <button type="submit">Áp dụng bộ lọc</button>
-      </form>
-      <Result state={state}>
-        {state.value && (
-          <>
-            <HistoryRows items={state.value.items} />
-            <p>
-              Trang {page} · Tổng {state.value.total}
-            </p>
-            <button disabled={page === 1} onClick={() => setPage(page - 1)}>
-              Trước
-            </button>
-            <button
-              disabled={page * 20 >= state.value.total}
-              onClick={() => setPage(page + 1)}
-            >
-              Sau
-            </button>
-          </>
-        )}
-      </Result>
+        </Result>
+      </section>
     </div>
   );
 }
@@ -1498,18 +1557,7 @@ export function ResourceHistoryPage({ kind }: { kind: "model" | "warranty" }) {
             {state.value?.legacyHistoryMayBeIncomplete && (
               <p>Lịch sử trước khi bật ghi nhận có thể chưa đầy đủ.</p>
             )}
-            <p>
-              Trang {page} · Tổng {history.total}
-            </p>
-            <button disabled={page === 1} onClick={() => setPage(page - 1)}>
-              Trước
-            </button>
-            <button
-              disabled={page * 20 >= history.total}
-              onClick={() => setPage(page + 1)}
-            >
-              Sau
-            </button>
+            <Pagination page={page} total={history.total} onChange={setPage} />
           </>
         )}
       </Result>
@@ -2347,18 +2395,7 @@ export function MaintenanceHistoryPage({
           <>
             <HistoryRows items={state.value.items} />
             <p>Lịch sử cũ có thể không đầy đủ.</p>
-            <p>
-              Trang {page} · Tổng {state.value.total}
-            </p>
-            <button disabled={page === 1} onClick={() => setPage(page - 1)}>
-              Trước
-            </button>
-            <button
-              disabled={page * 20 >= state.value.total}
-              onClick={() => setPage(page + 1)}
-            >
-              Sau
-            </button>
+            <Pagination page={page} total={state.value.total} onChange={setPage} />
           </>
         )}
       </Result>
@@ -3031,21 +3068,7 @@ export function MaintenanceRecordPage() {
                   {historyPage && (
                     <>
                       <HistoryRows items={historyPage.items} />
-                      <p>
-                        Trang {historyPageNo} · Tổng {historyPage.total}
-                      </p>
-                      <button
-                        disabled={historyPageNo === 1}
-                        onClick={() => setHistoryPageNo((value) => value - 1)}
-                      >
-                        Trước
-                      </button>
-                      <button
-                        disabled={historyPageNo * 20 >= historyPage.total}
-                        onClick={() => setHistoryPageNo((value) => value + 1)}
-                      >
-                        Sau
-                      </button>
+                      <Pagination page={historyPageNo} total={historyPage.total} onChange={setHistoryPageNo} />
                     </>
                   )}
                 </Result>

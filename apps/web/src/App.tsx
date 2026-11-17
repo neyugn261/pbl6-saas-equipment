@@ -453,7 +453,7 @@ function useLoad<T>(load: () => Promise<T>, key: string) {
 function Frame({
   title,
   action,
-  eyebrow = "VẬN HÀNH DỊCH VỤ",
+  eyebrow,
   description,
   children,
 }: {
@@ -465,13 +465,11 @@ function Frame({
 }) {
   return (
     <>
-      <header className="m1-header">
-        <div>
-          <span className="m1-eyebrow">{eyebrow}</span>
-          <h1>{title}</h1>
-          {description && <p>{description}</p>}
-        </div>
-        {action}
+      <header className="m1-header page-title-header">
+        {eyebrow && <span className="m1-eyebrow page-title-eyebrow">{eyebrow}</span>}
+        <h1>{title}</h1>
+        {action && <div className="ws-actions page-title-actions">{action}</div>}
+        {description && <p className="page-title-description">{description}</p>}
       </header>
       {children}
     </>
@@ -603,7 +601,7 @@ function CustomerDetailPage() {
   return (
     <Frame
       title={data.value?.name ?? "Khách hàng"}
-      eyebrow={data.value?.code ?? "KHÁCH HÀNG"}
+      eyebrow={data.value?.code}
       description={data.value?.address ?? undefined}
     >
       {data.loading ? (
@@ -1235,7 +1233,7 @@ function RequestDetailPage() {
   return (
     <Frame
       title={current?.title ?? "Yêu cầu dịch vụ"}
-      eyebrow={current?.requestNo ?? "YÊU CẦU DỊCH VỤ"}
+      eyebrow={current?.requestNo}
       description={
         current ? `Tạo lúc ${formatDate(current.createdAt)}` : undefined
       }

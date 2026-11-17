@@ -182,6 +182,7 @@ test("plan creation submits one intent; an unknown result never reports saved or
       },
       "../../components/Badges": { PriorityBadge: "PriorityBadge" },
       "./WorkspaceUI": ui,
+      "./ServiceDetailUI": { BusinessChanges: "BusinessChanges" },
       "./WorkOrderBoard": { default: "WorkOrderBoard" },
       "./service-detail-data": local.load("features/workspace/service-detail-data.ts"),
       "./calendar-preview":local.load("features/workspace/calendar-preview.ts"),
@@ -254,6 +255,7 @@ function operationsFixture(profile, search, response) {
     "../../auth/session": session, "../../api/client": local.client,
     "../../components/Badges": { PriorityBadge: "PriorityBadge" },
     "./WorkspaceUI": Object.fromEntries(names.map(name => [name, name])),
+    "./ServiceDetailUI": { BusinessChanges: "BusinessChanges" },
     "./WorkOrderBoard": { default: "WorkOrderBoard" },
     "./service-detail-data": local.load("features/workspace/service-detail-data.ts"),
     "./calendar-preview":local.load("features/workspace/calendar-preview.ts"),
@@ -286,13 +288,20 @@ test("request filtering and totals come from the server, including later pages a
 
 test("customer maintenance history never renders internal notes and uses inclusive Vietnam date bounds", () => {
   const fixture = operationsFixture({ roles: ["CUSTOMER_ADMIN"], userType: "CUSTOMER" }, "from=2026-11-01&to=2026-11-06", {
-    items: [{ id: "history", eventType: "PLAN_UPDATED", reasonInternal: "PRIVATE_REASON", actorId: "PRIVATE_ACTOR_ID", customerNote: "Public explanation" }], total: 1,
+    items: [{ id: "history", eventType: "PLAN_UPDATED", reasonInternal: "PRIVATE_REASON", actorId: "PRIVATE_ACTOR_ID", customerNote: "Public explanation", changes: {
+      status: { before: "ACTIVE", after: "PAUSED" },
+      nextDueDate: { before: "2026-11-12", after: "2027-02-12" },
+      reasonInternal: { before: null, after: "PRIVATE_CHANGE_REASON" },
+    } }], total: 1,
   });
   const tree = fixture.render("WorkspaceMaintenanceHistoryPage");
   const text = JSON.stringify(nodes(tree, n => ["p", "h3", "time", "dd"].includes(n.type)));
   assert.equal(text.includes("PRIVATE_REASON"), false);
   assert.equal(text.includes("PRIVATE_ACTOR_ID"), false);
   assert.equal(text.includes("Public explanation"), true);
+  const comparison = nodes(tree, n => n.type === "BusinessChanges")[0];
+  assert.deepEqual(Object.keys(comparison.props.data), ["status", "nextDueDate"]);
+  assert.equal(JSON.stringify(comparison.props.data).includes("PRIVATE_CHANGE_REASON"), false);
   const history = fixture.calls.find(call => call.path?.startsWith("/maintenance-history?"));
   const url = new URL(history.path, "http://local");
   assert.equal(url.searchParams.get("from"), "2026-11-01T00:00:00+07:00");
