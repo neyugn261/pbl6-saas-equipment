@@ -182,9 +182,46 @@
 .registration-directory--models .registration-directory__table table { min-width: 900px; }
 .registration-directory__table th,
 .registration-directory__table td { padding: 14px 20px; }
-.registration-directory__table td:last-child { text-align: right; }
+.registration-directory--models .registration-directory__table td:last-child { text-align: right; }
+.registration-page .registration-directory a.registration-directory__name,
+.registration-page .registration-directory__name strong {
+  color: var(--shop-accent, #a74b26);
+  font-weight: 400;
+}
+.registration-page .registration-directory a.registration-directory__name:hover {
+  color: var(--shop-accent, #a74b26);
+  text-decoration: underline;
+}
 .registration-directory__row-actions { justify-content: flex-end; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
 .registration-directory__row-actions button { min-height: 34px; padding: 6px 10px; font-size: 12px; }
+.registration-page .registration-directory__row-actions .registration-directory__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--shop-muted, #596762);
+  font-size: 12px;
+  font-weight: 400;
+  box-shadow: none;
+}
+.registration-page .registration-directory__row-actions .registration-directory__action:hover:not(:disabled) {
+  border-color: var(--shop-line, #cdd4cb);
+  background: var(--shop-soft, #e5e9e2);
+  color: var(--shop-ink, #242e2d);
+}
+.registration-page .registration-directory__row-actions .registration-directory__action--danger {
+  color: #a23d2d;
+}
+.registration-page .registration-directory__row-actions .registration-directory__action--danger:hover:not(:disabled) {
+  border-color: #e6beb3;
+  background: #f8e7e1;
+  color: #a23d2d;
+}
 .registration-directory__status {
   display: inline-flex;
   align-items: center;

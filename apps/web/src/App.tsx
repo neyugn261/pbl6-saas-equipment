@@ -894,10 +894,15 @@ function RequestActivity({
     `comments-${id}-${version}`,
   );
   return (
-    <div className="m1-activity">
+    <div
+      className={`m1-activity${mode !== "all" ? ` m1-activity--${mode}` : ""}`}
+    >
       {mode !== "comments" && (
-        <section>
-          <h3>Lịch sử trạng thái</h3>
+        <section
+          className="request-status-history"
+          aria-label="Lịch sử trạng thái"
+        >
+          {mode !== "history" && <h3>Lịch sử trạng thái</h3>}
           {history.loading ? (
             <Loading />
           ) : history.error ? (
@@ -905,40 +910,70 @@ function RequestActivity({
           ) : !history.value?.length ? (
             <Empty />
           ) : (
-            <ul>
+            <ol className="request-status-list">
               {history.value
                 .filter((item) => item.newStatus)
                 .map((item) => (
-                  <li key={item.id}>
-                    <StatusBadge status={item.newStatus} /> ·{" "}
-                    <DateText value={item.changedAt} />
-                    {item.reason && <p>{item.reason}</p>}
+                  <li className="request-status-event" key={item.id}>
+                    <div className="request-status-meta">
+                      <div className="request-status-transition">
+                        {item.oldStatus ? (
+                          <>
+                            <StatusBadge status={item.oldStatus} />
+                            <span
+                              className="request-status-arrow"
+                              role="img"
+                              aria-label="chuyển sang"
+                            >
+                              →
+                            </span>
+                          </>
+                        ) : (
+                          <span className="request-status-created">Tạo yêu cầu</span>
+                        )}
+                        <StatusBadge status={item.newStatus} />
+                      </div>
+                      <time dateTime={item.changedAt}>
+                        <DateText value={item.changedAt} />
+                      </time>
+                    </div>
+                    {item.reason && (
+                      <p className="request-status-reason">{item.reason}</p>
+                    )}
                   </li>
                 ))}
-            </ul>
+            </ol>
           )}
         </section>
       )}
       {mode !== "history" && (
-        <section>
-          <h3>Bình luận</h3>
+        <section className="request-conversation" aria-label="Danh sách bình luận">
+          {mode !== "comments" && <h3>Bình luận</h3>}
           {comments.loading ? (
             <Loading />
           ) : comments.error ? (
             <Problem error={comments.error} />
           ) : !comments.value?.length ? (
-            <Empty />
+            <p className="request-conversation-empty">
+              Chưa có bình luận. Trao đổi về yêu cầu tại đây.
+            </p>
           ) : (
-            <ul>
+            <ul className="request-comment-list">
               {comments.value.map((item) => (
-                <li key={item.id}>
-                  <strong>
-                    {item.visibility === "INTERNAL"
-                      ? "Trao đổi nội bộ"
-                      : "Khách hàng thấy"}
-                  </strong>{" "}
-                  · <DateText value={item.createdAt} />
-                  <p>{item.content}</p>
+                <li className="request-comment" key={item.id}>
+                  <div className="request-comment-meta">
+                    <span
+                      className={`request-comment-scope${item.visibility === "INTERNAL" ? " request-comment-scope--internal" : ""}`}
+                    >
+                      {item.visibility === "INTERNAL"
+                        ? "Trao đổi nội bộ"
+                        : "Khách hàng thấy"}
+                    </span>
+                    <time dateTime={item.createdAt}>
+                      <DateText value={item.createdAt} />
+                    </time>
+                  </div>
+                  <p className="request-comment-content">{item.content}</p>
                 </li>
               ))}
             </ul>
@@ -1433,11 +1468,17 @@ function RequestDetailPage() {
                               ) ? (
                                 <form
                                   id="request-comments"
-                                  className="m1-comment"
+                                  className="m1-comment request-comment-composer"
                                   onSubmit={addComment}
                                 >
+                                  <label htmlFor="request-comment-content">
+                                    Viết bình luận
+                                  </label>
                                   <textarea
+                                    id="request-comment-content"
                                     aria-label="Nội dung trao đổi"
+                                    aria-describedby="request-comment-visibility-help"
+                                    disabled={busy}
                                     required
                                     maxLength={5000}
                                     rows={3}
@@ -1445,34 +1486,53 @@ function RequestDetailPage() {
                                     onChange={(event) =>
                                       setComment(event.target.value)
                                     }
-                                    placeholder="Nhập bình luận..."
+                                    placeholder="Nhập nội dung trao đổi về yêu cầu…"
                                   />
-                                  {profile?.userType !== "CUSTOMER" &&
-                                    profile &&
-                                    has(profile.roles, [
-                                      "SERVICE_MANAGER",
-                                      "DISPATCHER",
-                                      "TECHNICIAN",
-                                    ]) && (
-                                      <select
-                                        aria-label="Phạm vi hiển thị trao đổi"
-                                        value={visibility}
-                                        onChange={(event) =>
-                                          setVisibility(
-                                            event.target.value as
-                                              "CUSTOMER" | "INTERNAL",
-                                          )
-                                        }
-                                      >
-                                        <option value="CUSTOMER">
-                                          Khách hàng thấy
-                                        </option>
-                                        <option value="INTERNAL">Nội bộ</option>
-                                      </select>
-                                    )}
-                                  <button disabled={busy || !comment.trim()}>
-                                    Gửi bình luận
-                                  </button>
+                                  <div className="request-comment-toolbar">
+                                    {profile?.userType !== "CUSTOMER" &&
+                                      profile &&
+                                      has(profile.roles, [
+                                        "SERVICE_MANAGER",
+                                        "DISPATCHER",
+                                        "TECHNICIAN",
+                                      ]) && (
+                                        <label className="request-comment-visibility">
+                                          <span>Hiển thị với</span>
+                                          <select
+                                            aria-label="Phạm vi hiển thị trao đổi"
+                                            disabled={busy}
+                                            value={visibility}
+                                            onChange={(event) =>
+                                              setVisibility(
+                                                event.target.value as
+                                                  "CUSTOMER" | "INTERNAL",
+                                              )
+                                            }
+                                          >
+                                            <option value="CUSTOMER">
+                                              Khách hàng và nhân viên
+                                            </option>
+                                            <option value="INTERNAL">
+                                              Chỉ nội bộ
+                                            </option>
+                                          </select>
+                                        </label>
+                                      )}
+                                    <button
+                                      type="submit"
+                                      disabled={busy || !comment.trim()}
+                                    >
+                                      {busy ? "Đang gửi…" : "Gửi bình luận"}
+                                    </button>
+                                  </div>
+                                  <p
+                                    id="request-comment-visibility-help"
+                                    className="request-comment-help"
+                                  >
+                                    {profile?.userType !== "CUSTOMER" && visibility === "INTERNAL"
+                                      ? "Chỉ nhân viên có quyền truy cập yêu cầu thấy bình luận này."
+                                      : "Khách hàng và nhân viên có quyền truy cập yêu cầu thấy bình luận này."}
+                                  </p>
                                 </form>
                               ) : (
                                 <p>Chỉ xem trao đổi theo quyền hiện tại.</p>
