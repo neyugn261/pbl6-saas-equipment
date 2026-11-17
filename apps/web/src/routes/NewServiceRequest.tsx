@@ -17,18 +17,16 @@ import { useFormDraft } from "../features/workspace/use-form-draft";
 import type { Page, EquipmentRecord, RequestRecord } from "../types/domain";
 function Frame({
   title,
-  eyebrow,
   description,
   children,
 }: {
   title: string;
-  eyebrow: string;
   description: string;
   children: ReactNode;
 }) {
   return (
     <div className="ws-page">
-      <PageHeading title={title} eyebrow={eyebrow} description={description} />
+      <PageHeading title={title} description={description} />
       {children}
     </div>
   );
@@ -194,7 +192,6 @@ export default function NewRequestPage() {
   return (
     <Frame
       title="Bạn cần hỗ trợ thiết bị nào?"
-      eyebrow="YÊU CẦU MỚI"
       description="Cung cấp thông tin sự cố để bộ phận dịch vụ tiếp nhận và xử lý."
     >
       {data.loading && !selectedEquipment ? (

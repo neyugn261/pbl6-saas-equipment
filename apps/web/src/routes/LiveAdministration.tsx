@@ -1,6 +1,7 @@
 import { StaffBranchAssignment } from '../features/workspace/BranchManagement'
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Building2, ChevronDown, MapPin } from 'lucide-react'
 import { api } from '../api/client'
 import { useSession, getSessionGeneration, type Profile } from '../auth/session'
 import { StatusBadge } from '../components/Badges'
@@ -71,13 +72,10 @@ function Screen({
 }) {
   return (
     <div className="live-admin">
-      <header className="m1-header">
-        <div>
-          <span className="m1-eyebrow">KHÔNG GIAN LÀM VIỆC</span>
-          <h1>{title}</h1>
-          {description && <p>{description}</p>}
-        </div>
-        {actions}
+      <header className="m1-header page-title-header">
+        <h1>{title}</h1>
+        {actions && <div className="ws-actions page-title-actions">{actions}</div>}
+        {description && <p className="page-title-description">{description}</p>}
       </header>
       {children}
     </div>
@@ -1030,9 +1028,11 @@ export function PortalLocationsPage() {
           {data.value && !data.value.length && (
             <section className="m1-card">Chưa có địa điểm.</section>
           )}
-          {data.value?.map((site) => (
-            <SiteLocations key={site.id} site={site} />
-          ))}
+          <div className="live-sites">
+            {data.value?.map((site) => (
+              <SiteLocations key={site.id} site={site} />
+            ))}
+          </div>
         </>
       )}
     </Screen>
@@ -1047,36 +1047,63 @@ function SiteLocations({ site }: { site: Site }) {
     revision,
   )
   return (
-    <section className="m1-card">
-      <h2>{site.name}</h2>
-      <p>
-        {site.code} · {site.address}
-      </p>
-      <StatusBadge status={site.status} />
-      <button aria-expanded={open} onClick={() => setOpen(!open)}>
-        {open ? 'Thu gọn vị trí' : 'Xem vị trí lắp đặt'}
-      </button>
+    <section className="m1-card live-site">
+      <div className="live-site-header">
+        <div className="live-site-heading">
+          <span className="live-site-icon" aria-hidden="true">
+            <Building2 size={20} />
+          </span>
+          <div className="live-site-copy">
+            <div className="live-site-title">
+              <h2>{site.name}</h2>
+              <StatusBadge status={site.status} />
+            </div>
+            <div className="live-site-meta">
+              <span className="live-site-code">{site.code}</span>
+              <span className="live-site-address">
+                <MapPin size={14} aria-hidden="true" />
+                {site.address || 'Chưa có địa chỉ'}
+              </span>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="live-site-toggle"
+          aria-expanded={open}
+          aria-controls={`site-locations-${site.id}`}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? 'Thu gọn vị trí' : 'Xem vị trí lắp đặt'}
+          <ChevronDown size={16} aria-hidden="true" />
+        </button>
+      </div>
       {open && (
-        <>
+        <div className="live-site-locations" id={`site-locations-${site.id}`}>
+          <h3>Vị trí lắp đặt</h3>
           <State {...data} retry={() => refresh(revision + 1)} />
           {data.value && !data.value.length && <p>Chưa có vị trí lắp đặt.</p>}
-          {data.value?.map((row) => (
-            <div className="live-location" key={row.id}>
-              <strong>{row.name}</strong>
-              <span>
-                {row.type} · {row.code || 'Không có mã'}
-              </span>
-              {row.parentId && (
-                <small>
-                  Thuộc:{' '}
-                  {data.value?.find((parent) => parent.id === row.parentId)
-                    ?.name ?? 'Vị trí cấp trên'}
-                </small>
-              )}
-              <StatusBadge status={row.status} />
-            </div>
-          ))}
-        </>
+          {!!data.value?.length && (
+            <ul className="live-site-location-list">
+              {data.value.map((row) => (
+                <li className="live-location" key={row.id}>
+                  <div className="live-location-details">
+                    <span className="live-location-name">{row.name}</span>
+                    <span>{row.type} · {row.code || 'Không có mã'}</span>
+                    {row.parentId && (
+                      <small>
+                        Thuộc:{' '}
+                        {data.value?.find((parent) => parent.id === row.parentId)
+                          ?.name ?? 'Vị trí cấp trên'}
+                      </small>
+                    )}
+                  </div>
+                  <StatusBadge status={row.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </section>
   )

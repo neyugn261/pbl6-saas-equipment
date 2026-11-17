@@ -34,7 +34,7 @@ function renderM2(componentName, response, path = '') {
     '../features/workspace/use-form-draft': draftHook(tab,h),
     '../features/workspace/ui-values': tab.load('features/workspace/ui-values.ts'),
     '../features/workspace/service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
-    '../features/workspace/WorkspaceUI': {EntityPicker:'picker',RelatedName:'related-name'},
+    '../features/workspace/WorkspaceUI': {EntityPicker:'picker',RelatedName:'related-name',Pagination:'pagination'},
     '../features/attachments/AttachmentsPanel': { AttachmentsPanel: 'attachments' },
     './ModelPolicyPanels': {
       MaintenancePolicyDetails: 'policy-details',

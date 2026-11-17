@@ -125,11 +125,108 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-.live-location {
-  border-top: 1px solid #edf0f5;
-  padding: 16px 0;
+.live-sites {
   display: grid;
-  gap: 6px;
+  gap: 14px;
+}
+.live-site-header,
+.live-site-heading,
+.live-site-title,
+.live-site-meta,
+.live-site-address {
+  display: flex;
+  align-items: center;
+}
+.live-site-header {
+  justify-content: space-between;
+  gap: 16px 24px;
+}
+.live-site-heading {
+  gap: 16px;
+  min-width: 0;
+}
+.live-site-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--shop-radius, 4px);
+  background: var(--shop-soft, #e5e9e2);
+  color: var(--shop-muted, #596762);
+}
+.live-site-copy { min-width: 0; }
+.live-site-title { flex-wrap: wrap; gap: 8px 12px; }
+.live-admin .live-site-title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.live-site-meta {
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 7px;
+  color: var(--shop-muted, #596762);
+  font-size: 12px;
+}
+.live-site-code { font-family: Consolas, monospace; }
+.live-site-address { align-items: flex-start; gap: 6px; }
+.live-site-address svg { flex-shrink: 0; margin-top: 2px; }
+.live-admin .live-site button.live-site-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-color: transparent;
+  border-radius: var(--shop-radius, 4px);
+  background: transparent;
+  color: var(--shop-accent, #a74b26);
+  font-size: 12px;
+  font-weight: 400;
+}
+.live-admin .live-site button.live-site-toggle:hover:not(:disabled) {
+  border-color: var(--shop-line, #cdd4cb);
+  background: var(--shop-soft, #e5e9e2);
+  color: var(--shop-hover, #873b1c);
+}
+.live-site-toggle[aria-expanded='true'] svg { transform: rotate(180deg); }
+.live-site-locations {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--shop-line, #cdd4cb);
+}
+.live-admin .live-site-locations h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.live-site-location-list { list-style: none; padding: 0; margin: 0; }
+.live-site-location-list .live-location {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--shop-line, #cdd4cb);
+}
+.live-site-location-list .live-location:last-child { border-bottom: 0; padding-bottom: 0; }
+.live-location-details {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--shop-muted, #596762);
+  font-size: 12px;
+}
+.live-location-name { color: var(--shop-ink, #242e2d); font-size: 14px; }
+.live-location > .status-badge { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .live-site-header { align-items: stretch; flex-direction: column; gap: 12px; }
+  .live-site-heading { align-items: flex-start; gap: 12px; }
+  .live-admin .live-site button.live-site-toggle { align-self: flex-start; margin-left: 54px; }
+  .live-site-location-list .live-location { flex-wrap: wrap; }
 }
 @media (max-width: 640px) {
   .live-admin .m1-card {
@@ -144,5 +241,5 @@
 .live-admin button { border: 1px solid #dce2eb; border-radius: 8px; padding: 8px 14px; background: white; color: #334155; cursor: pointer; font-weight: 500; }
 .live-admin button:hover:not(:disabled) { background: #eef1ff; border-color: #b7c0fa; }
 .live-admin button:disabled { cursor: not-allowed; opacity: .5; }
-.live-admin button[type=submit], .live-admin .live-form fieldset > button, .live-admin .live-form fieldset > .live-toolbar > button:first-child, .live-admin .m1-header > button { background: var(--servio-primary, #5565ee); border-color: transparent; color: white; }
+.live-admin button[type=submit], .live-admin .live-form fieldset > button, .live-admin .live-form fieldset > .live-toolbar > button:first-child, .live-admin .m1-header > button, .live-admin .m1-header > .page-title-actions > button { background: var(--servio-primary, #5565ee); border-color: transparent; color: white; }
 .live-admin .live-table a { color: #4050d7; font-weight: 600; }

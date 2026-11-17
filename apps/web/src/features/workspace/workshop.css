@@ -332,6 +332,48 @@ body:has(.workshop-shell) {
   color: var(--shop-ink);
   font-weight: 600;
 }
+.workshop-shell .page-title-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "title actions" "description description";
+  align-items: center;
+  gap: 8px 24px;
+}
+.workshop-shell .page-title-header:has(> .page-title-eyebrow) {
+  grid-template-areas: "eyebrow eyebrow" "title actions" "description description";
+}
+.workshop-shell .page-title-header > .page-title-eyebrow { grid-area: eyebrow; margin: 0; }
+.workshop-shell .page-title-header > h1 { grid-area: title; margin: 0; min-width: 0; }
+.workshop-shell .page-title-header > .page-title-description { grid-area: description; margin: 0; }
+.workshop-shell .page-title-header > .page-title-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+}
+.workshop-shell .page-title-actions > :is(.m1-actions, .live-toolbar) { margin: 0; }
+@media (max-width: 760px) {
+  .workshop-shell .page-title-header,
+  .workshop-shell .page-title-header:has(> .page-title-eyebrow) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: none;
+  }
+  .workshop-shell .page-title-header > .page-title-eyebrow { grid-area: auto; order: 0; }
+  .workshop-shell .page-title-header > h1 { grid-area: auto; order: 1; }
+  .workshop-shell .page-title-header > .page-title-description { grid-area: auto; order: 2; }
+  .workshop-shell .page-title-header > .page-title-actions {
+    grid-area: auto;
+    order: 3;
+    justify-self: start;
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+}
 .workshop-shell :is(.ws-card-header, .sd-card > header) p {
   color: var(--shop-muted);
 }
@@ -645,6 +687,46 @@ body:has(.workshop-shell) {
 }
 .workshop-shell .m1-timeline li :is(p, span) {
   color: var(--shop-muted);
+}
+.workshop-shell .service-history > li {
+  padding: 0 0 24px 24px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.workshop-shell .service-history > li::before {
+  inset: 7px auto auto 0;
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+}
+.workshop-shell .service-history > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 20px;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--shop-line);
+}
+.workshop-shell .service-history > li > strong { display: block; font-size: 15px; font-weight: 500; }
+.workshop-shell .service-history > li > span { display: block; margin: 5px 0 8px; font-size: 12px; }
+.workshop-shell .service-history > li > p { font-size: 13px; }
+.workshop-shell .service-history > li > p:has(> a) { display: inline-block; margin-right: 16px; }
+.workshop-shell .service-history .sd-history-details {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--shop-line);
+}
+.workshop-shell .service-history .sd-history-details > summary {
+  width: auto;
+  padding: 2px 0;
+  color: var(--shop-accent);
+  font-size: 13px;
+  font-weight: 500;
 }
 .workshop-shell .m1-tabs button[aria-selected="true"] {
   color: var(--shop-accent);
@@ -1744,6 +1826,277 @@ body:has(.workshop-shell) {
 }
 @media (max-width: 480px) {
   .workshop-shell .m1-summary-strip--equipment { grid-template-columns: 1fr; }
+}
+.equipment-history-filter-form { padding: 20px 22px; }
+.workshop-shell .equipment-history-timeline { padding: 20px 22px 0; }
+.workshop-shell .equipment-history-timeline > .service-history { margin: 0; }
+.equipment-history-timeline > p { margin: 0 0 20px; }
+.equipment-history-results > :is(p, .m1-error) { margin: 20px 22px; }
+@media (max-width: 640px) {
+  .workshop-shell .equipment-history-timeline { padding: 18px 16px 0; }
+}
+.equipment-history-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px 20px;
+}
+.equipment-history-picker { min-width: 0; }
+.equipment-history-picker .ws-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+.equipment-history-picker .ws-actions input { flex: 1; width: 100%; min-width: 0; }
+.equipment-history-picker .ws-actions button { flex-shrink: 0; }
+.equipment-history-filter-grid :is(input, select, button) { min-height: 40px; }
+.workshop-shell .equipment-history-filter-form .ws-label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 400;
+}
+.equipment-history-filter-form .ws-label > :is(input, select) { width: 100%; padding: 8px 12px; font-weight: 400; }
+.equipment-history-picker small { color: var(--shop-muted); font-size: 11px; }
+.equipment-history-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--shop-line);
+}
+.workshop-shell .equipment-history-filter-actions button { min-height: 38px; padding: 8px 16px; }
+@media (max-width: 1100px) {
+  .equipment-history-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .equipment-history-filter-grid { grid-template-columns: minmax(0, 1fr); }
+  .equipment-history-filter-form { padding: 18px 16px; }
+  .equipment-history-filter-actions > button { width: 100%; }
+}
+.maintenance-history-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 2fr) repeat(3, minmax(140px, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.maintenance-history-filter-grid--scoped { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.maintenance-history-equipment { min-width: 0; }
+.maintenance-history-equipment > .ws-label {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+.maintenance-history-equipment > .ws-label > :is(span, small) { grid-column: 1 / -1; }
+.maintenance-history-equipment .ws-actions { display: flex; flex-wrap: nowrap; gap: 8px; }
+.maintenance-history-equipment .ws-actions input { flex: 1; width: 100%; min-width: 0; }
+.maintenance-history-filter-grid :is(input, select, button) { min-height: 40px; }
+.maintenance-history-equipment small { font-size: 11px; color: var(--shop-muted); }
+.maintenance-history-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--shop-line);
+}
+.workshop-shell .maintenance-history-filter-actions .maintenance-history-advanced-toggle {
+  padding: 8px 14px;
+  border: 1px solid var(--shop-line);
+  background: var(--shop-paper);
+  color: var(--shop-ink);
+  font-weight: 400;
+}
+.workshop-shell .maintenance-history-filter-actions .maintenance-history-advanced-toggle:hover:not(:disabled) {
+  border-color: #a6b1a3;
+  background: var(--shop-soft);
+  color: var(--shop-ink);
+}
+.maintenance-history-advanced-toggle svg { transform: rotate(90deg); }
+.maintenance-history-advanced-toggle[aria-expanded="true"] svg { transform: rotate(270deg); }
+.maintenance-history-advanced { margin-top: 16px; padding: 16px; background: var(--shop-canvas); }
+.workshop-shell .maintenance-history-timeline { padding: 20px 22px 0; }
+.workshop-shell .maintenance-history-timeline > li {
+  padding: 0 0 26px 26px;
+  border-bottom: 0;
+}
+.workshop-shell .maintenance-history-timeline > li::before {
+  top: 6px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border: 0;
+}
+.workshop-shell .maintenance-history-timeline > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 20px;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--shop-line);
+}
+.maintenance-history-event-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+}
+.workshop-shell .maintenance-history-event-heading h3 {
+  margin: 0;
+  color: var(--shop-ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+.workshop-shell .maintenance-history-event-heading time { font-size: 12px; }
+.workshop-shell .maintenance-history-timeline > li > p { margin: 8px 0; font-size: 13px; line-height: 1.65; }
+.maintenance-history-event-links { gap: 10px 20px; margin-top: 10px; }
+.workshop-shell .maintenance-history-event-links .ws-text-link { gap: 6px; font-size: 13px; font-weight: 400; }
+.workshop-shell .maintenance-history-changes {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--shop-line);
+}
+.workshop-shell .maintenance-history-changes > summary {
+  cursor: pointer;
+  color: var(--shop-accent);
+  font-size: 13px;
+  font-weight: 500;
+}
+@media (max-width: 1100px) {
+  .maintenance-history-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .maintenance-history-equipment { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .maintenance-history-filter-grid,
+  .maintenance-history-equipment > .ws-label { grid-template-columns: minmax(0, 1fr); }
+  .maintenance-history-event-heading { flex-direction: column; gap: 4px; }
+  .workshop-shell .maintenance-history-timeline { padding: 18px 16px 0; }
+  .maintenance-history-advanced { padding: 12px; }
+}
+.equipment-services.m2-grid { align-items: start; }
+.equipment-maintenance { min-width: 0; }
+.equipment-maintenance-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.equipment-maintenance-summary > div {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 14px;
+  border-radius: var(--shop-radius);
+  background: var(--shop-canvas);
+}
+.equipment-maintenance-summary span {
+  color: var(--shop-muted);
+  font-size: 12px;
+}
+.equipment-maintenance-summary strong {
+  color: var(--shop-ink);
+  font-size: 18px;
+  font-weight: 500;
+}
+.equipment-maintenance-summary > [data-warning="true"] {
+  background: #f8ead9;
+}
+.equipment-maintenance-summary [data-warning="true"] strong { color: #874a1b; }
+.workshop-shell .equipment-maintenance h3 {
+  margin: 0 0 12px;
+  color: var(--shop-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.equipment-maintenance-plans {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.equipment-maintenance-plans > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 9px;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius);
+  font-size: 12px;
+}
+.equipment-maintenance-count { color: var(--shop-ink); font-weight: 500; }
+.equipment-maintenance-activity {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--shop-line);
+}
+.workshop-shell .equipment-maintenance-history { gap: 0; margin-bottom: 16px; }
+.workshop-shell .equipment-maintenance-history > li {
+  margin: 0;
+  padding: 0 0 22px 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.workshop-shell .equipment-maintenance-history > li:last-child { padding-bottom: 0; }
+.workshop-shell .equipment-maintenance-history > li::before {
+  inset: 6px auto auto 0;
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--shop-accent);
+}
+.workshop-shell .equipment-maintenance-history > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--shop-line);
+}
+.workshop-shell .equipment-maintenance-history > li > strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+}
+.workshop-shell .equipment-maintenance-history > li > span {
+  display: block;
+  margin: 4px 0 8px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.workshop-shell .equipment-maintenance-history > li > p:has(> a) {
+  display: inline-block;
+  margin-right: 12px;
+}
+.workshop-shell .equipment-maintenance-history details > summary {
+  padding: 4px 0;
+  color: var(--shop-accent);
+  font-weight: 400;
+}
+.equipment-maintenance-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 14px;
+  font-size: 12px;
+}
+.workshop-shell .equipment-maintenance-links a { color: var(--shop-accent); }
+.workshop-shell .equipment-maintenance-links a:hover { text-decoration: underline; }
+@media (max-width: 640px) {
+  .equipment-services.m2-grid { grid-template-columns: minmax(0, 1fr); }
+  .equipment-maintenance-summary { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 }
 .workshop-shell .m1-timeline a,
 .workshop-shell .registration-page details > summary {

@@ -1,4 +1,3 @@
-import { BranchScopeNotice } from "./BranchManagement";
 import type { ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -99,7 +98,6 @@ export default function ServiceManagerShell({
             <Wrench size={20} aria-hidden="true" />
           </span>
           <strong>servio</strong>
-          <small>/ workshop</small>
         </Link>
         <div className="workshop-context">
           <strong>{workspaceLabel}</strong>
@@ -204,7 +202,6 @@ export default function ServiceManagerShell({
             </>
           )}
         </nav>
-        <BranchScopeNotice />
         {children}
       </main>
       <footer className="workshop-footer">

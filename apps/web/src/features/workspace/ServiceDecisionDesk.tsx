@@ -364,7 +364,6 @@ export default function ServiceDecisionDesk() {
   return (
     <div className="ws-page workshop-desk">
       <PageHeading
-        eyebrow="BÀN ĐIỀU HÀNH DỊCH VỤ"
         title="Việc cần quyết định."
         description={`Chào ${profile?.fullName ?? "bạn"}. Theo dõi ai cần hành động, việc đang chờ và kết quả cần xem lại.`}
         actions={

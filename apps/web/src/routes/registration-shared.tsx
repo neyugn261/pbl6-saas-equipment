@@ -19,13 +19,10 @@ export function SetupPage({
 }) {
   return (
     <div className="registration-page">
-      <header className="registration-header">
-        <div>
-          <span className="m1-eyebrow">HỒ SƠ SAU BÀN GIAO</span>
-          <h1>{title}</h1>
-          {description && <p>{description}</p>}
-        </div>
-        <div className="registration-actions">{actions}</div>
+      <header className="registration-header page-title-header">
+        <h1>{title}</h1>
+        {actions && <div className="registration-actions page-title-actions">{actions}</div>}
+        {description && <p className="page-title-description">{description}</p>}
       </header>
       {children}
     </div>

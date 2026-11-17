@@ -132,6 +132,7 @@ function setup(name, asset = dossier, kind = "plan") {
     "../features/workspace/WorkspaceUI": {
       EntityPicker: "picker",
       RelatedName: "related-name",
+      Pagination: "pagination",
     },
   });
   return { calls, render: () => expand(h.render(mod[name])) };

@@ -13,6 +13,7 @@ function setup(fetch, profile = { id: 'admin', tenantId: 'tenant-a', customerId:
   })
   const pages = tab.load('routes/LiveAdministration.tsx', {
     react: host.react, 'react/jsx-runtime': host.jsx,
+    'lucide-react': { Building2: 'icon', ChevronDown: 'icon', MapPin: 'icon' },
     'react-router-dom': { Link: 'link', useNavigate: () => (path) => navigations.push(path), useParams: () => params,
       },
     '../api/client': tab.client, '../auth/session': tab.session,
