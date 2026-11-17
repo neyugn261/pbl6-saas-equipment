@@ -6,7 +6,7 @@ import {
 } from "../features/workspace/ServiceDetailUI";
 import CustomerServicePanel from "../features/workspace/CustomerServicePanel";
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Ban, CircleCheck, Pencil, Search } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../auth/session";
@@ -427,8 +427,8 @@ export function EquipmentModelsPage() {
                 {state.value.items.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <Link to={`/app/equipment-models/${row.id}`}>
-                        <strong>{row.name}</strong>
+                      <Link className="registration-directory__name" to={`/app/equipment-models/${row.id}`}>
+                        {row.name}
                       </Link>
                       <small>{row.modelCode}</small>
                     </td>
@@ -440,13 +440,16 @@ export function EquipmentModelsPage() {
                         <Link to={`/app/equipment-models/${row.id}`}>
                           Chính sách dịch vụ
                         </Link>
-                        <button disabled={busy} onClick={() => setForm(row)}>
+                        <button className="registration-directory__action" disabled={busy} onClick={() => setForm(row)}>
+                          <Pencil size={14} aria-hidden="true" />
                           Sửa
                         </button>
                         <button
+                          className={`registration-directory__action${row.status === "ACTIVE" ? " registration-directory__action--danger" : ""}`}
                           disabled={busy}
                           onClick={() => void toggle(row)}
                         >
+                          {row.status === "ACTIVE" ? <Ban size={14} aria-hidden="true" /> : <CircleCheck size={14} aria-hidden="true" />}
                           {row.status === "ACTIVE" ? "Ngừng dùng" : "Kích hoạt"}
                         </button>
                       </div>

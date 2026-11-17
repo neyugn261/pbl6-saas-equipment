@@ -22,6 +22,8 @@ body:has(.workshop-shell) {
   --shop-accent: #a74b26;
   --shop-hover: #873b1c;
   --shop-radius: 3px;
+  /* Legacy headings must follow Workshop's light surfaces in either OS theme. */
+  --text-h: var(--shop-ink);
   --servio-primary: var(--shop-accent);
   --servio-primary-hover: var(--shop-hover);
   --servio-ink: var(--shop-ink);
@@ -713,9 +715,217 @@ body:has(.workshop-shell) {
 .workshop-shell dialog {
   color: var(--shop-ink);
 }
+.workshop-shell dialog :is(h1, h2, h3) {
+  color: var(--shop-ink);
+}
 .workshop-shell dialog::backdrop {
   background: #25332c66;
   backdrop-filter: blur(2px);
+}
+.workshop-shell .m1-activity--comments,
+.workshop-shell .m1-activity--history {
+  display: block;
+  margin: 0;
+}
+.workshop-shell .m1-activity > .request-conversation,
+.workshop-shell .m1-activity > .request-status-history {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--shop-ink);
+}
+.workshop-shell .request-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.workshop-shell .request-status-list > .request-status-event {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 24px 30px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.workshop-shell .request-status-event::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--shop-paper);
+  border-radius: 50%;
+  background: var(--shop-accent);
+  box-shadow: 0 0 0 1px var(--shop-line);
+}
+.workshop-shell .request-status-event:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 21px;
+  bottom: -5px;
+  left: 6px;
+  width: 1px;
+  background: var(--shop-line);
+}
+.workshop-shell .request-status-event:last-child {
+  padding-bottom: 0;
+}
+.request-status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.request-status-transition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.workshop-shell .request-status-created {
+  color: var(--shop-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.workshop-shell .request-status-arrow,
+.workshop-shell .request-status-meta time {
+  color: var(--shop-muted);
+  font-size: 12px;
+}
+.workshop-shell .request-status-event .request-status-reason {
+  margin: 10px 0 0;
+  color: var(--shop-ink);
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.workshop-shell .request-conversation .request-comment-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.workshop-shell .request-conversation .request-comment {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius);
+  background: var(--shop-paper);
+}
+.request-comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.workshop-shell .request-comment-scope {
+  padding: 3px 8px;
+  border-radius: var(--shop-radius);
+  background: var(--shop-soft);
+  color: var(--shop-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.workshop-shell .request-comment-scope--internal {
+  background: #f8ead9;
+  color: #874a1b;
+}
+.workshop-shell .request-comment-meta time {
+  color: var(--shop-muted);
+  font-size: 12px;
+}
+.workshop-shell .request-comment .request-comment-content {
+  margin: 12px 0 0;
+  color: var(--shop-ink);
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.workshop-shell .request-conversation .request-conversation-empty {
+  margin: 0;
+  padding: 16px 0;
+  color: var(--shop-muted);
+}
+.workshop-shell .m1-comment.request-comment-composer {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0 0;
+  padding: 20px 0 0;
+  border: 0;
+  border-top: 1px solid var(--shop-line);
+}
+.workshop-shell .request-comment-composer > label {
+  color: var(--shop-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.workshop-shell .request-comment-composer :is(textarea, select) {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius);
+  background: var(--shop-paper);
+  color: var(--shop-ink);
+  box-shadow: none;
+}
+.workshop-shell .request-comment-composer textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.7;
+}
+.workshop-shell .request-comment-composer textarea::placeholder {
+  color: var(--shop-muted);
+}
+.workshop-shell .request-comment-composer :is(textarea, select):focus-visible {
+  border-color: var(--shop-accent);
+  outline: 2px solid var(--shop-accent);
+  outline-offset: 2px;
+}
+.request-comment-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.workshop-shell .request-comment-visibility {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--shop-muted);
+  font-size: 12px;
+}
+.workshop-shell .request-comment-toolbar button {
+  margin-left: auto;
+}
+.workshop-shell .request-comment-composer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.workshop-shell .request-comment-help {
+  margin: 0;
+  color: var(--shop-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 640px) {
+  .workshop-shell .request-comment-visibility,
+  .workshop-shell .request-comment-toolbar button {
+    width: 100%;
+  }
 }
 .workshop-shell .ws-empty-icon {
   border-radius: var(--shop-radius);

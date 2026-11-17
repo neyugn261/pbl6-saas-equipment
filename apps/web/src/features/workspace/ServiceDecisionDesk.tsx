@@ -374,7 +374,7 @@ export default function ServiceDecisionDesk() {
               onClick={refresh}
             >
               <RefreshCw size={15} />
-              Cập nhật
+              Làm mới
             </button>
             <Link className="ws-button" to="/app/service-requests/new">
               <Plus size={16} />

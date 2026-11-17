@@ -256,7 +256,7 @@ export function BusinessValues({ data }: { data: unknown }) {
         ),
     );
     return entries.length ? (
-      <dl className="sd-facts sd-facts--compact">
+      <dl className="sd-facts sd-facts--compact sd-business-values">
         {entries.map(([key, entry]) => (
           <div key={key}>
             <dt>

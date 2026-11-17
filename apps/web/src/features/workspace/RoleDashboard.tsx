@@ -369,7 +369,7 @@ function StandardDashboard() {
               onClick={() => refresh((v) => v + 1)}
             >
               <RefreshCw size={15} />
-              Cập nhật
+              Làm mới
             </button>
             {customer && (
               <Link

@@ -224,7 +224,7 @@ export function RegistrationListPage() {
                 {state.value.items.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <Link to={`/app/equipment-registrations/${row.id}`}>
+                      <Link className="registration-directory__name" to={`/app/equipment-registrations/${row.id}`}>
                         <EquipmentIdentity equipmentId={row.equipmentId} />
                       </Link>
                     </td>
