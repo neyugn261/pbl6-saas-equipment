@@ -14,6 +14,12 @@ import {
   type WorkOrderTx,
 } from './work-orders.repository';
 
+import {
+  lockTechnicians,
+  recomputeTechnician,
+} from './technician-locking';
+export { lockTechnicians, recomputeTechnician };
+
 export interface WorkflowContext {
   tx: WorkOrderTx;
   order: WorkOrderRow;
@@ -51,25 +57,10 @@ export class WorkOrderWorkflowRepository {
     );
   }
   async lockTechnicians(tx: WorkOrderTx, tenantId: string, ids: string[]) {
-    for (const id of [
-      ...new Set(ids.map((value) => value.toLowerCase())),
-    ].sort()) {
-      await tx.$queryRaw`SELECT id FROM technicians WHERE tenant_id = ${tenantId}::uuid AND id = ${id}::uuid FOR UPDATE`;
-    }
+    return lockTechnicians(tx, tenantId, ids);
   }
   async recomputeTechnician(tx: WorkOrderTx, tenantId: string, id: string) {
-    const technician = await tx.technician.findFirst({
-      where: { tenantId, id },
-    });
-    if (!technician || ['OFF_DUTY', 'INACTIVE'].includes(technician.status))
-      return;
-    const accepted = await tx.workOrderAssignment.count({
-      where: { tenantId, technicianId: id, status: 'ACCEPTED' },
-    });
-    await tx.technician.update({
-      where: { id },
-      data: { status: accepted ? 'BUSY' : 'AVAILABLE' },
-    });
+    return recomputeTechnician(tx, tenantId, id);
   }
   async audit(
     context: WorkflowContext,

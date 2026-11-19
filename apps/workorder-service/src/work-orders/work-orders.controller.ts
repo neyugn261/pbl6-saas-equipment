@@ -19,6 +19,7 @@ import {
   CreateWorkOrderDto,
   ListWorkOrdersDto,
   PatchWorkOrderDto,
+  QuickDispatchDto,
 } from './dto';
 import { WorkOrdersService } from './work-orders.service';
 
@@ -36,6 +37,11 @@ export class WorkOrdersController {
   @RequirePermissions('work_order:manage')
   create(@CurrentUser() p: Principal, @Body() input: CreateWorkOrderDto) {
     return this.service.create(p, input);
+  }
+  @Post('quick-dispatch')
+  @RequirePermissions('work_order:manage')
+  quickDispatch(@CurrentUser() p: Principal, @Body() input: QuickDispatchDto) {
+    return this.service.quickDispatch(p, input);
   }
   @Get(':id/history')
   @RequirePermissions('work_order:read')

@@ -48,6 +48,32 @@ export class CreateWorkOrderDto {
   @Matches(DATE_TIME_ZONE)
   scheduledEnd?: string;
 }
+export class QuickDispatchDto {
+  @IsUUID() serviceRequestId: string;
+  @IsUUID() technicianId: string;
+  @ValidateIf((_o, v) => v !== undefined)
+  @IsIn(WO_TYPES)
+  type?: (typeof WO_TYPES)[number];
+  @ValidateIf((_o, v) => v !== undefined)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  title?: string;
+  @ValidateIf((_o, v) => v !== undefined) @IsString() description?: string;
+  @ValidateIf((_o, v) => v !== undefined) @IsIn(PRIORITIES) priority?: string;
+  @ValidateIf((_o, v) => v !== undefined)
+  @IsISO8601({ strict: true })
+  @Matches(DATE_TIME_ZONE)
+  scheduledStart?: string;
+  @ValidateIf((_o, v) => v !== undefined)
+  @IsISO8601({ strict: true })
+  @Matches(DATE_TIME_ZONE)
+  scheduledEnd?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  dispatchNotes?: string;
+}
 export class PatchWorkOrderDto {
   @ValidateIf((_o, v) => v !== undefined)
   @IsString()

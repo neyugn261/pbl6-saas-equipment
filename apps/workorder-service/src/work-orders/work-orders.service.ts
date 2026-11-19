@@ -12,6 +12,7 @@ import {
   ListWorkOrdersDto,
   PatchWorkOrderDto,
   PRIORITIES,
+  QuickDispatchDto,
   WO_TYPES,
 } from './dto';
 import { WorkOrdersRepository } from './work-orders.repository';
@@ -48,56 +49,68 @@ export class WorkOrdersService {
   patch(p: Principal, id: string, input: PatchWorkOrderDto) {
     return this.repo.patch(p, id, input);
   }
+  private async resolveSource(
+    p: Principal,
+    serviceRequestId: string,
+    inputType?: string,
+  ) {
+    const source = await this.refs.request(
+      serviceRequestId,
+      p.accessToken,
+    );
+    if (!source || !sameUuid(source.id, serviceRequestId))
+      throw missing('SERVICE_REQUEST_NOT_FOUND');
+    const effectiveType = inputType ?? source.type;
+    if (!WO_TYPES.includes(effectiveType))
+      throw invalid(
+        'INVALID_WORK_ORDER_TYPE',
+        `Work Order type must be one of: ${WO_TYPES.join(', ')}`,
+      );
+    if (effectiveType === 'INSPECTION') {
+      if (!['REVIEWING', 'ACCEPTED'].includes(source.status))
+        throw invalid(
+          'SERVICE_REQUEST_NOT_READY_FOR_INSPECTION',
+          'An INSPECTION Work Order requires a REVIEWING or ACCEPTED Service Request',
+        );
+    } else {
+      if (source.status !== 'ACCEPTED')
+        throw invalid(
+          'SERVICE_REQUEST_NOT_ACCEPTED',
+          'Only an ACCEPTED Service Request can create a Work Order',
+        );
+    }
+    const equipment = await this.refs.equipment(
+      source.equipmentId,
+      p.accessToken,
+    );
+    if (
+      !equipment ||
+      !sameUuid(equipment.id, source.equipmentId) ||
+      !sameUuid(equipment.customerId, source.customerId)
+    )
+      throw invalid(
+        'EQUIPMENT_REFERENCE_INVALID',
+        'Equipment reference does not match the Service Request',
+      );
+    if (
+      !WO_TYPES.includes(source.type) ||
+      !PRIORITIES.includes(source.priority)
+    )
+      throw invalid(
+        'SERVICE_REQUEST_REFERENCE_INVALID',
+        'Service Request type or priority is invalid',
+      );
+    return { source, equipment, effectiveType };
+  }
   create(p: Principal, input: CreateWorkOrderDto) {
-    return this.repo.create(p, input, async () => {
-      const source = await this.refs.request(
-        input.serviceRequestId,
-        p.accessToken,
-      );
-      if (!source || !sameUuid(source.id, input.serviceRequestId))
-        throw missing('SERVICE_REQUEST_NOT_FOUND');
-      const effectiveType = input.type ?? source.type;
-      if (!WO_TYPES.includes(effectiveType))
-        throw invalid(
-          'INVALID_WORK_ORDER_TYPE',
-          `Work Order type must be one of: ${WO_TYPES.join(', ')}`,
-        );
-      if (effectiveType === 'INSPECTION') {
-        if (!['REVIEWING', 'ACCEPTED'].includes(source.status))
-          throw invalid(
-            'SERVICE_REQUEST_NOT_READY_FOR_INSPECTION',
-            'An INSPECTION Work Order requires a REVIEWING or ACCEPTED Service Request',
-          );
-      } else {
-        if (source.status !== 'ACCEPTED')
-          throw invalid(
-            'SERVICE_REQUEST_NOT_ACCEPTED',
-            'Only an ACCEPTED Service Request can create a Work Order',
-          );
-      }
-      const equipment = await this.refs.equipment(
-        source.equipmentId,
-        p.accessToken,
-      );
-      if (
-        !equipment ||
-        !sameUuid(equipment.id, source.equipmentId) ||
-        !sameUuid(equipment.customerId, source.customerId)
-      )
-        throw invalid(
-          'EQUIPMENT_REFERENCE_INVALID',
-          'Equipment reference does not match the Service Request',
-        );
-      if (
-        !WO_TYPES.includes(source.type) ||
-        !PRIORITIES.includes(source.priority)
-      )
-        throw invalid(
-          'SERVICE_REQUEST_REFERENCE_INVALID',
-          'Service Request type or priority is invalid',
-        );
-      return { source, equipment, effectiveType };
-    });
+    return this.repo.create(p, input, () =>
+      this.resolveSource(p, input.serviceRequestId, input.type),
+    );
+  }
+  quickDispatch(p: Principal, input: QuickDispatchDto) {
+    return this.repo.quickDispatch(p, input, () =>
+      this.resolveSource(p, input.serviceRequestId, input.type),
+    );
   }
   async reference(p: Principal, id: string) {
     const row = await this.repo.detail(p, id);
