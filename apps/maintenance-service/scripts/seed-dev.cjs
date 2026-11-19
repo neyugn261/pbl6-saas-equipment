@@ -85,7 +85,7 @@ async function main() {
         equipment && equipment.status !== 'RETIRED',
         'Seed Equipment is missing or retired',
       );
-      await app.get(PlansRepository).create(
+      const createdPlan = await app.get(PlansRepository).create(
         principal.tenantId,
         {
           equipmentId: fixture.equipmentId,
@@ -97,6 +97,23 @@ async function main() {
         equipment,
         fixture.id,
       );
+      const revision = await db.modelMaintenanceRevision.findFirst({
+        where: {
+          tenantId: principal.tenantId,
+          modelId: equipment.modelId,
+          isDefault: true,
+          status: 'PUBLISHED',
+        },
+      });
+      if (revision?.body?.rules?.[0]?.checklist) {
+        await db.maintenancePlan.update({
+          where: { id: createdPlan.id },
+          data: {
+            policyVersionId: revision.id,
+            checklist: revision.body.rules[0].checklist,
+          },
+        });
+      }
       console.log(
         'Seeded Maintenance Plan ' +
           fixture.id +
