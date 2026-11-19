@@ -14,7 +14,9 @@ import {
   CreateWorkOrderDto,
   ListWorkOrdersDto,
   PatchWorkOrderDto,
+  QuickDispatchDto,
 } from './dto';
+import { lockTechnicians, recomputeTechnician } from './technician-locking';
 import type { EquipmentRef, RequestRef } from '../references/references.client';
 import { allowedWorkOrderActions } from './work-order-policy';
 import { nextWorkOrderNumber } from './work-order-number';
@@ -309,6 +311,184 @@ export class WorkOrdersRepository {
           },
         });
         return workOrderView(row, p);
+      },
+      { timeout: 20000, maxWait: 5000 },
+    );
+  }
+  async quickDispatch(
+    p: Principal,
+    input: QuickDispatchDto,
+    resolve: () => Promise<{
+      source: RequestRef;
+      equipment: EquipmentRef;
+      effectiveType?: string;
+    }>,
+  ) {
+    const tenantId = requireTenantId(p);
+    assertSchedule(
+      input.scheduledStart ? new Date(input.scheduledStart) : null,
+      input.scheduledEnd ? new Date(input.scheduledEnd) : null,
+    );
+    return this.db.$transaction(
+      async (tx) => {
+        await lockServiceRequest(tx, tenantId, input.serviceRequestId);
+        if (
+          await tx.workOrder.findFirst({
+            where: {
+              tenantId,
+              serviceRequestId: input.serviceRequestId,
+              status: { notIn: ['COMPLETED', 'CANCELLED'] },
+            },
+          })
+        )
+          throw conflict(
+            'ACTIVE_WORK_ORDER_EXISTS',
+            'The request already has an active Work Order',
+          );
+        const { source, equipment, effectiveType } = await resolve();
+        if (!source.branchId)
+          throw invalid(
+            'BRANCH_ROUTING_REQUIRED',
+            'Allocate the Service Request to an active branch first',
+          );
+        assertBranchAccess(p, source.branchId);
+
+        await lockTechnicians(tx, tenantId, [input.technicianId]);
+        const technician = await tx.technician.findFirst({
+          where: { tenantId, id: input.technicianId },
+        });
+        if (!technician)
+          throw invalid('TECHNICIAN_NOT_FOUND', 'Technician was not found');
+        if (technician.branchId !== source.branchId)
+          throw invalid(
+            'TECHNICIAN_BRANCH_MISMATCH',
+            'Choose a technician from the Work Order branch',
+          );
+        if (!['AVAILABLE', 'BUSY'].includes(technician.status))
+          throw invalid(
+            'TECHNICIAN_UNAVAILABLE',
+            'Technician is OFF_DUTY or INACTIVE',
+          );
+
+        const now = new Date();
+        const row = await tx.workOrder.create({
+          data: {
+            tenantId,
+            workOrderNo: await nextWorkOrderNumber(tx, tenantId),
+            serviceRequestId: source.id,
+            branchId: source.branchId,
+            equipmentId: source.equipmentId,
+            customerId: source.customerId,
+            customerSiteId: equipment.customerSiteId,
+            locationId: equipment.locationId,
+            type: effectiveType ?? input.type ?? source.type,
+            priority: input.priority ?? source.priority,
+            title: input.title ?? source.title,
+            description: input.description ?? null,
+            scheduledStart: input.scheduledStart
+              ? new Date(input.scheduledStart)
+              : null,
+            scheduledEnd: input.scheduledEnd
+              ? new Date(input.scheduledEnd)
+              : null,
+            status: 'ASSIGNED',
+            createdBy: p.userId,
+          },
+        });
+
+        await tx.workOrderStatusHistory.createMany({
+          data: [
+            {
+              tenantId,
+              workOrderId: row.id,
+              oldStatus: null,
+              newStatus: 'CREATED',
+              changedBy: p.userId,
+              createdAt: now,
+            },
+            {
+              tenantId,
+              workOrderId: row.id,
+              oldStatus: 'CREATED',
+              newStatus: 'ASSIGNED',
+              changedBy: p.userId,
+              createdAt: now,
+            },
+          ],
+        });
+
+        await tx.workOrderAssignment.create({
+          data: {
+            tenantId,
+            workOrderId: row.id,
+            technicianId: technician.id,
+            assignedBy: p.userId,
+            assignedAt: now,
+            status: 'ASSIGNED',
+          },
+        });
+
+        await tx.workLog.create({
+          data: {
+            tenantId,
+            workOrderId: row.id,
+            actorUserId: p.userId,
+            eventType: 'CREATE',
+          },
+        });
+        if (input.dispatchNotes?.trim()) {
+          await tx.workLog.create({
+            data: {
+              tenantId,
+              workOrderId: row.id,
+              actorUserId: p.userId,
+              eventType: 'NOTE',
+              note: input.dispatchNotes.trim(),
+            },
+          });
+        }
+
+        await recomputeTechnician(tx, tenantId, technician.id);
+
+        const correlationId = getCorrelationId();
+        await enqueueEvent(tx, Events.WorkOrderCreated, {
+          tenantId,
+          aggregateId: row.id,
+          correlationId,
+          payload: {
+            workOrderId: row.id,
+            branchId: row.branchId,
+            workOrderNo: row.workOrderNo,
+            serviceRequestId: row.serviceRequestId,
+            maintenanceTaskId: null,
+            equipmentId: row.equipmentId,
+            customerId: row.customerId,
+            type: row.type as WorkOrderCreatedV1['type'],
+            priority: row.priority as WorkOrderCreatedV1['priority'],
+          },
+        });
+        await enqueueEvent(tx, Events.WorkOrderAssigned, {
+          tenantId,
+          aggregateId: row.id,
+          correlationId,
+          payload: {
+            workOrderId: row.id,
+            branchId: row.branchId,
+            workOrderNo: row.workOrderNo,
+            technicianId: technician.id,
+            technicianUserId: technician.userId,
+            assignedBy: p.userId,
+            scheduledStart: row.scheduledStart
+              ? row.scheduledStart.toISOString()
+              : null,
+          },
+        });
+
+        const refreshed = await tx.workOrder.findUniqueOrThrow({
+          where: { id: row.id },
+          include,
+        });
+        return workOrderView(refreshed, p);
       },
       { timeout: 20000, maxWait: 5000 },
     );
