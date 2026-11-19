@@ -1,12 +1,23 @@
 import { BranchScoped } from '@pbl6/auth';
-import { Controller, Get, Header, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  ParseUUIDPipe,
+  Query,
+} from '@nestjs/common';
 import {
   AllowUserTypes,
   CurrentUser,
   RequirePermissions,
   type Principal,
 } from '@pbl6/auth';
-import { TechnicianKpiQueryDto, WorkOrderSummaryQueryDto } from './dto';
+import {
+  TechnicianDrilldownQueryDto,
+  TechnicianKpiQueryDto,
+  WorkOrderSummaryQueryDto,
+} from './dto';
 import { ReportsService } from './reports.service';
 
 @BranchScoped()
@@ -33,6 +44,16 @@ export class ReportsController {
   ) {
     return this.reports.technicianKpi(p, query);
   }
+
+  @Get('technicians/:technicianId/work-orders')
+  @Header('Cache-Control', 'no-store')
+  technicianWorkOrders(
+    @CurrentUser() p: Principal,
+    @Param('technicianId', ParseUUIDPipe) technicianId: string,
+    @Query() query: TechnicianDrilldownQueryDto,
+  ) {
+    return this.reports.technicianWorkOrders(p, technicianId, query);
+  }
 }
 
 @BranchScoped()
@@ -49,5 +70,15 @@ export class TechnicianReportsController {
     @Query() query: TechnicianKpiQueryDto,
   ) {
     return this.reports.technicianKpi(p, query);
+  }
+
+  @Get(':technicianId/work-orders')
+  @Header('Cache-Control', 'no-store')
+  technicianWorkOrders(
+    @CurrentUser() p: Principal,
+    @Param('technicianId', ParseUUIDPipe) technicianId: string,
+    @Query() query: TechnicianDrilldownQueryDto,
+  ) {
+    return this.reports.technicianWorkOrders(p, technicianId, query);
   }
 }

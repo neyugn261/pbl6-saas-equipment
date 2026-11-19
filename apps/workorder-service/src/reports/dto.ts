@@ -58,6 +58,16 @@ export interface TechnicianKpiItem {
   onTimeRate: number | null;
   onTimeCount: number;
   scheduledCount: number;
+  // MTTR: Thời gian xử lý trung bình tính theo giờ (làm tròn 2 chữ số thập phân)
+  averageMttrHours: number | null;
+  // FTFR: Tỷ lệ sửa dứt điểm lần đầu (không phải ca thay thế/làm lại)
+  firstTimeFixRate: number | null;
+  firstTimeFixCount: number;
+  // Phân bổ khối lượng theo loại công việc
+  repairCount: number;
+  warrantyCount: number;
+  maintenanceCount: number;
+  inspectionCount: number;
 }
 
 export interface TechnicianKpiSummary {
@@ -69,6 +79,13 @@ export interface TechnicianKpiSummary {
   overallOnTimeRate: number | null;
   totalOnTimeCount: number;
   totalScheduledCount: number;
+  overallMttrHours: number | null;
+  overallFirstTimeFixRate: number | null;
+  totalFirstTimeFixCount: number;
+  totalRepairCount: number;
+  totalWarrantyCount: number;
+  totalMaintenanceCount: number;
+  totalInspectionCount: number;
 }
 
 export interface TechnicianKpiResponse {
@@ -77,4 +94,52 @@ export interface TechnicianKpiResponse {
   timezone: 'Asia/Ho_Chi_Minh';
   items: TechnicianKpiItem[];
   summary: TechnicianKpiSummary;
+}
+
+export class TechnicianDrilldownQueryDto {
+  @Transform(upperTimestamp)
+  @IsISO8601({ strict: true, strictSeparator: true })
+  @Matches(REPORT_TIMESTAMP, { message })
+  from: string;
+
+  @Transform(upperTimestamp)
+  @IsISO8601({ strict: true, strictSeparator: true })
+  @Matches(REPORT_TIMESTAMP, { message })
+  to: string;
+}
+
+export interface TechnicianDrilldownWorkOrder {
+  id: string;
+  workOrderNo: string;
+  title: string;
+  type: string;
+  priority: string;
+  status: string;
+  customerId: string;
+  customerName: string | null;
+  equipmentId: string;
+  branchId: string | null;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  startedAt: string | null;
+  completedAt: string;
+  durationHours: number | null;
+  isOnTime: boolean | null;
+  reportResult: string | null;
+  isFirstTimeFix: boolean | null;
+}
+
+export interface TechnicianDrilldownResponse {
+  from: string;
+  to: string;
+  timezone: 'Asia/Ho_Chi_Minh';
+  technician: {
+    technicianId: string;
+    employeeCode: string;
+    fullName: string | null;
+    branchId: string;
+    branchName: string | null;
+  };
+  items: TechnicianDrilldownWorkOrder[];
+  total: number;
 }

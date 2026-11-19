@@ -4,10 +4,18 @@ import {
   staffBranchId,
   type Principal,
 } from '@pbl6/auth';
-import { Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { DisplayNameLookup } from '@pbl6/service-kit';
 import { WO_STATUSES } from '../work-orders/dto';
 import type {
+  TechnicianDrilldownQueryDto,
+  TechnicianDrilldownResponse,
+  TechnicianDrilldownWorkOrder,
   TechnicianKpiItem,
   TechnicianKpiQueryDto,
   TechnicianKpiResponse,
@@ -102,6 +110,13 @@ export class ReportsService {
     let totalEligibleRepairCount = 0;
     let totalOnTimeCount = 0;
     let totalScheduledCount = 0;
+    let totalFirstTimeFixCount = 0;
+    let totalDurationHours = 0;
+    let totalDurationCount = 0;
+    let totalRepairCount = 0;
+    let totalWarrantyCount = 0;
+    let totalMaintenanceCount = 0;
+    let totalInspectionCount = 0;
 
     const items: TechnicianKpiItem[] = rows.map((row) => {
       const completedCount = count(row.completedCount ?? 0);
@@ -109,12 +124,26 @@ export class ReportsService {
       const eligibleRepairCount = count(row.eligibleRepairCount ?? 0);
       const onTimeCount = count(row.onTimeCount ?? 0);
       const scheduledCount = count(row.scheduledCount ?? 0);
+      const firstTimeFixCount = count(row.firstTimeFixCount ?? 0);
+      const durationHours = Number(row.totalDurationHours ?? 0);
+      const durationCount = count(row.durationCount ?? 0);
+      const repairCount = count(row.repairCount ?? 0);
+      const warrantyCount = count(row.warrantyCount ?? 0);
+      const maintenanceCount = count(row.maintenanceCount ?? 0);
+      const inspectionCount = count(row.inspectionCount ?? 0);
 
       totalCompletedCount += completedCount;
       totalResolvedRepairCount += resolvedRepairCount;
       totalEligibleRepairCount += eligibleRepairCount;
       totalOnTimeCount += onTimeCount;
       totalScheduledCount += scheduledCount;
+      totalFirstTimeFixCount += firstTimeFixCount;
+      totalDurationHours += durationHours;
+      totalDurationCount += durationCount;
+      totalRepairCount += repairCount;
+      totalWarrantyCount += warrantyCount;
+      totalMaintenanceCount += maintenanceCount;
+      totalInspectionCount += inspectionCount;
 
       const repairSuccessRate =
         eligibleRepairCount > 0
@@ -125,6 +154,17 @@ export class ReportsService {
       const onTimeRate =
         scheduledCount > 0
           ? Math.round((onTimeCount / scheduledCount) * 10000) / 10000
+          : null;
+
+      const averageMttrHours =
+        durationCount > 0
+          ? Math.round((durationHours / durationCount) * 100) / 100
+          : null;
+
+      const firstTimeFixRate =
+        eligibleRepairCount > 0
+          ? Math.round((firstTimeFixCount / eligibleRepairCount) * 10000) /
+            10000
           : null;
 
       const userEntry = users?.get(row.userId.toLowerCase());
@@ -146,6 +186,13 @@ export class ReportsService {
         onTimeRate,
         onTimeCount,
         scheduledCount,
+        averageMttrHours,
+        firstTimeFixRate,
+        firstTimeFixCount,
+        repairCount,
+        warrantyCount,
+        maintenanceCount,
+        inspectionCount,
       };
     });
 
@@ -167,6 +214,20 @@ export class ReportsService {
           ? Math.round((totalOnTimeCount / totalScheduledCount) * 10000) /
             10000
           : null,
+      overallMttrHours:
+        totalDurationCount > 0
+          ? Math.round((totalDurationHours / totalDurationCount) * 100) / 100
+          : null,
+      overallFirstTimeFixRate:
+        totalEligibleRepairCount > 0
+          ? Math.round((totalFirstTimeFixCount / totalEligibleRepairCount) * 10000) /
+            10000
+          : null,
+      totalFirstTimeFixCount,
+      totalRepairCount,
+      totalWarrantyCount,
+      totalMaintenanceCount,
+      totalInspectionCount,
     };
 
     return {
@@ -174,6 +235,94 @@ export class ReportsService {
       timezone: 'Asia/Ho_Chi_Minh',
       items,
       summary,
+    };
+  }
+
+  async technicianWorkOrders(
+    p: Principal,
+    technicianId: string,
+    query: TechnicianDrilldownQueryDto,
+  ): Promise<TechnicianDrilldownResponse> {
+    const tenantId = requireTenantId(p);
+    const range = reportRange(query.from, query.to);
+
+    const technician = await this.repo.findTechnician(tenantId, technicianId);
+    if (!technician) {
+      throw new NotFoundException({
+        code: 'TECHNICIAN_NOT_FOUND',
+        message: 'Technician was not found',
+      });
+    }
+
+    assertBranchAccess(p, technician.branchId);
+    const branchId = staffBranchId(p);
+
+    let rows;
+    try {
+      rows = await this.repo.technicianWorkOrders(
+        tenantId,
+        technicianId,
+        range.from,
+        range.to,
+        branchId,
+      );
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'REPORT_UNAVAILABLE',
+        message: 'Technician work orders report is unavailable',
+      });
+    }
+
+    const customerIds = [...new Set(rows.map((r) => r.customerId))];
+    const [userEntry, branchEntry, customers] = await Promise.all([
+      this.names
+        ?.lookup('users', [technician.userId], p)
+        .then((m) => m.get(technician.userId.toLowerCase()))
+        .catch(() => undefined),
+      this.names
+        ?.lookup('branches', [technician.branchId], p)
+        .then((m) => m.get(technician.branchId.toLowerCase()))
+        .catch(() => undefined),
+      this.names?.lookup('customers', customerIds, p).catch(() => undefined),
+    ]);
+
+    const items: TechnicianDrilldownWorkOrder[] = rows.map((r) => ({
+      id: r.id,
+      workOrderNo: r.workOrderNo,
+      title: r.title,
+      type: r.type,
+      priority: r.priority,
+      status: r.status,
+      customerId: r.customerId,
+      customerName: customers?.get(r.customerId.toLowerCase())?.name ?? null,
+      equipmentId: r.equipmentId,
+      branchId: r.branchId,
+      scheduledStart: r.scheduledStart
+        ? new Date(r.scheduledStart).toISOString()
+        : null,
+      scheduledEnd: r.scheduledEnd
+        ? new Date(r.scheduledEnd).toISOString()
+        : null,
+      startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
+      completedAt: new Date(r.completedAt).toISOString(),
+      durationHours: r.durationHours !== null ? Number(r.durationHours) : null,
+      isOnTime: r.isOnTime,
+      reportResult: r.reportResult,
+      isFirstTimeFix: r.isFirstTimeFix,
+    }));
+
+    return {
+      ...range,
+      timezone: 'Asia/Ho_Chi_Minh',
+      technician: {
+        technicianId: technician.id,
+        employeeCode: technician.employeeCode,
+        fullName: userEntry?.name ?? null,
+        branchId: technician.branchId,
+        branchName: branchEntry?.name ?? null,
+      },
+      items,
+      total: items.length,
     };
   }
 }
