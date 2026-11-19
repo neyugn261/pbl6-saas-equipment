@@ -108,6 +108,8 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
       repo.attachments!.mayWrite = (attempt) async {
         final order = await repo.order(attempt.workOrderId);
         if (!attempt.report) {
+          final curAssignmentId =
+              nested(order.data, 'currentAssignment')['id'];
           return order.currentFor(user.id) &&
               !order.terminal &&
               [
@@ -116,8 +118,8 @@ class _LiveWorkspaceState extends State<LiveWorkspace>
                 'IN_PROGRESS',
                 'ON_HOLD',
               ].contains(order.status) &&
-              nested(order.data, 'currentAssignment')['id'] ==
-                  attempt.authorityId;
+              (attempt.authorityId == null ||
+                  curAssignmentId == attempt.authorityId);
         }
         final report = await repo.get(
           '${WorkspaceRepository.wo}/work-orders/${attempt.workOrderId}/service-report',

@@ -395,12 +395,17 @@ class _LiveReportFormState extends State<LiveReportForm>
       try {
         final pngBytes = await _signatureController.toPngBytes();
         if (pngBytes != null && pngBytes.isNotEmpty) {
+          final assignmentId = (_assignmentId ??
+                  nested(flow.order?.data ?? {}, 'currentAssignment')['id'])
+              ?.toString();
           final attempt = flow.repo.attachments!.create(
             workOrderId: flow.id,
             report: false,
             fileName: 'signature-${DateTime.now().millisecondsSinceEpoch}.png',
             mimeType: 'image/png',
             bytes: pngBytes,
+            authorityId: assignmentId,
+            uploadedBy: flow.repo.user.id,
           );
           final res = await flow.repo.attachments!.upload(attempt);
           _signatureAttachmentId = res['id'] as String?;
