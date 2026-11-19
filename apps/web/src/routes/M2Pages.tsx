@@ -98,6 +98,8 @@ const historyEventLabel: Record<string, string> = {
   QR_CREATED: "Tạo mã QR",
   QR_REPRINTED: "Cấp lại mã QR",
   QR_REVOKED: "Thu hồi mã QR",
+  PUBLIC_QR_ENABLED: "Bật tra cứu QR công khai",
+  PUBLIC_QR_DISABLED: "Tắt tra cứu QR công khai",
   PLAN_CREATED: "Tạo kế hoạch",
   PLAN_UPDATED: "Cập nhật kế hoạch",
   PLAN_STATUS_CHANGED: "Đổi trạng thái kế hoạch",
@@ -481,6 +483,9 @@ function EquipmentEditor({
   const [commissionedDate, setCommissionedDate] = useState(
     String(equipment.commissionedDate ?? "").slice(0, 10),
   );
+  const [purchaseDate, setPurchaseDate] = useState(String(equipment.purchaseDate ?? "").slice(0, 10));
+  const [handoverDate, setHandoverDate] = useState(String(equipment.handoverDate ?? "").slice(0, 10));
+  const [installationDate, setInstallationDate] = useState(String(equipment.installationDate ?? "").slice(0, 10));
   const [operationalStatus, setOperationalStatus] = useState(
     String(equipment.operationalStatus ?? "UNKNOWN"),
   );
@@ -533,6 +538,9 @@ function EquipmentEditor({
           displayName: displayName.trim() || null,
           technicalSpecifications,
           commissionedDate: commissionedDate || null,
+          purchaseDate: purchaseDate || null,
+          handoverDate: handoverDate || null,
+          installationDate: installationDate || null,
         },
       });
       onSaved("Đã lưu hồ sơ thiết bị.");
@@ -671,6 +679,18 @@ function EquipmentEditor({
             + Thêm thông số
           </button>
         </fieldset>
+        <label>
+          Ngày mua
+          <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
+        </label>
+        <label>
+          Ngày bàn giao thực tế
+          <input type="date" value={handoverDate} onChange={(e) => setHandoverDate(e.target.value)} />
+        </label>
+        <label>
+          Ngày lắp đặt thực tế
+          <input type="date" value={installationDate} onChange={(e) => setInstallationDate(e.target.value)} />
+        </label>
         <label>
           Ngày đưa vào vận hành
           <input
@@ -815,6 +835,10 @@ export function DossierPage() {
               </div>
               <dl>
                 <div>
+                  <dt>Ngày mua</dt>
+                  <dd>{date(dossier.equipment.purchaseDate)}</dd>
+                </div>
+                <div>
                   <dt>Ngày bàn giao</dt>
                   <dd>{date(dossier.equipment.handoverDate)}</dd>
                 </div>
@@ -857,8 +881,10 @@ export function DossierPage() {
                             ["assetCode", "Mã tài sản"],
                             ["serialNumber", "Serial"],
                             ["lifecycleLabel", "Vòng đời hồ sơ thiết bị"],
+                            ["purchaseDate", "Ngày mua"],
                             ["commissionedDate", "Ngày đưa vào vận hành"],
                             ["handoverDate", "Ngày bàn giao"],
+                            ["installationDate", "Ngày lắp đặt"],
                           ]}
                         />
                         <h3>Thông số kỹ thuật</h3>

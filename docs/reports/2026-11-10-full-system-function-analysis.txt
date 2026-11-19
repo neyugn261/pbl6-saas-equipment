@@ -1,0 +1,433 @@
+PBL6 - PHAN TICH TOAN BO CHUC NANG, ROLE VA DE XUAT THAY THE
+================================================================
+
+Ngay phan tich : 10/11/2026
+Pham vi        : Toan bo Web, Mobile Technician, API, RBAC, microservice,
+                 luong nghiep vu va cac bien the du lieu trong repository.
+Baseline tham chieu:
+  - develop / origin/develop: 48f86d5f3ca93e1cea5bb9c612e6f1576be60336
+  - docs/testing/2026-11-10-full-system-acceptance-test-plan.md
+  - packages/auth/src/catalog.ts
+  - README.md, AGENTS.md, cac ADR va API contract
+
+QUY UOC DOC
+-----------
+Cot "Loai":
+  BAT HOP LY = hanh vi/phan quyen/thiet ke co nguy co sai nghiep vu
+  THIEU      = nhu cau hoac quy tac chua co/khong du de van hanh
+  DU THUA    = trung lap, lam roi luong, hoac co phan khong can cho MVP
+  GAP UAT    = da duoc ghi nhan nhung chua du bang chung PASS tren baseline
+  HOP LY     = nen giu, chi can bo sung dieu kien/kiem thu
+
+Muc do:
+  P0 = sai tenant/scope, mat du lieu, sai ton kho, sai phe duyet, chan E2E
+  P1 = anh huong van hanh/nghiep vu quan trong
+  P2 = tien dung, hien thi, kha nang tiep can
+
+Luu y:
+  - Day la phan tich repository va tai lieu, khong phai ket qua UAT.
+  - Cac de xuat thay the khong mo rong sang ERP, CRM ban hang, ke toan,
+    thanh toan, GPS, IoT, AI du doan, HR hay procurement phuc tap.
+  - Ba file Web dang co thay doi local chua commit khi lap test plan:
+    OperationsPages.tsx, ServiceManagerShell.tsx, role-workspace.ts.
+    Vi vay cac ket luan UI can duoc chay lai tren cung mot commit sach.
+
+
+1. TOM TAT DIEU HANH
+--------------------
+
+| Nhom | Danh gia hien tai | Van de chinh | Huong thay the |
+|------|-------------------|--------------|----------------|
+| Mo hinh role | Co du 8 role co dinh, catalog RBAC dung chung | Quy trinh Service Manager va Dispatcher chong lan; Tenant Admin vua giam sat vua phan bo; scope chi nhanh chua hien thi nhat quan | Tach ro quyen theo hanh dong va scope; de xuat Service Manager la owner quyet dinh, Dispatcher la owner lich/phan cong; Tenant Admin chi gan scope va giam sat |
+| Hanh trinh core | Da co Asset -> SR -> WO -> Report -> Inventory -> Notification | Nhieu nhanh co the dung o trang thai khong ro, thieu quy tac retry/compensation/approval | Dung state machine co allowedActions, idempotency key, audit va recovery queue |
+| Customer portal | Co Customer Admin/User va customer scope | Customer User thay duoc mot so thong tin nhung khong ro muc do; chi Customer Admin duoc phe duyet ban giao/chi phi; ket qua sua chua chua co luong phan hoi day du | Tieng viet hoa ro "cho ai", hien thi public/internal, phan biet xem voi phe duyet; them luong feedback/yeu cau tiep theo rieng |
+| Chi nhanh | ADR 0022 da mo ta routing, branch scope | UI va dashboard co nguy co khong noi ro scope; ca chua phan bo can duong vao va optimistic concurrency | Branch context bat buoc tren shell; hang doi unassigned; assign co expectedBranchId/version va audit |
+| Ton kho | Co ledger, reservation, issue/return/use/correction | Nhieu trang thai "da xuat/chua xuat/chua ro" kho hieu; chua chot quy tac mat/hong ngoai hien truong; so luong decimal de nham | Tach reservation/issue/use/return/correction; mot operation detail co receipt, recovery va actor; quy dinh don vi va precision |
+| UI Web | Co workshop chung, menu theo role, detail co lien ket | Dashboard con thien ve so lieu; mot so route/menu dung ten ky thuat; form loi/mat response va route cu con nguy co | UI theo next action va owner; mot component form dung chung; khong bao thanh cong khi chua co server confirmation |
+| Mobile | Co WO/report/checklist, draft, attachment, notification | Offline/draft/retry/mat mang va assignment doi tai khoan la diem rui ro cao; khong duoc gan nhan offline neu chua co sync durable | Mobile chi cho phep thao tac duoc xac nhan; draft co owner/tenant/WO; mutation co receipt va recovery |
+| UAT | Ke hoach acceptance rat day du, co P0/P1/P2 va ca chay loi | Chua co ket qua PASS tren baseline; khong duoc suy ra tu build hoac bao cao cu | Chay theo thu tu ID/OR/BR/SEC -> Asset -> SR -> WO -> Inventory -> notification/report -> UX/mobile |
+
+Ket luan: Khong nen viet lai toan bo he thong. Nen giu ownership microservice,
+RBAC catalog, snapshot/policy revision, event outbox/inbox, ledger kho va
+workshop chung. Can thay the cac diem dang "trung gian" bang mot quy trinh
+co trang thai, nguoi chiu trach nhiem, dieu kien tiep theo va co che phuc hoi
+ro rang.
+
+
+2. MA TRAN QUYEN VA VAI TRO - VAN DE TONG THE
+----------------------------------------------
+
+| Role | Nhiem vu dung | Quyen hien co dang chu y | Diem bat hop ly/thieu | De xuat thay the |
+|------|---------------|---------------------------|-----------------------|------------------|
+| PLATFORM_ADMIN | Quan tri nha cung cap SaaS, tenant lifecycle | tenant:read/manage, role:read, notification:read | Khong co audit/admin operations ro rang; de bi hieu nham la super-user xem WO cua tenant | Chi quan tri tenant, status, provisioning va platform audit; khong cho xem du lieu nghiep vu tenant neu khong co mot quyen break-glass rieng co audit |
+| TENANT_ADMIN | Cau hinh doanh nghiep, user/branch/customer, giam sat | user, role, branch, customer, equipment, maintenance:read, inventory:read, report:read | Co the doc nhieu mien nhung khong co service_request:review, work_order:manage/assign; menu/dashboard phai noi ro "giam sat, khong duyet" | Giu read-only nghiep vu; them man "phan bo branch" va dashboard giam sat; khong cap bypass service decision |
+| SERVICE_MANAGER | Tiep nhan, quyet dinh bao hanh/chi phi, tao va dieu phoi WO, maintenance | review, estimate manage, WO manage/assign, maintenance manage | Chong lan voi Dispatcher; co customer:manage/equipment manage co the qua rong; chua tach owner cua decision va owner cua schedule | Service Manager owner cua decision va lifecycle WO; co the assign khi khong co Dispatcher, nhung UI phai noi ro fallback; customer/equipment manage can gioi han theo branch |
+| DISPATCHER | Lap lich, phan cong, doi lich | work_order:read/assign, branch/customer/equipment read | Khong co work_order:manage nen khong tao/doi lich day du neu API can manage; role co the thanh legacy sau ADR 0022 | Hoac giu role voi "schedule/assign" permissions rieng, hoac de Service Manager kiem nhiem va loai menu Dispatcher khoi tai khoan moi; khong duy tri hai flow trung lap |
+| INVENTORY_STAFF | Quan ly kho, ledger, xuat/tra/correction | inventory manage/issue | inventory:issue co the xung dot voi reservation/use; chua ro ai duoc approve correction, ai chot discrepancy | Tach receive/adjust/issue/return/reconcile permissions; moi giao dich co source, actor, reason, before/after; correction nhay cam can supervisor/TA policy |
+| TECHNICIAN | Thuc hien WO duoc giao, report, checklist, parts use | WO execute, report submit, inventory read | service_request:comment_internal cho phep doc/ghi comment noi bo; co nguy co lo noi dung/ghi ngoai pham vi; mobile retry de trung mutation | Technician chi xem context can thiet, ghi work log/report; comment noi bo neu can thi gioi han vao WO duoc giao va loai noi dung; khong cho thao tac global |
+| CUSTOMER_ADMIN | Quan tri user trong customer, phe duyet ban giao/chi phi, theo doi dich vu | handover respond, cost estimate respond, user manage, role assign | role:assign can phai chan CUSTOMER_ADMIN gan role ngoai customer; customer scope phai kiem o service; maintenance read co the lo qua nhieu neu khong tach public | Chi quan tri CUSTOMER_USER cua customer minh; phe duyet theo revision; hien ro pham vi public; khong quan tri tenant user/branch |
+| CUSTOMER_USER | Tao va theo doi SR, doc thiet bi/public history | customer/equipment/SR/notification read/create | Co the nhin thay trang thai dang cho customer admin phe duyet nhung khong co hanh dong; chua ro maintenance chi tiet/public report | Giu quyen toi thieu; them action "bo sung thong tin" va "yeu cau tiep" neu contract; chi hien public fields va public attachments |
+
+Van de can sua o cap catalog:
+1. `work_order:assign` va `work_order:manage` dang phan bo chua phan biet
+   schedule/assign/cancel. Can tach action neu Dispatcher tiep tuc ton tai.
+2. `service_request:comment_internal` tren Technician/Dispatcher can dinh nghia
+   ro: chi doc, ghi hay ca hai; doi tuong nao; khong de role thay noi dung
+   sensitive cua customer.
+3. `customer:manage` va `equipment:manage` cua Service Manager can co branch
+   scope/server check, khong chi dropdown UI.
+4. `cost_estimate:respond` va `equipment_handover:respond` phai luu
+   actor/customer/revision/snapshot/reason; khong chi luu status.
+5. Tat ca role nhieu role van phai bi gioi han boi data scope; role union
+   khong duoc tu dong lam rong branch/customer scope.
+
+
+3. PHAN TICH THEO MIEN CHUC NANG
+---------------------------------
+
+3.1 Identity, tenant, user, RBAC va phien
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| ID-01 | BAT HOP LY | P0 | Logout, token het han, refresh loi va request GET dong thoi co nguy co lam request cu ghi de session moi | Lo nham du lieu tai khoan, lap POST hoac thao tac sau logout | Session generation bat buoc tren moi response; abort request cu khi doi user; refresh single-flight; mutation co idempotency key | ID-01, ID-03, SEC-04 |
+| ID-02 | THIEU | P0 | Chua co bang chung day du cho invalid tenant, invalid token, reused activation link va role update tren moi service | Co the cho phep truy cap sai scope neu chi test UI | Test matrix identity voi 401/403/409 rieng, khong gom validation vao authorization | ID-02, ID-04, ID-05 |
+| ID-03 | BAT HOP LY | P0 | Platform Admin co the bi hieu la co quyen xem moi du lieu, trong khi catalog chi cho tenant management | Sai expectation va rui ro break-glass khong audit | Tach Platform Admin va Support/Break-glass; neu them break-glass phai co reason, TTL, approval, audit | ID-06 |
+| ID-04 | THIEU | P1 | Invite/activation chua hien day du owner, TTL, revoke, resend va lich su | Tai khoan treo, link cu con dung | Activation record mot lan, expiry, revoke, resend tao version moi; hien trang thai va next action | ID-04 |
+| ID-05 | DU THUA | P1 | Trang role co the lam nguoi dung tuong role la custom permission | RBAC khong dung voi thiet ke role co dinh | Doi ten "Role catalog", chi cho xem mo ta, scope, assignable roles; khong co form tao role | Kiem UI va API role assign |
+
+3.2 Organization, Branch, Customer, Site, Location, Contact
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| OR-01 | BAT HOP LY | P0 | Branch cua tenant va Customer Site de bi nham trong UI/list/filter | Gan sai technician/kho, lo scope | Luon hien badge "Chi nhanh noi bo" va "Site khach hang"; branchId/customerId la hai filter bat buoc khac nhau | OR-01, BR-01 |
+| OR-02 | THIEU | P0 | Site chua routing branch thi request can hang doi; can co man hinh va owner xu ly | SR khong co nguoi phu trach, bi bo sot | Tao hang doi `UNASSIGNED_ROUTING`, Tenant Admin gan branch co reason/version; khong fallback random branch | E2E-05, BR-04 |
+| OR-03 | BAT HOP LY | P0 | Doi routing site moi co the lam ca cu bi chuyen branch neu chi doc routing hien tai | Sai lich su va scope | Snapshot serviceBranchId tai SR/WO; routing chi ap dung ca moi | E2E-05, BR-05 |
+| OR-04 | THIEU | P1 | Thieu quy tac ngung branch khi con WO/SR/user active | Mat owner hoac tao ca moi tren branch inactive | Block deactivate hoac bat buoc migration co preview; khong xoa lich su | OR-03 |
+| OR-05 | THIEU | P1 | Duplicate code, optimistic concurrency va quan he user-customer/site chua duoc hien ro trong UI | Ban ghi trung, lien ket sai | Unique business key + 409; form hien doi tuong trung; expectedVersion tren update | OR-04 |
+
+3.3 Equipment Model, Policy, Registration, Warranty, QR, Handover
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| AS-01 | HOP LY CAN GIU | P0 | Model policy revision, snapshot va warranty decision la huong dung | Bao toan cam ket lich su | Giu snapshot policy tai handover/registration; khong doc policy moi de viet lai may cu | MP-01, MP-02 |
+| AS-02 | BAT HOP LY | P0 | Thoi han warranty, ket luan su co duoc bao hanh va maintenance due date de bi gop thanh mot nhan | Nguoi dung tuong con warranty la duoc mien moi sua chua | Tach 3 field/section: warranty coverage, incident assessment, maintenance schedule; moi section co reason/source | MP-03, HS-03 |
+| AS-03 | THIEU | P0 | Handover CUSTOMER scope, STORE/DELIVERY, reject reason va snapshot can duoc kiem chung; không duoc coi UI click la accept | Tranh chap tai san va thoi diem ban giao | Handover state machine: DRAFT -> PENDING_CUSTOMER_CONFIRMATION -> ACCEPTED/REJECTED/EXPIRED; reject reason bat buoc; STORE co quy tac khac DELIVERY | E2E-01, MP-05 |
+| AS-04 | BAT HOP LY | P1 | QR co nguy co bi xem la quyen truy cap | Lo thong tin customer/asset | QR chi tra ve public lookup/request start token; server van auth + customer scope | SEC-02 |
+| AS-05 | THIEU | P1 | Chua co quy tac merge/duplicate serial, thay thiet bi, chuyen site, retired/disposed | Lich su bi dut hoac trung equipment | Equipment identity immutable; them lifecycle commands transfer/replace/retire; history event bat buoc | HS-01, HS-02 |
+| AS-06 | THIEU | P1 | Handover/registration co nhieu endpoint nhung can mot dossier duy nhat | Nguoi dung nhap trung thong tin, tao duplicate warranty/plan | Dung Registration dossier lam aggregate workflow; cac service van giu ownership nhung UI mot wizard co preview/commit | E2E-01, E2E-02 |
+
+3.4 Service Request va Warranty/Cost Decision
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| SR-01 | HOP LY CAN GIU | P0 | Co status history, internal/public comment va warranty snapshot | Co co so audit | Giu event history, actor/time/reason, phan biet public/internal tren response va notification | SR-01, SEC-03 |
+| SR-02 | BAT HOP LY | P0 | Co the tao WO truoc khi SR duoc review/accept hoac khi estimate chua duoc accept | Lam sai quy trinh va chi phi | Server enforce transition guard: SR accepted + decision complete; out-of-warranty phai co estimate approval neu policy yeu cau | E2E-02, E2E-03 |
+| SR-03 | THIEU | P1 | Chua ro SLA/priority/impact va ai la owner khi AWAITING_INFO | Hang doi khong co thu tu; request treo | Them priority/impact/nextAction/owner/dueAt; khong them SLA business neu chua co policy, chi hien due date van hanh | UX-01, RP-02 |
+| SR-04 | BAT HOP LY | P1 | `window.prompt` cho reject estimate/ly do lam mat context va khong co confirmation summary | Ly do thieu, de bam nham | Modal typed form co reason, attachment neu can, hien revision/total/expiry va receipt sau submit | F05, E2E-03 |
+| SR-05 | THIEU | P0 | Estimate phat sinh ngoai pham vi da duyet chua co quy tac | Co the coi report la dong y them tien | Them change request/estimate revision moi; khong sua revision da accept; customer accept rieng | E2E-03, GAP UAT |
+| SR-06 | BAT HOP LY | P1 | Search list va selected equipment co the bi rang buoc sai; list rong lam disable submit du selected ID hop le | Khong gui duoc request hop le | Tach `selectedEquipment` khoi `searchResults`; validate selected record doc lap | F02 |
+
+3.5 Work Order, Assignment, Technician execution, Service Report
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| WO-01 | HOP LY CAN GIU | P0 | Work order co assignment history, execution state, report va allowedActions | Phu hop field service | Giu state machine va server allowedActions; UI chi la projection | E2E-02 |
+| WO-02 | BAT HOP LY | P0 | Cancel, reschedule, reassign, complete va replace co the bi coi la thao tac doc lap khong co dieu kien | Tao WO trung, mat assignment, task sai | Command API rieng, transition guard, expectedVersion, requestId; khong cho complete khi report/parts requirement chua dat | E2E-04, SYS-02 |
+| WO-03 | BAT HOP LY | P0 | Technician chi duoc execute assigned WO, nhung client mobile/web can bi thu ID URL | Ghi du lieu vao WO nguoi khac | Server check tenant + branch + assigned technician tren moi mutation; dropdown khong phai security | BR-06, MB-01 |
+| WO-04 | THIEU | P1 | Khong tach lich du kien, lich khach xac nhan, thoi gian di chuyen va timezone | Hieu sai cam ket | Luu planned window, customer-confirmed window, actual timestamps; hien Asia/Ho_Chi_Minh va ISO trong detail | RP-01, UX-04 |
+| WO-05 | BAT HOP LY | P1 | Report mo ta dai dung input mot dong; draft va error recovery chua ro | Mat noi dung, UX kem | Textarea/rich editor co char counter; local draft co scope; submit co receipt; retry khong tao report moi | F06, UX-02, MB-02 |
+| WO-06 | THIEU | P1 | Ket qua RESOLVED/PARTIALLY_RESOLVED/UNRESOLVED chua duoc tach khoi `COMPLETED` va customer acknowledgement | Hien "da xong" sai | Tach work completion, technical result, customer confirmation; customer feedback la command rieng | HS-03 |
+| WO-07 | DU THUA | P1 | Service Manager va Dispatcher cung co the dieu phoi neu khong co policy ro | Hai hang doi, hai noi chinh sua lich | Mot owner schedule theo tenant configuration; neu khong co Dispatcher thi Service Manager fallback; hien banner owner | BR-04, E2E-02 |
+
+3.6 Maintenance Plan, Task, Scheduler
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| MT-01 | HOP LY CAN GIU | P0 | Scheduler co snapshot, task/WO linkage va idempotency y dinh | Co the chay event-driven | Giu `requestId`/idempotency va unique key (planId, occurrenceDate) | E2E-04 |
+| MT-02 | THIEU | P0 | Day 31/1, 29/2, inclusive end date va timezone can quy tac cong khai | Tao thieu/trung task | Dinh nghia date arithmetic theo local business date, test boundary fixture; khong dung Date UTC ngam dinh | MT-01-07 |
+| MT-03 | BAT HOP LY | P1 | Maintenance due date co the bi hien nhu lich hen | Khach tuong da dat lich | UI doi ten "den han bao tri", chi co appointment khi WO co confirmed window | BR-01, HS-03 |
+| MT-04 | THIEU | P1 | Plan pause/resume/end va overdue task chua co next action/owner ro | Task treo | Them state ACTIVE/PAUSED/ENDED, overdue queue, retry/manual resolve co audit | E2E-04 |
+| MT-05 | BAT HOP LY | P0 | Cancel WO maintenance va replacement WO neu khong idempotent se tao nhieu WO | Trung cong viec | Stable requestId theo task occurrence; replacement link khong doi ID WO cu | E2E-04, SYS-02 |
+
+3.7 Inventory: Part, Warehouse, Stock, Ledger, Reservation, Issue/Return/Use
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| INV-01 | HOP LY CAN GIU | P0 | Ledger before/after, available/reserved va idempotency la thiet ke dung | Audit ton kho duoc | Giu immutable ledger, projection stock, transaction detail va correlation/source | HS-02, RP-01 |
+| INV-02 | BAT HOP LY | P0 | Reservation, issue, return, confirm-use, correction neu hien chung mot luong se kho hieu | Tru kho sai hoac tru hai lan | Tach 5 command/receipt; moi command co status PENDING/SUCCEEDED/FAILED/UNCERTAIN va recovery | FL-02, SYS-01 |
+| INV-03 | THIEU | P0 | Chua chot mat/hong phu tung ngoai hien truong | Khong the dong discrepancy | Them DAMAGED/LOST/PENDING_INSPECTION voi actor, reason, approval va source issue; khong tu dong coi la USED | MB-04, UX-03 |
+| INV-04 | BAT HOP LY | P1 | Decimal string va format so co the lam `2.000` bi doc sai; don vi khong luon di cung | Nhap sai so luong | Part policy `INTEGER`/`DECIMAL`, unit bat buoc, format display theo locale va input hint khong ambiguity | F03 |
+| INV-05 | THIEU | P1 | Chua tach nguoi yeu cau, nguoi giao, nguoi nhan va nguoi xac nhan dung | Khong truy trach nhiem | Receipt luu requestedBy/issuedBy/receivedBy/confirmedBy; neu thieu nguoi nhan thi operation pending | INV-02 |
+| INV-06 | BAT HOP LY | P0 | Inventory Staff co the issue theo WO nhung phai chan WO khac branch/tenant va part khong phu hop | Lo scope, sai ton | Server validate WO branch, warehouse branch, part status, available quantity; client chi filter ho tro | SEC-01, BR-06 |
+| INV-07 | THIEU | P1 | Correction chua co cap phe duyet va lien ket giao dich goc bat buoc | Co the sua lich su tuy y | Correction append-only, reason + originalTransactionId; amount lon/negative can supervisor/TA policy | HS-02 |
+
+3.8 Notification, Attachment, History, Report
+
+| ID | Loai | Muc | Van de/Thieu sot | Tac dong | De xuat thay the | Cach xac minh |
+|----|------|-----|------------------|----------|-------------------|---------------|
+| NF-01 | HOP LY CAN GIU | P0 | Notification co recipient projection, count/read va event fan-out | Trai nghiem theo cong viec | Giu inbox server-side va link resource co auth check | NT-01, NT-02 |
+| NF-02 | BAT HOP LY | P0 | Notification co the duoc dung lam bang chung transaction da hoan tat | Nguoi dung tin sai | Chi publish sau committed source event/outbox; UI noi "da gui thong bao" khac "da hoan tat" | NT-03, SYS-01 |
+| NF-03 | THIEU | P1 | Chua co preference/quiet hours/channel boundary; in-app khong phai push | Spam hoac expectation sai | MVP chi in-app, ghi ro; them preference sau; khong mo ta push khi app dong | MB-04 |
+| AT-01 | BAT HOP LY | P0 | Attachment prepare/PUT/finalize co the bi hien thanh upload thanh cong khi finalize loi | File mo coi la co that, trung file | Attachment state machine PREPARED/UPLOADED/FINALIZED/FAILED/ORPHANED; retry finalize an toan; cleanup co owner | FL-01, FL-02 |
+| AT-02 | THIEU | P0 | Signed URL, internal/customer visibility va TTL can kiem ca metadata/count | Lo noi dung noi bo | Download endpoint auth truoc khi cap signed URL; visibility server-side; URL khong gui bearer | FL-03, SEC-03 |
+| HS-01 | THIEU | P1 | History aggregate tu nhieu service can source, pagination, correlation va phan biet incomplete | Khach tuong timeline day du | Dossier hien source service, event time, effective time, page cursor, data completeness | HS-01 |
+| RP-01 | BAT HOP LY | P1 | Dashboard aggregate neu chi dem mot trang list hoac loi nguon thanh 0 | So lieu sai quyet dinh | Report endpoint aggregate server-side, filter branch/time explicit, error khac empty; click-through co cung filter | RP-01, RP-02 |
+
+
+4. PHAN TICH UI WEB THEO ROLE
+-----------------------------
+
+4.1 PLATFORM_ADMIN
+------------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| Dashboard | Metric tenant la hop ly; khong nen co metric doanh thu/satisfaction khong co nguon | Hien tenant active/suspended, provisioning pending, platform incidents co source |
+| Tenant | Can create/suspend/update nhung phai co confirmation anh huong | Trang detail co status history, reason, admin owner, audit before/after |
+| User/role | Khong nen xem nhu tenant staff management | Chi role catalog va tenant admin provisioning; user trong tenant do Tenant Admin quan ly |
+| Ho tro tenant | Chua co break-glass contract | Khong tao nut "login as"; neu can thi thiet ke quyen rieng, TTL, approval, audit |
+
+4.2 TENANT_ADMIN
+-----------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| Organization | Branch/customer/user CRUD phu hop | Them deactivation guard, duplicate validation, optimistic concurrency |
+| Role | Co nguy co hieu la custom role | Role catalog read-only, assignable matrix, hien scope |
+| Operations | Nen doc SR/WO/maintenance/report, khong tu dong review/assign/execute | Menu label "Giam sat dich vu"; neu co assign thi hien quyen rieng |
+| Branch allocation | Day la chuc nang quan trong nhung de bi mat khoi menu | Tao man hinh "Phan bo dich vu", queue unassigned, reason/version |
+| Inventory | Chi doc | An button issue/adjust; link sang transaction detail read-only |
+
+4.3 SERVICE_MANAGER
+--------------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| Decision desk | La trung tam nghiep vu tot, nhung can next action va owner ro | Queue theo NEW/AWAITING_INFO/AWAITING_APPROVAL/READY_FOR_WO; moi row co owner, due, allowed action |
+| Warranty | Can tach coverage va incident decision | Panel 3 phan: policy snapshot, coverage, conclusion/reason |
+| Cost estimate | Revision/expiry la dung, nhung reject prompt chua tot | Modal accept/reject co summary, reason, revision, receipt |
+| WO | Co the tao/assign khi co quyen | Kiem transition server; hien ai la schedule owner (SM hay Dispatcher) |
+| Customer/equipment manage | Co the qua rong | Giu neu can cho branch; neu khong tach read va manage theo domain |
+| Maintenance | Co plan/task/WO | Them overdue/paused/failed scheduler queue va manual recovery |
+
+4.4 DISPATCHER
+----------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| Board | Can WO created/assigned/rejected/reschedule | Them filter branch/date/priority/skill va empty/error khac nhau |
+| Calendar | Planned va customer-confirmed can tach | Dung component timezone chung; khong drag-drop neu backend chua co command |
+| Assignment | Can check skill/status/branch | Backend validate, UI hien ly do reject; tranh BUSY = overload |
+| Role lifecycle | ADR 0022 cho thay SM co the dieu phoi | Chon mot mo hinh: Dispatcher la schedule owner hoac loai role moi; khong de 2 noi cung sua |
+
+4.5 INVENTORY_STAFF
+--------------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| Dashboard | Co pending sync/low stock/parts/warehouses | Them discrepancy queue va pending operation detail |
+| Transaction | Nhieu state co the gay nham | Moi operation co receipt, source, before/after, actor, retry/abort |
+| Part quantity | Decimal string kho doc voi locale Viet | Hien so + unit; input hint theo precision; part integer khong cho decimal |
+| Issue/return | Can ownership va status item ro | Hien WO, technician, warehouse, receiver, expected quantity, actual quantity |
+| Correction | Khong nen la nut sua so du don gian | Wizard correction co reason, source transaction, approval neu vuot threshold |
+
+4.6 TECHNICIAN
+----------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| My work | Co assigned/in-progress/on-hold/completed | Them rejected/awaiting parts/uncertain va next action |
+| WO detail | Can context thiet bi, lien he, checklist | Chi hien fields can thiet; tach public/internal; branch assignment badge |
+| Execute | Accept/start/hold/complete phu hop | Disable duplicate click; receipt khi network uncertain; server allowedActions |
+| Report | Input dai dung input mot dong | Textarea, autosave draft co scope, preview, report submit receipt |
+| Parts | Read inventory va use report can ro | Khong cho technician tu tru kho; chi xac nhan use theo part issue da giao |
+| Mobile | La surface quan trong nhat cua role | Mobile parity voi API; test logout/login user khac, offline, retry, attachment |
+
+4.7 CUSTOMER_ADMIN
+-------------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| Home | Co handover/estimate/processing metrics | Them "dang cho ai", han phan hoi, link den record |
+| Handover | Accept/reject can snapshot va reason | Modal review voi equipment/site/warranty/policy; accept/reject receipt |
+| Estimate | Can xem revision va total | Hien diff revision, currency, expiry, include/exclude; reject reason bat buoc |
+| Users | Chi quan ly CUSTOMER_USER cua customer minh | Server enforce customer scope; khong hien tenant role |
+| Service result | Chua nen gan customer click voi WO close | Them customer acknowledgement/feedback/request-follow-up rieng |
+
+4.8 CUSTOMER_USER
+------------------
+| Hang muc | Nhan xet | De xuat thay the |
+|----------|----------|-------------------|
+| Tao SR | Nhanh va dung customer scope | Wizard 3 buoc: equipment -> problem/attachment -> review/submit; selected equipment tach search results |
+| Theo doi | Can status va next actor | Dung public timeline, "dang cho Customer Admin" neu khong co quyen respond |
+| Equipment/QR | QR chi nhan dien, khong cap quyen | QR route qua auth/scope; khong hien metadata customer khac |
+| Maintenance | Customer Admin co read; User can nhac hoac khong | Chot contract: public due date toi thieu; chi mo rong permission neu co nhu cau |
+| Notification | Link phai mo dung resource va recheck scope | Server count, mark read idempotent, stale link hien 403/404 ro |
+
+
+5. CAC DIEM DU THUA HOAC CAN GOM LAI
+--------------------------------------
+
+| Nhom trung lap | Tai sao khong hop ly | De xuat gop/thay the |
+|----------------|---------------------|---------------------|
+| Service Manager + Dispatcher cung assign/schedule | Hai role cung sua mot resource, de tranh chap va khong ro owner | Dinh nghia `schedule_owner`; neu Dispatcher duoc dung thi tach `work_order:schedule`; neu khong thi Service Manager kiem nhiem |
+| Registration + Handover + Equipment create | Nhap lap thong tin va co the tao duplicate | Mot registration dossier wizard, commit mot lan; service ownership van tach |
+| Warranty expiry + Warranty incident decision + Maintenance due | Cung hien nhu "bao hanh" | Ba card/section va ba status/nguon rieng |
+| Inventory issue + confirm use + report parts | Co the bi hieu la cung mot lan tru kho | Issue la kho giao, use la technician xac nhan, report la ket qua ky thuat; lien ket nhung khong thay the nhau |
+| Web M2 legacy WO page + Workshop V2 | Hai UI cho cung lifecycle | Chon Workshop V2 lam product route; legacy chi giu hidden/compatibility, co test regression |
+| Dashboard metric + list page count | Count khong cung semantics/filter | Metric endpoint co definition/filter/click-through; khong dem client page |
+| Role catalog + custom role wording | Tenant co the tuong co the tao role | Doi ten Role catalog, khong cho custom role trong MVP |
+| In-app notification + push expectation | App dong khong co push thi thong bao bi hieu sai | Hien "Thong bao trong ung dung"; push la phase rieng |
+| QR lookup + authorization | QR la public key nhan dien, khong phai access token | Public minimal lookup + auth required for full dossier/request |
+
+
+6. THIEU SOT XUYEN HE THONG CAN BO SUNG
+----------------------------------------
+
+| ID | Muc | Thieu sot | De xuat thay the | Uu tien |
+|----|-----|-----------|-------------------|---------|
+| SYS-01 | P0 | Chua co bang chung UAT baseline cho moi role va moi tenant | Chay acceptance test theo luot; luu commit, diff, evidence, status NOT RUN/PASS/FAIL/BLOCKED | P0 |
+| SYS-02 | P0 | Cross-service transaction khong the atomic; recovery can quan sat | Outbox/inbox + correlationId + operation status + reconciliation dashboard | P0 |
+| SYS-03 | P0 | Event out-of-order/duplicate/error can duoc kiem | Inbox unique eventId, version/order rule, dead-letter/retry, khong rollback projection moi ve cu | P0 |
+| SYS-04 | P0 | Tenant/customer/branch isolation can kiem ca list/count/file/download/filter | Test ID thay the tren moi endpoint va response metadata; server check ownership | P0 |
+| SYS-05 | P1 | Audit log cho decision, role, stock correction, branch assignment chua duoc nhin nhu san pham | Append-only audit: actor, role, tenant, branch, before/after, reason, correlation, source | P1 |
+| SYS-06 | P1 | Error contract can phan biet 401/403/404/409/422/503/uncertain | UI mapping thong nhat; khong fallback success/zero/empty | P1 |
+| SYS-07 | P1 | Timezone/date arithmetic khong dong bo giua component cu va moi | Date-only cho due date; instant cho event; local datetime co timezone; utility dung chung | P1 |
+| SYS-08 | P1 | Data retention/archive/soft delete cho equipment, customer, user, attachment chua ro | Khong hard delete record co history; archive state va retention policy; file cleanup co audit | P1 |
+| SYS-09 | P1 | Search/pagination/filter semantics chua dong nhat | Server cursor/total/filters; URL state; query thay the khong lam mat selection | P1 |
+| SYS-10 | P2 | Accessibility/responsive/long text/chinese? (chuoi dai) can test | Keyboard/focus/error association, 390px/1440px, long serial/name, not color-only | P2 |
+| SYS-11 | P1 | Seed/demo co nguy co trung user/WO/stock sau chay lai | Idempotent seed keys, reset strict tren DB test, khong ghi de du lieu nguoi dung | P1 |
+| SYS-12 | P1 | Mobile draft/attachment lifecycle va account switch chua co bang chung | Draft namespace tenant/user/WO; receipt; recovery; khong auto-resend mutation | P1 |
+
+
+7. KIEN TRUC THAY THE DE XUAT
+------------------------------
+
+7.1 Mot state machine chung cho moi aggregate
+
+Moi aggregate dung command thay vi update tu do:
+
+  Service Request:
+    NEW -> AWAITING_INFO -> UNDER_REVIEW -> ACCEPTED/REJECTED/CANCELLED
+    ACCEPTED -> AWAITING_CUSTOMER_APPROVAL (neu ngoai warranty)
+    ACCEPTED -> READY_FOR_WO -> PROCESSING -> RESOLVED/PARTIALLY_RESOLVED/UNRESOLVED
+
+  Work Order:
+    CREATED -> ASSIGNED -> ACCEPTED -> IN_PROGRESS -> ON_HOLD
+    ON_HOLD -> IN_PROGRESS
+    IN_PROGRESS -> COMPLETED/CANCELLED
+    COMPLETED co technicalResult rieng; customerAcknowledgement la luong rieng.
+
+  Handover:
+    DRAFT -> PENDING_CUSTOMER_CONFIRMATION -> ACCEPTED/REJECTED/EXPIRED
+
+  Inventory operation:
+    PREPARED -> PENDING -> SUCCEEDED/FAILED/UNCERTAIN -> RECONCILED
+
+Khong cho client tu dat status. Moi command tra:
+  { resource, previousState, newState, allowedActions, receipt, correlationId }
+
+7.2 Data scope mot cach nhat quan
+
+  request context -> tenantId -> customerId (neu customer) -> branchId
+  -> resource owner/snapshot -> permission -> allowed action.
+
+Tat ca read/list/detail/mutation/download/notification/count deu dung cung
+scope helper. Branch routing chi quyet dinh owner luc tao; sau do snapshot
+branch tren SR/WO/stock operation.
+
+7.3 Mot UI shell theo next action
+
+Moi role co:
+  - Context bar: tenant, branch/customer scope, environment, timezone.
+  - Work queue: viec can xu ly, viec dang cho ai, han tiep theo.
+  - Detail: source chain, actor, status, allowedActions.
+  - Evidence: history, files, audit, correlation.
+  - Recovery: retry/inspect/abort khi uncertain.
+
+Khong tao 8 ban sao cua cung mot detail. Dung component chung va policy
+`allowedActions` tu server.
+
+7.4 Mot transaction/operation receipt cho thao tac nguy hiem
+
+Ap dung cho estimate, handover, WO assignment, inventory issue/return,
+attachment finalize va report submit:
+  - client gui idempotencyKey;
+  - server luu receipt;
+  - timeout tra `UNCERTAIN`, khong tu dong gui lai;
+  - client co "Kiem tra ket qua";
+  - reconciliation co the doi soat theo correlationId.
+
+
+8. LO TRINH THAY THE DE XUAT
+----------------------------
+
+| Phase | Noi dung | Ket qua bat buoc | Uu tien |
+|-------|----------|-------------------|---------|
+| 0 | Chot quyen va ownership | Quyet dinh Dispatcher con hay khong; matrix role/permission/scope; state transition | P0 |
+| 1 | Khoa an toan du lieu | Tenant/customer/branch checks, activation, session generation, file visibility, 401/403 | P0 |
+| 2 | Khoa core workflow | SR review -> estimate -> WO -> assignment -> report -> customer ack; command/idempotency | P0 |
+| 3 | Khoa inventory | Issue/return/use/correction, lost/damaged, receipt/reconcile, decimal/unit | P0 |
+| 4 | Chuan hoa UI | Context bar, role work queue, detail chain, modal approval, selected object state, error mapping | P1 |
+| 5 | Maintenance/notification/history | Date boundary, scheduler idempotency, event ordering, notification audience, dossier completeness | P1 |
+| 6 | Mobile hardening | Draft namespace, attachment recovery, uncertain mutation, offline claim, timezone | P1 |
+| 7 | UAT va ban giao | Chay test plan baseline, evidence khong chua secret, PASS/FAIL/BLOCKED, regression | P0 |
+
+Khong nen lam UI polish truoc Phase 1-3. Mot UI dep nhung scope/stock/approval
+sai se lam tang rui ro demo va du lieu.
+
+
+9. DANH SACH VIEC CU THE THEO ROLE
+------------------------------------
+
+| Owner | Viec can lam | Acceptance criterion |
+|-------|--------------|----------------------|
+| Platform/Identity | Xac dinh Platform Admin va break-glass; activation/refresh/logout | Khong xem tenant data mac dinh; link dung mot lan; refresh single-flight; logout chan request cu |
+| Tenant Admin/Organization | Branch allocation, deactivation guard, user/customer scope | Ca unassigned co queue; assign co reason/version; branch inactive khong tao ca moi |
+| Service Manager/Request | Warranty decision, estimate revision, SR guard | Khong tao WO sai state; estimate reject/accept co revision/reason/receipt |
+| Dispatcher/Workorder | Chot role owner va schedule model | Khong co hai role cung ghi lich khong co quy tac; assignment check branch/skill |
+| Technician/Workorder-Mobile | Report textarea/draft, execute assigned only, uncertain retry | Khong ghi WO nguoi khac; mat mang khong tao trung; report day du va public/internal dung |
+| Inventory | Operation receipt, discrepancy, lost/damaged, quantity format | Ledger khong tru hai lan; correction co source/reason; precision dung don vi |
+| Customer Portal | Handover/estimate review, public history, feedback | Customer chi thay customer cua minh; accept/reject co snapshot; feedback khong tu dong dong/mo WO |
+| Notification | Audience, count/read, event idempotency | Khong lo cross customer; replay khong nhan doi; link recheck scope |
+| QA/Release | Chay test plan 2026-11-10 tren baseline sach | Moi ca co evidence va status; P0 fail/block khong duoc goi la acceptance PASS |
+
+
+10. CAC QUYET DINH CAN CHOT TRUOC KHI CODE
+-------------------------------------------
+
+1. Dispatcher co con la role chinh thuc khong? Neu co, role nao la schedule
+   owner va permissions cu the la gi?
+2. Tenant Admin co duoc phan bo SR/WO vao branch hay chi xem? Neu duoc,
+   command va audit nao bat buoc?
+3. Out-of-warranty estimate co bat buoc accept truoc khi tao WO trong moi
+   truong hop hay co ngoai le do Service Manager?
+4. Customer User duoc xem maintenance due date, report public, parts public
+   va feedback o muc nao?
+5. WO COMPLETED co nghia la ky thuat vien ket thuc, hay customer da xac nhan?
+   Hai khai niem phai khac nhau trong API/UI.
+6. Phu tung LOST/DAMAGED ai duoc chot, can phe duyet hay khong?
+7. Co cho phep thay equipment/customer/site/serial sau handover khong? Neu co,
+   day la transfer/replace command, khong sua nguoc snapshot.
+8. In-app notification co du la MVP? Khong duoc goi la push neu khong co
+   delivery khi app dong.
+9. Maintenance date tinh theo local business date hay UTC instant?
+10. Attachment customer/internal co duoc publish sau khi upload hay phai
+    explicit publish? Ai duoc publish va co audit khong?
+
+
+11. KET LUAN CUOI
+-----------------
+
+He thong da co nen tang tot cho MVP: microservice ownership, RBAC catalog,
+tenant/customer scope, equipment dossier, service request, work order,
+maintenance, inventory ledger, notification projection va role workspace.
+
+Nhung diem khong hop ly lon nhat khong nam o viec "thieu them nhieu man hinh",
+ma nam o:
+  1. chua chot ownership giua Service Manager va Dispatcher;
+  2. UI co the khong giai thich branch/customer scope;
+  3. approval/revision/acknowledgement chua tach khoi completion;
+  4. thao tac multi-service va kho can receipt/recovery/idempotency;
+  5. mobile va attachment can xu ly uncertain state;
+  6. acceptance test chua co ket qua baseline, khong duoc suy ra PASS tu build.
+
+Phuong an thay the khuyen nghi la "giu kien truc, thay cac diem mo ho bang
+command/state/receipt/scope/audit", khong viet lai toan bo. Sau khi chot 10
+quyet dinh o muc 10, uu tien P0 theo Phase 0-3, sau do moi polish UI va
+mo rong Mobile. Ket qua nghiem thu cuoi cung phai dua tren test plan ngay
+10/11/2026 va co bang chung cho tung role, tung tenant, tung branch va tung
+duong file/notification.

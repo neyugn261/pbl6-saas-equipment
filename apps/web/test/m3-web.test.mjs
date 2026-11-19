@@ -224,7 +224,7 @@ for (const mode of ['RECEIVE', 'ADJUST', 'ISSUE', 'RETURN']) {
     const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', {
       react: h.react, 'react/jsx-runtime': h.jsx, 'react-router-dom': { Link: 'link' },
       'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
-      '../../api/client': tab.client, '../../auth/session': tab.session, './stock-mutation': tab.stock,
+      '../../api/client': tab.client, '../../auth/session': tab.session, './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'),
       '../../display-names': tab.load('display-names.ts'),
       '../workspace/ui-values':tab.load('features/workspace/ui-values.ts'),
     })

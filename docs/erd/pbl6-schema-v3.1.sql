@@ -456,6 +456,7 @@ CREATE TABLE equipments (
     serial_number VARCHAR(150) NOT NULL,
     -- ADR 0009; additive EquipmentMoved/outbox migration (20261027090000).
     snapshot_version INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_version >= 0),
+    purchase_date DATE,
     installation_date DATE,
     handover_date DATE,
     -- ADR 0010, migration 20261027140000_equipment_dossier_history.
@@ -481,6 +482,7 @@ CREATE TABLE equipments (
 CREATE INDEX idx_equipments_tenant_customer ON equipments (tenant_id, customer_id);
 CREATE INDEX idx_equipments_tenant_site ON equipments (tenant_id, customer_site_id);
 CREATE INDEX idx_equipments_tenant_status ON equipments (tenant_id, status);
+CREATE INDEX idx_equipments_tenant_purchase_date ON equipments (tenant_id, purchase_date);
 
 CREATE TABLE equipment_model_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2281,3 +2283,80 @@ ALTER TABLE inventory_operations ADD CONSTRAINT inventory_operations_business_li
 );
 ALTER TABLE inventory_request_commands ADD CONSTRAINT inventory_request_commands_fingerprint_check
   CHECK (fingerprint ~ '^[0-9a-f]{64}$');
+
+-- ADR 0024: Minh UX additions, 19/11/2026.
+
+\connect asset_db
+-- apps/asset-service/prisma/migrations/0011_bulk_and_public_intake/migration.sql
+CREATE TABLE bulk_handovers (
+  id uuid PRIMARY KEY,
+  tenant_id uuid NOT NULL,
+  actor_id uuid NOT NULL,
+  request_hash char(64) NOT NULL,
+  result jsonb NOT NULL,
+  created_at timestamptz(6) NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, actor_id, id)
+);
+CREATE INDEX bulk_handovers_tenant_created ON bulk_handovers (tenant_id, created_at);
+
+ALTER TABLE equipment_qr_codes
+  ADD COLUMN public_enabled boolean NOT NULL DEFAULT false,
+  ADD COLUMN public_branch_id uuid,
+  ADD COLUMN public_equipment_version integer;
+
+CREATE TABLE public_qr_inquiries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  equipment_id uuid NOT NULL,
+  branch_id uuid,
+  token_hash char(64) NOT NULL UNIQUE,
+  request_hash char(64) NOT NULL,
+  contact_name varchar(100) NOT NULL,
+  contact_phone varchar(30) NOT NULL,
+  description varchar(4000) NOT NULL,
+  status varchar(20) NOT NULL DEFAULT 'NEW' CHECK (status IN ('NEW', 'ACKNOWLEDGED', 'REJECTED')),
+  resolution_note varchar(2000),
+  resolved_by uuid,
+  resolved_at timestamptz(6),
+  created_at timestamptz(6) NOT NULL DEFAULT now(),
+  FOREIGN KEY (tenant_id, equipment_id) REFERENCES equipments(tenant_id, id)
+);
+CREATE INDEX public_qr_inquiries_scope ON public_qr_inquiries (tenant_id, branch_id, status, created_at);
+
+
+\connect inventory_db
+-- apps/inventory-service/prisma/migrations/0007_part_pricing/migration.sql
+ALTER TABLE parts
+  ADD COLUMN cost_price numeric(14,2),
+  ADD COLUMN standard_price numeric(14,2),
+  ADD COLUMN currency varchar(3) NOT NULL DEFAULT 'VND',
+  ADD COLUMN pricing_version integer NOT NULL DEFAULT 1,
+  ADD CONSTRAINT parts_prices_valid CHECK (
+    (cost_price IS NULL OR cost_price >= 0) AND
+    (standard_price IS NULL OR standard_price >= 0) AND
+    currency = 'VND' AND pricing_version > 0
+  );
+
+
+\connect inventory_db
+-- apps/inventory-service/prisma/migrations/0008_estimate_parts/migration.sql
+CREATE TABLE estimate_parts_snapshots (
+  tenant_id uuid NOT NULL,
+  service_request_id uuid NOT NULL,
+  source_version integer NOT NULL CHECK (source_version > 0),
+  request_hash char(64) NOT NULL,
+  payload jsonb NOT NULL,
+  updated_at timestamptz(6) NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, service_request_id)
+);
+
+
+\connect inventory_db
+-- apps/inventory-service/prisma/migrations/0009_estimate_parts_inbox/migration.sql
+CREATE TABLE processed_events (
+  event_id uuid NOT NULL,
+  consumer varchar(100) NOT NULL,
+  event_type varchar(100) NOT NULL,
+  processed_at timestamptz(6) NOT NULL DEFAULT now(),
+  PRIMARY KEY (event_id, consumer)
+);

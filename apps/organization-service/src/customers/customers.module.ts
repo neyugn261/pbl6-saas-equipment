@@ -8,6 +8,6 @@ import { CustomersService } from './customers.service';
 @Module({
   controllers: [CustomersController, ContactsController],
   providers: [CustomersService, ContactsService, CustomersRepository],
-  exports: [CustomersService],
+  exports: [CustomersService, CustomersRepository],
 })
 export class CustomersModule {}

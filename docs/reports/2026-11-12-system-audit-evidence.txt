@@ -1,0 +1,126 @@
+PBL6 — BẰNG CHỨNG RÀ SOÁT HỆ THỐNG 12/11/2026
+Baseline: 4f34fcbb6f81e10cc40a8dd9c01bb67e39239fcc (develop)
+Báo cáo: 2026-11-12-full-system-critical-source-audit.md
+
+1. KIỂM TRA NODE / WEB
+
+pnpm lint
+Kết quả: exit 0.
+
+pnpm typecheck
+Kết quả: exit 0. Bao gồm build packages và Prisma generate theo script repo.
+
+pnpm --filter @pbl6/auth --filter @pbl6/service-kit --filter @pbl6/testing --filter identity-service --filter organization-service --filter asset-service --filter service-request-service --filter workorder-service --filter maintenance-service --filter inventory-service --filter notification-service --filter api-gateway --filter web test
+Kết quả: exit 0.
+  Web: 109
+  service-kit: 35
+  api-gateway: 8
+  auth: 45
+  testing: 3
+  organization-service: 15
+  asset-service: 70
+  identity-service: 16
+  maintenance-service: 22
+  workorder-service: 50
+  inventory-service: 24
+  notification-service: 58
+  service-request-service: 85
+Tổng: 540 test đạt.
+
+pnpm --filter @pbl6/event-contracts test --runInBand --testPathIgnorePatterns=rabbitmq.integration
+Kết quả: exit 0, 5 suite / 29 test đạt.
+Tổng Node/Web: 569 test đạt. Không bao gồm full DB suite hoặc full E2E.
+
+pnpm --filter web build
+Kết quả: exit 0. TypeScript + Vite build đạt, có các sửa đổi Web local sẵn có.
+
+2. PROBE CÔ LẬP SOURCE HIỆN HÀNH
+
+Script local: tmp/audit-20261112-probes.cjs
+Lệnh: node tmp/audit-20261112-probes.cjs
+Kết quả: exit 0.
+Phương pháp: transpile phương thức từ TypeScript hiện hành, mock persistence/network;
+dùng shared AccessTokenVerifier đã build và JWT key tổng hợp dành riêng cho audit.
+Không dùng tài khoản hay secret thật, không ghi DB.
+
+revoked_session:
+  Identity AuthService.me: 401 với session đã revoked.
+  Shared verifier với cùng access token: vẫn chấp nhận, còn equipment:manage.
+  Lưu ý: đây là trade-off đã ghi trong ADR 0004, không phải lỗi implementation mới.
+
+activation_tenant_status:
+  Mock tenant lookup nếu được gọi sẽ trả SUSPENDED.
+  Số lần gọi tenant lookup: 0.
+  UsersService.activateAccount trả token; verifier đọc role TENANT_ADMIN.
+  Chưa phải kiểm chứng HTTP/DB E2E; repository activation cũng đã được đọc để đối chiếu.
+
+create_work_order_retired_equipment:
+  Request ref: ACCEPTED, cùng equipment/customer.
+  Equipment ref: RETIRED.
+  WorkOrdersService.create resolver chấp nhận tham chiếu.
+  Không chạy INSERT Work Order vào DB trong probe này.
+
+3. PROBE RABBITMQ THẬT
+
+Script local: tmp/audit-20261112-rabbit-probe.cjs
+Lệnh: node tmp/audit-20261112-rabbit-probe.cjs
+Kết quả: exit 0.
+Sử dụng RabbitMqEventBus của package đã build từ source hiện hành.
+Chỉ tạo exchange audit.20261112.<UUID> và queue <exchange>.late-consumer.
+Không tiêu thụ queue nghiệp vụ, không thay đổi bảng outbox nghiệp vụ.
+
+Kết quả quan sát:
+{
+  "probe": "producer_before_first_consumer_binding",
+  "realRabbitMQ": true,
+  "firstPublishResolved": true,
+  "firstEventAvailableAfterBinding": false,
+  "secondEventReceived": true,
+  "businessQueuesTouched": false
+}
+
+Trình tự tái hiện:
+  a. Tạo publisher với exchange mới, không có subscription.
+  b. Chờ bus ready rồi publish TenantCreated tổng hợp: publish resolve.
+  c. Tạo durable queue và binding cho TenantCreated.v1.
+  d. Đọc queue: không có event đầu.
+  e. Publish event thứ hai: queue nhận đúng event thứ hai.
+  f. Dọn queue/exchange thử trong finally, đóng connection.
+
+Kết luận thực nghiệm chỉ chứng minh mất sự kiện trước binding.
+Kết luận outbox bị PUBLISHED dựa trên đường code relay.ts gọi markPublished
+sau publish resolve; không sửa outbox thật để thử.
+
+4. MOBILE: GIỚI HẠN MÔI TRƯỜNG, KHÔNG KẾT LUẬN LỖI SOURCE
+
+flutter analyze --no-pub
+Lần trong sandbox bị treo và được dừng; lần ngoài sandbox exit 1,
+báo 7296 vấn đề chủ yếu từ dependency/package URI không được resolve.
+Không coi con số đó là 7296 lỗi lập trình.
+
+flutter pub get --offline --enforce-lockfile
+Kết quả: exit 1.
+Thông báo chính:
+  The current Dart SDK version is 3.12.2.
+  Because pbl6_technician requires SDK version ^3.13.3, version solving failed.
+
+Không đổi SDK constraint, không nâng SDK, không sửa lockfile hoặc source Mobile.
+Chưa chạy Flutter test/build trong môi trường SDK đúng.
+
+5. CHƯA THỰC HIỆN TRONG LƯỢT NÀY
+
+- Full DB integration và full Gateway E2E.
+- Nghiệm thu toàn bộ Web bằng browser và Android thật.
+- Load test, pentest Internet, kiểm toán dependency/CVE.
+- Phá/recreate broker đang chứa nghiệp vụ để kiểm thử mất dữ liệu.
+- Backup/restore toàn hệ thống.
+- Fetch Git mới hoặc kiểm tra lại trạng thái CI/billing GitHub hiện tại.
+
+6. TÁC ĐỘNG MÔI TRƯỜNG
+
+- Khởi động Docker Desktop và RabbitMQ phát triển phục vụ probe.
+- Không seed/reset DB hoặc commit/merge.
+- Build/cache/generated outputs theo các script kiểm tra; không sửa source sản phẩm.
+- Tài nguyên RabbitMQ thử riêng đã được dọn.
+- Các log và script chi tiết trong tmp/audit-20261112-* bị Git ignore.
+- Hai file báo cáo Markdown/TXT mới là đầu ra bàn giao của lượt audit.

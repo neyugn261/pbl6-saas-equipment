@@ -1,0 +1,63 @@
+MINH UX — evidence 19/11/2026
+Baseline: develop@f0751a4
+Branch: codex/minh-ux-20261119
+
+Scope: Asset bulk registration/public QR intake; Inventory pricing/approved-parts projection;
+focused React Web pages; proposed shared event contract and schema/API documentation.
+
+Final successful checks:
+
+1. pnpm build:packages — PASS.
+2. pnpm --filter @pbl6/event-contracts test --runInBand --testPathIgnorePatterns=rabbitmq.integration
+   PASS: 6 suites / 31 tests. The shared RabbitMQ integration suite was explicitly excluded.
+3. pnpm --filter asset-service test --runInBand
+   PASS: 9 suites / 76 tests.
+4. pnpm --filter inventory-service test --runInBand
+   PASS: 4 suites / 25 tests.
+5. pnpm --filter web test
+   PASS: 133 tests, 0 failures, 0 skips. Includes pricing conflict and bulk-command recovery component tests.
+6. pnpm --filter asset-service test:db
+   PASS: 6 suites / 52 tests on fresh asset_test_db in isolated PostgreSQL.
+   Covers existing registration, handover, dossier, equipment/history and 8 new bulk/public-QR tests.
+   Final local log: tmp/minh-ux-check-1795094619996-0.log
+7. pnpm --filter inventory-service test:db --runTestsByPath test/inventory-db.integration.ts test/part-requests.integration.ts test/pricing-estimates.integration.ts
+   PASS: 3 suites / 67 tests. Includes 7 pricing/estimate tests and existing inventory/PartRequest regression.
+   Final local log: tmp/minh-ux-check-1795094154481-1.log
+
+Total above: 384 passing test cases in the selected scope; this is not the entire repository test gate.
+
+8. pnpm --filter asset-service typecheck — PASS.
+9. pnpm --filter inventory-service typecheck — PASS.
+10. pnpm --filter web typecheck — PASS; also executed as part of Web build.
+11. Lint Asset, Inventory, Web and @pbl6/event-contracts — PASS.
+12. Build Asset, Inventory and Web — PASS.
+13. Migration deploy on empty isolated Asset/Inventory test databases and repeat deploy — PASS.
+    Asset 12 migrations; Inventory 9 migrations; later repeat deploy reported no pending migrations.
+14. db:check-drift Asset and Inventory — PASS, no difference.
+    Shadow database also belongs to the isolated test container.
+    Logs: tmp/minh-ux-check-1795094672295-0.log and tmp/minh-ux-check-1795094674717-1.log
+15. YAML parsed with duplicate-key rejection; 378 local references resolve across 5 YAML documents — PASS.
+16. ADR/handoff local links and git diff --check — PASS.
+17. No working-tree changes in apps/mobile, apps/workorder-service or apps/service-request-service.
+    No staged changes, commits, pushes or merges were made for this delivery.
+
+Test environment and limits:
+- A separate ephemeral PostgreSQL 17 container was created for this work.
+- The temporary test container was removed after the checks. Existing demo containers were retained.
+- Only asset_test_db, inventory_test_db, maintenance_test_db and shadow_test_db in that container were used.
+- Demo databases were not migrated/reset/seeded by these checks.
+- Organization/WO HTTP references are explicit fixtures in the new suites.
+- Approved-parts envelopes call the real consumer with real inbox/DB writes, but Request production is not implemented here.
+- Existing Asset registration DB tests also start a real Maintenance HTTP service against its test database.
+- Web harness executes component handlers/effects; it does not verify browser layout, keyboard accessibility or Flutter.
+- No new live RabbitMQ producer-to-consumer UAT, whole-stack browser UAT, production deployment or live CI result is claimed.
+
+Resolved issues during implementation:
+- Corrected test BranchAccessClient fixture usage (403 during first attempt).
+- Added Inventory processed_events inbox required by its first consumer.
+- Corrected Asset history actor type to reuse the established auditContext helper.
+- Aligned SQL foreign-key/index declarations with Prisma (drift now clean).
+- Updated explicit import maps in existing Web harnesses for added components.
+- Initial fixture used a static QR token; switched it to random tokens. A later broad Asset run
+  collided with the early fixture residue. Recreated only the isolated asset_test_db and reran
+  the full suite from empty; final result is the 52-test PASS above. No product/demo DB was cleared.

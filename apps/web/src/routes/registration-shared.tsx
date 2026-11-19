@@ -235,6 +235,7 @@ export function DirectoryPicker({
   onChange,
   onAdd,
   revision = 0,
+  responseShape = 'page',
 }: {
   label: string
   area: 'organization' | 'assetM2'
@@ -243,14 +244,29 @@ export function DirectoryPicker({
   onChange: (id: string) => void
   onAdd?: () => void
   revision?: number
+  responseShape?: 'page' | 'list'
 }) {
   const [draft, setDraft] = useState(''),
     [q, setQ] = useState(''),
     [page, setPage] = useState(1)
   const target = path
-    ? `${path}${path.includes('?') ? '&' : '?'}page=${page}&pageSize=20&q=${encodeURIComponent(q)}`
+    ? responseShape === 'list'
+      ? path
+      : `${path}${path.includes('?') ? '&' : '?'}page=${page}&pageSize=20&q=${encodeURIComponent(q)}`
     : null
-  const state = useDirectory<Page<DirectoryRow>>(area, target, revision)
+  const state = useDirectory<Page<DirectoryRow> | DirectoryRow[]>(area, target, revision)
+  const list = responseShape === 'list' && Array.isArray(state.value)
+    ? state.value.filter(row =>
+        (row.status !== 'INACTIVE' || row.id === selected) &&
+        [row.code, row.name, row.address].filter(Boolean).join(' ').toLocaleLowerCase('vi').includes(q.trim().toLocaleLowerCase('vi')),
+      )
+    : null
+  const data = list
+    ? { items: list.slice((page - 1) * 20, page * 20), total: list.length }
+    : responseShape === 'page' && state.value && !Array.isArray(state.value) && Array.isArray(state.value.items)
+      ? state.value
+      : null
+  const shapeError = state.value && !data ? 'Danh sách tải về không đúng định dạng. Vui lòng thử lại.' : ''
   // The selected ID stays visible even when a different page is being searched.
   return (
     <fieldset className="registration-picker">
@@ -278,18 +294,18 @@ export function DirectoryPicker({
           </button>
         )}
       </div>
-      <LoadState {...state} />
+      <LoadState loading={state.loading} error={state.error || shapeError} />
       <select
         aria-label={label}
         value={selected}
         onChange={(e) => onChange(e.target.value)}
-        disabled={!path || state.loading}
+        disabled={!path || state.loading || Boolean(state.error || shapeError)}
       >
         <option value="">Chọn {label.toLowerCase()}</option>
-        {selected && !state.value?.items.some((row) => row.id === selected) && (
+        {selected && !data?.items.some((row) => row.id === selected) && (
           <option value={selected}>Đã chọn · Tên chưa tải được</option>
         )}
-        {state.value?.items.map((row) => (
+        {data?.items.map((row) => (
           <option key={row.id} value={row.id}>
             {[
               row.code,
@@ -304,10 +320,10 @@ export function DirectoryPicker({
           </option>
         ))}
       </select>
-      {state.value && (
+      {data && (
         <div className="registration-pagination">
           <span>
-            Trang {page} · {state.value.total} kết quả
+            Trang {page} · {data.total} kết quả
           </span>
           <button
             type="button"
@@ -318,7 +334,7 @@ export function DirectoryPicker({
           </button>
           <button
             type="button"
-            disabled={page * 20 >= state.value.total}
+            disabled={page * 20 >= data.total}
             onClick={() => setPage(page + 1)}
           >
             Sau

@@ -76,6 +76,7 @@ const staff: WorkspaceRole[] = [
 const customer: WorkspaceRole[] = ["CUSTOMER_ADMIN", "CUSTOMER_USER"];
 const equipment: WorkspaceRole[] = [...staff, "INVENTORY_STAFF"];
 const links: NavigationItem[] = [
+  { path: '/app/public-qr-inquiries', label: 'Báo lỗi QR chờ xác minh', group: 'Công việc dịch vụ', icon: 'ClipboardList', roles: ['SERVICE_MANAGER'] },
   {
     path: "/admin/tenants",
     label: "Doanh nghiệp sử dụng",
@@ -149,6 +150,13 @@ const links: NavigationItem[] = [
   {
     path: "/app/equipment-handovers",
     label: "Bàn giao thiết bị",
+    group: "Khách hàng & thiết bị",
+    icon: "ClipboardList",
+    roles: ["TENANT_ADMIN", "SERVICE_MANAGER"],
+  },
+  {
+    path: "/app/bulk-handovers",
+    label: "Nhập lô thiết bị",
     group: "Khách hàng & thiết bị",
     icon: "ClipboardList",
     roles: ["TENANT_ADMIN", "SERVICE_MANAGER"],

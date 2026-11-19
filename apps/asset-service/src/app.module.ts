@@ -1,4 +1,5 @@
 import { RegistrationMaintenanceConsumer } from './events/registration-maintenance.consumer';
+import { PublicQrTenantConsumer } from './events/public-qr-tenant.consumer';
 import { ModelPoliciesModule } from './model-policies/model-policies.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -30,6 +31,7 @@ import { HistoryConsumer } from './events/history.consumer';
     // Global JwtAuthGuard + PermissionsGuard: every route needs a token unless @Public().
     AuthModule.forRootAsync({
       inject: [ConfigService],
+      branchServiceUrl: (config: ConfigService) => config.getOrThrow<string>('ORGANIZATION_SERVICE_URL'),
       useFactory: (config: ConfigService) => jwtOptionsFromConfig(config),
     }),
     HealthModule.forRootAsync({
@@ -37,6 +39,6 @@ import { HistoryConsumer } from './events/history.consumer';
       useFactory: (prisma: PrismaService) => [prismaHealthCheck(prisma)],
     }),
   ],
-  providers: [EventsService, HistoryConsumer, RegistrationMaintenanceConsumer],
+  providers: [EventsService, HistoryConsumer, RegistrationMaintenanceConsumer, PublicQrTenantConsumer],
 })
 export class AppModule {}

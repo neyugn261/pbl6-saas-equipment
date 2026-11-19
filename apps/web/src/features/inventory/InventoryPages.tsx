@@ -20,8 +20,10 @@ import {
   stockLabels,
 } from "../workspace/ui-values";
 import "./inventory-parts.css";
+import { PartPricing, type Prices } from './PartPricing';
+import { priceText } from './prices';
 
-type Part = {
+type Part = Prices & {
   id: string;
   sku: string;
   name: string;
@@ -207,6 +209,7 @@ export function InventoryPartsPage() {
     unit: "",
     allowFractional: false,
     description: "",
+    costPrice: '', standardPrice: '',
   });
   const path = `/parts?page=${page}&pageSize=${pageSize}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
   const state = usePage<Part>(path, revision);
@@ -218,7 +221,8 @@ export function InventoryPartsPage() {
     try {
       await api.inventory("/parts", {
         method: "POST",
-        body: { ...form, description: form.description || undefined },
+        body: { ...form, description: form.description || undefined,
+          costPrice: form.costPrice || null, standardPrice: form.standardPrice || null },
       });
       setForm({
         sku: "",
@@ -226,6 +230,7 @@ export function InventoryPartsPage() {
         unit: "",
         allowFractional: false,
         description: "",
+        costPrice: '', standardPrice: '',
       });
       setShowForm(false);
       setRevision((value) => value + 1);
@@ -292,6 +297,9 @@ export function InventoryPartsPage() {
               }
             />
           </label>
+          <label>Giá niêm yết (VND)<input inputMode="decimal" pattern="(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?" value={form.standardPrice} onChange={e => setForm({ ...form, standardPrice: e.target.value })} /></label>
+          <label>Giá vốn nội bộ (VND)<input inputMode="decimal" pattern="(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?" value={form.costPrice} onChange={e => setForm({ ...form, costPrice: e.target.value })} /></label>
+          <p>Để trống nếu chưa cấu hình. Giá vốn chỉ hiển thị cho nhân viên có quyền quản lý kho.</p>
           <label>
             <input
               type="checkbox"
@@ -341,6 +349,8 @@ export function InventoryPartsPage() {
                     <th>Tên phụ tùng</th>
                     <th>Đơn vị</th>
                     <th>Cho phép lượng lẻ</th>
+                    <th>Giá niêm yết</th>
+                    {canManage && <th>Giá vốn</th>}
                     <th>Trạng thái</th>
                   </tr>
                 </thead>
@@ -355,6 +365,8 @@ export function InventoryPartsPage() {
                       <td>{part.name}</td>
                       <td>{part.unit}</td>
                       <td>{part.allowFractional ? "Có" : "Không"}</td>
+                      <td>{priceText(part.standardPrice, part.currency)}</td>
+                      {canManage && <td>{priceText(part.costPrice, part.currency)}</td>}
                       <td>
                         <StatusBadge status={part.status} label={part.status === "ACTIVE" ? "Đang sử dụng" : "Ngừng sử dụng"} />
                       </td>
@@ -451,6 +463,7 @@ export function InventoryPartPage() {
               </div>
             </section>
             <h2>Tồn theo kho</h2>
+            <PartPricing key={`${part.id}:${part.pricingVersion}`} part={part} canManage={canManage} onSaved={() => setRevision(value => value + 1)} />
             {stock?.items.map((row) => (
               <section
                 className="m1-card m1-section-card"

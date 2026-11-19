@@ -1,5 +1,20 @@
 # Versioned event catalog
 
+## 19/11 UX proposal — approved-parts snapshot
+
+`CostEstimatePartsSnapshot.v1` (producer Service Request, aggregate ServiceRequest)
+is defined in the executable catalog for owner/consumer review. Inventory's consumer
+and inbox are implemented; Request production is a handoff dependency, not a live
+integrated capability yet. Payload: serviceRequestId, estimateId, estimateRevision,
+per-Request sourceVersion, APPROVED/WITHDRAWN, VND and linked part lines containing
+lineId/partId/description/decimal quantity/unitPrice. Withdrawal is an empty full
+snapshot. It creates no inventory reservation or automatic demand. See
+[ADR 0024](../decisions/0024-minh-ux-bulk-pricing-public-qr.md).
+
+Asset also subscribes to existing `TenantStatusChanged.v1` on
+`asset-service.public-qr-tenant`: suspension/disable closes opt-in public QR links;
+activation never reopens them. Delivery uses the existing inbox/transport guarantees.
+
 Transport, envelope and guarantees: [ADR 0005](../decisions/0005-event-transport.md).
 The executable contract is `Events` in
 [`packages/event-contracts/src/catalog.ts`](../../packages/event-contracts/src/catalog.ts);

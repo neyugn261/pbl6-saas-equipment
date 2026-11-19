@@ -45,6 +45,26 @@ tags:
   - name: History
   - name: Internal
 paths:
+  /bulk-handovers/preview:
+    $ref: './minh-ux.yaml#/paths/~1bulk-handovers~1preview'
+  /bulk-handovers:
+    $ref: './minh-ux.yaml#/paths/~1bulk-handovers'
+  /bulk-handovers/update/preview:
+    $ref: './minh-ux.yaml#/paths/~1bulk-handovers~1update~1preview'
+  /bulk-handovers/update:
+    $ref: './minh-ux.yaml#/paths/~1bulk-handovers~1update'
+  /bulk-handovers/{id}:
+    $ref: './minh-ux.yaml#/paths/~1bulk-handovers~1{id}'
+  /equipment/{id}/qr-codes/public:
+    $ref: './minh-ux.yaml#/paths/~1equipment~1{id}~1qr-codes~1public'
+  /public/equipment-by-qr/{token}:
+    $ref: './minh-ux.yaml#/paths/~1public~1equipment-by-qr~1{token}'
+  /public/equipment-by-qr/{token}/inquiries:
+    $ref: './minh-ux.yaml#/paths/~1public~1equipment-by-qr~1{token}~1inquiries'
+  /public-qr-inquiries:
+    $ref: './minh-ux.yaml#/paths/~1public-qr-inquiries'
+  /public-qr-inquiries/{id}/decision:
+    $ref: './minh-ux.yaml#/paths/~1public-qr-inquiries~1{id}~1decision'
   /equipment-models:
     get:
       tags: [Models]
@@ -136,7 +156,9 @@ paths:
         CUSTOMER accounts only receive equipment of the customer_id in their
         token; their customerId query value is ignored. Staff may filter by a
         customer of their tenant. Search covers assetCode, serialNumber and
-        model name. Warranty is evaluated for today in Asia/Ho_Chi_Minh.
+        model name. Warranty is evaluated for today in Asia/Ho_Chi_Minh. Date
+        filters are inclusive. The response includes status/warranty/missing-
+        installation counts over the complete filtered set, not just this page.
       x-permissions: [equipment:read]
       x-user-types: [TENANT_STAFF, CUSTOMER]
       parameters:
@@ -151,13 +173,48 @@ paths:
           in: query
           description: Matches customerSiteId; combined with the effective customer scope.
           schema: { type: string, format: uuid }
+        - name: locationId
+          in: query
+          description: Matches equipment at this location under the effective tenant/customer scope.
+          schema: { type: string, format: uuid }
         - name: status
           in: query
           schema: { $ref: '#/components/schemas/EquipmentStatus' }
+        - name: operationalStatus
+          in: query
+          schema: { type: string, enum: [UNKNOWN, OPERATIONAL, DEGRADED, NOT_OPERATIONAL] }
+        - name: handoverFrom
+          in: query
+          description: Inclusive actual handover date lower bound.
+          schema: { type: string, format: date }
+        - name: purchaseFrom
+          in: query
+          description: Inclusive purchase date lower bound; independent from handover and warranty dates.
+          schema: { type: string, format: date }
+        - name: purchaseTo
+          in: query
+          description: Inclusive purchase date upper bound.
+          schema: { type: string, format: date }
+        - name: handoverTo
+          in: query
+          description: Inclusive actual handover date upper bound.
+          schema: { type: string, format: date }
+        - name: installationFrom
+          in: query
+          description: Inclusive actual installation date lower bound.
+          schema: { type: string, format: date }
+        - name: installationTo
+          in: query
+          description: Inclusive actual installation date upper bound.
+          schema: { type: string, format: date }
+        - name: installationDateMissing
+          in: query
+          description: Filter equipment by whether an actual installation date is recorded. Does not infer whether installation is required.
+          schema: { type: string, enum: [YES, NO] }
         - name: registrationStatus
           in: query
           description: Staff-only; CUSTOMER receives 403 if this filter is supplied
-          schema: { type: string, enum: [NOT_RECORDED, DRAFT, PENDING_MAINTENANCE, COMPLETED] }
+          schema: { type: string, enum: [NOT_RECORDED, DRAFT, PENDING_MAINTENANCE, PENDING_CUSTOMER_CONFIRMATION, COMPLETED] }
         - name: warranty
           in: query
           description: Filter by warranty state today
@@ -175,9 +232,10 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/PageMeta'
                   - type: object
-                    required: [items]
+                    required: [items, summary]
                     properties:
                       items: { type: array, items: { $ref: '#/components/schemas/EquipmentListItem' } }
+                      summary: { $ref: '#/components/schemas/EquipmentListSummary' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -691,7 +749,7 @@ components:
         status: { $ref: '#/components/schemas/EquipmentModelStatus' }
     Equipment:
       type: object
-      required: [id, modelId, customerId, customerSiteId, locationId, assetCode, serialNumber, installationDate, handoverDate, status, createdAt, updatedAt, displayName, description, commissionedDate, technicalSpecifications, operationalStatus, operationalStatusUpdatedAt, operationalStatusUpdatedBy]
+      required: [id, modelId, customerId, customerSiteId, locationId, assetCode, serialNumber, purchaseDate, installationDate, handoverDate, status, createdAt, updatedAt, displayName, description, commissionedDate, technicalSpecifications, operationalStatus, operationalStatusUpdatedAt, operationalStatusUpdatedBy]
       properties:
         registrationStatus: { type: string, enum: [NOT_RECORDED, DRAFT, PENDING_MAINTENANCE, COMPLETED], description: Staff list/detail only; initial setup progress is separate from equipment lifecycle }
         registrationId: { type: [string, 'null'], format: uuid, description: Staff list/detail only; omitted for CUSTOMER }
@@ -710,6 +768,7 @@ components:
         assetCode: { type: string }
         serialNumber: { type: string }
         installationDate: { type: [string, 'null'], format: date }
+        purchaseDate: { type: [string, 'null'], format: date, description: Recorded purchase date; never used as warranty start date. }
         handoverDate: { type: [string, 'null'], format: date }
         status: { $ref: '#/components/schemas/EquipmentStatus' }
         createdAt: { type: string, format: date-time }
@@ -725,9 +784,46 @@ components:
       allOf:
         - $ref: '#/components/schemas/Equipment'
         - type: object
-          required: [warranty]
+          required: [model, warranty, customerDisplay, siteDisplay, locationDisplay]
           properties:
+            model: { $ref: '#/components/schemas/EquipmentListModel' }
+            customerDisplay: { $ref: '#/components/schemas/EquipmentDisplayReference' }
+            siteDisplay: { $ref: '#/components/schemas/EquipmentSiteDisplayReference' }
+            locationDisplay: { $ref: '#/components/schemas/EquipmentDisplayReference' }
             warranty: { $ref: '#/components/schemas/WarrantyStatus' }
+    EquipmentDisplayReference:
+      type: [object, 'null']
+      required: [name]
+      properties:
+        name: { type: string }
+        code: { type: string }
+    EquipmentSiteDisplayReference:
+      type: [object, 'null']
+      required: [name]
+      properties:
+        name: { type: string }
+        code: { type: string }
+        address: { type: string }
+    EquipmentListModel:
+      type: object
+      required: [id, manufacturer, modelCode, name, category]
+      properties:
+        id: { type: string, format: uuid }
+        manufacturer: { type: string }
+        modelCode: { type: string }
+        name: { type: string }
+        category: { type: [string, 'null'] }
+    EquipmentListSummary:
+      type: object
+      description: Counts over the complete filtered dataset, not only the current page.
+      required: [active, inService, outOfService, retired, inWarranty, withoutInstallationDate]
+      properties:
+        active: { type: integer, minimum: 0 }
+        inService: { type: integer, minimum: 0 }
+        outOfService: { type: integer, minimum: 0 }
+        retired: { type: integer, minimum: 0 }
+        inWarranty: { type: integer, minimum: 0 }
+        withoutInstallationDate: { type: integer, minimum: 0, description: Equipment records with installationDate null; does not imply installation is required. }
     EquipmentDetail:
       allOf:
         - $ref: '#/components/schemas/Equipment'
@@ -753,6 +849,7 @@ components:
         assetCode: { type: string, minLength: 1, maxLength: 100 }
         serialNumber: { type: string, minLength: 1, maxLength: 150, description: Unique within (tenant, model) }
         installationDate: { type: string, format: date }
+        purchaseDate: { type: string, format: date }
         handoverDate: { type: string, format: date }
     EquipmentPatch:
       type: object
@@ -767,6 +864,7 @@ components:
         - { required: [customerSiteId] }
         - { required: [locationId] }
         - { required: [installationDate] }
+        - { required: [purchaseDate] }
         - { required: [handoverDate] }
         - { required: [status] }
       if: { required: [operationalStatus] }
@@ -785,6 +883,7 @@ components:
         customerSiteId: { type: string, format: uuid, description: Must belong to the existing customer; changing it without locationId clears the old location }
         locationId: { type: [string, 'null'], format: uuid, description: A non-null location must belong to the effective site }
         installationDate: { type: [string, 'null'], format: date }
+        purchaseDate: { type: [string, 'null'], format: date }
         handoverDate: { type: [string, 'null'], format: date }
         status: { $ref: '#/components/schemas/EquipmentStatus' }
     Specifications:

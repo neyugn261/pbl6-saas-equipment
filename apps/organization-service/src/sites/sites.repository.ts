@@ -26,6 +26,24 @@ export class SitesRepository {
         ...(scope.customerId ? { customerId: scope.customerId } : {}),
         deletedAt: null, customer: { deletedAt: null },
       },
+      select: { id: true, tenantId: true, name: true, code: true, address: true },
+    });
+  }
+
+  displayLocationNames(scope: { tenantId: string; customerId: string | null }, ids: string[]) {
+    return this.prisma.location.findMany({
+      where: {
+        tenantId: scope.tenantId,
+        id: { in: [...new Set(ids)] },
+        deletedAt: null,
+        customerSite: {
+          deletedAt: null,
+          customer: {
+            deletedAt: null,
+            ...(scope.customerId ? { id: scope.customerId } : {}),
+          },
+        },
+      },
       select: { id: true, tenantId: true, name: true, code: true },
     });
   }

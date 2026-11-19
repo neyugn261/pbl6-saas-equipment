@@ -16,6 +16,28 @@ datasource db {
   provider = "postgresql"
 }
 
+model EstimatePartsSnapshot {
+  tenantId String @map("tenant_id") @db.Uuid
+  serviceRequestId String @map("service_request_id") @db.Uuid
+  sourceVersion Int @map("source_version")
+  requestHash String @map("request_hash") @db.Char(64)
+  payload Json
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([tenantId, serviceRequestId])
+  @@map("estimate_parts_snapshots")
+}
+
+model ProcessedEvent {
+  eventId String @map("event_id") @db.Uuid
+  consumer String @db.VarChar(100)
+  eventType String @map("event_type") @db.VarChar(100)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([eventId, consumer])
+  @@map("processed_events")
+}
+
 /// status: ACTIVE | INACTIVE.
 model Part {
   id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -24,6 +46,10 @@ model Part {
   name              String             @db.VarChar(200)
   unit              String             @db.VarChar(30)
   allowFractional   Boolean            @default(false) @map("allow_fractional")
+  costPrice         Decimal?           @map("cost_price") @db.Decimal(14, 2)
+  standardPrice     Decimal?           @map("standard_price") @db.Decimal(14, 2)
+  currency          String             @default("VND") @db.VarChar(3)
+  pricingVersion    Int                @default(1) @map("pricing_version")
   description       String?
   status            String             @default("ACTIVE") @db.VarChar(30)
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)

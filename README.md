@@ -1,5 +1,8 @@
 # 🛠️ PBL6 - SaaS Equipment Management
 
+UX phần Minh ngày 19/11 (working tree): [bàn giao và các trang demo](docs/reports/2026-11-19-minh-ux-handoff.md),
+[ADR 0024](docs/decisions/0024-minh-ux-bulk-pricing-public-qr.md). Phụ tùng theo báo giá còn phụ thuộc producer của Service Request.
+
 Nền tảng SaaS quản lý bảo hành, bảo trì và điều phối kỹ thuật viên hiện trường cho các doanh nghiệp cung cấp thiết bị (multi-tenant). Đồ án chuyên ngành Công nghệ phần mềm (PBL6).
 
 - Bối cảnh nghiệp vụ và quy tắc kiến trúc: [AGENTS.md](AGENTS.md)

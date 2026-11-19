@@ -1,5 +1,11 @@
 # Inventory Service
 
+19/11 UX working tree: nullable VND catalogue prices, versioned price editing and
+restricted cost visibility; approved-parts snapshot consumer and WO comparison API.
+The Service Request producer is still an owner handoff dependency. See
+[ADR 0024](../../docs/decisions/0024-minh-ux-bulk-pricing-public-qr.md),
+[API supplement](../../docs/api/minh-ux.yaml) and [demo/handoff](../../docs/reports/2026-11-19-minh-ux-handoff.md).
+
 Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
 
 M3 runtime owned by Minh. Part/Warehouse, stock/threshold reads, immutable ledger,

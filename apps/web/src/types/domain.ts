@@ -56,9 +56,25 @@ export interface EquipmentRecord {
   assetCode: string
   serialNumber: string
   status: EquipmentStatus
+  purchaseDate?: string | null
   handoverDate: string | null
-  model?: { name: string }
-  warranty?: { result: 'IN_WARRANTY' | 'OUT_OF_WARRANTY' | 'NO_WARRANTY' }
+  installationDate?: string | null
+  updatedAt?: string
+  createdAt?: string
+  operationalStatus?: 'UNKNOWN' | 'OPERATIONAL' | 'DEGRADED' | 'NOT_OPERATIONAL'
+  model?: { id?: string; manufacturer?: string; modelCode?: string; category?: string | null; name: string }
+  warranty?: { result: 'IN_WARRANTY' | 'OUT_OF_WARRANTY' | 'NO_WARRANTY'; endDate?: string | null }
+  customerDisplay?: { name: string; code?: string } | null
+  siteDisplay?: { name: string; code?: string; address?: string } | null
+  locationDisplay?: { name: string; code?: string } | null
+}
+export interface EquipmentListSummary {
+  active: number
+  inService: number
+  outOfService: number
+  retired: number
+  inWarranty: number
+  withoutInstallationDate: number
 }
 export interface RequestRecord {
   id: string

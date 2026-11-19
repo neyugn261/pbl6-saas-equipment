@@ -4,10 +4,11 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { assertInScope, dataScope, type Principal } from '@pbl6/auth';
-import { toPage, type Page } from '@pbl6/service-kit';
+import { DisplayNameLookup, toPage, type DisplayName, type Page } from '@pbl6/service-kit';
 import type {
   Equipment,
   EquipmentModel,
@@ -41,6 +42,37 @@ export interface WarrantyStatusResponse {
   policySnapshot: Warranty['policySnapshot'] | null;
 }
 
+export interface EquipmentListSummary {
+  active: number;
+  inService: number;
+  outOfService: number;
+  retired: number;
+  inWarranty: number;
+  withoutInstallationDate: number;
+}
+
+export interface EquipmentListModel {
+  id: string;
+  manufacturer: string;
+  modelCode: string;
+  name: string;
+  category: string | null;
+}
+
+export type EquipmentDisplayReference = Pick<DisplayName, 'name'> & {
+  code?: string;
+  address?: string;
+};
+
+function displayReference(row: DisplayName | undefined): EquipmentDisplayReference | null {
+  if (!row) return null;
+  return {
+    name: row.name,
+    ...(row.code ? { code: row.code } : {}),
+    ...(row.address ? { address: row.address } : {}),
+  };
+}
+
 export interface EquipmentResponse {
   displayName: string | null;
   description: string | null;
@@ -59,6 +91,7 @@ export interface EquipmentResponse {
   assetCode: string;
   serialNumber: string;
   installationDate: string | null;
+  purchaseDate: string | null;
   handoverDate: string | null;
   status: string;
   createdAt: string;
@@ -94,6 +127,7 @@ export function equipmentResponse(
     assetCode: row.assetCode,
     serialNumber: row.serialNumber,
     installationDate: dateString(row.installationDate),
+    purchaseDate: dateString(row.purchaseDate),
     handoverDate: dateString(row.handoverDate),
     status: row.status,
     createdAt: row.createdAt.toISOString(),
@@ -129,29 +163,70 @@ export class EquipmentService {
     private readonly models: EquipmentModelRepository,
     @Inject(ORGANIZATION_CLIENT)
     private readonly organization: OrganizationClient,
+    @Optional() private readonly names?: DisplayNameLookup,
   ) {}
 
   async list(
     principal: Principal,
     query: ListEquipmentQueryDto,
-  ): Promise<Page<EquipmentResponse & { warranty: WarrantyStatusResponse }>> {
+  ): Promise<
+    Page<EquipmentResponse & {
+      warranty: WarrantyStatusResponse;
+      model: EquipmentListModel;
+      customerDisplay: EquipmentDisplayReference | null;
+      siteDisplay: EquipmentDisplayReference | null;
+      locationDisplay: EquipmentDisplayReference | null;
+    }> & {
+      summary: EquipmentListSummary;
+    }
+  > {
     if (principal.userType === 'CUSTOMER' && query.registrationStatus)
       throw new ForbiddenException({
         code: 'FORBIDDEN',
         message: 'Registration progress filters are staff-only',
       });
-    const { rows, total, asOfDate } = await this.repository.list(
+    if (
+      (query.handoverFrom && query.handoverTo && query.handoverFrom > query.handoverTo) ||
+      (query.installationFrom && query.installationTo && query.installationFrom > query.installationTo) ||
+      (query.purchaseFrom && query.purchaseTo && query.purchaseFrom > query.purchaseTo)
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_DATE_RANGE',
+        message: 'Date range start must be on or before its end',
+      });
+    }
+    const { rows, total, asOfDate, summary } = await this.repository.list(
       dataScope(principal),
       query,
     );
-    return toPage(
+    const [customers, sites, locations] = this.names
+      ? await Promise.all([
+          this.names.lookup('customers', rows.map((row) => row.customerId), principal),
+          this.names.lookup('sites', rows.map((row) => row.customerSiteId), principal),
+          this.names.lookup('locations', rows.map((row) => row.locationId), principal),
+        ])
+      : [new Map(), new Map(), new Map()];
+    const page = toPage(
       rows.map((row) => ({
         ...equipmentResponse(row, principal.userType === 'CUSTOMER'),
+        model: {
+          id: row.model.id,
+          manufacturer: row.model.manufacturer,
+          modelCode: row.model.modelCode,
+          name: row.model.name,
+          category: row.model.category,
+        },
+        customerDisplay: displayReference(customers.get(row.customerId.toLowerCase())),
+        siteDisplay: displayReference(sites.get(row.customerSiteId.toLowerCase())),
+        locationDisplay: row.locationId
+          ? displayReference(locations.get(row.locationId.toLowerCase()))
+          : null,
         warranty: this.warrantyResponse(row.id, asOfDate, row.warranties[0] ?? null),
       })),
       total,
       query,
     );
+    return { ...page, summary };
   }
 
   async create(
@@ -190,6 +265,8 @@ export class EquipmentService {
         code: 'VALIDATION_FAILED',
         message: 'Display name cannot be blank',
       });
+    if (input.purchaseDate && input.purchaseDate > todayInVietnam())
+      throw new BadRequestException({ code: 'INVALID_PURCHASE_DATE', message: 'Purchase date cannot be in the future' });
   }
 
   async detail(principal: Principal, id: string) {
@@ -250,6 +327,8 @@ export class EquipmentService {
     principal: Principal,
     id: string,
     input: PatchEquipmentDto,
+    expectedUpdatedAt?: string,
+    sourceBatchId?: string,
   ): Promise<EquipmentResponse> {
     if (
       Object.entries(input).every(
@@ -291,6 +370,8 @@ export class EquipmentService {
         message: 'Retired equipment cannot be changed',
       });
     }
+    if (input.purchaseDate && input.purchaseDate > todayInVietnam())
+      throw new BadRequestException({ code: 'INVALID_PURCHASE_DATE', message: 'Purchase date cannot be in the future' });
     // Skip Organization on date/status-only patches. A changed site with no
     // location clears the old location; a non-null location is checked at its effective site.
     if (input.customerSiteId !== undefined || input.locationId !== undefined) {
@@ -315,8 +396,29 @@ export class EquipmentService {
         input,
         validatedSiteId,
         principal.roles,
+        expectedUpdatedAt,
+        sourceBatchId,
       ),
     );
+  }
+
+  async validateBulkPatch(
+    principal: Principal,
+    id: string,
+    input: PatchEquipmentDto,
+    expectedUpdatedAt: string,
+  ) {
+    const scope = dataScope(principal);
+    const before = assertInScope(scope, await this.repository.findScoped(scope, id), 'EQUIPMENT_NOT_FOUND');
+    if (before.updatedAt.toISOString() !== expectedUpdatedAt)
+      throw new ConflictException({ code: 'EQUIPMENT_CHANGED', message: 'Equipment changed after this file was exported; export a fresh update template.' });
+    if (before.status === 'RETIRED')
+      throw new ConflictException({ code: 'EQUIPMENT_RETIRED', message: 'Retired equipment cannot be changed' });
+    if (input.purchaseDate && input.purchaseDate > todayInVietnam())
+      throw new BadRequestException({ code: 'INVALID_PURCHASE_DATE', message: 'Purchase date cannot be in the future' });
+    if (input.customerSiteId !== undefined || input.locationId !== undefined)
+      await this.validateSite(before.customerId, input.customerSiteId ?? before.customerSiteId, input.locationId ?? undefined, principal);
+    return { id: before.id, assetCode: before.assetCode };
   }
 
   async reference(principal: Principal, id: string) {

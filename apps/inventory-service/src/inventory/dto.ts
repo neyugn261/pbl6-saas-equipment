@@ -8,6 +8,8 @@ import {
   MaxLength,
   MinLength,
   ValidateIf,
+  IsInt,
+  Min,
 } from 'class-validator';
 import { PaginationQueryDto } from '@pbl6/service-kit';
 
@@ -19,12 +21,19 @@ const trim = ({ value }: { value: unknown }) =>
 export const QUANTITY = /^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$/;
 export const MONEY = /^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$/;
 export class PartInput {
+  @ValidateIf(nullable) @Matches(MONEY) costPrice?: string | null;
+  @ValidateIf(nullable) @Matches(MONEY) standardPrice?: string | null;
   @Transform(trim) @IsString() @MinLength(1) @MaxLength(100) sku: string;
   @Transform(trim) @IsString() @MinLength(1) @MaxLength(200) name: string;
   @Transform(trim) @IsString() @MinLength(1) @MaxLength(30) unit: string;
   @ValidateIf(supplied) @IsBoolean() allowFractional?: boolean;
   @ValidateIf(nullable) @IsString() @MaxLength(4000) description?:
     string | null;
+}
+export class PartPricingInput {
+  @IsInt() @Min(1) expectedVersion: number;
+  @ValidateIf(nullable) @Matches(MONEY) costPrice?: string | null;
+  @ValidateIf(nullable) @Matches(MONEY) standardPrice?: string | null;
 }
 export class PartPatch {
   @ValidateIf(supplied)

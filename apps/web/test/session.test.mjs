@@ -71,6 +71,16 @@ function deferred() {
   return { promise, resolve, reject }
 }
 const ok = (value) => Response.json(value)
+
+test('login rate limit explains the wait and never creates a stored session', async () => {
+  const browser = tab(async () => new Response(JSON.stringify({ code: 'RATE_LIMIT_EXCEEDED' }), {
+    status: 429, headers: { 'content-type': 'application/json', 'Retry-After': '61' },
+  }))
+  await assert.rejects(browser.session.login({ email: 'manager@demo.local', password: 'demo' }),
+    /Đã vượt giới hạn.*2 phút/)
+  assert.equal(browser.sessionStorage.getItem('pbl6.session.refresh'), null)
+})
+
 const tokens = (label) => ({
   accessToken: `access-${label}`,
   refreshToken: `refresh-${label}`,

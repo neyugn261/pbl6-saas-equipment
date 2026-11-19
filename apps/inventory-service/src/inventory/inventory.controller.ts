@@ -31,6 +31,7 @@ import {
   IssueInput,
   PartInput,
   PartPatch,
+  PartPricingInput,
   ReturnInput,
   StockMutation,
   ThresholdInput,
@@ -99,6 +100,12 @@ export class InventoryController {
     @Body() input: PartPatch,
   ) {
     return this.service.updatePart(p, id, input);
+  }
+  @Put('parts/:id/pricing')
+  @RequirePermissions('inventory:manage')
+  pricing(@CurrentUser() p: Principal, @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: PartPricingInput) {
+    return this.service.pricing(p, id, input);
   }
   @Get('warehouses')
   @RequirePermissions('inventory:read')

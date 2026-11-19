@@ -34,6 +34,7 @@ function setup(order, mutation = async () => ({})) {
     "../../routes/ModelPolicyPanels": { WorkOrderChecklist: "checklist" },
     "../attachments/AttachmentsPanel": { AttachmentsPanel: "attachments" },
     "../inventory/PartRequests": { WorkOrderPartRequests: "part-requests" },
+    "../inventory/RecommendedParts": { RecommendedParts: 'recommended-parts' },
     "./WorkspaceUI": {
       Badge: "badge",
       DataState: "data-state",

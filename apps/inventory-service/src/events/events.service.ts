@@ -5,7 +5,8 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OutboxRelay, RabbitMqEventBus } from '@pbl6/event-contracts';
+import { Events, OutboxRelay, RabbitMqEventBus } from '@pbl6/event-contracts';
+import { EstimatePartsService } from '../part-requests/estimate-parts.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly db: PrismaService,
     private readonly config: ConfigService,
+    private readonly estimateParts: EstimatePartsService,
   ) {}
   async onModuleInit() {
     const url = this.config.get<string>('RABBITMQ_URL');
@@ -26,6 +28,8 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.bus = new RabbitMqEventBus({ url, logger: this.logger });
+    this.bus.subscribe({ queue: 'inventory-service.estimate-parts', events: [Events.CostEstimatePartsSnapshot],
+      handler: event => this.estimateParts.handle(event) });
     await this.bus.start();
     this.relay = new OutboxRelay({
       db: this.db,

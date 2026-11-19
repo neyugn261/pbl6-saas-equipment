@@ -76,6 +76,7 @@ type Equipment = {
   assetCode: string
   serialNumber: string
   displayName: string | null
+  purchaseDate: string | null
   handoverDate: string | null
   installationDate: string | null
   commissionedDate: string | null
@@ -97,6 +98,7 @@ type FormState = {
   assetCode: string
   serialNumber: string
   displayName: string
+  purchaseDate: string
   handoverDate: string
   installationDate: string
   commissionedDate: string
@@ -122,6 +124,7 @@ function formEquipment(eq: Equipment) {
     assetCode: eq.assetCode,
     serialNumber: eq.serialNumber,
     displayName: eq.displayName || '',
+    purchaseDate: eq.purchaseDate || '',
     handoverDate: eq.handoverDate || '',
     installationDate: eq.installationDate || '',
     commissionedDate: eq.commissionedDate || '',
@@ -174,12 +177,12 @@ export function RegistrationListPage() {
   )
   return (
     <SetupPage
-      title="Hồ sơ ghi nhận bàn giao"
-      description="Tiếp tục các hồ sơ đã lưu và kiểm tra kết quả thiết lập dịch vụ."
+      title="Hồ sơ đăng ký thiết bị"
+      description="Chuẩn bị thông tin máy và chính sách trước khi hoàn tất bàn giao. Các hồ sơ nháp chưa có nghĩa là khách đã nhận máy."
       actions={
-        <Link className="m1-button" to="/app/equipment-registrations/new">
-          + Ghi nhận bàn giao
-        </Link>
+        <><Link className="m1-button" to="/app/bulk-handovers">Nhập lô CSV / XLSX</Link><Link className="m1-button" to="/app/equipment-registrations/new">
+          + Đăng ký thiết bị
+        </Link></>
       }
     >
       <section className="m1-card registration-directory">
@@ -273,6 +276,7 @@ export function EquipmentRegistrationPage() {
     assetCode: '',
     serialNumber: '',
     displayName: '',
+    purchaseDate: '',
     handoverDate: '',
     installationDate: '',
     commissionedDate: '',
@@ -600,6 +604,7 @@ export function EquipmentRegistrationPage() {
                     ...(form.displayName.trim()
                       ? { displayName: form.displayName.trim() }
                       : {}),
+                    ...(form.purchaseDate ? { purchaseDate: form.purchaseDate } : {}),
                     ...(form.handoverDate
                       ? { handoverDate: form.handoverDate }
                       : {}),
@@ -923,8 +928,8 @@ export function EquipmentRegistrationPage() {
   }
   return (
     <SetupPage
-      title="Ghi nhận thiết bị đã bàn giao"
-      description="Khách hàng → thiết bị → chính sách của Model → xác nhận bàn giao."
+      title="Đăng ký thiết bị và chuẩn bị bàn giao"
+      description="Lưu hồ sơ nháp → kiểm tra thông tin và chính sách → hoàn tất tại cửa hàng hoặc gửi khách xác nhận tại cơ sở. Ngày bàn giao thực tế chỉ ghi khi đã diễn ra."
       actions={
         <Link
           to="/app/equipment-registrations"
@@ -1409,6 +1414,7 @@ export function EquipmentRegistrationPage() {
                     {(
                       [
                         ['handoverDate', 'Ngày bàn giao thực tế'],
+                        ['purchaseDate', 'Ngày mua'],
                         ['installationDate', 'Ngày lắp đặt'],
                         ['commissionedDate', 'Ngày đưa vào sử dụng'],
                       ] as const
@@ -1416,6 +1422,7 @@ export function EquipmentRegistrationPage() {
                       .filter(
                         ([key]) =>
                           key === 'handoverDate' ||
+                          key === 'purchaseDate' ||
                           form.deliveryMethod === 'CUSTOMER_SITE' ||
                           (record && !record.deliveryMethod),
                       )
@@ -1426,7 +1433,7 @@ export function EquipmentRegistrationPage() {
                             type="date"
                             value={form[key]}
                             max={today()}
-                            disabled={frozen || busy}
+                            disabled={frozen || busy || (key === 'purchaseDate' && form.source === 'EXISTING')}
                             onChange={(e) => {
                               field(key, e.target.value)
                               if (record || form.source === 'EXISTING')
