@@ -12,9 +12,9 @@ export class DisplayIdsQuery {
   ids!: string[];
 }
 
-export type DisplayName = { id: string; tenantId: string; name: string; code?: string };
+export type DisplayName = { id: string; tenantId: string; name: string; code?: string; address?: string };
 type Caller = { tenantId: string | null; accessToken: string };
-type Kind = 'users' | 'branches' | 'sites';
+type Kind = 'users' | 'branches' | 'customers' | 'sites' | 'locations';
 
 /** Optional presentation data only. No shared cache: every call rechecks caller authorization. */
 export class DisplayNameLookup {
@@ -38,7 +38,11 @@ export class DisplayNameLookup {
           if (typeof row?.id !== 'string' || typeof row.tenantId !== 'string' ||
             row.tenantId.toLowerCase() !== caller.tenantId.toLowerCase() ||
             !batch.includes(row.id.toLowerCase()) || typeof row.name !== 'string') continue;
-          result.set(row.id.toLowerCase(), row);
+          result.set(row.id.toLowerCase(), {
+            ...row,
+            ...(typeof row.code === 'string' ? { code: row.code } : {}),
+            ...(typeof row.address === 'string' ? { address: row.address } : {}),
+          });
         }
       } catch {
         // A timeout, forbidden/missing reference or deployment lag must not fail a business read.

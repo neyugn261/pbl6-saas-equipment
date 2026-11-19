@@ -35,6 +35,7 @@ import type {
   IssueInput,
   PartInput,
   PartPatch,
+  PartPricingInput,
   ReturnInput,
   StockMutation,
   WarehouseInput,
@@ -150,6 +151,12 @@ export class InventoryService {
     return json(
       await this.repo.updatePart(this.tenant(p), id, input, p.userId),
     );
+  }
+  async pricing(p: Principal, id: string, input: PartPricingInput) {
+    if (!p.permissions.has('inventory:manage')) throw new ForbiddenException();
+    if (input.costPrice === undefined && input.standardPrice === undefined)
+      throw invalid('EMPTY_PRICING', 'Provide at least one price');
+    return json(await this.repo.pricing(this.tenant(p), id, input, p.userId));
   }
   async warehouses(p: Principal, q: InventoryQuery) {
     const page = (await this.repo.warehouses(this.tenant(p), q,

@@ -7,6 +7,7 @@ import {
   type ChecklistItem,
 } from './model-policies';
 import { type Check, is, shapeProblems } from './checks';
+import { validEstimatePartLines, type CostEstimatePartsSnapshotV1 } from './estimate-parts';
 
 /**
  * Event catalog v1 (docs/architecture/events.md). Each event has a type, a
@@ -661,6 +662,16 @@ export const Events = {
         policyVersionId: is.uuid,
       },
     }),
+  CostEstimatePartsSnapshot: define<CostEstimatePartsSnapshotV1>({
+    type: 'CostEstimatePartsSnapshot', version: 1, aggregateType: 'ServiceRequest',
+    producer: 'service-request-service', fields: {
+      serviceRequestId: is.uuid, estimateId: is.uuid,
+      estimateRevision: v => Number.isSafeInteger(v) && Number(v) > 0,
+      sourceVersion: v => Number.isSafeInteger(v) && Number(v) > 0 && Number(v) <= 2147483647,
+      status: is.oneOf(['APPROVED', 'WITHDRAWN']), currency: is.oneOf(['VND']),
+      lines: validEstimatePartLines,
+    },
+  }),
   LowStockDetected: define<LowStockDetectedV1>({
     type: 'LowStockDetected',
     version: 1,

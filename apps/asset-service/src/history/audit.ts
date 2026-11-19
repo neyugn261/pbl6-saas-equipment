@@ -21,6 +21,7 @@ export function equipmentSnapshot(row: Equipment) {
     customerId: row.customerId,
     customerSiteId: row.customerSiteId,
     locationId: row.locationId,
+    purchaseDate: row.purchaseDate?.toISOString().slice(0, 10) ?? null,
   };
 }
 export function auditContext(

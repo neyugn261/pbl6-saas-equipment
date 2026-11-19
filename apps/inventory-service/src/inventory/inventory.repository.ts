@@ -7,6 +7,7 @@ import type {
   InventoryQuery,
   PartInput,
   PartPatch,
+  PartPricingInput,
   WarehouseInput,
   WarehousePatch,
   AuditQuery,
@@ -153,6 +154,22 @@ export class InventoryRepository {
         row,
       );
       return row;
+    });
+  }
+  pricing(tenantId: string, id: string, input: PartPricingInput, actorId: string) {
+    return this.db.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM parts WHERE tenant_id = ${tenantId}::uuid AND id = ${id}::uuid FOR UPDATE`;
+      const before = await tx.part.findFirst({ where: { tenantId, id } });
+      if (!before) throw notFound();
+      if (before.pricingVersion !== input.expectedVersion)
+        throw conflict('PRICING_VERSION_CONFLICT', 'Prices changed; reload before saving');
+      const after = await tx.part.update({ where: { id }, data: {
+        ...(input.costPrice === undefined ? {} : { costPrice: input.costPrice }),
+        ...(input.standardPrice === undefined ? {} : { standardPrice: input.standardPrice }),
+        pricingVersion: { increment: 1 },
+      } });
+      await this.audit(tx, tenantId, actorId, 'PART', id, 'PRICING_UPDATED', before, after);
+      return after;
     });
   }
   updatePart(tenantId: string, id: string, input: PartPatch, actorId: string) {

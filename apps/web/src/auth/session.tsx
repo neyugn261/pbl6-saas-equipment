@@ -65,6 +65,13 @@ async function json<T>(path: string, init: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get('Retry-After'))
+      const wait = Number.isFinite(seconds) && seconds > 0
+        ? ` Vui lòng thử lại sau khoảng ${Math.ceil(seconds / 60)} phút.`
+        : ' Vui lòng chờ một lúc rồi thử lại.'
+      throw new Error(`Đã vượt giới hạn số lần đăng nhập hoặc xác thực.${wait}`)
+    }
     throw new Error(body.message || `Identity: ${response.status}`)
   }
   return response.json() as Promise<T>

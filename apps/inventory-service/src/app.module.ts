@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import { EstimatePartsController } from './part-requests/estimate-parts.controller';
+import { EstimatePartsService } from './part-requests/estimate-parts.service';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { PricingVisibilityInterceptor } from './inventory/pricing.interceptor';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule, jwtOptionsFromConfig } from '@pbl6/auth';
 import { HealthModule, DisplayNameLookup } from '@pbl6/service-kit';
@@ -40,6 +44,7 @@ import { InventoryRequestsService } from './part-requests/requests.service';
     }),
   ],
   controllers: [
+    EstimatePartsController,
     InventoryRequestsController,
     InventoryController,
     InternalInventoryController,
@@ -47,6 +52,8 @@ import { InventoryRequestsService } from './part-requests/requests.service';
     ServicePartsController,
   ],
   providers: [
+    EstimatePartsService,
+    { provide: APP_INTERCEPTOR, useClass: PricingVisibilityInterceptor },
     InventoryRequestsRepository,
     InventoryRequestsService,
     { provide: DisplayNameLookup, inject: [ConfigService], useFactory: (config: ConfigService) =>

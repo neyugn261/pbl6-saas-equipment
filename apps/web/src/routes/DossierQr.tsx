@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { api, ApiError } from "../api/client";
 import { getSessionGeneration } from "../auth/session";
+import { Link } from 'react-router-dom';
 import "./dossier-qr.css";
 
 type CurrentQr = {
@@ -87,6 +88,7 @@ export default function DossierQr({ equipmentId, assetCode }: {
       {qrImage && <img src={qrImage} width={112} height={112} alt={`Mã QR ${assetCode}`} />}
       <div>
         <h2>Mã QR thiết bị</h2>
+        <Link to={`/app/equipment/${equipmentId}/public-qr`}>Cấu hình tra cứu QR công khai</Link>
         <p role="status">{current?.message ?? "Đang tải mã QR…"}</p>
         {qrImage && <button type="button" onClick={() => void printLabel(qrImage)}>In tem QR</button>}
         {current?.error && <button type="button" onClick={() => setRevision(value => value + 1)}>Tải lại mã QR</button>}

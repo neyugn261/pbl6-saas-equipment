@@ -1,4 +1,5 @@
 import { RegistrationMaintenanceConsumer } from './registration-maintenance.consumer';
+import { PublicQrTenantConsumer } from './public-qr-tenant.consumer';
 import {
   Injectable,
   Logger,
@@ -19,6 +20,7 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly history: HistoryConsumer,
     private readonly registrations: RegistrationMaintenanceConsumer,
+    private readonly publicQrTenant: PublicQrTenantConsumer,
   ) {}
   async onModuleInit() {
     const url = this.config.get<string>('RABBITMQ_URL');
@@ -29,6 +31,7 @@ export class EventsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.bus = new RabbitMqEventBus({ url, logger: this.logger });
+    this.bus.subscribe({ queue: 'asset-service.public-qr-tenant', events: [Events.TenantStatusChanged], handler: event => this.publicQrTenant.handle(event) });
     this.bus.subscribe({
       queue: 'asset-service.history',
       events: [Events.ServiceRequestStatusChanged, Events.WorkOrderCompletedV2],

@@ -1,0 +1,288 @@
+openapi: 3.1.0
+info:
+  title: Minh UX API supplement
+  version: 0.1.0
+  description: Working-tree proposal. Asset paths use /api/assets and Inventory paths use /api/inventory. See ADR 0024 for producer dependencies and lifecycle rules.
+servers:
+  - url: /api/assets
+tags:
+  - name: Bulk
+  - name: PublicQR
+  - name: Pricing
+  - name: RecommendedParts
+security:
+  - bearerAuth: []
+paths:
+  /bulk-handovers/preview:
+    post:
+      tags: [Bulk]
+      description: Staff with equipment:manage. Validates without writes. 1–2,000 rows, 5 MB CSV. Does not activate policy or confirm customer acceptance.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkInput' }
+      responses:
+        '201': { description: 'valid, count, rows[{row,valid,message?}], nextStep. Invalid references can be reported as valid=false.' }
+        '400': { description: Invalid CSV/shape/duplicate rows }
+        '403': { description: Permission denied }
+  /bulk-handovers:
+    post:
+      tags: [Bulk]
+      description: Creates DRAFT registrations atomically in Asset DB; caller scoped replay. Each registration continues through existing policy/submit/customer-confirmation APIs. The technical batch cap is 2,000 rows pending measured asynchronous processing.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkInput' }
+      responses:
+        '201': { description: 'id, status=DRAFTS_CREATED, registrations (existing registration response), nextStep' }
+        '409': { description: Key reused or duplicate database identifier; inspect original result before retry }
+        '422': { description: 'BULK_VALIDATION_FAILED with row validation details; no batch writes' }
+  /bulk-handovers/update/preview:
+    post:
+      tags: [Bulk]
+      description: Tenant staff with equipment:manage. Validates a versioned update file against current tenant scope and organization location references without writes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkEquipmentUpdateInput' }
+      responses:
+        '200': { description: 'valid, count, per-row result; stale updatedAt or out-of-scope equipment is rejected' }
+        '403': { description: Permission denied }
+  /bulk-handovers/update:
+    post:
+      tags: [Bulk]
+      description: Applies per-row purchaseDate, handoverDate, installationDate, customerSiteId and locationId updates. Blank values preserve current values; explicit null clears nullable fields. Each row uses equipment history and compares updatedAt under a row lock. Partial result is retained for idempotent replay.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkEquipmentUpdateInput' }
+      responses:
+        '201': { description: 'id, status=COMPLETED/PARTIAL, per-row outcomes' }
+        '409': { description: Key reused with different content or row changed after preview }
+  /bulk-handovers/{id}:
+    get:
+      tags: [Bulk]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: Original result snapshot for this tenant and creating actor. GET individual registrations for current lifecycle. }
+        '404': { description: Result unavailable in caller scope }
+  /equipment/{id}/qr-codes/public:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [PublicQR]
+      description: qr:manage, tenant staff and servicing branch scope.
+      responses:
+        '200': { description: 'enabled, hasQr, eligible, routingReady, name, publicUrl' }
+        '404': { description: Equipment/site unavailable in scope }
+    put:
+      tags: [PublicQR]
+      description: Explicitly enable/disable current QR. Defaults private; movement invalidates the previously enabled projection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        '200': { description: 'enabled, publicUrl' }
+        '404': { description: QR/equipment/site unavailable }
+        '409': { description: Equipment changed while setting access }
+        '422': { description: PUBLIC_QR_ROUTING_REQUIRED; assign the active customer site to a servicing branch first }
+  /public/equipment-by-qr/{token}:
+    get:
+      tags: [PublicQR]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/QrToken'
+      responses:
+        '200':
+          description: No-store projection. No serial/customer/location/history/equipment ID. Warranty status does not decide incident coverage.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicEquipment' }
+        '404': { description: Public QR unavailable; no further distinction }
+        '429': { description: Minute window exhausted }
+  /public/equipment-by-qr/{token}/inquiries:
+    post:
+      tags: [PublicQR]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/QrToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [formToken, contactName, contactPhone, description, consent]
+              properties:
+                formToken: { type: string, maxLength: 600 }
+                contactName: { type: string, minLength: 1, maxLength: 100 }
+                contactPhone: { type: string, pattern: '^\+?[0-9 ()-]{8,30}$' }
+                description: { type: string, minLength: 10, maxLength: 4000 }
+                consent: { type: boolean, enum: [true] }
+      responses:
+        '201': { description: 'reference UUID and status=PENDING_VERIFICATION. Same valid form and payload replay the original reference.' }
+        '400': { description: Invalid contact/consent/input fields }
+        '404': { description: Invalid/expired capability or unavailable QR }
+        '409': { description: Form already used for different content }
+        '429': { description: Submission window exhausted }
+  /public-qr-inquiries:
+    get:
+      tags: [PublicQR]
+      description: Tenant staff with service_request:review. Branch-scoped paginated contact queue; raw form hashes excluded.
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: status, in: query, schema: { type: string, enum: [NEW, ACKNOWLEDGED, REJECTED] } }
+      responses:
+        '200': { description: 'items[{id,equipmentId,branchId,contactName,contactPhone,description,status,resolutionNote,resolvedBy,resolvedAt,createdAt,tenantId}], total, page, pageSize' }
+  /public-qr-inquiries/{id}/decision:
+    post:
+      tags: [PublicQR]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status, note]
+              properties:
+                status: { type: string, enum: [ACKNOWLEDGED, REJECTED] }
+                note: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201': { description: 'id, status. Records actor/time; does not create a Request or Work Order.' }
+        '404': { description: Outside tenant/branch scope }
+        '409': { description: Inquiry already handled }
+  /parts/{id}/pricing:
+    servers:
+      - url: /api/inventory
+    put:
+      tags: [Pricing]
+      description: inventory:manage. Existing Part GET/list/POST add standardPrice, currency and pricingVersion; costPrice returned only to inventory managers. Existing POST Part optionally accepts nullable prices.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion]
+              minProperties: 2
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                costPrice: { $ref: '#/components/schemas/Price' }
+                standardPrice: { $ref: '#/components/schemas/Price' }
+      responses:
+        '200': { description: Updated existing Part response plus nullable prices, currency=VND and incremented pricingVersion. Empty/null values are not zero. }
+        '400': { description: Invalid decimal or missing price fields }
+        '403': { description: Inventory management permission required }
+        '404': { description: Part outside tenant scope }
+        '409': { description: PRICING_VERSION_CONFLICT; reload before editing again }
+  /work-orders/{id}/recommended-parts:
+    servers:
+      - url: /api/inventory
+    get:
+      tags: [RecommendedParts]
+      description: inventory:read and work_order:read; live WO tenant/branch/assignment checks. Consumer implemented; new snapshot producer still belongs to Service Request owner. No stock hold or automatic PartRequest.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: 'state=NO_SNAPSHOT/WITHDRAWN/APPROVED, workOrderId, reservesStock=false, lines. APPROVED also includes estimateId, estimateRevision, sourceVersion, currency and partTotals. Lines contain immutable approved price and current safe Part metadata. partTotals describes approved/open-to-fulfill/pending-issue/issued/returned/confirmed-used/unreconciled quantities on this WO.' }
+        '404': { description: WO outside current scope }
+        '503': { description: WO reference unavailable }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    QrToken: { name: token, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    Price: { type: [string, 'null'], pattern: '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$' }
+    BulkInput:
+      type: object
+      additionalProperties: false
+      required: [customerId, customerSiteId, deliveryMethod]
+      properties:
+        customerId: { type: string, format: uuid }
+        customerSiteId: { type: string, format: uuid }
+        deliveryMethod: { type: string, enum: [STORE, CUSTOMER_SITE] }
+        defaultModelId: { type: string, format: uuid }
+        defaultLocationId: { type: string, format: uuid, description: Used when a row has no locationId; validated within the common customer site. }
+        csv: { type: string, maxLength: 5000000, description: CSV requires assetCode and serialNumber; modelId required per row unless defaultModelId supplied. Optional displayName/customerSiteId/locationId/purchaseDate/handoverDate. }
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          items:
+            type: object
+            additionalProperties: false
+            required: [modelId, assetCode, serialNumber]
+            properties:
+              modelId: { type: string, format: uuid }
+              assetCode: { type: string, minLength: 1, maxLength: 100 }
+              serialNumber: { type: string, minLength: 1, maxLength: 150 }
+              displayName: { type: string, minLength: 1, maxLength: 200 }
+              locationId: { type: string, format: uuid }
+              customerSiteId: { type: string, format: uuid, description: Optional site override within the selected customer. }
+              purchaseDate: { type: string, format: date, description: Recorded purchase date; does not start warranty. }
+              handoverDate: { type: string, format: date }
+    BulkEquipmentUpdateInput:
+      type: object
+      additionalProperties: false
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          items:
+            type: object
+            additionalProperties: false
+            required: [equipmentId, updatedAt]
+            minProperties: 3
+            properties:
+              equipmentId: { type: string, format: uuid }
+              updatedAt: { type: string, format: date-time, description: Optimistic version from the export file. }
+              purchaseDate: { type: [string, 'null'], format: date }
+              handoverDate: { type: [string, 'null'], format: date }
+              installationDate: { type: [string, 'null'], format: date }
+              customerSiteId: { type: string, format: uuid, description: Must be a site of this equipment's current customer. A site change without locationId clears the old location. }
+              locationId: { type: [string, 'null'], format: uuid }
+      oneOf:
+        - required: [csv]
+          not: { required: [rows] }
+        - required: [rows]
+          not: { required: [csv] }
+    PublicEquipment:
+      type: object
+      additionalProperties: false
+      required: [name, model, warrantyStatus, formToken, formExpiresAt, notice]
+      properties:
+        name: { type: string }
+        model: { type: string }
+        warrantyStatus: { type: string, enum: [NO_WARRANTY, IN_WARRANTY, OUT_OF_WARRANTY] }
+        formToken: { type: string }
+        formExpiresAt: { type: string, format: date-time }
+        notice: { type: string }

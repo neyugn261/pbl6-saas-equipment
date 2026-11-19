@@ -29,6 +29,10 @@ x-review-notes: ../plans/minh-m3-inventory-handoff.md
 x-reservation-contract: ./inventory-reservations.yaml
 x-part-requests-contract: ./inventory-part-requests.yaml
 paths:
+  /parts/{id}/pricing:
+    $ref: './minh-ux.yaml#/paths/~1parts~1{id}~1pricing'
+  /work-orders/{id}/recommended-parts:
+    $ref: './minh-ux.yaml#/paths/~1work-orders~1{id}~1recommended-parts'
   /work-orders/{id}/part-requests:
     $ref: './inventory-part-requests.yaml#/paths/~1work-orders~1{id}~1part-requests'
   /part-requests:
@@ -580,6 +584,8 @@ components:
       type: object
       required: [sku, name, unit]
       properties:
+        costPrice: { type: [string, 'null'], pattern: '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$', description: 'Catalogue cost. Visible only with inventory:manage; null is unknown.' }
+        standardPrice: { type: [string, 'null'], pattern: '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$', description: 'Reference price in VND; null is unknown.' }
         sku: { type: string, minLength: 1, maxLength: 100 }
         name: { type: string, minLength: 1, maxLength: 200 }
         unit: { type: string, minLength: 1, maxLength: 30 }
@@ -599,6 +605,8 @@ components:
         - type: object
           required: [id, status, createdAt, updatedAt]
           properties:
+            currency: { type: string, const: VND }
+            pricingVersion: { type: integer, minimum: 1 }
             id: { type: string, format: uuid }
             status: { $ref: "#/components/schemas/Status" }
             createdAt: { type: string, format: date-time }

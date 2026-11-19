@@ -221,7 +221,7 @@ export class RegistrationService {
     )
       invalidInput('Actual equipment dates cannot be in the future');
   }
-  async create(p: Principal, raw: CreateRegistrationDto, key: string) {
+  async create(p: Principal, raw: CreateRegistrationDto, key: string, transaction?: Tx) {
     if (!isUUID(key)) invalidInput('Idempotency-Key must be a UUID');
     const normalized = canonical(raw) as CreateRegistrationDto;
     const source = equipmentSource(normalized.equipment);
@@ -275,9 +275,10 @@ export class RegistrationService {
     }
     if (source.mode === 'NEW') {
       this.checkDates(source.data);
-      await this.equipment.validateCreate(p, source.data);
+      // Batch callers prevalidate every row before opening their Asset transaction.
+      if (!transaction) await this.equipment.validateCreate(p, source.data);
     }
-    const row = await this.db.$transaction(async (tx) => {
+    const write = async (tx: Tx) => {
       const lock = `registration-create:${tenantId}:${p.userId}:${key.toLowerCase()}`;
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lock}, 0))::text`;
       const replay = await tx.equipmentRegistration.findUnique({
@@ -358,7 +359,8 @@ export class RegistrationService {
       });
       await this.audit(tx, eq, p, 'SERVICE_SETUP_DRAFT_CREATED', created.id);
       return created;
-    });
+    };
+    const row = transaction ? await write(transaction) : await this.db.$transaction(write);
     return this.view(row, p);
   }
   private async lockEquipment(p: Principal, id: string, tx: Tx) {

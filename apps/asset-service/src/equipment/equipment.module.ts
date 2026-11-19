@@ -1,4 +1,8 @@
 import { RegistrationHandoverService } from '../registrations/registration-handover.service';
+import { BulkHandoverController } from '../registrations/bulk.controller';
+import { BulkHandoverService } from '../registrations/bulk.service';
+import { PublicQrController, PublicQrManagementController } from '../qr/public-qr.controller';
+import { PublicQrService } from '../qr/public-qr.service';
 import { AppliedPoliciesController } from '../model-policies/applied-policies.controller';
 import { ModelSetupService } from '../model-policies/model-setup.service';
 import { RegistrationService } from '../registrations/registration.service';
@@ -39,6 +43,8 @@ import { DossierService } from '../dossier/dossier.service';
 @Module({
   imports: [EquipmentModelModule, OrganizationModule],
   controllers: [
+    BulkHandoverController,
+    PublicQrController, PublicQrManagementController,
     HandoverController, CustomerHandoverController,
     EquipmentController,
     AppliedPoliciesController,
@@ -53,6 +59,8 @@ import { DossierService } from '../dossier/dossier.service';
     DossierController,
   ],
   providers: [
+    BulkHandoverService,
+    PublicQrService,
     { provide: DisplayNameLookup, inject: [ConfigService], useFactory: (config: ConfigService) =>
       new DisplayNameLookup({ identity: config.get<string>('IDENTITY_SERVICE_URL'), organization: config.get<string>('ORGANIZATION_SERVICE_URL') }) },
     HandoverService, HandoverRepository, HandoverAuthorization, HandoverWorker,

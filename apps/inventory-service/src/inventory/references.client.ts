@@ -12,6 +12,7 @@ export interface BranchReference {
   status: string;
 }
 export interface WorkOrderReference {
+  serviceRequestId?: string | null;
   branchId?: string | null;
   id: string;
   status: string;

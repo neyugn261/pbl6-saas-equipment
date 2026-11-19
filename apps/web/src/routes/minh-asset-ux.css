@@ -1,0 +1,16 @@
+.minh-ux-card { padding: 1.5rem; margin-block: 1rem; }
+.minh-steps { display: flex; gap: 1rem; padding: 1rem 0; list-style: none; flex-wrap: wrap; }
+.minh-steps li { border-bottom: 3px solid #9b5b2c; padding: .6rem 1rem; font-weight: 600; }
+.minh-ux-card fieldset { border: 0; padding: 0; min-width: 0; }
+.minh-ux-card label { display: grid; gap: .45rem; margin-block: .9rem; }
+.minh-ux-card textarea { width: 100%; min-height: 5rem; box-sizing: border-box; }
+.minh-ux-card table { width: 100%; text-align: left; border-collapse: collapse; }
+.minh-ux-card td, .minh-ux-card th { padding: .65rem; border-bottom: 1px solid #d8d0c4; }
+.minh-public-page { max-width: 760px; padding: clamp(1rem,4vw,2.5rem); margin: 2rem auto; color: #272b29; line-height: 1.6; }
+.minh-public-page .m1-card { background: #fffdf8; border: 1px solid #d8d0c4; border-radius: 14px; }
+.minh-eyebrow { color: #754322; font-weight: 700; letter-spacing: .08em; font-size: .8rem; }
+.minh-intake-form input:not([type="checkbox"]), .minh-intake-form textarea { width: 100%; padding: .7rem; border: 1px solid #756c61; border-radius: 6px; box-sizing: border-box; font: inherit; background: white; color: #272b29; }
+.minh-intake-form .minh-consent { display: flex; align-items: flex-start; }
+.minh-intake-form button, .minh-public-page button { background: #74431f; color: white; padding: .8rem 1.2rem; border: 0; border-radius: 6px; font: inherit; cursor: pointer; }
+.minh-public-page a { color: #754322; text-decoration: underline; }
+.minh-preserve-text { white-space: pre-wrap; overflow-wrap: anywhere; }

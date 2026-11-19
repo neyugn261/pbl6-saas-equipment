@@ -12,6 +12,7 @@ import {
   Prisma,
   type Equipment,
   type EquipmentHistory,
+  type EquipmentModel,
   type Warranty,
 } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,7 +22,7 @@ import type {
   ListEquipmentQueryDto,
   PatchEquipmentDto,
 } from './dto/equipment.dto';
-import { auditContext, changedFields, json } from '../history/audit';
+import { auditContext, changedFields, equipmentSnapshot, json } from '../history/audit';
 import { historyVisibility } from '../history/visibility';
 
 const missing = () =>
@@ -62,7 +63,10 @@ export type EquipmentDetailRow = Equipment & {
   registration?: { id: string; status: string; deliveryMethod?: string | null; maintenanceProvisioning?: string | null } | null;
 };
 
-export type EquipmentListRow = Equipment & { warranties: Warranty[] };
+export type EquipmentListRow = Equipment & {
+  warranties: Warranty[];
+  model: Pick<EquipmentModel, 'id' | 'manufacturer' | 'modelCode' | 'name' | 'category'>;
+};
 
 @Injectable()
 export class EquipmentRepository {
@@ -71,7 +75,19 @@ export class EquipmentRepository {
   async list(
     scope: DataScope,
     query: ListEquipmentQueryDto,
-  ): Promise<{ rows: EquipmentListRow[]; total: number; asOfDate: string }> {
+  ): Promise<{
+    rows: EquipmentListRow[];
+    total: number;
+    asOfDate: string;
+    summary: {
+      active: number;
+      inService: number;
+      outOfService: number;
+      retired: number;
+      inWarranty: number;
+      withoutInstallationDate: number;
+    };
+  }> {
     // Capture the day once for both filtering and the returned projection.
     const asOfDate = todayInVietnam();
     const date = dbDate(asOfDate);
@@ -86,6 +102,44 @@ export class EquipmentRepository {
     };
     const q = query.q?.trim();
     const search = q ? escapeLikePattern(q) : undefined;
+    const filterAnd: Prisma.EquipmentWhereInput[] = [];
+    if (query.handoverFrom || query.handoverTo) {
+      filterAnd.push({
+        handoverDate: {
+          ...(query.handoverFrom ? { gte: dbDate(query.handoverFrom) } : {}),
+          ...(query.handoverTo ? { lte: dbDate(query.handoverTo) } : {}),
+        },
+      });
+    }
+    if (query.installationFrom || query.installationTo) {
+      filterAnd.push({
+        installationDate: {
+          ...(query.installationFrom ? { gte: dbDate(query.installationFrom) } : {}),
+          ...(query.installationTo ? { lte: dbDate(query.installationTo) } : {}),
+        },
+      });
+    }
+    if (query.purchaseFrom || query.purchaseTo) {
+      filterAnd.push({
+        purchaseDate: {
+          ...(query.purchaseFrom ? { gte: dbDate(query.purchaseFrom) } : {}),
+          ...(query.purchaseTo ? { lte: dbDate(query.purchaseTo) } : {}),
+        },
+      });
+    }
+    if (query.installationDateMissing === 'YES')
+      filterAnd.push({ installationDate: null });
+    if (query.installationDateMissing === 'NO')
+      filterAnd.push({ installationDate: { not: null } });
+    if (query.warranty === 'IN_WARRANTY')
+      filterAnd.push({ warranties: { some: covering } });
+    if (query.warranty === 'OUT_OF_WARRANTY')
+      filterAnd.push({
+        warranties: { none: covering },
+        AND: [{ warranties: { some: ended } }],
+      });
+    if (query.warranty === 'NO_WARRANTY')
+      filterAnd.push({ warranties: { none: covering }, AND: [{ warranties: { none: ended } }] });
     const where: Prisma.EquipmentWhereInput = {
       ...(query.registrationStatus === 'NOT_RECORDED'
         ? { registration: { is: null } }
@@ -97,6 +151,7 @@ export class EquipmentRepository {
         ? { customerId: query.customerId }
         : {}),
       ...(query.siteId ? { customerSiteId: query.siteId } : {}),
+      ...(query.locationId ? { locationId: query.locationId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.operationalStatus
         ? { operationalStatus: query.operationalStatus }
@@ -110,25 +165,7 @@ export class EquipmentRepository {
             ],
           }
         : {}),
-      ...(query.warranty === 'IN_WARRANTY'
-        ? { warranties: { some: covering } }
-        : {}),
-      ...(query.warranty === 'OUT_OF_WARRANTY'
-        ? {
-            AND: [
-              { warranties: { none: covering } },
-              { warranties: { some: ended } },
-            ],
-          }
-        : {}),
-      ...(query.warranty === 'NO_WARRANTY'
-        ? {
-            AND: [
-              { warranties: { none: covering } },
-              { warranties: { none: ended } },
-            ],
-          }
-        : {}),
+      ...(filterAnd.length ? { AND: filterAnd } : {}),
     };
     const field = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort;
     const direction = query.sort.startsWith('-') ? 'desc' : 'asc';
@@ -136,11 +173,15 @@ export class EquipmentRepository {
       { [field]: direction },
       { id: 'asc' },
     ];
-    const [rows, total] = await Promise.all([
+    const withinFilter = (extra: Prisma.EquipmentWhereInput) => ({
+      AND: [where, extra],
+    });
+    const [rows, total, active, inService, outOfService, retired, inWarranty, withoutInstallationDate] = await Promise.all([
       this.prisma.equipment.findMany({
         where,
         orderBy,
         include: {
+          model: { select: { id: true, manufacturer: true, modelCode: true, name: true, category: true } },
           registration: { select: { id: true, status: true, deliveryMethod: true, maintenanceProvisioning: true } },
           warranties: {
             // A covering period sorts before every ended period. Future and
@@ -155,8 +196,19 @@ export class EquipmentRepository {
         take: query.pageSize,
       }),
       this.prisma.equipment.count({ where }),
+      this.prisma.equipment.count({ where: withinFilter({ status: 'ACTIVE' }) }),
+      this.prisma.equipment.count({ where: withinFilter({ status: 'IN_SERVICE' }) }),
+      this.prisma.equipment.count({ where: withinFilter({ status: 'OUT_OF_SERVICE' }) }),
+      this.prisma.equipment.count({ where: withinFilter({ status: 'RETIRED' }) }),
+      this.prisma.equipment.count({ where: withinFilter({ warranties: { some: covering } }) }),
+      this.prisma.equipment.count({ where: withinFilter({ installationDate: null }) }),
     ]);
-    return { rows, total, asOfDate };
+    return {
+      rows,
+      total,
+      asOfDate,
+      summary: { active, inService, outOfService, retired, inWarranty, withoutInstallationDate },
+    };
   }
 
   findScoped(scope: DataScope, id: string): Promise<Equipment | null> {
@@ -246,6 +298,7 @@ export class EquipmentRepository {
           installationDate: input.installationDate
             ? dbDate(input.installationDate)
             : null,
+          purchaseDate: input.purchaseDate ? dbDate(input.purchaseDate) : null,
           handoverDate: input.handoverDate ? dbDate(input.handoverDate) : null,
         },
       });
@@ -268,6 +321,7 @@ export class EquipmentRepository {
               description: equipment.description,
               technicalSpecifications: equipment.technicalSpecifications,
               installationDate: dateString(equipment.installationDate),
+              purchaseDate: dateString(equipment.purchaseDate),
               handoverDate: dateString(equipment.handoverDate),
               commissionedDate: dateString(equipment.commissionedDate),
               status: equipment.status,
@@ -288,6 +342,8 @@ export class EquipmentRepository {
     input: PatchEquipmentDto,
     validatedSiteId?: string,
     roles: readonly string[] = [],
+    expectedUpdatedAt?: string,
+    sourceBatchId?: string,
   ): Promise<Equipment> {
     return this.prisma.$transaction(async (tx) => {
       // Serialize concurrent patches before reading old values, including RETIRED.
@@ -296,6 +352,8 @@ export class EquipmentRepository {
         where: { ...scopeWhere(scope), id },
       });
       if (!before) throw missing();
+      if (expectedUpdatedAt && before.updatedAt.toISOString() !== expectedUpdatedAt)
+        throw new ConflictException({ code: 'EQUIPMENT_CHANGED', message: 'Equipment changed after this file was exported; export a fresh update template.' });
       const registration = await tx.equipmentRegistration.findFirst({ where: { tenantId: scope.tenantId, equipmentId: id } });
       if (registration?.deliveryMethod) {
         if ([input.handoverDate, input.installationDate, input.commissionedDate].some(day => day && day > todayInVietnam()))
@@ -345,6 +403,10 @@ export class EquipmentRepository {
         input.handoverDate !== undefined
           ? input.handoverDate
           : dateString(before.handoverDate);
+      const purchaseDate =
+        input.purchaseDate !== undefined
+          ? input.purchaseDate
+          : dateString(before.purchaseDate);
       const status = input.status ?? before.status;
       if (before.handoverRequired && status === 'ACTIVE' && before.status !== 'ACTIVE') {
         const acceptance = before.currentHandoverId && await tx.equipmentHandover.findFirst({
@@ -359,6 +421,7 @@ export class EquipmentRepository {
         technicalSpecifications: before.technicalSpecifications ?? null,
         commissionedDate: dateString(before.commissionedDate ?? null),
         installationDate: dateString(before.installationDate),
+        purchaseDate: dateString(before.purchaseDate),
         handoverDate: dateString(before.handoverDate),
       };
       const profileAfter = {
@@ -379,6 +442,7 @@ export class EquipmentRepository {
             ? input.commissionedDate
             : profileBefore.commissionedDate,
         installationDate,
+        purchaseDate,
         handoverDate,
       };
       const moved =
@@ -417,12 +481,15 @@ export class EquipmentRepository {
             : before.snapshotVersion,
           installationDate:
             installationDate === null ? null : dbDate(installationDate),
+          purchaseDate:
+            purchaseDate === null ? null : dbDate(purchaseDate),
           handoverDate: handoverDate === null ? null : dbDate(handoverDate),
         },
       });
       const histories: Prisma.EquipmentHistoryCreateManyInput[] = [];
       const audit = {
         ...auditContext(before, actorId, roles),
+        ...(sourceBatchId ? { context: json({ ...equipmentSnapshot(before), snapshotMoment: 'LOCAL_WRITE', source: 'BULK_UPDATE', sourceBatchId }) } : {}),
         reasonInternal: input.reason?.trim() ?? null,
         customerNote: input.customerNote ?? null,
       };
@@ -457,6 +524,10 @@ export class EquipmentRepository {
             installationDate: {
               from: dateString(before.installationDate),
               to: installationDate,
+            },
+            purchaseDate: {
+              from: dateString(before.purchaseDate),
+              to: purchaseDate,
             },
             handoverDate: {
               from: dateString(before.handoverDate),

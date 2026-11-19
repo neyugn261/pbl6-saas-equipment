@@ -16,6 +16,7 @@ import { technicianName } from "../../display-names";
 import type { Page } from "../../types/domain";
 import { WorkOrderChecklist } from "../../routes/ModelPolicyPanels";
 import { WorkOrderPartRequests } from "../inventory/PartRequests";
+import { RecommendedParts } from '../inventory/RecommendedParts';
 import { AttachmentsPanel } from "../attachments/AttachmentsPanel";
 import { Badge, DataState, EmptyState, RelatedName } from "./WorkspaceUI";
 import {
@@ -609,7 +610,8 @@ export default function ServiceManagerWorkOrder() {
               revision={revision}
             />
             {profile?.roles.includes("SERVICE_MANAGER") && (
-              <WorkOrderPartRequests key={`${id}:${getSessionGeneration()}`} workOrderId={id} workOrderNo={value(row.workOrderNo, "Lệnh đang mở")} status={row.status} />
+              <><RecommendedParts workOrderId={id} />
+              <WorkOrderPartRequests key={`${id}:${getSessionGeneration()}`} workOrderId={id} workOrderNo={value(row.workOrderNo, "Lệnh đang mở")} status={row.status} /></>
             )}
             <ServiceNotice title={next[0]}>
               <p>{next[1]}</p>

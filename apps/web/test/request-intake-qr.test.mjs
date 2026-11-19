@@ -69,7 +69,8 @@ test('dossier preview reads QR without issuing a new token and hides print for r
   for (const state of ['ACTIVE', 'NOT_ISSUED', 'REVOKED', 'INELIGIBLE']) {
     const h = hooks()
     const reads = []
-    const { default: DossierQr } = tab.load('routes/DossierQr.tsx', {
+  const { default: DossierQr } = tab.load('routes/DossierQr.tsx', {
+    'react-router-dom': { Link: 'a' },
       react: h.react, 'react/jsx-runtime': h.jsx,
       qrcode: { __esModule: true, default: { toDataURL: async () => 'data:image/png;base64,stub' } },
       '../api/client': { ...tab.client, api: { assetM2: async (...args) => {

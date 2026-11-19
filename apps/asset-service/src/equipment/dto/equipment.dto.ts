@@ -81,6 +81,10 @@ export class CreateEquipmentDto {
   @ValidateIf((_, value) => value !== undefined)
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsISO8601({ strict: true })
+  purchaseDate?: string;
+  @ValidateIf((_, value) => value !== undefined)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsISO8601({ strict: true })
   handoverDate?: string;
 }
 
@@ -117,6 +121,10 @@ export class PatchEquipmentDto {
   @ValidateIf((_, value) => value !== undefined && value !== null)
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsISO8601({ strict: true })
+  purchaseDate?: string | null;
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsISO8601({ strict: true })
   handoverDate?: string | null;
   @ValidateIf((_, value) => value !== undefined)
   @IsIn(EQUIPMENT_STATUSES)
@@ -131,8 +139,16 @@ export class ListEquipmentQueryDto extends PaginationQueryDto {
   @IsIn(['UNKNOWN', 'OPERATIONAL', 'DEGRADED', 'NOT_OPERATIONAL'])
   operationalStatus?: string;
   @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) handoverFrom?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) handoverTo?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) installationFrom?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) installationTo?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) purchaseFrom?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) purchaseTo?: string;
+  @IsOptional() @IsIn(['YES', 'NO']) installationDateMissing?: 'YES' | 'NO';
   @IsOptional() @IsUUID() customerId?: string;
   @IsOptional() @IsUUID() siteId?: string;
+  @IsOptional() @IsUUID() locationId?: string;
   @IsOptional() @IsIn(EQUIPMENT_STATUSES) status?: EquipmentStatus;
   @IsOptional() @IsIn(WARRANTY_RESULTS) warranty?: WarrantyResult;
   @IsOptional()

@@ -11,3 +11,4 @@ export * from './sql';
 export * from './model-policies';
 
 export * from './equipment-registration';
+export * from './estimate-parts';

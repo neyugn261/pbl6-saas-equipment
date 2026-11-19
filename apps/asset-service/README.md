@@ -1,5 +1,13 @@
 # Asset Service
 
+19/11 UX working tree: CSV/XLSX batch registration drafts (up to 2,000 rows), versioned
+batch updates for purchase/handover/installation dates and location, scoped filtered
+equipment exports, opt-in public QR
+and a branch-scoped unverified inquiry queue. See [ADR 0024](../../docs/decisions/0024-minh-ux-bulk-pricing-public-qr.md),
+[API supplement](../../docs/api/minh-ux.yaml) and [demo/handoff](../../docs/reports/2026-11-19-minh-ux-handoff.md).
+Bulk import does not automatically activate warranties or replace customer acceptance.
+Purchase date is stored independently from actual handover and warranty start. The 2,000-row cap is a technical request limit; asynchronous processing and load evidence remain follow-up work.
+
 Seed hệ thống chuẩn: từ root chạy `pnpm demo:seed`; để xóa dữ liệu local và nạp lại chạy `pnpm demo:reset` khi backend đã dừng. [Catalog, 14 tài khoản và kịch bản hai chi nhánh](../../docs/user-guide/demo-data.md). Các seed riêng bên dưới phục vụ chuẩn bị danh mục của từng service.
 
 Equipment models, equipment, warranties and warranty check, QR codes, equipment history.

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { DataScope } from '@pbl6/auth';
 import { toSkipTake } from '@pbl6/service-kit';
 import { codeOrNameMatches, type ListQueryDto } from '../common/validation';
 import {
@@ -14,6 +15,20 @@ import { enqueueSiteRouting } from '../sites/site-routing';
 @Injectable()
 export class CustomersRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  displayNames(scope: DataScope, ids: string[]) {
+    return this.prisma.customer.findMany({
+      where: {
+        tenantId: scope.tenantId,
+        id: {
+          in: [...new Set(ids)],
+          ...(scope.customerId ? { equals: scope.customerId } : {}),
+        },
+        deletedAt: null,
+      },
+      select: { id: true, tenantId: true, name: true, code: true },
+    });
+  }
 
   /** `onlyId` limits the list to one customer (CUSTOMER accounts). */
   async list(
