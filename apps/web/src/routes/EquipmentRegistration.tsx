@@ -7,6 +7,7 @@ import type { Page } from '../types/domain'
 import { locationOptions } from '../display-names'
 import { EquipmentIdentity } from '../features/workspace/WorkspaceUI'
 import {
+  CustomerYouTubePicker,
   DirectoryPicker,
   DirectoryPagination,
   LoadState,
@@ -320,10 +321,7 @@ export function EquipmentRegistrationPage() {
     form.siteId ? `/sites/${form.siteId}/locations` : null,
     revision,
   )
-  const [locationSearch, setLocationSearch] = useState({ siteId: '', text: '' })
-  const locationQuery = locationSearch.siteId === form.siteId ? locationSearch.text : ''
   const locationChoices = locationOptions(locations.value ?? [], form.siteId)
-    .filter(row => row.id === form.locationId || row.label.toLocaleLowerCase('vi').includes(locationQuery.trim().toLocaleLowerCase('vi')))
   const locationLocked = Boolean(record) ||
     (form.source === 'EXISTING' && Boolean(form.equipmentId)) || busy || !form.siteId
   const contacts = useDirectory<DirectoryRow[]>(
@@ -1163,13 +1161,11 @@ export function EquipmentRegistrationPage() {
             >
               {step === 0 && (
                 <>
-                  <h2>Khách hàng và nơi đặt thiết bị</h2>
+                  <h2>Khách hàng</h2>
                   {!record ? (
-                    <DirectoryPicker
-                      label="Khách hàng"
-                      area="organization"
-                      path="/customers?status=ACTIVE"
-                      selected={form.customerId}
+                    <CustomerYouTubePicker
+                      selectedId={form.customerId}
+                      selectedCustomer={customer.value}
                       onChange={(value) => {
                         selectedSequence.current++
                         setForm((prev) => ({
@@ -1192,104 +1188,141 @@ export function EquipmentRegistrationPage() {
                     </p>
                   )}
                   <LoadState {...customer} />
-                  <div className="registration-fields">
-                    <label>
-                      Địa điểm đặt thiết bị *
-                      <select
-                        value={form.siteId}
-                        disabled={
-                          Boolean(record) ||
-                          (form.source === 'EXISTING' &&
-                            Boolean(form.equipmentId)) ||
-                          busy ||
-                          !form.customerId
-                        }
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            siteId: e.target.value,
-                            locationId: '',
-                          }))
-                        }
-                      >
-                        <option value="">Chọn địa điểm</option>
-                        {sites.value
-                          ?.filter(
-                            (row) =>
-                              row.status === 'ACTIVE' || row.id === form.siteId,
-                          )
-                          .map((row) => (
-                            <option value={row.id} key={row.id}>
-                              {row.code} · {row.name} · {row.address}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    {!record && (
-                      <button
-                        disabled={!form.customerId || busy}
-                        onClick={() => setQuick('site')}
-                      >
-                        + Thêm địa điểm
-                      </button>
-                    )}
-                    <LoadState {...sites} />
-                    {!locationLocked && (
-                      <label>
-                        Tìm vị trí theo đường dẫn
-                        <input
-                          type="search"
-                          value={locationQuery}
-                          onChange={(e) => setLocationSearch({ siteId: form.siteId, text: e.target.value })}
-                        />
-                      </label>
-                    )}
-                    <label>
-                      Vị trí chi tiết
-                      <select
-                        value={form.locationId}
-                        disabled={locationLocked || locations.loading}
-                        onChange={(e) => field('locationId', e.target.value)}
-                      >
-                        <option value="">Không chỉ định</option>
-                        {form.locationId && !locationChoices.some(row => row.id === form.locationId) && (
-                          <option value={form.locationId}>Vị trí đã lưu</option>
+                  {Boolean(form.customerId) && (
+                    <>
+                      <div className="registration-site-section">
+                        <h3>Địa điểm đặt thiết bị</h3>
+                        <div className="registration-fields">
+                          <label>
+                            Địa điểm đặt thiết bị *
+                            <select
+                              value={form.siteId}
+                              disabled={
+                                Boolean(record) ||
+                                (form.source === 'EXISTING' &&
+                                  Boolean(form.equipmentId)) ||
+                                busy ||
+                                !form.customerId
+                              }
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  siteId: e.target.value,
+                                  locationId: '',
+                                }))
+                              }
+                            >
+                              <option value="">Chọn địa điểm</option>
+                              {sites.value
+                                ?.filter(
+                                  (row) =>
+                                    row.status === 'ACTIVE' || row.id === form.siteId,
+                                )
+                                .map((row) => (
+                                  <option value={row.id} key={row.id}>
+                                    {row.code} · {row.name} · {row.address}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                          {!record && (
+                            <button
+                              type="button"
+                              className="ws-button ws-button--secondary"
+                              disabled={!form.customerId || busy}
+                              onClick={() => setQuick('site')}
+                            >
+                              + Thêm địa điểm
+                            </button>
+                          )}
+                          <LoadState {...sites} />
+                          <label>
+                            Vị trí chi tiết
+                            <select
+                              value={form.locationId}
+                              disabled={locationLocked || locations.loading}
+                              onChange={(e) => field('locationId', e.target.value)}
+                            >
+                              <option value="">Không chỉ định</option>
+                              {form.locationId && !locationChoices.some(row => row.id === form.locationId) && (
+                                <option value={form.locationId}>Vị trí đã lưu</option>
+                              )}
+                              {locationChoices.map((row) => (
+                                <option value={row.id} key={row.id}>
+                                  {row.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {!record && (
+                            <button
+                              type="button"
+                              className="ws-button ws-button--secondary"
+                              disabled={!form.siteId || busy}
+                              onClick={() => setQuick('location')}
+                            >
+                              + Thêm vị trí
+                            </button>
+                          )}
+                          <LoadState {...locations} />
+                        </div>
+                      </div>
+                      <div className="registration-contact-section">
+                        <div className="registration-contact-header">
+                          <div>
+                            <h3>Người liên hệ</h3>
+                          </div>
+                          {!record && (
+                            <button
+                              type="button"
+                              className="ws-button ws-button--secondary"
+                              disabled={!form.customerId || busy}
+                              onClick={() => setQuick('contact')}
+                            >
+                              + Thêm liên hệ khách hàng
+                            </button>
+                          )}
+                        </div>
+                        <LoadState {...contacts} />
+                        {contacts.value && contacts.value.length > 0 ? (
+                          <div className="registration-contact-cards">
+                            {contacts.value.map((row) => (
+                              <div key={row.id} className="registration-contact-item">
+                                <div className="registration-contact-badge" aria-hidden="true">👤</div>
+                                <div className="registration-contact-info">
+                                  <div className="registration-contact-title">
+                                    <strong>{row.name}</strong>
+                                    {row.position && (
+                                      <span className="registration-contact-tag">{row.position}</span>
+                                    )}
+                                  </div>
+                                  <div className="registration-contact-meta">
+                                    {row.phone && (
+                                      <a href={`tel:${row.phone}`} className="registration-contact-link">
+                                        📞 {row.phone}
+                                      </a>
+                                    )}
+                                    {row.email && (
+                                      <a href={`mailto:${row.email}`} className="registration-contact-link">
+                                        ✉ {row.email}
+                                      </a>
+                                    )}
+                                    {!row.phone && !row.email && (
+                                      <span className="registration-contact-none">Chưa có thông tin liên lạc</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="registration-contact-empty">
+                            <p>Khách hàng này chưa có người liên hệ nào.</p>
+                          </div>
                         )}
-                        {locationChoices.map((row) => (
-                          <option value={row.id} key={row.id}>
-                            {row.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {!record && (
-                      <button
-                        disabled={!form.siteId || busy}
-                        onClick={() => setQuick('location')}
-                      >
-                        + Thêm vị trí
-                      </button>
-                    )}
-                    <LoadState {...locations} />
-                  </div>
-                  <h3>Người liên hệ</h3>
-                  <LoadState {...contacts} />
-                  {contacts.value?.map((row) => (
-                    <p key={row.id}>
-                      {row.name} ·{' '}
-                      {row.email || row.phone || 'Chưa có thông tin liên lạc'}
-                    </p>
-                  ))}
-                  <button
-                    disabled={!form.customerId || busy}
-                    onClick={() => setQuick('contact')}
-                  >
-                    + Thêm liên hệ khách hàng
-                  </button>
-                  <p>
-                    Người liên hệ chưa phải tài khoản Customer Portal. Mời tài
-                    khoản được thực hiện riêng theo quyền.
-                  </p>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
               {step === 1 && (

@@ -53,6 +53,7 @@ export interface EquipmentRecord {
   modelId: string
   customerId: string
   customerSiteId: string
+  locationId?: string | null
   assetCode: string
   serialNumber: string
   status: EquipmentStatus

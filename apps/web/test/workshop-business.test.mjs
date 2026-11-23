@@ -30,7 +30,7 @@ function fixture(
       Pagination: "Pagination",
       RelatedName: "RelatedName",
     },
-    "./ServiceDetailUI": { ServiceCard: "ServiceCard" },
+    "./ServiceDetailUI": { ServiceCard: "ServiceCard", ServiceFacts: "ServiceFacts" },
     "./WorkOrderReadiness": { default: "WorkOrderReadiness" },
     "./service-detail-data": tab.load(
       "features/workspace/service-detail-data.ts",

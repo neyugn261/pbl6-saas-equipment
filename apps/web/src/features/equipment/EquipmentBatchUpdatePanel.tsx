@@ -15,7 +15,7 @@ type UpdateRow = {
 type Preview = { valid: boolean; count: number; rows: { row: number; valid: boolean; assetCode?: string; message?: string }[] };
 type Result = { id: string; status: string; count: number; rows: { row: number; valid: boolean; assetCode?: string; message?: string }[] };
 const editable = new Set(["purchaseDate", "handoverDate", "installationDate", "customerSiteId", "locationId"]);
-const knownReadOnly = new Set(["assetCode", "serialNumber", "displayName", "model", "customer", "customerCode", "site", "siteCode", "location", "locationCode", "status", "operationalStatus", "warranty", "warrantyEndDate", "exportedAt", "appliedFilters"]);
+const knownReadOnly = new Set(["assetCode", "serialNumber", "displayName", "model", "customer", "customerCode", "site", "siteCode", "siteAddress", "location", "locationCode", "status", "operationalStatus", "warranty", "warrantyEndDate", "exportedAt", "appliedFilters"]);
 
 function toUpdateRows(input: SheetRow[]): UpdateRow[] {
   if (input.length === 0 || input.length > 2000) throw new Error("Tệp cần có từ 1 đến 2.000 dòng thiết bị.");

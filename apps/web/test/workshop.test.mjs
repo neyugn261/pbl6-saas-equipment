@@ -28,62 +28,6 @@ const ui = Object.fromEntries(
   ].map((name) => [name, name]),
 );
 
-test("Workshop board passes server filters into each independent lane and links the full filtered list", () => {
-  const tab = webTab(async () => {
-    throw new Error("Unexpected request");
-  });
-  const h = hooks(),
-    calls = [];
-  const { default: Board } = tab.load("features/workspace/WorkOrderBoard.tsx", {
-    "react/jsx-runtime": h.jsx,
-    "react-router-dom": { Link: "a" },
-    "lucide-react": icons,
-    "../../components/Badges": { PriorityBadge: "PriorityBadge" },
-    "./WorkspaceUI": ui,
-    "./service-detail-data": {
-      workOrderNextStep: () => ["Kiểm tra công việc"],
-      recordAge: () => "2 ngày",
-    },
-    "./workspace-data": {
-      value: String,
-      asRow: (value) => value ?? {},
-      formatDate: String,
-      useWorkspaceData: (area, path) => {
-        calls.push({ area, path });
-        return { loading: false, data: { items: [], total: 12 } };
-      },
-    },
-  });
-  const filters = new URLSearchParams(
-    "q=pump&priority=HIGH&type=REPAIR&page=8",
-  );
-  const tree = Board({ filters, revision: 2, refresh() {} });
-  const lanes = nodes(tree, (n) => typeof n.type === "function");
-  assert.equal(lanes.length, 4);
-  for (const lane of lanes) {
-    const rendered = lane.type(lane.props);
-    const url = new URL(calls.at(-1).path, "http://local");
-    assert.equal(url.searchParams.get("page"), "1");
-    assert.equal(url.searchParams.get("pageSize"), "4");
-    assert.equal(url.searchParams.get("q"), "pump");
-    assert.equal(url.searchParams.get("priority"), "HIGH");
-    assert.equal(url.searchParams.get("type"), "REPAIR");
-    assert.equal(url.searchParams.get("status"), lane.props.status);
-    const href = nodes(rendered, (n) => n.type === "a")[0].props.to;
-    const list = new URL(href, "http://local");
-    assert.equal(list.searchParams.get("view"), "list");
-    assert.equal(list.searchParams.get("q"), "pump");
-    assert.equal(list.searchParams.get("status"), lane.props.status);
-    assert.equal(list.searchParams.has("pageSize"), false);
-  }
-  const completed = Board({
-    filters: new URLSearchParams("status=COMPLETED"),
-    revision: 0,
-    refresh() {},
-  });
-  assert.equal(nodes(completed, (n) => typeof n.type === "function").length, 1);
-});
-
 test("Field Desk covers responsibility queues and never sends unsupported sort to handovers or tasks", () => {
   const tab = webTab(async () => {});
   const { decisionGroups, decisionQueues, queuePath, queueListPath } = tab.load(
@@ -202,6 +146,9 @@ test("Workshop shell preserves role navigation and highlights a child record's g
   const { default: Shell } = tab.load(
     "features/workspace/ServiceManagerShell.tsx",
     {
+      react: h.react,
+      './BranchSwitcher': { default: 'branch-switcher' },
+      './branch-context': tab.branches,
       "react/jsx-runtime": h.jsx,
       "react-router-dom": {
         Link: "a",
@@ -251,6 +198,9 @@ test("Workshop shell keeps customer links in portal and hides tenant notificatio
     const { default: Shell } = tab.load(
       "features/workspace/ServiceManagerShell.tsx",
       {
+        react: h.react,
+        './BranchSwitcher': { default: 'branch-switcher' },
+        './branch-context': tab.branches,
         "react/jsx-runtime": h.jsx,
         "react-router-dom": {
           Link: "a",

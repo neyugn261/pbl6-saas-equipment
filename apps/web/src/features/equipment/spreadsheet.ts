@@ -31,7 +31,7 @@ export async function parseCsvFile(file: File): Promise<SheetRow[]> {
 
 export function protectCsvCell(value: unknown) {
   const text = value == null ? "" : String(value);
-  return /^[\s]*[=+@\-]/.test(text) ? `'${text}` : text;
+  return /^[\s]*[=+@-]/.test(text) ? `'${text}` : text;
 }
 
 export function makeCsv(headers: string[], rows: SheetRow[]) {
@@ -131,10 +131,18 @@ async function findEntry(bytes: Uint8Array, filename: string) {
   throw new Error(`Không tìm thấy ${filename} trong XLSX.`);
 }
 
-function excelDate(value: string) {
+export function excelDate(value: string) {
   if (!/^\d+(?:\.\d+)?$/.test(value)) return value;
   const date = new Date(Date.UTC(1899, 11, 30) + Number(value) * 86400000);
-  return date.toISOString().slice(0, 10);
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : value;
+}
+
+export function mapImportRows(rows: SheetRow[], mapping: Record<string, string>, excelDates = false): SheetRow[] {
+  const dates = new Set(['purchaseDate', 'handoverDate', 'installationDate']);
+  return rows.map(row => Object.fromEntries(Object.entries(mapping).map(([field, header]) => {
+    const value = header ? row[header] ?? '' : '';
+    return [field, excelDates && dates.has(field) ? excelDate(value) : value];
+  })));
 }
 
 export async function parseXlsx(file: File): Promise<SheetRow[]> {
@@ -168,5 +176,5 @@ export async function parseXlsx(file: File): Promise<SheetRow[]> {
 
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob), anchor = document.createElement("a");
-  anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+  anchor.href = url; anchor.download = filename; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

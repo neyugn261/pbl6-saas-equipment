@@ -1,4 +1,5 @@
 import { statusNames } from '../workspace/workspace-data'
+import TechnicianKpiVisuals from './TechnicianKpiVisuals'
 import { useEffect, useState, type FormEvent } from 'react'
 import { ApiError, api } from '../../api/client'
 import { getSessionGeneration } from '../../auth/session'
@@ -81,6 +82,8 @@ type TechnicianKpi = {
   onTimeCount: number
   scheduledCount: number
   onTimeRate: number | null
+  averageMttrHours?: number | null
+  firstTimeFixRate?: number | null
 }
 type KpiReport = {
   from: string
@@ -92,6 +95,8 @@ type KpiReport = {
     totalCompletedCount: number
     overallRepairSuccessRate: number | null
     overallOnTimeRate: number | null
+    overallMttrHours?: number | null
+    overallFirstTimeFixRate?: number | null
   }
 }
 type Branch = { id: string; code: string; name: string }
@@ -176,17 +181,11 @@ export function TechnicianKpiPanel() {
           <div><strong>{state.data.summary.totalCompletedCount}</strong><span>Lệnh hoàn tất</span></div>
           <div><strong>{rate(state.data.summary.overallRepairSuccessRate)}</strong><span>Sửa thành công</span></div>
           <div><strong>{rate(state.data.summary.overallOnTimeRate)}</strong><span>Đúng hạn</span></div>
+          <div><strong>{state.data.summary.overallMttrHours == null ? 'Chưa đủ dữ liệu' : `${state.data.summary.overallMttrHours} giờ`}</strong><span>MTTR · Thời gian xử lý trung bình</span></div>
+          <div><strong>{state.data.summary.overallFirstTimeFixRate == null ? 'Chưa đủ dữ liệu' : rate(state.data.summary.overallFirstTimeFixRate)}</strong><span>FTFR · Sửa dứt điểm lần đầu</span></div>
         </div>
-        {state.data.items.length === 0 ? <p>Không có kết quả trong khoảng ngày đã chọn.</p> : <div className="live-table technician-kpi-table"><table>
-          <thead><tr><th>Kỹ thuật viên</th><th>Chi nhánh</th><th>Hoàn tất</th><th>Sửa thành công</th><th>Đúng hạn</th></tr></thead>
-          <tbody>{state.data.items.map(item => <tr key={item.technicianId}>
-            <td>{item.fullName || item.employeeCode} ({item.employeeCode})</td>
-            <td>{item.branchName || item.branchCode || item.branchId}</td>
-            <td>{item.completedCount}</td>
-            <td>{rate(item.repairSuccessRate)} ({item.resolvedRepairCount}/{item.eligibleRepairCount})</td>
-            <td>{rate(item.onTimeRate)} ({item.onTimeCount}/{item.scheduledCount})</td>
-          </tr>)}</tbody>
-        </table></div>}
+        {!!state.data.items.length && <TechnicianKpiVisuals key={key} items={state.data.items} from={`${query.from}T00:00:00+07:00`} to={`${addDay(query.to)}T00:00:00+07:00`}/>}
+        {state.data.items.length === 0 && <p>Không có kết quả trong khoảng ngày đã chọn.</p>}
       </>}
     </div>
   </section>

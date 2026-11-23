@@ -60,6 +60,8 @@ test('applied maintenance terms distinguish finite years, warranty end and legac
     '../features/workspace/maintenance-term': tab.load('features/workspace/maintenance-term.ts'),
     react: host.react, 'react/jsx-runtime': host.jsx,
     '../api/client': tab.client, '../auth/session': tab.session,
+    '../features/workspace/ServiceDetailUI': { ServiceCard: ({ children }) => children, ServiceFacts: ({ facts }) => null, ServiceNotice: ({ children }) => children },
+    '../features/workspace/workspace-data': { formatDate: (d) => d || '—' },
     './registration-data': {}, './registration-shared': {},
   })
   const tree = host.render(mod.MaintenancePolicyDetails, { record: { name: 'Annual', policyVersionId: 'policy',

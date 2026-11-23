@@ -7,7 +7,7 @@ import { DirectoryPicker, SetupPage } from "./registration-shared";
 import { useDirectory, errorText } from "./registration-data";
 import type { Page } from "../types/domain";
 import { locationOptions } from '../display-names';
-import { parseXlsx, type SheetRow } from '../features/equipment/spreadsheet';
+import { mapImportRows, parseCsvFile, parseXlsx, type SheetRow } from '../features/equipment/spreadsheet';
 import "./minh-asset-ux.css";
 
 type BulkResult = {
@@ -43,6 +43,7 @@ export function BulkHandoverPage() {
 function BulkHandoverForm({ storageKey }: { storageKey: string }) {
   const generation = getSessionGeneration();
   const pending = useRef(false);
+  const fileRead = useRef(0);
   const [saved] = useState(() => {
     try {
       const text = sessionStorage.getItem(storageKey);
@@ -67,6 +68,10 @@ function BulkHandoverForm({ storageKey }: { storageKey: string }) {
     [csv, setCsv] = useState("");
   const [fileRows, setFileRows] = useState<SheetRow[] | null>(null),
     [importFileName, setImportFileName] = useState("");
+  const importFields = ['modelId', 'assetCode', 'serialNumber', 'displayName', 'customerSiteId', 'locationId', 'purchaseDate', 'handoverDate'];
+  const fieldLabels: Record<string, string> = { modelId: 'Model', assetCode: 'Mã thiết bị', serialNumber: 'Số sê-ri', displayName: 'Tên máy', customerSiteId: 'Cơ sở lắp đặt', locationId: 'Vị trí chi tiết', purchaseDate: 'Ngày mua', handoverDate: 'Ngày bàn giao' };
+  const [columnMap, setColumnMap] = useState<Record<string, string>>({});
+  const mappedRows = fileRows ? mapImportRows(fileRows, columnMap, importFileName.toLowerCase().endsWith('.xlsx')) : null;
   const [preview, setPreview] = useState<Preview | null>(null),
     [result, setResult] = useState<BulkResult | null>(null);
   const [busy, setBusy] = useState(false),
@@ -81,8 +86,8 @@ function BulkHandoverForm({ storageKey }: { storageKey: string }) {
   }
   function requestBody() {
     const common = { customerId, customerSiteId, deliveryMethod, defaultModelId: modelId, ...(defaultLocationId ? { defaultLocationId } : {}) };
-    return fileRows
-      ? { ...common, rows: fileRows.map(row => ({
+    return mappedRows
+      ? { ...common, rows: mappedRows.map(row => ({
           ...(row.modelId || modelId ? { modelId: row.modelId || modelId } : {}),
           assetCode: row.assetCode,
           serialNumber: row.serialNumber,
@@ -262,6 +267,7 @@ function BulkHandoverForm({ storageKey }: { storageKey: string }) {
                 type="file"
                 accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={async (event) => {
+                  const readId = ++fileRead.current;
                   const file = event.target.files?.[0];
                   if (!file) return;
                   setFileRows(null);
@@ -270,26 +276,13 @@ function BulkHandoverForm({ storageKey }: { storageKey: string }) {
                   invalidate();
                   if (file.size > 5000000) { setError("Chọn tệp không quá 5 MB."); return; }
                   const name = file.name.toLowerCase();
-                  if (name.endsWith(".xlsx")) {
-                    try {
-                      const imported = await parseXlsx(file);
-                      setFileRows(imported);
-                      setImportFileName(file.name);
-                      setCsv("");
-                      invalidate();
-                    } catch (cause) { setError(cause instanceof Error ? cause.message : "Không đọc được XLSX."); }
-                    return;
-                  }
-                  if (!name.endsWith(".csv")) { setError("Chỉ nhận file .xlsx hoặc .csv."); return; }
-                  void file.text().then(
-                    (text) => {
-                      setFileRows(null);
-                      setImportFileName(file.name);
-                      setCsv(text);
-                      invalidate();
-                    },
-                    () => setError("Không đọc được file."),
-                  );
+                  if (!name.endsWith('.xlsx') && !name.endsWith('.csv')) { setError('Chỉ nhận file .xlsx hoặc .csv.'); return; }
+                  try {
+                    const imported = name.endsWith('.xlsx') ? await parseXlsx(file) : await parseCsvFile(file);
+                    if (readId !== fileRead.current || generation !== getSessionGeneration()) return;
+                    setFileRows(imported); setColumnMap(Object.fromEntries(importFields.map(field => [field, field in (imported[0] ?? {}) ? field : ''])));
+                    setImportFileName(file.name); setCsv(''); invalidate();
+                  } catch (cause) { if (readId === fileRead.current && generation === getSessionGeneration()) { setFileRows(null); setError(errorText(cause)); } }
                 }}
               />
             </label>
@@ -309,12 +302,14 @@ function BulkHandoverForm({ storageKey }: { storageKey: string }) {
                 disabled={!!fileRows}
                 placeholder={sample}
                 onChange={(e) => {
+                  fileRead.current++;
                   setCsv(e.target.value);
                   invalidate();
                 }}
               />
             </label>
-            {importFileName && <p>Đã đọc {importFileName}{fileRows ? ` · ${fileRows.length.toLocaleString("vi-VN")} dòng XLSX` : " · CSV"}</p>}
+            {importFileName && <p>Đã đọc {importFileName}{fileRows ? ` · ${fileRows.length.toLocaleString("vi-VN")} dòng` : " · CSV"}</p>}
+            {!!fileRows?.length && <fieldset><legend>Ghép cột trong tệp</legend><div className="management-fields">{importFields.map(field => <label key={field}>{fieldLabels[field]}<select value={columnMap[field] || ''} onChange={event => { setColumnMap(current => ({ ...current, [field]: event.target.value })); invalidate(); }}><option value="">{['assetCode', 'serialNumber'].includes(field) ? 'Chọn cột bắt buộc' : 'Không có / dùng giá trị mặc định'}</option>{Object.keys(fileRows[0]).map(header => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><p>Ngày theo YYYY-MM-DD; model, cơ sở và vị trí dùng mã định danh từ danh mục hiện có.</p></fieldset>}
             <p>Ngày dùng YYYY-MM-DD hoặc ngày Excel. Các cột modelId, customerSiteId, locationId, purchaseDate và handoverDate được phép khai báo theo từng máy. Ngày mua không thay đổi ngày bắt đầu bảo hành.</p>
           </fieldset>
           <button
@@ -323,7 +318,8 @@ function BulkHandoverForm({ storageKey }: { storageKey: string }) {
               locked ||
               !customerId ||
               !customerSiteId ||
-              !modelId ||
+              (!modelId && !mappedRows?.every(row => row.modelId)) ||
+              (!!fileRows && (!columnMap.assetCode || !columnMap.serialNumber)) ||
               !(fileRows?.length || csv)
             }
           >

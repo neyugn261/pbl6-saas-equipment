@@ -7,26 +7,30 @@ import { ServiceCard } from "./ServiceDetailUI";
 
 export default function CustomerServicePanel({
   customerId,
+  mode = 'all',
 }: {
   customerId: string;
+  mode?: 'all' | 'equipment' | 'requests';
 }) {
   const [page, setPage] = useState(1),
     [requestPage, setRequestPage] = useState(1),
+    [orderPage, setOrderPage] = useState(1),
     [revision, setRevision] = useState(0);
   const equipment = useWorkspaceData<Page<Row>>(
     "assetM2",
-    `/equipment?customerId=${customerId}&page=${page}&pageSize=20`,
+    mode !== 'requests' ? `/equipment?customerId=${customerId}&page=${page}&pageSize=20` : null,
     revision,
   );
   const requests = useWorkspaceData<Page<Row>>(
     "requestsLive",
-    `/service-requests?customerId=${customerId}&page=${requestPage}&pageSize=20`,
+    mode !== 'equipment' ? `/service-requests?customerId=${customerId}&page=${requestPage}&pageSize=20` : null,
     revision,
   );
+  const orders = useWorkspaceData<Page<Row>>('workorders', mode !== 'equipment' ? `/work-orders?customerId=${customerId}&page=${orderPage}&pageSize=20` : null, revision);
   const retry = () => setRevision((v) => v + 1);
   return (
     <div className="sd-stack">
-      <ServiceCard
+      {mode !== 'requests' && <ServiceCard
         title="Thiết bị của khách hàng"
         description="Chọn thiết bị để xem bảo hành, địa điểm và lịch sử tác động."
       >
@@ -66,8 +70,8 @@ export default function CustomerServicePanel({
             />
           )}
         </DataState>
-      </ServiceCard>
-      <ServiceCard
+      </ServiceCard>}
+      {mode !== 'equipment' && <ServiceCard
         title="Yêu cầu dịch vụ"
         description="Theo dõi các yêu cầu của khách hàng trên mọi thiết bị."
       >
@@ -103,7 +107,8 @@ export default function CustomerServicePanel({
             />
           )}
         </DataState>
-      </ServiceCard>
+      </ServiceCard>}
+      {mode !== 'equipment' && <ServiceCard title="Lệnh công việc của khách hàng" description="Các lệnh được ghi nhận trong phạm vi bạn được phép xem."><DataState {...orders} retry={retry}>{orders.data && <><ul className="m2-linked-list">{orders.data.items.map(row => <li key={String(row.id)}><Link to={`/app/work-orders/${row.id}`}>{value(row.workOrderNo)} · {value(row.title)}</Link><Badge status={row.status}/></li>)}</ul>{!orders.data.items.length && <p>Chưa có lệnh công việc.</p>}<Pagination page={orderPage} total={orders.data.total} onChange={setOrderPage}/></>}</DataState></ServiceCard>}
     </div>
   );
 }

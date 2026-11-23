@@ -337,6 +337,7 @@ export function navigationFor(roles: readonly string[]) {
     .map((item) => ({
       ...item,
       label:
+        roles.includes('SERVICE_MANAGER') && item.path === '/app/equipment-history' ? 'Lịch sử sự kiện' :
         roles.includes("TECHNICIAN") &&
         !roles.some((role) =>
           ["TENANT_ADMIN", "SERVICE_MANAGER", "DISPATCHER"].includes(role),

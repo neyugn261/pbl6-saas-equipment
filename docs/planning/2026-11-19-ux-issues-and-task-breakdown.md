@@ -4,6 +4,8 @@
 > **Dự án:** PBL6 — SaaS-based Field Service Management Platform for Equipment Vendors  
 > **Tài liệu đối chiếu:** [AGENTS.md](../../AGENTS.md), kiến trúc Microservices và các ADR hiện hành (ADR 0003, 0004, 0013, 0014, 0015, 0022).
 
+**Cập nhật triển khai Nguyên 21/11:** [tiến độ theo từng task, kiểm thử và phụ thuộc](../testing/nguyen-web-tasks-2026-11-21.md). Đã có code Web cho Quick Dispatch, KPI/drilldown, cây vị trí, toolbar, Customer workspace và branch mặc định. Báo giá/media/báo cáo khách và các tiêu chí rộng hơn vẫn còn phụ thuộc; không xem snapshot này là nghiệm thu toàn bộ backlog.
+
 ---
 
 ## I. TỔNG HỢP 12 VẤN ĐỀ TRẢI NGHIỆM NGƯỜI DÙNG & NGHIỆP VỤ CỐT LÕI

@@ -1,3 +1,6 @@
+import QuickDispatch from './features/workspace/QuickDispatch';
+import EquipmentGridRow from './features/equipment/EquipmentGridRow';
+import { equipmentExportColumns, equipmentFilters, scopeEquipmentFilters, equipmentViewParams, equipmentColumns, type EquipmentFilters } from './features/equipment/list-view';
 import { BranchAllocationPage } from "./features/workspace/BranchManagement";
 import ServiceManagerWorkOrder from "./features/workspace/ServiceManagerWorkOrder";
 import ServiceManagerShell from "./features/workspace/ServiceManagerShell";
@@ -5,11 +8,12 @@ import WorkspaceRouteBoundary from "./features/workspace/WorkspaceRouteBoundary"
 import {
   ServiceSections,
   ServiceNotice,
+  ServiceCard,
+  ServiceFacts,
 } from "./features/workspace/ServiceDetailUI";
 import { RequestLinkedOrders } from "./features/workspace/CustomerServicePanel";
 import {
   serviceLabels,
-  equipmentLifecycleLabel,
   requestResponsibility,
 } from "./features/workspace/service-detail-data";
 import RequestCloseoutSummary from "./features/workspace/RequestCloseoutSummary";
@@ -45,8 +49,9 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
-import { Boxes, Building2, ChevronRight, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { Boxes, Building2, ChevronDown, ChevronRight, ChevronUp, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { api, ApiError } from "./api/client";
 import { creators, has, home, menu } from "./auth/access";
 import { PriorityBadge, StatusBadge } from "./components/Badges";
@@ -61,7 +66,7 @@ import QrPage from "./routes/QrPage";
 import EstimatePanel from "./routes/EstimatePanel";
 import { NotificationInbox } from "./features/notifications/NotificationInbox";
 import { AttachmentsPanel } from "./features/attachments/AttachmentsPanel";
-import { WorkOrderReportsPage } from "./features/reports/WorkOrderReports";
+const WorkOrderReportsPage = lazy(() => import('./features/reports/WorkOrderReports').then(module => ({ default: module.WorkOrderReportsPage })));
 
 import {
   login,
@@ -295,9 +300,6 @@ function Problem({ error }: { error: unknown }) {
 }
 function Loading() {
   return <p role="status">Đang tải…</p>;
-}
-function Empty() {
-  return <p>Chưa có dữ liệu.</p>;
 }
 function Gate({ roles, children }: { roles: string[]; children: ReactNode }) {
   const { profile } = useSession();
@@ -654,32 +656,30 @@ function CustomerDetailPage() {
 }
 function EquipmentPage() {
   const { profile } = useSession();
+  const [viewParams, setViewParams] = useSearchParams();
+  const viewKey = viewParams.toString();
   const canManage = profile?.roles.some((role) =>
     ["TENANT_ADMIN", "SERVICE_MANAGER"].includes(role),
   );
   const canFilterOrganization = profile?.userType !== "CUSTOMER";
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const search = viewParams.get('q') || '';
+  const requestedPage = Number(viewParams.get('page'));
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const filters = scopeEquipmentFilters(equipmentFilters(viewParams), profile);
+  const [queryState, setQueryState] = useState({ key: viewKey, value: search });
+  const query = queryState.key === viewKey ? queryState.value : search;
+  const setQuery = (value: string) => setQueryState({ key: viewKey, value });
+  const setPage = (value: number) => setViewParams(equipmentViewParams(filters, search, value));
   const [equipmentRevision, setEquipmentRevision] = useState(0);
-  const [draftFilters, setDraftFilters] = useState({
-    status: "",
-    operationalStatus: "",
-    warranty: "",
-    registrationStatus: "",
-    customerId: "",
-    siteId: "",
-    locationId: "",
-    installationDateMissing: "",
-    purchaseFrom: "",
-    purchaseTo: "",
-    handoverFrom: "",
-    handoverTo: "",
-    installationFrom: "",
-    installationTo: "",
-  });
-  const [filters, setFilters] = useState(draftFilters);
-  const [selected, setSelected] = useState<Record<string, EquipmentRecord>>({});
+  const [draftState, setDraftState] = useState({ key: viewKey, value: filters });
+  const draftFilters = scopeEquipmentFilters(draftState.key === viewKey ? draftState.value : filters, profile);
+  const setDraftFilters = (value: EquipmentFilters) => setDraftState({ key: viewKey, value });
+  const selectionScope = equipmentViewParams(filters, search).toString();
+  const visibleColumns = equipmentColumns.map((column) => column.key);
+  type Selection = Record<string, EquipmentRecord>;
+  const [selectionState, setSelectionState] = useState<{ scope: string; items: Selection }>({ scope: selectionScope, items: {} });
+  const selected = selectionState.scope === selectionScope ? selectionState.items : {};
+  const setSelected = (value: Selection | ((current: Selection) => Selection)) => setSelectionState(current => ({ scope: selectionScope, items: typeof value === 'function' ? value(current.scope === selectionScope ? current.items : {}) : value }));
   const [customerLookup, setCustomerLookup] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
   useEffect(() => {
@@ -689,12 +689,52 @@ function EquipmentPage() {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
   const [exportError, setExportError] = useState("");
+  const [exportPreset, setExportPreset] = useState('view');
   const [showBulkUpdate, setShowBulkUpdate] = useState(false);
+  const filterExpandedKey = `pbl6.registration.filters-expanded.${profile?.tenantId}.${profile?.id}`;
+  const hasAdvancedFilters = Boolean(
+    filters.siteId ||
+    filters.locationId ||
+    filters.operationalStatus ||
+    filters.installationDateMissing ||
+    filters.registrationStatus ||
+    filters.purchaseFrom ||
+    filters.purchaseTo ||
+    filters.handoverFrom ||
+    filters.handoverTo ||
+    filters.installationFrom ||
+    filters.installationTo
+  );
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => {
+    if (hasAdvancedFilters) return true;
+    try {
+      const saved = sessionStorage.getItem(filterExpandedKey);
+      if (saved !== null) return saved === "true";
+    } catch { /* Display preference only */ }
+    return false;
+  });
+  const toggleAdvanced = () => setShowAdvanced((current) => {
+    const next = !current;
+    try { sessionStorage.setItem(filterExpandedKey, String(next)); } catch { /* Optional display preferences. */ }
+    return next;
+  });
+  const advancedCount = [
+    canFilterOrganization && (draftFilters.customerId || draftFilters.siteId || draftFilters.locationId) ? 1 : 0,
+    draftFilters.operationalStatus ? 1 : 0,
+    draftFilters.installationDateMissing ? 1 : 0,
+    draftFilters.registrationStatus && canManage ? 1 : 0,
+    draftFilters.purchaseFrom || draftFilters.purchaseTo ? 1 : 0,
+    draftFilters.handoverFrom || draftFilters.handoverTo ? 1 : 0,
+    draftFilters.installationFrom || draftFilters.installationTo ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
   const customers = useDirectory<Page<CustomerRecord>>("organization", canFilterOrganization ? `/customers?page=1&pageSize=100${customerQuery ? `&q=${encodeURIComponent(customerQuery)}` : ""}` : null);
+  const currentCustomer = useDirectory<CustomerRecord>("organization", !canFilterOrganization && profile?.customerId ? `/customers/${profile.customerId}` : null);
   const sites = useDirectory<DirectoryRow[]>("organization", filters.customerId ? `/customers/${filters.customerId}/sites` : null);
-  const filterSites = useDirectory<DirectoryRow[]>("organization", draftFilters.customerId ? `/customers/${draftFilters.customerId}/sites` : null);
+  const draftSites = useDirectory<DirectoryRow[]>("organization", draftFilters.customerId && draftFilters.customerId !== filters.customerId ? `/customers/${draftFilters.customerId}/sites` : null);
+  const filterSites = draftFilters.customerId === filters.customerId ? sites : draftSites;
   const appliedLocations = useDirectory<DirectoryRow[]>("organization", filters.siteId ? `/sites/${filters.siteId}/locations` : null);
-  const filterLocations = useDirectory<DirectoryRow[]>("organization", draftFilters.siteId ? `/sites/${draftFilters.siteId}/locations` : null);
+  const draftLocations = useDirectory<DirectoryRow[]>("organization", draftFilters.siteId && draftFilters.siteId !== filters.siteId ? `/sites/${draftFilters.siteId}/locations` : null);
+  const filterLocations = draftFilters.siteId === filters.siteId ? appliedLocations : draftLocations;
   const params = new URLSearchParams({ page: String(page), pageSize: "20" });
   if (search) params.set("q", search);
   Object.entries(filters).forEach(([key, value]) => {
@@ -709,6 +749,15 @@ function EquipmentPage() {
     equipmentRevision,
   );
   const summary = data.value?.summary;
+  const scrollKey = `pbl6.registration.list-scroll.${profile?.tenantId}.${profile?.id}.${viewKey}`;
+  const rememberScroll = () => { try { sessionStorage.setItem(scrollKey, String(window.scrollY)); } catch { /* Browsing remains available without storage. */ } };
+  useEffect(() => {
+    if (data.loading) return;
+    let top = 0;
+    try { top = Number(sessionStorage.getItem(scrollKey)) || 0; } catch { /* Keep the default position. */ }
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top, behavior: 'instant' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [data.loading, scrollKey]);
   const statusLabels: Record<string, string> = {
     ACTIVE: "Hoạt động",
     IN_SERVICE: "Đang sử dụng",
@@ -733,13 +782,14 @@ function EquipmentPage() {
     PENDING_CUSTOMER_CONFIRMATION: "Chờ khách xác nhận",
     COMPLETED: "Đã hoàn tất",
   };
-  const activeFilters = [
+  const activeFilterKeys = [['q'], ['status'], ['operationalStatus'], ['warranty'], ['registrationStatus'], ['customerId'], ['siteId'], ['locationId'], ['installationDateMissing'], ['installationDateMissing'], ['handoverFrom', 'handoverTo'], ['purchaseFrom', 'purchaseTo'], ['installationFrom', 'installationTo']];
+  const activeFilterItems = [
     search ? `Tìm: ${search}` : "",
     filters.status ? `Trạng thái: ${statusLabels[filters.status]}` : "",
     filters.operationalStatus ? `Vận hành: ${operationalLabels[filters.operationalStatus]}` : "",
     filters.warranty ? `Bảo hành: ${warrantyLabels[filters.warranty]}` : "",
     filters.registrationStatus && canManage ? `Hồ sơ: ${registrationLabels[filters.registrationStatus]}` : "",
-    filters.customerId ? `Khách: ${(customers.value?.items ?? []).find(row => row.id === filters.customerId)?.name ?? "đã chọn"}` : "",
+    canFilterOrganization && filters.customerId ? `Khách: ${(customers.value?.items ?? []).find(row => row.id === filters.customerId)?.name ?? "đã chọn"}` : "",
     filters.siteId ? `Cơ sở: ${(sites.value ?? []).find(row => row.id === filters.siteId)?.name ?? "đã chọn"}` : "",
     filters.locationId ? `Vị trí: ${(appliedLocations.value ?? []).find(row => row.id === filters.locationId)?.name ?? "đã chọn"}` : "",
     filters.installationDateMissing === "YES" ? "Ngày lắp chưa ghi nhận" : "",
@@ -753,7 +803,16 @@ function EquipmentPage() {
     filters.installationFrom || filters.installationTo
       ? `Lắp đặt: ${filters.installationFrom || "…"} – ${filters.installationTo || "…"}`
       : "",
-  ].filter(Boolean);
+  ].map((label, index) => ({ label, keys: activeFilterKeys[index] })).filter(item => item.label);
+  const activeFilters = activeFilterItems.map(item => item.label);
+  const clearFilter = (keys: string[]) => {
+    const next = { ...filters };
+    keys.forEach(key => { if (key in next) next[key as keyof EquipmentFilters] = ''; });
+    if (keys.includes('customerId')) { next.siteId = ''; next.locationId = ''; }
+    if (keys.includes('siteId')) next.locationId = '';
+    setViewParams(equipmentViewParams(next, keys.includes('q') ? '' : search));
+    setSelected({});
+  };
   const clearFilters = () => {
     const empty = {
       status: "",
@@ -772,25 +831,31 @@ function EquipmentPage() {
       installationTo: "",
     };
     setQuery("");
-    setSearch("");
+    setCustomerLookup("");
+    setCustomerQuery("");
     setDraftFilters(empty);
-    setFilters(empty);
-    setPage(1);
+    setViewParams({});
     setSelected({});
   };
-  const exportHeaders = ["equipmentId", "updatedAt", "assetCode", "serialNumber", "displayName", "model", "customer", "customerCode", "site", "siteCode", "location", "locationCode", "status", "operationalStatus", "purchaseDate", "handoverDate", "installationDate", "warranty", "warrantyEndDate", "exportedAt", "appliedFilters"];
+  const updateHeaders = ['equipmentId', 'updatedAt', 'assetCode', 'serialNumber', 'customerSiteId', 'locationId', 'purchaseDate', 'handoverDate', 'installationDate'];
+  const exportHeaders = exportPreset === 'update' ? updateHeaders : equipmentExportColumns(visibleColumns);
   const exportRows = async (onlySelected: boolean, format: "csv" | "xlsx") => {
     setExporting(true);
     setExportError("");
     try {
       let all: EquipmentRecord[] = [];
       let total = data.value?.total ?? 0;
+      let expectedTotal: number | undefined;
+      const seen = new Set<string>();
       const exportedAt = new Date().toISOString();
       for (let currentPage = 1; currentPage <= Math.max(1, Math.ceil(total / 100)); currentPage++) {
         const query = new URLSearchParams(params);
         query.set("page", String(currentPage));
         query.set("pageSize", "100");
         const result = await api.assetM2<Page<EquipmentRecord> & { summary?: EquipmentListSummary }>(`/equipment?${query.toString()}`);
+        if (expectedTotal !== undefined && result.total !== expectedTotal) throw new Error('Số lượng thiết bị thay đổi trong lúc xuất. Vui lòng tải lại và xuất lại.');
+        expectedTotal = result.total;
+        for (const item of result.items) { if (seen.has(item.id)) throw new Error('Danh sách thay đổi giữa các trang. Vui lòng xuất lại để tránh trùng dòng.'); seen.add(item.id); }
         all = all.concat(result.items);
         total = result.total;
         setExportProgress(Math.min(all.length, total).toLocaleString("vi-VN") + " / " + total.toLocaleString("vi-VN"));
@@ -799,10 +864,13 @@ function EquipmentPage() {
       if (onlySelected) {
         const ids = new Set(Object.keys(selected));
         all = all.filter(row => ids.has(row.id));
+        if (all.length !== ids.size) throw new Error('Một số dòng đã chọn không còn thuộc kết quả hiện tại. Vui lòng chọn lại trước khi xuất.');
       }
       const rows = all.map(item => ({
         equipmentId: item.id,
         updatedAt: item.updatedAt ?? "",
+        customerSiteId: item.customerSiteId ?? '',
+        locationId: item.locationId ?? '',
         assetCode: item.assetCode,
         serialNumber: item.serialNumber,
         displayName: item.displayName ?? "",
@@ -811,6 +879,7 @@ function EquipmentPage() {
         customerCode: item.customerDisplay?.code ?? "",
         site: item.siteDisplay?.name ?? "",
         siteCode: item.siteDisplay?.code ?? "",
+        siteAddress: item.siteDisplay?.address ?? '',
         location: item.locationDisplay?.name ?? "",
         locationCode: item.locationDisplay?.code ?? "",
         status: item.status,
@@ -880,9 +949,7 @@ function EquipmentPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                setSearch(query.trim());
-                setFilters({ ...draftFilters });
-                setPage(1);
+                setViewParams(equipmentViewParams(draftFilters, query));
                 setSelected({});
               }}
               className="equipment-filter-form"
@@ -895,10 +962,80 @@ function EquipmentPage() {
                     <p>Tìm trên dữ liệu thuộc phạm vi của bạn; ngày bắt đầu và kết thúc đều được tính.</p>
                   </div>
                 </div>
-                <button type="button" className="equipment-reset-button" onClick={clearFilters}>
-                  <RotateCcw size={15} aria-hidden="true" /> Xóa điều kiện
-                </button>
+                <div className="equipment-filter-heading-actions">
+                  <button type="button" className="equipment-reset-button" onClick={clearFilters}>
+                    <RotateCcw size={15} aria-hidden="true" /> Xóa điều kiện
+                  </button>
+                  <button
+                    type="button"
+                    className="ws-button ws-button--secondary equipment-toggle-btn"
+                    aria-expanded={showAdvanced}
+                    onClick={toggleAdvanced}
+                  >
+                    {showAdvanced ? (
+                      <>
+                        <ChevronUp size={15} aria-hidden="true" />
+                        <span>Ẩn bớt</span>
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={15} aria-hidden="true" />
+                        <span>{advancedCount > 0 ? `Hiện thêm (${advancedCount})` : "Hiện thêm bộ lọc"}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
+              {showAdvanced && (
+                <div className={`equipment-filter-grid equipment-organization-filters${canFilterOrganization ? "" : " equipment-organization-filters--portal"}`} role="group" aria-labelledby="equipment-customer-filter-title">
+                  <h3 id="equipment-customer-filter-title"><Building2 size={16} aria-hidden="true" />Khách hàng và địa điểm</h3>
+                  {canFilterOrganization ? (
+                    <>
+                      <label>
+                        <span>Tìm khách hàng theo mã / tên</span>
+                        <div className="equipment-search-input">
+                          <Search size={16} aria-hidden="true" />
+                          <input type="search" maxLength={100} aria-label="Tìm khách hàng" placeholder="Nhập mã hoặc tên khách hàng" value={customerLookup} onChange={e => setCustomerLookup(e.target.value)} />
+                        </div>
+                      </label>
+                      <label>
+                        <span>Khách hàng</span>
+                        <select aria-label="Lọc theo khách hàng" value={draftFilters.customerId} disabled={customers.loading || !!customers.error} onChange={e => setDraftFilters({ ...draftFilters, customerId: e.target.value, siteId: "", locationId: "" })}>
+                          <option value="">{customers.loading ? "Đang tải khách hàng…" : "Tất cả khách hàng"}</option>
+                          {draftFilters.customerId && !customers.value?.items.some(customer => customer.id === draftFilters.customerId) && <option value={draftFilters.customerId}>Khách hàng đã chọn</option>}
+                          {(customers.value?.items ?? []).map(customer => <option key={customer.id} value={customer.id}>{customer.code} · {customer.name}</option>)}
+                        </select>
+                        {customers.error && <small role="alert">Không tải được danh sách khách hàng. {customers.error}</small>}
+                      </label>
+                    </>
+                  ) : (
+                    <label>
+                      <span>Khách hàng của bạn</span>
+                      <input aria-label="Khách hàng của bạn" readOnly aria-busy={currentCustomer.loading} value={currentCustomer.value ? `${currentCustomer.value.code} · ${currentCustomer.value.name}` : currentCustomer.loading ? "Đang tải khách hàng…" : profile?.customerId ? "Chưa tải được tên khách hàng" : "Chưa liên kết khách hàng"} />
+                      {currentCustomer.error && <small role="alert">Không tải được thông tin khách hàng. {currentCustomer.error}</small>}
+                    </label>
+                  )}
+                  <label>
+                    <span>Cơ sở khách hàng</span>
+                    <select aria-label="Lọc theo cơ sở khách hàng" value={draftFilters.siteId} disabled={!draftFilters.customerId || filterSites.loading || !!filterSites.error} onChange={e => setDraftFilters({ ...draftFilters, siteId: e.target.value, locationId: "" })}>
+                      <option value="">{filterSites.loading ? "Đang tải cơ sở…" : !draftFilters.customerId ? "Chọn khách hàng trước" : "Tất cả cơ sở"}</option>
+                      {draftFilters.siteId && !filterSites.value?.some(site => site.id === draftFilters.siteId) && <option value={draftFilters.siteId}>Cơ sở đã chọn</option>}
+                      {(filterSites.value ?? []).map(site => <option key={site.id} value={site.id}>{site.code ? `${site.code} · ` : ""}{site.name}</option>)}
+                    </select>
+                    {filterSites.error && <small role="alert">Không tải được cơ sở. {filterSites.error}</small>}
+                  </label>
+                  <label>
+                    <span>Vị trí lắp đặt</span>
+                    <select aria-label="Lọc theo vị trí lắp đặt" value={draftFilters.locationId} disabled={!draftFilters.siteId || filterLocations.loading || !!filterLocations.error} onChange={e => setDraftFilters({ ...draftFilters, locationId: e.target.value })}>
+                      <option value="">{filterLocations.loading ? "Đang tải vị trí…" : !draftFilters.siteId ? "Chọn cơ sở trước" : "Tất cả vị trí"}</option>
+                      {draftFilters.locationId && !filterLocations.value?.some(location => location.id === draftFilters.locationId) && <option value={draftFilters.locationId}>Vị trí đã chọn</option>}
+                      {(filterLocations.value ?? []).map(location => <option key={location.id} value={location.id}>{location.code ? `${location.code} · ` : ""}{location.name}</option>)}
+                    </select>
+                    {filterLocations.error && <small role="alert">Không tải được vị trí. {filterLocations.error}</small>}
+                  </label>
+                  {!canFilterOrganization && <p className="equipment-organization-note">Thiết bị thuộc khách hàng của tài khoản. Bạn có thể lọc theo cơ sở và vị trí lắp đặt.</p>}
+                </div>
+              )}
               <div className="equipment-filter-grid">
                 <label className="equipment-filter-search">
                   <span>Mã thiết bị, serial hoặc model</span>
@@ -922,31 +1059,6 @@ function EquipmentPage() {
                     <option value="RETIRED">Ngừng sử dụng</option>
                   </select>
                 </label>
-                {canFilterOrganization && <label>
-                  <span>Tìm khách hàng theo mã / tên</span>
-                  <input aria-label="Tìm khách hàng" placeholder="Nhập mã hoặc tên khách" value={customerLookup} onChange={e => setCustomerLookup(e.target.value)} />
-                </label>}
-                {canFilterOrganization && <label>
-                  <span>Khách hàng</span>
-                  <select value={draftFilters.customerId} onChange={e => setDraftFilters({ ...draftFilters, customerId: e.target.value, siteId: "", locationId: "" })}>
-                    <option value="">Tất cả khách hàng</option>
-                    {(customers.value?.items ?? []).map(customer => <option key={customer.id} value={customer.id}>{customer.code} · {customer.name}</option>)}
-                  </select>
-                </label>}
-                {canFilterOrganization && <label>
-                  <span>Cơ sở khách hàng</span>
-                  <select value={draftFilters.siteId} disabled={!draftFilters.customerId || filterSites.loading} onChange={e => setDraftFilters({ ...draftFilters, siteId: e.target.value, locationId: "" })}>
-                    <option value="">Tất cả cơ sở</option>
-                    {(filterSites.value ?? []).map(site => <option key={site.id} value={site.id}>{site.code ? `${site.code} · ` : ""}{site.name}</option>)}
-                  </select>
-                </label>}
-                {canFilterOrganization && <label>
-                  <span>Vị trí lắp đặt</span>
-                  <select value={draftFilters.locationId} disabled={!draftFilters.siteId || filterLocations.loading} onChange={e => setDraftFilters({ ...draftFilters, locationId: e.target.value })}>
-                    <option value="">Tất cả vị trí</option>
-                    {(filterLocations.value ?? []).map(location => <option key={location.id} value={location.id}>{location.code ? `${location.code} · ` : ""}{location.name}</option>)}
-                  </select>
-                </label>}
                 <label>
                   <span>Tình trạng vận hành</span>
                   <select value={draftFilters.operationalStatus} onChange={(e) => setDraftFilters({ ...draftFilters, operationalStatus: e.target.value })}>
@@ -963,48 +1075,74 @@ function EquipmentPage() {
                     <option value="NO_WARRANTY">Không có hiệu lực hôm nay</option>
                   </select>
                 </label>
-                <label>
-                  <span>Tình trạng lắp đặt</span>
-                  <select value={draftFilters.installationDateMissing} onChange={(e) => setDraftFilters({ ...draftFilters, installationDateMissing: e.target.value })}>
-                    <option value="">Tất cả</option>
-                    <option value="YES">Chưa ghi nhận ngày lắp</option>
-                    <option value="NO">Đã ghi nhận ngày lắp</option>
-                  </select>
-                </label>
-                {canManage && (
-                  <label>
-                    <span>Hồ sơ dịch vụ</span>
-                    <select value={draftFilters.registrationStatus} onChange={(e) => setDraftFilters({ ...draftFilters, registrationStatus: e.target.value })}>
-                      <option value="">Tất cả</option>
-                      {Object.entries(registrationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
-                  </label>
+                {showAdvanced && (
+                  <>
+                    <label>
+                      <span>Tình trạng lắp đặt</span>
+                      <select value={draftFilters.installationDateMissing} onChange={(e) => setDraftFilters({ ...draftFilters, installationDateMissing: e.target.value })}>
+                        <option value="">Tất cả</option>
+                        <option value="YES">Chưa ghi nhận ngày lắp</option>
+                        <option value="NO">Đã ghi nhận ngày lắp</option>
+                      </select>
+                    </label>
+                    {canManage && (
+                      <label>
+                        <span>Hồ sơ dịch vụ</span>
+                        <select value={draftFilters.registrationStatus} onChange={(e) => setDraftFilters({ ...draftFilters, registrationStatus: e.target.value })}>
+                          <option value="">Tất cả</option>
+                          {Object.entries(registrationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </label>
+                    )}
+                    <div className="equipment-date-filters">
+                      <fieldset className="equipment-date-filter">
+                        <legend>Ngày mua</legend>
+                        <label><span>Từ ngày</span><input type="date" value={draftFilters.purchaseFrom} onChange={(e) => setDraftFilters({ ...draftFilters, purchaseFrom: e.target.value })} /></label>
+                        <label><span>Đến ngày</span><input type="date" value={draftFilters.purchaseTo} onChange={(e) => setDraftFilters({ ...draftFilters, purchaseTo: e.target.value })} /></label>
+                      </fieldset>
+                      <fieldset className="equipment-date-filter">
+                        <legend>Ngày bàn giao thực tế</legend>
+                        <label><span>Từ ngày</span><input type="date" value={draftFilters.handoverFrom} onChange={(e) => setDraftFilters({ ...draftFilters, handoverFrom: e.target.value })} /></label>
+                        <label><span>Đến ngày</span><input type="date" value={draftFilters.handoverTo} onChange={(e) => setDraftFilters({ ...draftFilters, handoverTo: e.target.value })} /></label>
+                      </fieldset>
+                      <fieldset className="equipment-date-filter">
+                        <legend>Ngày lắp đặt thực tế</legend>
+                        <label><span>Từ ngày</span><input type="date" value={draftFilters.installationFrom} onChange={(e) => setDraftFilters({ ...draftFilters, installationFrom: e.target.value })} /></label>
+                        <label><span>Đến ngày</span><input type="date" value={draftFilters.installationTo} onChange={(e) => setDraftFilters({ ...draftFilters, installationTo: e.target.value })} /></label>
+                      </fieldset>
+                    </div>
+                  </>
                 )}
-                <fieldset className="equipment-date-filter">
-                  <legend>Ngày mua</legend>
-                  <label><span>Từ ngày</span><input type="date" value={draftFilters.purchaseFrom} onChange={(e) => setDraftFilters({ ...draftFilters, purchaseFrom: e.target.value })} /></label>
-                  <label><span>Đến ngày</span><input type="date" value={draftFilters.purchaseTo} onChange={(e) => setDraftFilters({ ...draftFilters, purchaseTo: e.target.value })} /></label>
-                </fieldset>
-                <fieldset className="equipment-date-filter">
-                  <legend>Ngày bàn giao thực tế</legend>
-                  <label><span>Từ ngày</span><input type="date" value={draftFilters.handoverFrom} onChange={(e) => setDraftFilters({ ...draftFilters, handoverFrom: e.target.value })} /></label>
-                  <label><span>Đến ngày</span><input type="date" value={draftFilters.handoverTo} onChange={(e) => setDraftFilters({ ...draftFilters, handoverTo: e.target.value })} /></label>
-                </fieldset>
-                <fieldset className="equipment-date-filter">
-                  <legend>Ngày lắp đặt thực tế</legend>
-                  <label><span>Từ ngày</span><input type="date" value={draftFilters.installationFrom} onChange={(e) => setDraftFilters({ ...draftFilters, installationFrom: e.target.value })} /></label>
-                  <label><span>Đến ngày</span><input type="date" value={draftFilters.installationTo} onChange={(e) => setDraftFilters({ ...draftFilters, installationTo: e.target.value })} /></label>
-                </fieldset>
               </div>
               {activeFilters.length > 0 && (
                 <div className="equipment-active-filters" aria-live="polite">
                   <strong>Điều kiện đang áp dụng</strong>
-                  {activeFilters.map((filter) => <span key={filter}>{filter}</span>)}
+                  {activeFilterItems.map(item => <button type="button" className="equipment-filter-chip" key={item.label} aria-label={`Bỏ điều kiện ${item.label}`} onClick={() => clearFilter(item.keys)}>{item.label} <span aria-hidden="true">×</span></button>)}
                 </div>
               )}
               <div className="equipment-filter-actions">
                 <span>Model, serial và mã thiết bị được tìm trên toàn bộ dữ liệu theo quyền.</span>
-                <button type="submit" className="m1-button">Áp dụng bộ lọc</button>
+                <div className="equipment-filter-actions__group">
+                  <button
+                    type="button"
+                    className="ws-button ws-button--secondary equipment-toggle-btn"
+                    aria-expanded={showAdvanced}
+                    onClick={toggleAdvanced}
+                  >
+                    {showAdvanced ? (
+                      <>
+                        <ChevronUp size={15} aria-hidden="true" />
+                        <span>Ẩn bớt</span>
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={15} aria-hidden="true" />
+                        <span>{advancedCount > 0 ? `Hiện thêm (${advancedCount})` : "Hiện thêm bộ lọc"}</span>
+                      </>
+                    )}
+                  </button>
+                  <button type="submit" className="m1-button">Áp dụng bộ lọc</button>
+                </div>
               </div>
             </form>
           </section>
@@ -1015,6 +1153,7 @@ function EquipmentPage() {
                 <p>{data.value?.total ?? 0} kết quả · sắp xếp theo thời gian tạo mới nhất</p>
               </div>
               <div className="equipment-export-actions">
+                <label>Nội dung xuất<select value={exportPreset} onChange={event => setExportPreset(event.target.value)}><option value="view">Các cột đang hiển thị</option>{canManage && <option value="update">Mẫu cập nhật thiết bị</option>}</select></label>
                 {canManage && <button type="button" className="ws-button ws-button--secondary" onClick={() => setShowBulkUpdate(value => !value)}>{showBulkUpdate ? "Đóng nhập lô" : "Nhập / cập nhật lô"}</button>}
                 <button type="button" className="ws-button ws-button--secondary" disabled={exporting || !data.value?.total} onClick={() => void exportRows(false, "csv")}>{exporting ? "Đang xuất " + exportProgress + "…" : "Xuất tất cả đã lọc · CSV"}</button>
                 <button type="button" className="ws-button ws-button--secondary" disabled={exporting || !data.value?.total} onClick={() => void exportRows(false, "xlsx")}>{exporting ? "Đang xuất " + exportProgress + "…" : "XLSX"}</button>
@@ -1031,85 +1170,32 @@ function EquipmentPage() {
               </div>
             ) : (
               <>
-                <div className="equipment-grid-scroll" role="region" aria-label="Bảng thiết bị, cuộn ngang để xem thêm cột" tabIndex={0}>
+                <div className="equipment-grid-scroll" role="region" aria-label="Bảng thiết bị, cuộn ngang để xem thêm cột" tabIndex={0} onClickCapture={rememberScroll}>
                   <table className="equipment-grid">
                   <thead>
                     <tr>
                       <th><input type="checkbox" aria-label="Chọn tất cả thiết bị trang này" checked={pageSelected} onChange={togglePage} /></th>
                       <th className="equipment-grid__identity">Thiết bị</th>
-                      <th>Khách hàng / vị trí</th>
-                      <th>Số sê-ri</th>
-                      <th>Mua / bàn giao / lắp đặt</th>
-                      <th>Hiệu lực bảo hành</th>
-                      <th>Tình trạng</th>
+                      {visibleColumns.map(key => <th key={key}>{equipmentColumns.find(column => column.key === key)?.label}</th>)}
                       {canManage && <th>Hồ sơ dịch vụ</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.value?.items.map((item) => (
-                      <tr key={item.id}>
-                        <td><input type="checkbox" aria-label={`Chọn ${item.assetCode}`} checked={!!selected[item.id]} onChange={event => setSelected(current => { const next = { ...current }; if (event.target.checked) next[item.id] = item; else delete next[item.id]; return next; })} /></td>
-                        <td className="equipment-grid__identity">
-                          <Link
-                            to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/equipment/${item.id}`}
-                          >
-                            {item.assetCode}
-                          </Link>
-                          <strong>{item.displayName || item.model?.name || "Thiết bị chưa có tên"}</strong>
-                          <small>{[item.model?.manufacturer, item.model?.modelCode].filter(Boolean).join(" · ") || item.model?.name || "Chưa có thông tin model"}</small>
-                        </td>
-                        <td className="equipment-context-cell">
-                          <strong>{item.customerDisplay ? `${item.customerDisplay.code ? `${item.customerDisplay.code} · ` : ""}${item.customerDisplay.name}` : "Tên khách hàng chưa sẵn sàng"}</strong>
-                          <span>{item.siteDisplay ? `${item.siteDisplay.code ? `${item.siteDisplay.code} · ` : ""}${item.siteDisplay.name}` : "Tên cơ sở chưa sẵn sàng"}</span>
-                          {item.siteDisplay?.address && <small>{item.siteDisplay.address}</small>}
-                          {item.locationDisplay && <span>Vị trí: {item.locationDisplay.code ? `${item.locationDisplay.code} · ` : ""}{item.locationDisplay.name}</span>}
-                        </td>
-                        <td>{item.serialNumber}</td>
-                        <td className="equipment-dates-cell">
-                          <span><b>Mua</b>{item.purchaseDate || "Chưa ghi nhận"}</span>
-                          <span><b>Bàn giao</b>{item.handoverDate || "Chưa ghi nhận"}</span>
-                          <span><b>Lắp đặt</b>{item.installationDate || "Chưa ghi nhận"}</span>
-                        </td>
-                        <td>
-                          {item.warranty?.result ? (
-                            <div className="equipment-warranty-cell">
-                              <StatusBadge status={item.warranty.result} />
-                              {item.warranty?.endDate && <small>Đến {item.warranty.endDate}</small>}
-                            </div>
-                          ) : (
-                            "Chưa có dữ liệu"
-                          )}
-                        </td>
-                        <td>
-                          <div className="equipment-status-cell">
-                            <StatusBadge status={item.status} label={equipmentLifecycleLabel(item.status)} />
-                            <small>{operationalLabels[item.operationalStatus || "UNKNOWN"]}</small>
-                          </div>
-                        </td>
-                        {canManage && (
-                          <td>
-                            <Link
-                              to={
-                                item.registrationId
-                                  ? `/app/equipment-registrations/${item.registrationId}`
-                                  : `/app/equipment-registrations/new?equipmentId=${item.id}`
-                              }
-                            >
-                              {item.registrationStatus === "COMPLETED"
-                                ? "Đã hoàn tất"
-                                : item.registrationStatus ===
-                                    "PENDING_MAINTENANCE"
-                                  ? "Chờ bảo trì"
-                                  : item.registrationStatus ===
-                                      "PENDING_CUSTOMER_CONFIRMATION"
-                                    ? "Chờ khách xác nhận"
-                                    : item.registrationStatus === "DRAFT"
-                                      ? "Tiếp tục hồ sơ"
-                                      : "Hoàn thiện bàn giao"}
-                            </Link>
-                          </td>
-                        )}
-                      </tr>
+                    {data.value?.items.map(item => (
+                      <EquipmentGridRow
+                        key={item.id}
+                        item={item}
+                        portal={profile?.userType === 'CUSTOMER'}
+                        canManage={!!canManage}
+                        columns={visibleColumns}
+                        selected={!!selected[item.id]}
+                        operationalLabels={operationalLabels}
+                        onSelect={checked => setSelected(current => {
+                          const next = { ...current };
+                          if (checked) next[item.id] = item; else delete next[item.id];
+                          return next;
+                        })}
+                      />
                     ))}
                   </tbody>
                   </table>
@@ -1186,7 +1272,7 @@ function RequestActivity({
           ) : history.error ? (
             <Problem error={history.error} />
           ) : !history.value?.length ? (
-            <Empty />
+            <p className="request-history-empty">Chưa có thay đổi trạng thái được ghi nhận.</p>
           ) : (
             <ol className="request-status-list">
               {history.value
@@ -1570,10 +1656,10 @@ function RequestDetailPage() {
             {intake && (
               <section id="request-intake" tabIndex={-1} aria-label="Tiến trình tiếp nhận">
                 <ol className="sd-progress request-intake-progress">
-                  {["Xem sự cố", "Thẩm định bảo hành", "Chọn phương án", "Điều phối & theo dõi"].map((label, index) => (
-                    <li key={label} data-state={index < intake.stage ? "done" : index === intake.stage ? "current" : "pending"}
-                      aria-current={index === intake.stage ? "step" : undefined}>
-                      <span aria-hidden="true">{index < intake.stage ? "✓" : index + 1}</span>{label}
+                  {["Tiếp nhận & thẩm định", "Thống nhất phương án", "Điều phối & theo dõi"].map((label, index) => (
+                    <li key={label} data-state={index < Math.max(0, intake.stage - 1) ? "done" : index === Math.max(0, intake.stage - 1) ? "current" : "pending"}
+                      aria-current={index === Math.max(0, intake.stage - 1) ? "step" : undefined}>
+                      <span aria-hidden="true">{index < Math.max(0, intake.stage - 1) ? "✓" : index + 1}</span>{label}
                     </li>
                   ))}
                 </ol>
@@ -1583,6 +1669,7 @@ function RequestDetailPage() {
               </section>
             )}
             <div className="m1-actions">
+              {isManager && current.status === 'ACCEPTED' && current.branchId && <QuickDispatch key={`${sessionGeneration}:${current.id}`} requestId={current.id} branchId={current.branchId} onChanged={() => void refreshRequest()}/>}
               <button className="request-refresh-action" disabled={busy} onClick={() => void refreshRequest()}>
                 Làm mới trạng thái
               </button>
@@ -1644,21 +1731,10 @@ function RequestDetailPage() {
               </p>
             )}
             {intake && (
-              <>
-                <div className="m1-request-detail-grid request-intake-grid">
-                  <section className="m1-card m1-section-card">
-                    <div className="m1-section-header"><h2>Mô tả sự cố</h2></div>
-                    <div className="m1-section-body m1-prose">{current.description}</div>
-                    <div className="m1-section-body">
-                      <Link to={`/app/equipment/${current.equipmentId}`}>
-                        {recordLabel(equipmentLabel.value?.assetCode, equipmentLabel.value?.displayName, "Mở hồ sơ thiết bị")}
-                      </Link>
-                    </div>
-                  </section>
-                  <div id="request-assessment" tabIndex={-1}>{assessmentPanel}</div>
-                </div>
+              <div className="sd-stack request-intake-panels">
+                <div id="request-assessment" tabIndex={-1}>{assessmentPanel}</div>
                 <div id="request-estimate" tabIndex={-1}>{estimatePanel}</div>
-              </>
+              </div>
             )}
             <ServiceSections
               items={[
@@ -1666,238 +1742,178 @@ function RequestDetailPage() {
                   key: "overview",
                   label: "Thông tin & trao đổi",
                   content: (
-                    <>
-                      {(current.resolutionSummary ||
-                        current.resolutionResult) && (
-                        <section className="m1-card m1-section-card">
-                          <div className="m1-section-header">
-                            <h2>Kết quả dịch vụ</h2>
-                          </div>
-                          <div className="m1-section-body">
-                            <p>{current.resolutionSummary ?? "—"}</p>
-                            <dl>
-                              <dt>Kết quả</dt>
-                              <dd>
-                                {serviceLabels[
-                                  current.resolutionResult ?? ""
-                                ] ?? "Chưa ghi nhận"}
-                              </dd>
-                              <dt>Lệnh công việc</dt>
-                              <dd>{current.resolvedWorkOrderNo ?? "—"}</dd>
-                              <dt>Hoàn thành lúc</dt>
-                              <dd>
-                                {formatDate(current.resolutionCompletedAt)}
-                              </dd>
-                            </dl>
-                          </div>
-                        </section>
-                      )}
-                      <AttachmentsPanel
-                        kind="SERVICE_REQUEST_RESULT"
-                        requestId={current.id}
-                      />
-                      <div className="m1-request-detail-grid">
-                        <div>
-                          {!intake && <section className="m1-card m1-section-card">
-                            <div className="m1-section-header">
-                              <h2>Mô tả sự cố</h2>
-                            </div>
-                            <div className="m1-section-body m1-prose">
-                              {current.description}
-                            </div>
-                          </section>}
-                          <section className="m1-card m1-section-card">
-                            <div className="m1-section-header">
-                              <h2>Thiết bị & vị trí</h2>
-                            </div>
-                            <div className="m1-section-body">
-                              <Link
-                                className="m1-equipment-link"
-                                to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/equipment/${current.equipmentId}`}
-                              >
-                                <span className="m1-entity-avatar">
-                                  <Boxes size={19} />
-                                </span>
-                                <span>
-                                  <strong>Mở hồ sơ thiết bị</strong>
-                                  <small>
-                                    {equipmentLabel.value?.displayName ||
-                                      equipmentLabel.value?.model?.name ||
-                                      equipmentLabel.value?.assetCode ||
-                                      "Thiết bị không xác định"}
-                                  </small>
-                                </span>
-                                <ChevronRight size={18} />
-                              </Link>
-                            </div>
-                          </section>
-                          <section className="m1-card m1-section-card">
-                            <div className="m1-section-header">
-                              <h2>Trao đổi</h2>
-                            </div>
-                            <div className="m1-section-body">
-                              <RequestActivity
-                                id={current.id}
-                                version={version}
-                                mode="comments"
+                    <div className="sd-columns request-overview">
+                      <div className="sd-stack request-overview-main">
+                        <ServiceCard title="Mô tả sự cố">
+                          <p className="request-overview-description">{current.description || "Chưa có mô tả sự cố."}</p>
+                        </ServiceCard>
+                        <ServiceCard title="Trao đổi" description="Theo dõi phản hồi và bổ sung thông tin cho yêu cầu này.">
+                          <RequestActivity
+                            id={current.id}
+                            version={version}
+                            mode="comments"
+                          />
+                          {current.allowedActions?.includes(
+                            "add-comment",
+                          ) ? (
+                            <form
+                              id="request-comments"
+                              className="m1-comment request-comment-composer"
+                              onSubmit={addComment}
+                            >
+                              <label htmlFor="request-comment-content">
+                                Viết bình luận
+                              </label>
+                              <textarea
+                                id="request-comment-content"
+                                aria-label="Nội dung trao đổi"
+                                aria-describedby="request-comment-visibility-help"
+                                disabled={busy}
+                                required
+                                maxLength={5000}
+                                rows={3}
+                                value={comment}
+                                onChange={(event) =>
+                                  setComment(event.target.value)
+                                }
+                                placeholder="Nhập nội dung trao đổi về yêu cầu…"
                               />
-                              {current.allowedActions?.includes(
-                                "add-comment",
-                              ) ? (
-                                <form
-                                  id="request-comments"
-                                  className="m1-comment request-comment-composer"
-                                  onSubmit={addComment}
-                                >
-                                  <label htmlFor="request-comment-content">
-                                    Viết bình luận
-                                  </label>
-                                  <textarea
-                                    id="request-comment-content"
-                                    aria-label="Nội dung trao đổi"
-                                    aria-describedby="request-comment-visibility-help"
-                                    disabled={busy}
-                                    required
-                                    maxLength={5000}
-                                    rows={3}
-                                    value={comment}
-                                    onChange={(event) =>
-                                      setComment(event.target.value)
-                                    }
-                                    placeholder="Nhập nội dung trao đổi về yêu cầu…"
-                                  />
-                                  <div className="request-comment-toolbar">
-                                    {profile?.userType !== "CUSTOMER" &&
-                                      profile &&
-                                      has(profile.roles, [
-                                        "SERVICE_MANAGER",
-                                        "DISPATCHER",
-                                        "TECHNICIAN",
-                                      ]) && (
-                                        <label className="request-comment-visibility">
-                                          <span>Hiển thị với</span>
-                                          <select
-                                            aria-label="Phạm vi hiển thị trao đổi"
-                                            disabled={busy}
-                                            value={visibility}
-                                            onChange={(event) =>
-                                              setVisibility(
-                                                event.target.value as
-                                                  "CUSTOMER" | "INTERNAL",
-                                              )
-                                            }
-                                          >
-                                            <option value="CUSTOMER">
-                                              Khách hàng và nhân viên
-                                            </option>
-                                            <option value="INTERNAL">
-                                              Chỉ nội bộ
-                                            </option>
-                                          </select>
-                                        </label>
-                                      )}
-                                    <button
-                                      type="submit"
-                                      disabled={busy || !comment.trim()}
-                                    >
-                                      {busy ? "Đang gửi…" : "Gửi bình luận"}
-                                    </button>
-                                  </div>
-                                  <p
-                                    id="request-comment-visibility-help"
-                                    className="request-comment-help"
-                                  >
-                                    {profile?.userType !== "CUSTOMER" && visibility === "INTERNAL"
-                                      ? "Chỉ nhân viên có quyền truy cập yêu cầu thấy bình luận này."
-                                      : "Khách hàng và nhân viên có quyền truy cập yêu cầu thấy bình luận này."}
-                                  </p>
-                                </form>
-                              ) : (
-                                <p>Chỉ xem trao đổi theo quyền hiện tại.</p>
-                              )}
-                            </div>
-                          </section>
-                        </div>
-                        <aside>
-                          <section className="m1-card m1-section-card">
-                            <div className="m1-section-header">
-                              <h2>Thông tin yêu cầu</h2>
-                            </div>
-                            <div className="m1-section-body">
-                              <dl>
-                                <dt>Trạng thái</dt>
-                                <dd>
-                                  <StatusBadge status={current.status} />
-                                </dd>
-                                <dt>Ưu tiên</dt>
-                                <dd>
-                                  <PriorityBadge priority={current.priority} />
-                                </dd>
-                                <dt>Bảo hành</dt>
-                                <dd>
-                                  {current.warrantyCheck?.result ? (
-                                    <StatusBadge
-                                      status={current.warrantyCheck.result}
-                                    />
-                                  ) : (
-                                    "Chưa kiểm tra"
+                              <div className="request-comment-toolbar">
+                                {profile?.userType !== "CUSTOMER" &&
+                                  profile &&
+                                  has(profile.roles, [
+                                    "SERVICE_MANAGER",
+                                    "DISPATCHER",
+                                    "TECHNICIAN",
+                                  ]) && (
+                                    <label className="request-comment-visibility">
+                                      <span>Hiển thị với</span>
+                                      <select
+                                        aria-label="Phạm vi hiển thị trao đổi"
+                                        disabled={busy}
+                                        value={visibility}
+                                        onChange={(event) =>
+                                          setVisibility(
+                                            event.target.value as
+                                              "CUSTOMER" | "INTERNAL",
+                                          )
+                                        }
+                                      >
+                                        <option value="CUSTOMER">
+                                          Khách hàng và nhân viên
+                                        </option>
+                                        <option value="INTERNAL">
+                                          Chỉ nội bộ
+                                        </option>
+                                      </select>
+                                    </label>
                                   )}
-                                </dd>
-                                <dt>Loại yêu cầu</dt>
-                                <dd>
-                                  {requestTypeLabels[current.type] ??
-                                    current.type}
-                                </dd>
-                              </dl>
-                            </div>
-                          </section>
-                          {profile?.roles.includes("SERVICE_MANAGER") && (
-                            <RequestLinkedOrders
-                              key={current.id}
-                              requestId={current.id}
-                            />
+                                <button
+                                  type="submit"
+                                  disabled={busy || !comment.trim()}
+                                >
+                                  {busy ? "Đang gửi…" : "Gửi bình luận"}
+                                </button>
+                              </div>
+                              <p
+                                id="request-comment-visibility-help"
+                                className="request-comment-help"
+                              >
+                                {profile?.userType !== "CUSTOMER" && visibility === "INTERNAL"
+                                  ? "Chỉ nhân viên có quyền truy cập yêu cầu thấy bình luận này."
+                                  : "Khách hàng và nhân viên có quyền truy cập yêu cầu thấy bình luận này."}
+                              </p>
+                            </form>
+                          ) : (
+                            <p>Chỉ xem trao đổi theo quyền hiện tại.</p>
                           )}
-                        </aside>
+                        </ServiceCard>
+                        {(current.resolutionSummary || current.resolutionResult) && (
+                          <ServiceCard title="Kết quả dịch vụ">
+                            <p className="request-overview-description">{current.resolutionSummary || "Chưa có tóm tắt kết quả."}</p>
+                            <ServiceFacts items={[
+                              { label: "Kết quả", value: serviceLabels[current.resolutionResult ?? ""] ?? "Chưa ghi nhận" },
+                              { label: "Lệnh công việc", value: current.resolvedWorkOrderNo || "Chưa ghi nhận" },
+                              { label: "Hoàn thành lúc", value: formatDate(current.resolutionCompletedAt) },
+                            ]} />
+                          </ServiceCard>
+                        )}
+                        <div className="request-result-attachments">
+                          <AttachmentsPanel kind="SERVICE_REQUEST_RESULT" requestId={current.id} />
+                        </div>
                       </div>
-                    </>
+                      <aside className="sd-stack request-overview-aside" aria-label="Thông tin liên quan đến yêu cầu">
+                        <ServiceCard title="Thông tin yêu cầu">
+                          <ServiceFacts items={[
+                            { label: "Trạng thái", value: <StatusBadge status={current.status} /> },
+                            { label: "Ưu tiên", value: <PriorityBadge priority={current.priority} /> },
+                            { label: "Loại yêu cầu", value: requestTypeLabels[current.type] ?? current.type },
+                            { label: "Bảo hành khi xét duyệt", value: current.warrantyCheck?.result ? <StatusBadge status={current.warrantyCheck.result} /> : "Chưa kiểm tra" },
+                            { label: "Thời điểm gửi", value: formatDate(current.createdAt) },
+                          ]} />
+                        </ServiceCard>
+                        <ServiceCard title="Thiết bị liên quan">
+                          <Link className="m1-equipment-link" to={`${profile?.userType === "CUSTOMER" ? "/portal" : "/app"}/equipment/${current.equipmentId}`}>
+                            <span className="m1-entity-avatar" aria-hidden="true"><Boxes size={19} /></span>
+                            <span>
+                              <strong>{equipmentLabel.value?.displayName || equipmentLabel.value?.model?.name || equipmentLabel.value?.assetCode || "Mở hồ sơ thiết bị"}</strong>
+                              <small>Xem hồ sơ thiết bị <ChevronRight size={14} aria-hidden="true" /></small>
+                            </span>
+                          </Link>
+                          {equipmentLabel.loading ? <Loading /> : equipmentLabel.error ? <Problem error={equipmentLabel.error} /> : (
+                            <ServiceFacts items={[
+                              { label: "Mã thiết bị", value: equipmentLabel.value?.assetCode || "Chưa ghi nhận" },
+                              { label: "Số sê-ri", value: equipmentLabel.value?.serialNumber || "Chưa ghi nhận" },
+                            ]} />
+                          )}
+                        </ServiceCard>
+                        {profile?.roles.includes("SERVICE_MANAGER") && (
+                          <RequestLinkedOrders
+                            key={current.id}
+                            requestId={current.id}
+                          />
+                        )}
+                      </aside>
+                    </div>
                   ),
                 },
                 {
                   key: "decision",
                   label: intake ? "Hồ sơ & chính sách" : "Bảo hành & dự toán",
                   content: (
-                    <>
+                    <div className="sd-stack request-policy-section">
                       <RequestDossierExtras
                         equipmentId={current.equipmentId}
                         requestId={current.id}
                         revision={version}
                       />
                       {current.resolutionChecklist && (
-                        <section className="m1-card">
-                          <h2>Kết quả công việc đã công bố</h2>
-                          <ul>
+                        <ServiceCard title="Kết quả công việc đã công bố">
+                          <ul className="request-resolution-checklist">
                             {current.resolutionChecklist.map((item) => (
                               <li key={item.itemId}>
-                                {item.title} ·{" "}
-                                {serviceLabels[item.status] ?? item.status}
+                                <span>{item.title}</span>
+                                <span className="ws-pill">{serviceLabels[item.status] ?? item.status}</span>
                               </li>
                             ))}
                           </ul>
-                        </section>
+                        </ServiceCard>
                       )}
                       {!intake && <>{assessmentPanel}{estimatePanel}</>}
-                    </>
+                    </div>
                   ),
                 },
                 {
                   key: "history",
                   label: "Lịch sử xử lý",
                   content: (
-                    <RequestActivity
-                      id={current.id}
-                      version={version}
-                      mode="history"
-                    />
+                    <ServiceCard title="Lịch sử xử lý" description="Các lần chuyển trạng thái và lý do được ghi nhận cho yêu cầu.">
+                      <RequestActivity
+                        id={current.id}
+                        version={version}
+                        mode="history"
+                      />
+                    </ServiceCard>
                   ),
                 },
               ]}
@@ -2146,7 +2162,7 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
     {
       path: "/app/service-requests/new",
       element: <NewRequestPage />,
-      roles: ["SERVICE_MANAGER"],
+      roles: [],
     },
     {
       path: "/app/service-requests/:id",

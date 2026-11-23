@@ -8,6 +8,7 @@ import {
   Search,
 } from "lucide-react";
 import {
+  asRow,
   formatDate,
   statusNames,
   useWorkspaceData,
@@ -237,13 +238,14 @@ export function EquipmentIdentity({
   if (data.loading) return <span>Đang tải nhận dạng thiết bị…</span>;
   if (data.error) return <span>Chưa tải được nhận dạng thiết bị</span>;
   const row = data.data;
+  const name = value(row?.displayName, value(asRow(row?.model).name, value(row?.assetCode, "Chưa có tên thiết bị")));
   return (
     <span className="workshop-equipment-identity">
       <strong>
-        {value(row?.displayName ?? row?.assetCode, "Chưa có tên thiết bị")}
+        {name}
       </strong>
       <small>
-        {value(row?.assetCode, "Chưa có mã")} · Serial{" "}
+        {name !== row?.assetCode && <>{value(row?.assetCode, "Chưa có mã")} · </>}Số sê-ri{" "}
         {value(row?.serialNumber, "Chưa có")}
       </small>
       {showCurrentSite && (

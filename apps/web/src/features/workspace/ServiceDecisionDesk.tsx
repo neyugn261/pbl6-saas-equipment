@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Plus, RefreshCw } from "lucide-react";
+import { ArrowRight, RefreshCw } from "lucide-react";
 import { useSession } from "../../auth/session";
 import type { Page } from "../../types/domain";
 import { PriorityBadge } from "../../components/Badges";
@@ -375,10 +375,6 @@ export default function ServiceDecisionDesk() {
               <RefreshCw size={15} />
               Làm mới
             </button>
-            <Link className="ws-button" to="/app/service-requests/new">
-              <Plus size={16} />
-              Tạo yêu cầu dịch vụ
-            </Link>
           </>
         }
       />

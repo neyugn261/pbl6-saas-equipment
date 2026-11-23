@@ -61,7 +61,7 @@ export default function TechnicianSchedule({
         xác nhận lịch. Hệ thống chưa tự chặn lịch trùng.
       </p>
       <Link
-        to={`/app/work-orders?view=list&technicianId=${encodeURIComponent(technicianId)}&status=ASSIGNED,ACCEPTED,TRAVELLING,IN_PROGRESS,ON_HOLD&sort=scheduledStart`}
+        to={`/app/work-orders?technicianId=${encodeURIComponent(technicianId)}&status=ASSIGNED,ACCEPTED,TRAVELLING,IN_PROGRESS,ON_HOLD&sort=scheduledStart`}
       >
         Xem toàn bộ công việc của kỹ thuật viên →
       </Link>

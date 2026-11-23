@@ -1,6 +1,8 @@
 import { getAccessToken, getSessionGeneration, refresh } from '../auth/session'
 import { bases } from './config'
+import { selectedBranchId, withBranchFilter } from '../features/workspace/branch-context'
 export { isMockMode } from './config'
+export { selectedBranchId as getViewKey } from '../features/workspace/branch-context'
 
 export class ApiError extends Error {
   status: number
@@ -32,13 +34,16 @@ async function request<T>(
 ): Promise<T> {
   const generation = getSessionGeneration()
   const method = options.method || 'GET'
+  const view = selectedBranchId()
   const assertSession = () => {
     if (getSessionGeneration() !== generation)
       throw new ApiError(409, 'SESSION_CHANGED', 'Phiên đăng nhập đã thay đổi.')
+    if (method.toUpperCase() === 'GET' && selectedBranchId() !== view)
+      throw new ApiError(409, 'VIEW_CHANGED', 'Ngữ cảnh chi nhánh đã thay đổi.')
   }
   async function send(token: string) {
     assertSession()
-    return fetch(`${bases[area]}${path}`, {
+    return fetch(`${bases[area]}${method.toUpperCase() === 'GET' ? withBranchFilter(area, path) : path}`, {
       method,
       headers: {
         ...options.headers,

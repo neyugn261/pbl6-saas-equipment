@@ -1,12 +1,12 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
 } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Search } from "lucide-react";
 import { ApiError, api } from "../../api/client";
 import { StatusBadge } from "../../components/Badges";
 import { getSessionGeneration, useSession } from "../../auth/session";
@@ -22,6 +22,8 @@ import {
 import "./inventory-parts.css";
 import { PartPricing, type Prices } from './PartPricing';
 import { priceText } from './prices';
+import { PageHeading } from '../workspace/WorkspaceUI';
+import TableToolbar from '../workspace/TableToolbar';
 
 type Part = Prices & {
   id: string;
@@ -195,9 +197,9 @@ function Pager({
 
 export function InventoryPartsPage() {
   const { profile } = useSession();
+  const createLock = useRef(false);
   const canManage = isManager(profile?.roles ?? []);
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [revision, setRevision] = useState(0);
   const [showForm, setShowForm] = useState(false);
@@ -216,6 +218,8 @@ export function InventoryPartsPage() {
 
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (createLock.current) return;
+    createLock.current = true;
     setBusy(true);
     setError("");
     try {
@@ -237,23 +241,17 @@ export function InventoryPartsPage() {
     } catch (cause) {
       setError(message(cause));
     } finally {
+      createLock.current = false;
       setBusy(false);
     }
   }
 
   return (
     <div className="m2-page">
-      <h1>Danh mục phụ tùng</h1>
-      <p>
-        Tra cứu phụ tùng, đơn vị tính và tồn khả dụng để chuẩn bị xử lý dịch vụ.
-      </p>
-      {canManage && (
-        <button onClick={() => setShowForm((value) => !value)}>
-          Thêm phụ tùng
-        </button>
-      )}
+      <PageHeading title="Danh mục phụ tùng" description="Tra cứu phụ tùng, giá và đơn vị tính để chuẩn bị xử lý dịch vụ." actions={canManage && <button type="button" className="ws-button" aria-expanded={showForm} disabled={busy} onClick={() => setShowForm(value => !value)}>Thêm phụ tùng</button>}/>
       {canManage && showForm && (
         <form className="m2-editor" onSubmit={(event) => void create(event)}>
+          <fieldset disabled={busy}>
           <label>
             Mã SKU
             <input
@@ -289,7 +287,8 @@ export function InventoryPartsPage() {
           </label>
           <label>
             Mô tả
-            <input
+            <textarea
+              rows={3}
               maxLength={4000}
               value={form.description}
               onChange={(event) =>
@@ -311,6 +310,8 @@ export function InventoryPartsPage() {
             Cho phép số lượng lẻ
           </label>
           <button disabled={busy}>{busy ? "Đang tạo…" : "Lưu phụ tùng"}</button>
+          <button type="button" disabled={busy} onClick={() => setShowForm(false)}>Hủy</button>
+          </fieldset>
         </form>
       )}
       {error && (
@@ -319,25 +320,7 @@ export function InventoryPartsPage() {
         </p>
       )}
       <section className="m1-card inventory-parts-directory">
-      <form
-        className="m2-filters inventory-parts-directory__toolbar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setPage(1);
-          setQuery(search.trim());
-        }}
-      >
-        <label className="inventory-parts-directory__search">
-          <Search size={17} aria-hidden="true" />
-          <input
-            aria-label="Tìm SKU hoặc tên phụ tùng"
-            placeholder="Tìm SKU hoặc tên phụ tùng…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-        <button type="submit">Tìm</button>
-      </form>
+      <TableToolbar query={query} onQuery={value => { setQuery(value); setPage(1); }} placeholder="Tìm SKU hoặc tên phụ tùng…" onReset={() => { setQuery(''); setPage(1); }}/>
       <PageStatus loading={state.loading} error={state.error}>
         {state.data && (
           <>
@@ -572,6 +555,7 @@ function MinimumQuantityForm({
 
 export function InventoryWarehousesPage() {
   const { profile } = useSession();
+  const createLock = useRef(false);
   const canManage = isManager(profile?.roles ?? []);
   const [revision, setRevision] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
@@ -598,6 +582,8 @@ export function InventoryWarehousesPage() {
 
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (createLock.current) return;
+    createLock.current = true;
     setBusy(true);
     setError("");
     try {
@@ -611,23 +597,16 @@ export function InventoryWarehousesPage() {
     } catch (cause) {
       setError(message(cause));
     } finally {
+      createLock.current = false;
       setBusy(false);
     }
   }
   return (
     <div className="m2-page">
-      <h1>Kho và tồn kho</h1>
-      <p>
-        Kiểm tra tồn khả dụng, lượng cách ly và phụ tùng cần bổ sung trước khi
-        điều phối công việc.
-      </p>
-      {canManage && (
-        <button onClick={() => setShowCreate((value) => !value)}>
-          Thêm kho
-        </button>
-      )}
+      <PageHeading title="Kho và tồn kho" description="Kiểm tra tồn khả dụng, lượng cách ly và phụ tùng cần bổ sung trước khi điều phối." actions={canManage && <button type="button" className="ws-button" aria-expanded={showCreate} disabled={busy} onClick={() => setShowCreate(value => !value)}>Thêm kho</button>}/>
       {canManage && showCreate && (
         <form className="m2-editor" onSubmit={(event) => void create(event)}>
+          <fieldset disabled={busy}>
           {branches.loading ? (
             <p role="status">Đang tải chi nhánh…</p>
           ) : branches.error ? (
@@ -690,6 +669,8 @@ export function InventoryWarehousesPage() {
           <button disabled={busy || branches.loading}>
             {busy ? "Đang tạo…" : "Lưu kho"}
           </button>
+          <button type="button" disabled={busy} onClick={() => setShowCreate(false)}>Hủy</button>
+          </fieldset>
         </form>
       )}
       {error && (
@@ -835,6 +816,8 @@ export function InventoryTransactionsPage({
     [mutationScope, sessionGeneration],
   );
   const pending = mutation.pending;
+  const [formExpanded, setFormExpanded] = useState(Boolean(initialWorkOrderId));
+  const showTransactionForm = formExpanded || Boolean(pending) || Boolean(mutation.storageError);
   const [options, setOptions] = useState<{
     generation: number;
     parts: Part[];
@@ -1119,6 +1102,7 @@ export function InventoryTransactionsPage({
         generation: operationGeneration,
         message: "Đã ghi nhận giao dịch kho.",
       });
+      setFormExpanded(false);
       setForm((value) => ({
         ...value,
         quantity: "",
@@ -1174,12 +1158,7 @@ export function InventoryTransactionsPage({
 
   return (
     <div className="m2-page">
-      <h1>Giao dịch kho</h1>
-      <p>
-        Chọn đúng kho, phụ tùng và công việc trước khi ghi nhận. Số lượng có đơn
-        vị đi kèm; nhập 2 cho hai đơn vị hoặc 2,5 cho hai đơn vị rưỡi nếu phụ
-        tùng cho phép số lẻ.
-      </p>
+      <PageHeading title="Giao dịch kho" description="Theo dõi nhập, xuất, trả và điều chỉnh; đối soát các giao dịch chưa xác định kết quả." actions={canManage && <button type="button" className="ws-button" aria-expanded={showTransactionForm} disabled={formLocked} onClick={() => setFormExpanded(value => !value)}>Thêm giao dịch</button>}/>
       {error && (
         <p role="alert" className="m1-error">
           {error}
@@ -1211,7 +1190,8 @@ export function InventoryTransactionsPage({
           </button>
         </section>
       )}
-      <fieldset disabled={formLocked} className="inventory-mutation-fields">
+      {showTransactionForm && <fieldset disabled={formLocked} className="inventory-mutation-fields">
+        <button type="button" disabled={formLocked} onClick={() => setFormExpanded(false)}>Hủy</button>
         {canManage && (
           <label>
             Thao tác
@@ -1538,7 +1518,7 @@ export function InventoryTransactionsPage({
             </div>
           </section>
         )}
-      </fieldset>
+      </fieldset>}
       <section className="m1-card m1-section-card">
         <div className="m1-section-header">
           <h2>Lịch sử thẻ kho</h2>

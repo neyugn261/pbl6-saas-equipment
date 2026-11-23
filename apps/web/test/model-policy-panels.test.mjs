@@ -55,6 +55,12 @@ function setup(fetch, changed = () => {}) {
   const panel = tab.load('routes/ModelPolicyPanels.tsx', {
     '../features/workspace/service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
     '../features/workspace/maintenance-term':tab.load('features/workspace/maintenance-term.ts'),
+    '../features/workspace/workspace-data': tab.load('features/workspace/workspace-data.ts', { react: host.react, '../../auth/session': tab.session, '../../api/client': tab.client }),
+    '../features/workspace/ServiceDetailUI': {
+      ServiceCard: ({ children, title, description, actions, className }) => host.react.createElement('section', { className }, title ? host.react.createElement('h3', null, title) : null, description ? host.react.createElement('p', null, description) : null, actions, children),
+      ServiceFacts: ({ facts }) => host.react.createElement('dl', null, (facts || []).map((f, i) => host.react.createElement('div', { key: i }, host.react.createElement('dt', null, f.label), host.react.createElement('dd', null, f.value)))),
+      ServiceNotice: ({ tone, title, children }) => host.react.createElement('div', { className: tone }, title ? host.react.createElement('strong', null, title) : null, children),
+    },
     react: host.react,
     'react/jsx-runtime': host.jsx,
     '../api/client': tab.client,
