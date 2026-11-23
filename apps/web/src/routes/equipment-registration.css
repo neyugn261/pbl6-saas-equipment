@@ -318,8 +318,212 @@
   padding: 18px;
 }
 .registration-inline-form {
-  border-color: #b0bdef !important;
-  background: #fafbff !important;
+  border: 1px solid var(--shop-line, #cdd4cb) !important;
+  border-radius: var(--shop-radius, 3px) !important;
+  background: var(--shop-paper, #fcfcf9) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+/* Modal backdrop and card for QuickForm popups */
+.registration-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background: rgba(18, 28, 45, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+  animation: regModalFadeIn 0.15s ease-out;
+}
+@keyframes regModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.registration-modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--shop-paper, #fcfcf9) !important;
+  border: 1px solid var(--shop-line, #cdd4cb) !important;
+  border-radius: var(--shop-radius, 4px) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  padding: 26px 28px !important;
+  margin: auto;
+  animation: regModalScaleIn 0.18s ease-out;
+}
+@keyframes regModalScaleIn {
+  from { transform: scale(0.96); opacity: 0.7; }
+  to { transform: scale(1); opacity: 1; }
+}
+.registration-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--shop-line, #cdd4cb);
+}
+.registration-modal-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--shop-ink, #242e2d);
+  margin: 0;
+}
+.registration-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: none !important;
+  font-size: 24px !important;
+  line-height: 1 !important;
+  width: 32px;
+  height: 32px;
+  color: var(--shop-muted, #596762) !important;
+  cursor: pointer !important;
+  border-radius: var(--shop-radius, 3px) !important;
+  padding: 0 !important;
+}
+.registration-modal-close:hover {
+  color: var(--shop-ink, #242e2d) !important;
+  background: var(--shop-soft, #e5e9e2) !important;
+}
+.registration-modal-subtitle {
+  font-size: 13px;
+  color: var(--shop-muted, #596762);
+  margin: 10px 0 20px;
+  line-height: 1.5;
+}
+.registration-field-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--shop-muted, #596762);
+  margin-top: 5px;
+  line-height: 1.4;
+  font-style: italic;
+}
+/* Registration contacts section */
+.registration-contact-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--shop-line, #cdd4cb);
+}
+.registration-contact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.registration-contact-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--shop-ink, #242e2d);
+  margin: 0 0 4px;
+}
+.registration-contact-subtitle {
+  font-size: 13px;
+  color: var(--shop-muted, #596762);
+  margin: 0;
+  line-height: 1.4;
+}
+.registration-contact-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.registration-contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--shop-paper, #fcfcf9);
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+  transition: border-color 0.15s ease;
+}
+.registration-contact-item:hover {
+  border-color: #a6b1a3;
+}
+.registration-contact-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--shop-soft, #e5e9e2);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.registration-contact-info {
+  flex: 1;
+  min-width: 0;
+}
+.registration-contact-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.registration-contact-title strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--shop-ink, #242e2d);
+}
+.registration-contact-tag {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  background: var(--shop-soft, #e5e9e2);
+  color: var(--shop-muted, #596762);
+  border-radius: 10px;
+}
+.registration-contact-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.registration-contact-link {
+  color: var(--shop-accent, #a74b26);
+  text-decoration: none;
+  font-weight: 500;
+}
+.registration-contact-link:hover {
+  color: var(--shop-hover, #873b1c);
+  text-decoration: underline;
+}
+.registration-contact-none {
+  color: var(--shop-muted, #596762);
+  font-style: italic;
+}
+.registration-contact-empty {
+  padding: 16px 18px;
+  background: var(--shop-canvas, #eeefea);
+  border: 1px dashed var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+  margin-bottom: 12px;
+}
+.registration-contact-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--shop-muted, #596762);
+}
+.registration-contact-note {
+  font-size: 12px;
+  color: var(--shop-muted, #596762);
+  margin: 6px 0 0;
+  line-height: 1.5;
 }
 .registration-page a {
   color: #3f56ca;
@@ -329,6 +533,9 @@
 }
 .registration-step {
   min-height: 250px;
+}
+.registration-page .m1-card.registration-step {
+  overflow: visible;
 }
 .registration-step > label {
   margin-bottom: 20px;
@@ -411,3 +618,374 @@
 .registration-policy-overrides { margin-top: 20px; border-top: 1px solid #d6deea; padding-top: 16px; }
 .registration-policy-overrides summary { cursor: pointer; font-weight: 600; }
 .registration-policy-overrides form { margin-top: 16px; }
+
+/* YouTube-like Customer Search Picker */
+.customer-yt-picker {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+/* Vùng 1: Tìm kiếm & Thêm khách hàng (Vùng riêng phía trên) */
+.customer-search-area {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 24px;
+  transition: min-height 0.2s ease;
+  z-index: 10;
+}
+.customer-search-area.is-dropdown-open {
+  min-height: 400px;
+}
+.customer-yt-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--shop-ink, #242e2d);
+  margin-bottom: 8px;
+}
+.customer-yt-toolbar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.customer-yt-search-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 280px;
+}
+.customer-yt-search-box {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 4px);
+  background: #ffffff;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.customer-yt-search-box:focus-within {
+  border-color: var(--shop-accent, #a74b26);
+  box-shadow: 0 0 0 3px rgb(167 75 38 / 12%);
+}
+.customer-yt-search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 0 12px;
+  font-size: 14px;
+  color: var(--shop-muted, #72807a);
+  pointer-events: none;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* Override .registration-page input - Remove inner frame/border */
+.registration-page .customer-yt-search-box input.customer-yt-input {
+  flex: 1;
+  min-height: 40px !important;
+  height: 40px !important;
+  padding: 0 12px !important;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--shop-ink, #242e2d) !important;
+  font-size: 13.5px !important;
+  box-sizing: border-box !important;
+}
+.customer-yt-input::placeholder {
+  color: var(--shop-muted, #8a968f);
+  font-size: 13px;
+}
+
+/* Override .registration-page button - Seamless right button without extra frame */
+.registration-page .customer-yt-search-box button.customer-yt-search-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+  background: var(--shop-soft, #f0f2eb) !important;
+  border: none !important;
+  border-left: 1px solid var(--shop-line, #cdd4cb) !important;
+  border-radius: 0 !important;
+  color: var(--shop-ink, #242e2d) !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transition: background 0.15s ease !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+.registration-page .customer-yt-search-box button.customer-yt-search-btn:hover {
+  background: #e2e6dc !important;
+}
+
+.customer-yt-add-btn {
+  white-space: nowrap;
+  min-height: 42px;
+  height: 42px;
+  padding: 0 16px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+/* Autocomplete Suggestions Dropdown: nổi lên trên với z-index: 1000 và khớp chiều rộng search box */
+.customer-yt-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  z-index: 1000;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.customer-yt-dropdown-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f2eb;
+  transition: background 0.15s ease;
+}
+.customer-yt-dropdown-item:last-child {
+  border-bottom: 0;
+}
+.customer-yt-dropdown-item:hover,
+.customer-yt-dropdown-item.is-selected {
+  background: var(--shop-soft, #f4f6f1);
+}
+.customer-yt-item-icon {
+  font-size: 15px;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+.customer-yt-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.customer-yt-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+.customer-yt-item-title strong {
+  font-size: 13px;
+  color: var(--shop-ink, #242e2d);
+}
+.customer-yt-code-tag {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: monospace;
+  padding: 1px 6px;
+  background: var(--shop-soft, #e5e9e2);
+  color: var(--shop-ink, #242e2d);
+  border-radius: 3px;
+}
+.customer-yt-active-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  background: #2b7a4b;
+  color: #ffffff;
+  border-radius: 10px;
+}
+.customer-yt-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--shop-muted, #687771);
+}
+.customer-yt-empty-item {
+  padding: 18px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--shop-muted, #687771);
+}
+
+/* Results Table Panel */
+.customer-yt-results-panel {
+  margin-top: 14px;
+  background: #ffffff;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+.customer-yt-table-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+.customer-yt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.customer-yt-table th {
+  position: sticky;
+  top: 0;
+  background: var(--shop-soft, #f0f2eb);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid var(--shop-line, #cdd4cb);
+  color: var(--shop-ink, #242e2d);
+  z-index: 1;
+}
+.customer-yt-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf0ea;
+  vertical-align: middle;
+  color: var(--shop-ink, #242e2d);
+}
+.customer-yt-table tr:hover {
+  background: #f7f9f5;
+}
+.customer-yt-table tr.is-row-selected {
+  background: #eef5eb;
+}
+.customer-yt-selected-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #2b7a4b;
+  color: white;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.customer-yt-table-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--shop-muted, #687771);
+}
+.customer-yt-table-empty p {
+  margin: 0;
+}
+
+/* Vùng 2: Khách hàng đã chọn và thông tin (Vùng riêng phía dưới) */
+.customer-selected-area {
+  margin-top: 20px;
+}
+.customer-yt-selected-card {
+  padding: 16px 20px;
+  background: #fafbf9;
+  border: 1px solid #d8e0d5;
+  border-left: 4px solid #2b7a4b;
+  border-radius: var(--shop-radius, 4px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.customer-yt-selected-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.customer-yt-selected-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #205c38;
+  background: #e6f0e4;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.customer-yt-check-icon {
+  font-size: 10px;
+  font-weight: 800;
+}
+.customer-yt-selected-name {
+  margin: 0 0 12px;
+}
+.customer-yt-selected-name strong {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--shop-ink, #242e2d);
+  letter-spacing: -0.2px;
+}
+.customer-yt-selected-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 20px;
+  padding-top: 12px;
+  border-top: 1px solid #e3e8e0;
+  font-size: 13px;
+}
+.customer-yt-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.customer-yt-grid-item--wide {
+  grid-column: 1 / -1;
+}
+.customer-yt-grid-label {
+  color: var(--shop-muted, #72807a);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.customer-yt-grid-val {
+  color: var(--shop-ink, #242e2d);
+  font-weight: 600;
+  font-size: 13.5px;
+  word-break: break-word;
+}
+.customer-yt-grid-val.customer-yt-code-tag {
+  align-self: flex-start;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #205c38;
+  background: #edf4ec;
+  border: 1px solid #d4e3d1;
+  padding: 1px 7px;
+  border-radius: 3px;
+}
+.customer-yt-grid-val a {
+  color: var(--shop-accent, #a74b26);
+  text-decoration: none;
+}
+.customer-yt-grid-val a:hover {
+  text-decoration: underline;
+}
+
+.registration-site-section,
+.registration-contact-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--shop-line, #cdd4cb);
+}
+.registration-site-section h3,
+.registration-contact-section h3 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--shop-ink, #242e2d);
+}

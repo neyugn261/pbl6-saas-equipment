@@ -12,6 +12,7 @@ function setup(fetch, profile = { id: 'admin', tenantId: 'tenant-a', customerId:
     react: host.react, '../api/client': tab.client, '../auth/session': tab.session,
   })
   const pages = tab.load('routes/LiveAdministration.tsx', {
+    '../features/workspace/LocationTreeView': { SiteLocationContents: 'site-location-contents' },
     react: host.react, 'react/jsx-runtime': host.jsx,
     'lucide-react': { Building2: 'icon', ChevronDown: 'icon', MapPin: 'icon' },
     'react-router-dom': { Link: 'link', useNavigate: () => (path) => navigations.push(path), useParams: () => params,

@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import BranchSwitcher from './BranchSwitcher';
+import { selectedBranchId } from './branch-context';
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -25,6 +27,7 @@ export default function ServiceManagerShell({
   children: ReactNode;
 }) {
   const { profile, clear } = useSession();
+  const [branchView, setBranchView] = useState(selectedBranchId);
   const location = useLocation();
   const navigate = useNavigate();
   if (!profile) return null;
@@ -60,7 +63,7 @@ export default function ServiceManagerShell({
     history?.path ??
     (platform ? "/admin/tenants" : "/app/inventory/warehouses");
   const footerLabel = history
-    ? "Lịch sử thiết bị đã ghi nhận"
+    ? (profile.roles.includes('SERVICE_MANAGER') ? 'Lịch sử sự kiện đã ghi nhận' : 'Lịch sử thiết bị đã ghi nhận')
     : platform
       ? "Doanh nghiệp sử dụng"
       : "Tra cứu tồn kho";
@@ -109,6 +112,7 @@ export default function ServiceManagerShell({
                 : "Phạm vi doanh nghiệp đã đăng nhập"}
           </small>
         </div>
+        {profile.roles.includes('TENANT_ADMIN') && <BranchSwitcher key={`${profile.tenantId}:${profile.id}`} onChange={setBranchView}/>}
         <div className="workshop-account">
           <Link
             className="workshop-lookup"
@@ -202,7 +206,7 @@ export default function ServiceManagerShell({
             </>
           )}
         </nav>
-        {children}
+        <div key={`${profile.id}:${branchView}`}>{children}</div>
       </main>
       <footer className="workshop-footer">
         <span>Servio / {workspaceLabel}</span>

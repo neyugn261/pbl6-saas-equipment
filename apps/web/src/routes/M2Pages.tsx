@@ -15,8 +15,11 @@ import {
   ServiceNotice,
   ServiceHeader,
   ServiceFacts,
+  ServiceCard,
+  RefreshButton,
 } from "../features/workspace/ServiceDetailUI";
-import { EntityPicker, RelatedName, Pagination, PageHeading } from "../features/workspace/WorkspaceUI";
+import { PriorityBadge, StatusBadge } from "../components/Badges";
+import { EmptyState, EntityPicker, RelatedName, Pagination, PageHeading } from "../features/workspace/WorkspaceUI";
 import {
   MaintenancePolicyDetails,
   WorkOrderChecklist,
@@ -230,11 +233,11 @@ function Source<T>({
   section: Section<T>;
   children: (data: T) => React.ReactNode;
 }) {
-  if (!section) return <p role="status">Chưa tải được mục này.</p>;
+  if (!section) return <p className="equipment-source-message" role="status">Chưa tải được mục này.</p>;
   if (section.status !== "AVAILABLE")
-    return <p role="status">{message[section.status]}</p>;
+    return <p className="equipment-source-message" role="status">{message[section.status]}</p>;
   return section.data == null ? (
-    <p>Chưa có dữ liệu.</p>
+    <p className="equipment-source-message">Chưa có dữ liệu.</p>
   ) : (
     <>{children(section.data)}</>
   );
@@ -406,7 +409,7 @@ function HistoryRows({
       ))}
     </ul>
   ) : (
-    <p>Chưa có lịch sử được ghi nhận.</p>
+    <EmptyState title="Chưa có lịch sử được ghi nhận" description="Các sự kiện đã được đồng bộ cho thiết bị sẽ hiển thị tại đây." />
   );
 }
 
@@ -421,7 +424,7 @@ function LinkedRows({
 }) {
   const { pathname } = useLocation();
   const base = pathname.startsWith("/portal") ? "/portal" : "/app";
-  if (!items.length) return <p>Chưa có bản ghi.</p>;
+  if (!items.length) return <EmptyState title="Chưa có bản ghi" description="Các hồ sơ được ghi nhận cho thiết bị sẽ hiển thị tại đây." />;
   return (
     <ul className="m2-linked-list">
       {items.map((item) => {
@@ -763,7 +766,7 @@ export function DossierPage() {
       ["TENANT_ADMIN", "SERVICE_MANAGER"].includes(role),
     );
   return (
-    <div className="m2-page sd-page">
+    <div className="m2-page sd-page equipment-dossier">
       <ServiceHeader
         back={`${base}/equipment`}
         backLabel="Danh sách thiết bị"
@@ -791,9 +794,6 @@ export function DossierPage() {
             quyết định xử lý.
           </p>
           <div className="registration-actions">
-            <Link to={`/app/service-requests/new?equipmentId=${id}`}>
-              + Tạo yêu cầu dịch vụ
-            </Link>
             <Link
               to={
                 dossier.equipment.registrationId
@@ -868,39 +868,33 @@ export function DossierPage() {
                   key: "profile",
                   label: "Thông tin & bảo hành",
                   content: (
-                    <div className="m2-grid">
-                      <Card title="Thông tin thiết bị">
-                        <Fields
-                          row={{
-                            ...dossier.equipment,
-                            lifecycleLabel: equipmentLifecycleLabel(
-                              dossier.equipment.status,
-                            ),
-                          }}
-                          fields={[
-                            ["assetCode", "Mã tài sản"],
-                            ["serialNumber", "Serial"],
-                            ["lifecycleLabel", "Vòng đời hồ sơ thiết bị"],
-                            ["purchaseDate", "Ngày mua"],
-                            ["commissionedDate", "Ngày đưa vào vận hành"],
-                            ["handoverDate", "Ngày bàn giao"],
-                            ["installationDate", "Ngày lắp đặt"],
-                          ]}
-                        />
-                        <h3>Thông số kỹ thuật</h3>
-                        <BusinessValues
-                          data={dossier.equipment.technicalSpecifications}
-                        />
+                    <div className="equipment-dossier-profile">
+                      <div className="sd-stack">
+                      <ServiceCard title="Thông tin thiết bị">
+                        <ServiceFacts items={[
+                          { label: "Mã thiết bị", value: asText(dossier.equipment.assetCode) },
+                          { label: "Số sê-ri", value: asText(dossier.equipment.serialNumber) },
+                          { label: "Vòng đời hồ sơ thiết bị", value: equipmentLifecycleLabel(dossier.equipment.status) },
+                          { label: "Ngày mua", value: date(dossier.equipment.purchaseDate) },
+                          { label: "Ngày đưa vào vận hành", value: date(dossier.equipment.commissionedDate) },
+                          { label: "Ngày bàn giao", value: date(dossier.equipment.handoverDate) },
+                          { label: "Ngày lắp đặt", value: date(dossier.equipment.installationDate) },
+                        ]} />
+                        <section className="equipment-dossier-specifications">
+                          <h3>Thông số kỹ thuật</h3>
+                          <BusinessValues data={dossier.equipment.technicalSpecifications} />
+                        </section>
                         {dossier.profileCompleteness.missingFields.length >
                           0 && (
-                          <p>
-                            Hồ sơ còn thiếu:{" "}
+                          <ServiceNotice title="Hồ sơ còn thiếu thông tin">
+                            <p>
                             {dossier.profileCompleteness.missingFields
                               .map((field) => serviceLabels[field] ?? field)
                               .join(", ")}
-                          </p>
+                            </p>
+                          </ServiceNotice>
                         )}
-                      </Card>
+                      </ServiceCard>
                       {canManageEquipment &&
                         dossier.equipment.status !== "RETIRED" && (
                           <details className="sd-edit-disclosure">
@@ -920,91 +914,70 @@ export function DossierPage() {
                         )}
                       {canManageEquipment &&
                         dossier.equipment.status === "RETIRED" && (
-                          <p>
+                          <p className="equipment-dossier-hint">
                             Thiết bị đã ngừng sử dụng; không thể chỉnh hồ sơ
                             hoặc xác nhận tình trạng.
                           </p>
                         )}
-                      <Card title="Bảo hành và tình trạng">
-                        <p>
-                          Bảo hành theo lịch:{" "}
-                          {asText(
-                            statusLabel[
-                              String(dossier.calendarCoverage?.result)
-                            ] ?? dossier.calendarCoverage?.result,
-                          )}
-                        </p>
-                        <p>
-                          Quyết định bảo hành của từng yêu cầu được lưu riêng
-                          khi xét duyệt.
-                        </p>
-                        <p>
-                          Tình trạng vận hành:{" "}
-                          {operationalLabels[
-                            String(dossier.operationalCondition.status)
-                          ] ?? asText(dossier.operationalCondition.status)}
-                          {Boolean(
-                            dossier.operationalCondition.confirmedAt,
-                          ) && (
-                            <>
-                              {" "}
-                              · Xác nhận{" "}
-                              {date(dossier.operationalCondition.confirmedAt)}
-                            </>
-                          )}
-                        </p>
-                        <p>
-                          Xác nhận này không bảo đảm tình trạng hiện tại của
-                          thiết bị.
-                        </p>
-                        {dossier.warranties.map((w) => (
-                          <p key={String(w.id)}>
-                            {statusLabel[String(w.warrantyType)] ??
-                              asText(w.warrantyType)}{" "}
-                            · {date(w.startDate)} – {date(w.endDate)} ·{" "}
-                            {statusLabel[String(w.status)] ?? asText(w.status)}{" "}
-                            ·{" "}
-                            <Link to={`${base}/warranties/${w.id}/history`}>
-                              Lịch sử
-                            </Link>
-                          </p>
-                        ))}
+                      </div>
+                      <div className="sd-stack">
+                      <ServiceCard title="Bảo hành và tình trạng">
+                        <ServiceFacts items={[
+                          {
+                            label: "Bảo hành theo lịch",
+                            value: dossier.calendarCoverage?.result ? <StatusBadge status={String(dossier.calendarCoverage.result)} label={asText(statusLabel[String(dossier.calendarCoverage.result)] ?? dossier.calendarCoverage.result)} /> : "Chưa có dữ liệu",
+                            hint: "Quyết định bảo hành của từng yêu cầu được lưu riêng khi xét duyệt.",
+                          },
+                          {
+                            label: "Tình trạng vận hành",
+                            value: <>{operationalLabels[String(dossier.operationalCondition.status)] ?? asText(dossier.operationalCondition.status)}{Boolean(dossier.operationalCondition.confirmedAt) && <small>Xác nhận {date(dossier.operationalCondition.confirmedAt)}</small>}</>,
+                            hint: "Xác nhận này không bảo đảm tình trạng hiện tại của thiết bị.",
+                          },
+                        ]} />
+                        <section className="equipment-dossier-warranty-section">
+                          <h3>Hồ sơ bảo hành</h3>
+                          {dossier.warranties.length ? (
+                            <ul className="equipment-dossier-warranties">
+                              {dossier.warranties.map(w => (
+                                <li key={String(w.id)}>
+                                  <div className="equipment-dossier-warranty-heading">
+                                    <strong>{statusLabel[String(w.warrantyType)] ?? asText(w.warrantyType)}</strong>
+                                    <StatusBadge status={String(w.status)} label={statusLabel[String(w.status)] ?? asText(w.status)} />
+                                  </div>
+                                  <ServiceFacts items={[
+                                    { label: "Từ ngày", value: date(w.startDate) },
+                                    { label: "Đến ngày", value: date(w.endDate) },
+                                  ]} />
+                                  <Link className="ws-text-link" to={`${base}/warranties/${w.id}/history`}>Xem lịch sử bảo hành</Link>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : <p className="equipment-dossier-hint">Chưa có hồ sơ bảo hành được ghi nhận.</p>}
+                        </section>
                         {profile?.userType !== "CUSTOMER" &&
                           Boolean(dossier.equipment.modelId) && (
                             <Link
+                              className="ws-text-link"
                               to={`/app/models/${dossier.equipment.modelId}/history`}
                             >
                               Lịch sử Model
                             </Link>
                           )}
-                      </Card>
-                      <Card title="Khách hàng và vị trí">
-                        <Source section={dossier.customer}>
-                          {(row) => (
-                            <p>
-                              <strong>{asText(row.name)}</strong>
-                              {Boolean(row.address) && (
-                                <>
-                                  <br />
-                                  {asText(row.address)}
-                                </>
-                              )}
-                            </p>
-                          )}
-                        </Source>
-                        <Source section={dossier.site}>
-                          {(row) => <p>Địa điểm: {asText(row.name)}</p>}
-                        </Source>
-                        <Source section={dossier.location}>
-                          {(row) => <p>Vị trí: {asText(row.name)}</p>}
-                        </Source>
+                      </ServiceCard>
+                      <ServiceCard title="Khách hàng và vị trí">
+                        <ServiceFacts items={[
+                          { label: "Khách hàng", value: <Source section={dossier.customer}>{row => <>{asText(row.name)}{Boolean(row.address) && <small>{asText(row.address)}</small>}</>}</Source> },
+                          { label: "Cơ sở", value: <Source section={dossier.site}>{row => asText(row.name)}</Source> },
+                          { label: "Vị trí lắp đặt", value: <Source section={dossier.location}>{row => asText(row.name)}</Source> },
+                        ]} />
+                        <section className="equipment-dossier-contacts">
+                        <h3>Người liên hệ</h3>
                         <Source section={dossier.contacts}>
                           {(rows) => (
-                            <>
+                            rows.length ? <ul className="equipment-dossier-contact-list">
                               {rows.map((row) => (
-                                <p key={String(row.id)}>
+                                <li key={String(row.id)}>
                                   <strong>{asText(row.name)}</strong>
-                                  <br />
                                   {Boolean(row.phone) && (
                                     <a href={`tel:${row.phone}`}>
                                       {asText(row.phone)}
@@ -1012,18 +985,19 @@ export function DossierPage() {
                                   )}
                                   {Boolean(row.email) && (
                                     <>
-                                      <br />
                                       <a href={`mailto:${row.email}`}>
                                         {asText(row.email)}
                                       </a>
                                     </>
                                   )}
-                                </p>
+                                </li>
                               ))}
-                            </>
+                            </ul> : <p className="equipment-dossier-hint">Chưa có người liên hệ được ghi nhận.</p>
                           )}
                         </Source>
-                      </Card>
+                        </section>
+                      </ServiceCard>
+                      </div>
                     </div>
                   ),
                 },
@@ -1039,7 +1013,7 @@ export function DossierPage() {
                   label: "Dịch vụ & bảo trì",
                   content: (
                     <div className="m2-grid equipment-services">
-                      <Card title="Yêu cầu dịch vụ">
+                      <ServiceCard title="Yêu cầu dịch vụ">
                         <Source section={dossier.requests}>
                           {(page) => (
                             <>
@@ -1049,6 +1023,7 @@ export function DossierPage() {
                                 equipmentId={id!}
                               />
                               <Link
+                                className="ws-text-link equipment-section-link"
                                 to={`${base}/equipment/${id}/service-requests`}
                               >
                                 Xem tất cả ({page.total})
@@ -1056,8 +1031,8 @@ export function DossierPage() {
                             </>
                           )}
                         </Source>
-                      </Card>
-                      <Card title="Lệnh công việc">
+                      </ServiceCard>
+                      <ServiceCard title="Lệnh công việc">
                         <Source section={dossier.workOrders}>
                           {(page) => (
                             <>
@@ -1066,14 +1041,14 @@ export function DossierPage() {
                                 type="workorder"
                                 equipmentId={id!}
                               />
-                              <Link to={`${base}/equipment/${id}/work-orders`}>
+                              <Link className="ws-text-link equipment-section-link" to={`${base}/equipment/${id}/work-orders`}>
                                 Xem tất cả ({page.total})
                               </Link>
                             </>
                           )}
                         </Source>
-                      </Card>
-                      <Card title="Bảo trì">
+                      </ServiceCard>
+                      <ServiceCard title="Bảo trì">
                         <div className="equipment-maintenance">
                           <Source section={dossier.maintenance}>
                             {(row) => (
@@ -1144,8 +1119,8 @@ export function DossierPage() {
                             </nav>
                           )}
                         </div>
-                      </Card>
-                      <Card title="Dịch vụ ghi nhận gần nhất">
+                      </ServiceCard>
+                      <ServiceCard title="Dịch vụ ghi nhận gần nhất">
                         <p>
                           {dossier.latestRecordedService.entry
                             ? date(
@@ -1154,7 +1129,7 @@ export function DossierPage() {
                             : "Chưa ghi nhận"}
                         </p>
                         <p>Dữ liệu có thể cập nhật chậm hơn Work Order.</p>
-                      </Card>
+                      </ServiceCard>
                     </div>
                   ),
                 },
@@ -1172,12 +1147,12 @@ export function DossierPage() {
                           thể cập nhật vào những thời điểm khác nhau.
                         </p>
                       </ServiceNotice>
-                      <Card title="Dòng lịch sử">
+                      <ServiceCard title="Dòng lịch sử">
                         <HistoryRows items={dossier.timelinePreview.items} />
-                        <Link to={`${base}/equipment/${id}/timeline`}>
+                        <Link className="ws-text-link equipment-section-link" to={`${base}/equipment/${id}/timeline`}>
                           Xem tất cả ({dossier.timelinePreview.total})
                         </Link>
-                      </Card>
+                      </ServiceCard>
                     </div>
                   ),
                 },
@@ -1370,8 +1345,8 @@ export function HistoryFeedPage({ equipmentId }: { equipmentId?: string }) {
         <Link to={`${base}/equipment/${equipmentId}`}>← Hồ sơ thiết bị</Link>
       )}
       <PageHeading
-        title="Lịch sử thiết bị"
-        description="Theo dõi thay đổi hồ sơ, bảo hành và hoạt động dịch vụ của thiết bị theo thời gian."
+        title={!equipmentId && profile?.roles.includes('SERVICE_MANAGER') ? 'Lịch sử sự kiện' : 'Lịch sử thiết bị'}
+        description="Các sự kiện đã ghi nhận từ hồ sơ thiết bị, bàn giao, bảo hành và lịch sử dịch vụ. Phạm vi này không bao gồm toàn bộ nhật ký của mọi phân hệ."
       />
       <section className="ws-card equipment-history-filters">
         <div className="ws-card-header">
@@ -2244,75 +2219,56 @@ export function RequestDossierExtras({
       api.assetM2(`/equipment/${equipmentId}/service-requests/${requestId}`),
   );
   return (
-    <Card title="Quyết định bảo hành và dự toán">
+    <ServiceCard title="Quyết định bảo hành và dự toán" description="Đối chiếu kết luận đã lưu trên yêu cầu với thời hạn bảo hành hiện tại.">
       <Result state={state}>
         {state.value && (
           <Source section={state.value}>
             {(data) => (
-              <>
-                <p>
-                  Bảo hành khi xét duyệt:{" "}
-                  {statusLabel[
-                    String((data.warrantyCheck as Row | null)?.result)
-                  ] ?? asText((data.warrantyCheck as Row | null)?.result)}
-                </p>
-                <p>
-                  Bảo hành theo lịch hiện tại:{" "}
-                  {statusLabel[
-                    String((data.calendarCoverageNow as Row | null)?.result)
-                  ] ?? asText((data.calendarCoverageNow as Row | null)?.result)}
-                </p>
-                <p>
-                  Hai giá trị có thể khác nhau vì quyết định yêu cầu được lưu
-                  tại thời điểm xét duyệt.
-                </p>
-                <p>
-                  Đang chờ:{" "}
-                  {serviceLabels[
-                    String((data.request as Row | null)?.waitingFor)
-                  ] ?? "Không có bước chờ"}
-                </p>
-                <p>
-                  Kết quả:{" "}
-                  {serviceLabels[
-                    String((data.request as Row | null)?.resolutionResult)
-                  ] ?? asText((data.request as Row | null)?.resolutionResult)}
-                </p>
-                <p>
-                  Tóm tắt cho khách hàng:{" "}
-                  {asText((data.request as Row | null)?.resolutionSummary)}
-                </p>
-                <h3>Các phiên bản dự toán</h3>
-                <Source section={data.estimates as Section<Row[]>}>
-                  {(revisions) =>
-                    revisions.length ? (
-                      <ul className="m2-linked-list">
-                        {revisions.map((estimate) => (
-                          <li key={String(estimate.id)}>
-                            <span>
-                              Bản {asText(estimate.revisionNo)} ·{" "}
-                              {serviceLabels[String(estimate.status)] ??
-                                asText(estimate.status)}
-                            </span>
-                            <span>
-                              {asText(estimate.totalAmount)}{" "}
-                              {asText(estimate.currency)} · Hiệu lực đến{" "}
-                              {date(estimate.validUntil)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>Chưa có dự toán.</p>
-                    )
-                  }
-                </Source>
-              </>
+              <div className="sd-stack request-policy-summary">
+                <ServiceFacts items={[
+                  { label: "Bảo hành khi xét duyệt", value: statusLabel[String((data.warrantyCheck as Row | null)?.result)] ?? asText((data.warrantyCheck as Row | null)?.result) },
+                  { label: "Bảo hành theo lịch hiện tại", value: statusLabel[String((data.calendarCoverageNow as Row | null)?.result)] ?? asText((data.calendarCoverageNow as Row | null)?.result) },
+                  { label: "Đang chờ", value: serviceLabels[String((data.request as Row | null)?.waitingFor)] ?? "Không có bước chờ" },
+                  { label: "Kết quả", value: serviceLabels[String((data.request as Row | null)?.resolutionResult)] ?? asText((data.request as Row | null)?.resolutionResult) },
+                ]} />
+                <ServiceNotice title="Phân biệt thời hạn và quyết định bảo hành">
+                  Hai giá trị có thể khác nhau vì quyết định yêu cầu được lưu tại thời điểm xét duyệt.
+                </ServiceNotice>
+                <section className="request-policy-result">
+                  <h3>Tóm tắt cho khách hàng</h3>
+                  <p>{asText((data.request as Row | null)?.resolutionSummary)}</p>
+                </section>
+                <section className="request-estimate-history">
+                  <h3>Các phiên bản dự toán</h3>
+                  <Source section={data.estimates as Section<Row[]>}>
+                    {(revisions) =>
+                      revisions.length ? (
+                        <ul className="request-estimate-revisions">
+                          {revisions.map((estimate) => (
+                            <li key={String(estimate.id)}>
+                              <header>
+                                <strong>Bản {asText(estimate.revisionNo)}</strong>
+                                <StatusBadge status={String(estimate.status ?? "")} label={serviceLabels[String(estimate.status)] ?? asText(estimate.status)} />
+                              </header>
+                              <ServiceFacts items={[
+                                { label: "Tổng giá trị", value: `${asText(estimate.totalAmount)} ${asText(estimate.currency)}` },
+                                { label: "Hiệu lực đến", value: date(estimate.validUntil) },
+                              ]} />
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>Chưa có dự toán.</p>
+                      )
+                    }
+                  </Source>
+                </section>
+              </div>
             )}
           </Source>
         )}
       </Result>
-    </Card>
+    </ServiceCard>
   );
 }
 
@@ -3172,19 +3128,31 @@ export function TechnicianPage() {
   const { id } = useParams();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
-  const orders = useRemote<Page<Row>>(
-    `technician-orders:${id}:${page}:${status}`,
-    () =>
-      api.workorders(
-        `/work-orders?technicianId=${id}&page=${page}&pageSize=20${status ? `&status=${status}` : ""}`,
-      ),
-  );
-  const state = useRemote<Row>(`technician:${id}`, () =>
+  const [from, setFrom] = useState(""), [to, setTo] = useState("");
+  const [sort, setSort] = useState("scheduledStart");
+  const [revision, refresh] = useState(0);
+  const state = useRemote<Row>(`technician:${id}:${revision}`, () =>
     api.workorders(`/technicians/${id}`),
   );
+  const validDate = (input: string) => {
+    if (!input) return true;
+    const parsed = new Date(`${input}T00:00:00Z`);
+    return /^\d{4}-\d{2}-\d{2}$/.test(input) && Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === input;
+  };
+  const valid = validDate(from) && validDate(to) && (!from || !to || from <= to);
+  const params = new URLSearchParams({ technicianId: id ?? "", page: String(page), pageSize: "20", sort });
+  if (status) params.set("status", status);
+  if (valid && from) params.set("scheduledFrom", vietnamInstant(`${from}T00:00:00`));
+  if (valid && to) params.set("scheduledTo", vietnamInstant(`${to}T23:59:59.999`));
+  const orders = useRemote<Page<Row>>(
+    `technician-orders:${params}:${valid}:${Boolean(state.value)}:${revision}`,
+    () => state.value && valid
+      ? api.workorders(`/work-orders?${params}`)
+      : Promise.resolve({ items: [], total: 0, page, pageSize: 20 }),
+  );
+  const skills = Array.isArray(state.value?.skills) ? state.value.skills as Row[] : [];
   return (
-    <div className="m2-page">
-      <Link to="/app/technicians">← Kỹ thuật viên</Link>
+    <div className="m2-page technician-dossier">
       <ServiceHeader
         back="/app/technicians"
         backLabel="Đội ngũ kỹ thuật"
@@ -3194,112 +3162,82 @@ export function TechnicianPage() {
             ? technicianName(state.value.fullName, state.value.employeeCode)
             : "Hồ sơ kỹ thuật viên"
         }
-        description="Thông tin hỗ trợ điều phối và liên hệ trong quá trình thực hiện dịch vụ."
+        description="Thông tin hồ sơ, kỹ năng và lịch công việc phục vụ điều phối."
         status={state.value?.status}
+        actions={<RefreshButton refresh={() => refresh(value => value + 1)} busy={state.loading} />}
       />
       <Result state={state}>
         {state.value && (
-          <Card title="Thông tin kỹ thuật viên">
-            <Fields
-              row={state.value}
-              fields={[
-                ["employeeCode", "Mã nhân viên"],
-                ["status", "Trạng thái"],
-                ["branchId", "Chi nhánh"],
-                ["userId", "Tài khoản"],
-              ]}
-            />
-            <ServiceFacts
-              items={[
-                { label: "Email", value: asText(state.value.email) },
-                { label: "Điện thoại", value: asText(state.value.phone) },
-              ]}
-            />
-            <p>
-              Kỹ năng:{" "}
-              {Array.isArray(state.value.skills)
-                ? state.value.skills
-                    .map((skill: Row) =>
-                      asText(
-                        skill.name ?? skill.code ?? "Kỹ năng không xác định",
-                      ),
-                    )
-                    .join(", ")
-                : "—"}
-            </p>
-          </Card>
+          <div className="sd-stack">
+            <div className="sd-columns technician-profile-columns">
+              <ServiceCard title="Thông tin kỹ thuật viên">
+                <ServiceFacts items={[
+                  { label: "Mã nhân viên", value: asText(state.value.employeeCode) },
+                  { label: "Chi nhánh", value: displayName("branch", { name: state.value.branchName, code: state.value.branchCode }) },
+                  { label: "Ngày tạo hồ sơ", value: date(state.value.createdAt) },
+                  { label: "Cập nhật gần nhất", value: date(state.value.updatedAt) },
+                  ...(state.value.email ? [{ label: "Email", value: asText(state.value.email) }] : []),
+                  ...(state.value.phone ? [{ label: "Điện thoại", value: asText(state.value.phone) }] : []),
+                ]} />
+              </ServiceCard>
+              <ServiceCard title="Kỹ năng chuyên môn" description={`${skills.length} kỹ năng được ghi nhận trong hồ sơ.`}>
+                {skills.length ? <div className="ws-pills">{skills.map((skill, index) => <span className="ws-pill" key={asText(skill.skillId ?? index)}>
+                  {asText(skill.name ?? skill.code ?? "Kỹ năng chưa có tên")}
+                  {typeof skill.level === "number" && <> · Mức {skill.level}/5</>}
+                </span>)}</div> : <p className="sd-muted">Chưa ghi nhận kỹ năng chuyên môn.</p>}
+              </ServiceCard>
+            </div>
+            <ServiceCard title="Công việc của kỹ thuật viên" description="Theo người phụ trách hiện tại của lệnh; lịch sử phân công đầy đủ nằm trong từng lệnh.">
+              <form className="management-filter-grid technician-schedule-filters" aria-label="Lọc công việc của kỹ thuật viên" onSubmit={event => event.preventDefault()}>
+                <label>Trạng thái công việc
+                  <select aria-label="Trạng thái công việc" value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}>
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="ASSIGNED,ACCEPTED,TRAVELLING,IN_PROGRESS,ON_HOLD">Đang được giao</option>
+                    {["ASSIGNED", "ACCEPTED", "TRAVELLING", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "CANCELLED"].map(key => <option key={key} value={key}>{statusLabel[key]}</option>)}
+                  </select>
+                </label>
+                <label>Từ ngày dự kiến
+                  <input aria-label="Từ ngày dự kiến" type="date" value={from} onChange={event => { setFrom(event.target.value); setPage(1); }} />
+                </label>
+                <label>Đến ngày dự kiến
+                  <input aria-label="Đến ngày dự kiến" type="date" value={to} min={from || undefined} onChange={event => { setTo(event.target.value); setPage(1); }} />
+                </label>
+                <label>Sắp xếp
+                  <select aria-label="Sắp xếp công việc" value={sort} onChange={event => { setSort(event.target.value); setPage(1); }}>
+                    <option value="scheduledStart">Lịch dự kiến gần trước</option>
+                    <option value="-scheduledStart">Lịch dự kiến xa trước</option>
+                    <option value="-createdAt">Mới tạo trước</option>
+                    <option value="-priority">Ưu tiên cao trước</option>
+                  </select>
+                </label>
+                {Boolean(status || from || to || sort !== "scheduledStart") && <button type="button" className="ws-button ws-button--secondary" onClick={() => { setStatus(""); setFrom(""); setTo(""); setSort("scheduledStart"); setPage(1); }}>Xóa bộ lọc</button>}
+              </form>
+              <p className="sd-muted technician-schedule-hint">Lọc theo lịch dự kiến, gồm cả ngày bắt đầu và kết thúc. Kết quả trống hoặc trạng thái sẵn sàng chưa đủ để khẳng định kỹ thuật viên rảnh toàn bộ khung giờ.</p>
+              {!valid ? <p role="alert" className="m1-error">Chọn khoảng ngày hợp lệ; ngày kết thúc phải sau hoặc bằng ngày bắt đầu.</p> : (
+                <Result state={orders}>
+                  {orders.value && <>
+                    <p className="sd-muted">{orders.value.total} lệnh phù hợp trên toàn bộ kết quả.</p>
+                    {orders.value.items.length ? <div className="ws-table-wrap">
+                      <table className="ws-table technician-order-table">
+                        <colgroup><col /><col /><col /><col /><col /></colgroup>
+                        <thead><tr><th scope="col">LỆNH CÔNG VIỆC</th><th scope="col">ƯU TIÊN</th><th scope="col">TRẠNG THÁI</th><th scope="col">LỊCH DỰ KIẾN</th><th scope="col">THAO TÁC</th></tr></thead>
+                        <tbody>{orders.value.items.map(row => <tr key={asText(row.id)}>
+                          <td data-label="Lệnh công việc"><Link className="ws-text-link" to={`/app/work-orders/${row.id}`}>{asText(row.workOrderNo)}</Link><strong>{asText(row.title)}</strong><small>{serviceLabels[String(row.type)] ?? asText(row.type)}</small></td>
+                          <td data-label="Ưu tiên"><PriorityBadge priority={String(row.priority ?? "NORMAL")} /></td>
+                          <td data-label="Trạng thái"><StatusBadge status={String(row.status)} label={statusLabel[String(row.status)] ?? asText(row.status)} /></td>
+                          <td data-label="Lịch dự kiến"><strong>{row.scheduledStart ? date(row.scheduledStart) : "Chưa có lịch dự kiến"}</strong><small>{row.scheduledEnd ? `Đến ${date(row.scheduledEnd)}` : "Chưa có giờ kết thúc"}</small></td>
+                          <td data-label="Thao tác"><Link className="ws-button ws-button--secondary ws-technician-detail" to={`/app/work-orders/${row.id}`}>Xem chi tiết</Link></td>
+                        </tr>)}</tbody>
+                      </table>
+                    </div> : <EmptyState title="Chưa có công việc phù hợp" description="Thử thay đổi trạng thái hoặc khoảng ngày dự kiến để xem các lệnh khác." />}
+                    <Pagination page={page} total={orders.value.total} onChange={setPage} />
+                  </>}
+                </Result>
+              )}
+            </ServiceCard>
+          </div>
         )}
       </Result>
-      <Card title="Lệnh công việc gắn với kỹ thuật viên">
-        <p>
-          Danh sách theo người được gắn với lệnh hiện tại; lịch sử phân công đầy
-          đủ nằm trong từng lệnh.
-        </p>
-        <label>
-          Lọc trạng thái{" "}
-          <select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">Tất cả trạng thái</option>
-            {[
-              "ASSIGNED",
-              "ACCEPTED",
-              "TRAVELLING",
-              "IN_PROGRESS",
-              "ON_HOLD",
-              "COMPLETED",
-              "CANCELLED",
-            ].map((key) => (
-              <option key={key} value={key}>
-                {statusLabel[key]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Result state={orders}>
-          {orders.value && (
-            <>
-              <ul className="m2-linked-list">
-                {orders.value.items.map((row) => (
-                  <li key={String(row.id)}>
-                    <Link to={`/app/work-orders/${row.id}`}>
-                      {asText(row.workOrderNo)} · {asText(row.title)}
-                    </Link>
-                    <span>
-                      {statusLabel[String(row.status)] ?? asText(row.status)} ·{" "}
-                      {date(row.scheduledStart)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {!orders.value.items.length && (
-                <p>Chưa có lệnh phù hợp bộ lọc.</p>
-              )}
-              <div className="registration-pagination">
-                <button
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  Trước
-                </button>
-                <span>
-                  Trang {page} · {orders.value.total} lệnh
-                </span>
-                <button
-                  disabled={page * 20 >= orders.value.total}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Sau
-                </button>
-              </div>
-            </>
-          )}
-        </Result>
-      </Card>
     </div>
   );
 }

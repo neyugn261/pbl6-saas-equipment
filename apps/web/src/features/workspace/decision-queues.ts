@@ -114,7 +114,7 @@ export const decisionQueues: DecisionQueue[] = [
     resource: "/work-orders",
     status: "CREATED,ASSIGNED",
     kind: "order",
-    list: "/app/work-orders?view=list",
+    list: "/app/work-orders",
     guidance:
       "Phối hợp Dispatcher và kỹ thuật viên; kiểm tra địa điểm công việc và lịch dự kiến.",
   },
@@ -126,7 +126,7 @@ export const decisionQueues: DecisionQueue[] = [
     resource: "/work-orders",
     status: "ACCEPTED,TRAVELLING,IN_PROGRESS",
     kind: "order",
-    list: "/app/work-orders?view=list",
+    list: "/app/work-orders",
     guidance:
       "Theo dõi tiến độ, thông tin hiện trường và khả năng cần phối hợp vật tư.",
   },
@@ -138,7 +138,7 @@ export const decisionQueues: DecisionQueue[] = [
     resource: "/work-orders",
     status: "ON_HOLD",
     kind: "order",
-    list: "/app/work-orders?view=list",
+    list: "/app/work-orders",
     guidance: "Đọc lý do tạm dừng trong nhật ký và xác định ai cần tháo gỡ.",
   },
   {
@@ -161,7 +161,7 @@ export const decisionQueues: DecisionQueue[] = [
     resource: "/work-orders",
     status: "COMPLETED",
     kind: "order",
-    list: "/app/work-orders?view=list",
+    list: "/app/work-orders",
     guidance:
       "Hoàn tất lệnh chưa chứng minh máy đã vận hành tốt hoặc khách đã xác nhận. Đọc báo cáo và đối soát phụ tùng.",
   },

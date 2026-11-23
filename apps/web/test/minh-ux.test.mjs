@@ -140,6 +140,7 @@ test("an interrupted bulk import survives navigation and retries the original co
         errorText: (error) => error.message,
       },
       "./minh-asset-ux.css": {},
+      '../features/equipment/spreadsheet': tab.load('features/equipment/spreadsheet.ts'),
       '../display-names': tab.load('display-names.ts'),
     });
     const root = h.render(BulkHandoverPage);

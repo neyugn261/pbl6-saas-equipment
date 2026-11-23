@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { Page } from "../../types/domain";
 import { useSession } from "../../auth/session";
 import { DataState, EmptyState, Pagination } from "./WorkspaceUI";
-import { ServiceCard } from "./ServiceDetailUI";
+import { ServiceCard, ServiceFacts } from "./ServiceDetailUI";
 import {
   asRow,
   formatDate,
@@ -56,13 +56,15 @@ export default function EquipmentPartsHistory({
         retry={() => refresh((v) => v + 1)}
       >
         {data?.items.length ? (
-          <ol className="sd-history">
+          <ol className="sd-history equipment-parts-list">
             {data.items.map((item) => {
               const part = asRow(item.part);
               const correction =
                 item.kind === "REVERSE" || Boolean(item.correctsConfirmationId);
               return (
                 <li key={String(item.id)}>
+                  <div className="equipment-parts-heading">
+                  <div>
                   <h3>{value(part.name, "Phụ tùng chưa có tên")}</h3>
                   <p>
                     {value(part.sku, "Chưa có mã")} ·{" "}
@@ -70,7 +72,10 @@ export default function EquipmentPartsHistory({
                       ? "Điều chỉnh xác nhận trước"
                       : "Xác nhận sử dụng"}
                   </p>
-                  <strong>
+                  </div>
+                  <span className="ws-pill">{item.isReversed ? "Đã đảo xác nhận" : correction ? "Điều chỉnh" : "Xác nhận"}</span>
+                  </div>
+                  <strong className="equipment-parts-quantity">
                     {value(item.quantity)} {value(part.unit, "")} ·{" "}
                     {item.isReversed
                       ? "Xác nhận đã được đảo; không coi là lượng sử dụng hiện hành"
@@ -83,14 +88,10 @@ export default function EquipmentPartsHistory({
                     Thời điểm ghi nhận xác nhận; không mặc định là thời điểm lắp
                     thực tế.
                   </p>
-                  <p>Lý do: {value(item.reason, "Chưa công bố lý do")}</p>
-                  <p>
-                    {dispositions[String(item.removedPartDisposition)] ??
-                      "Chưa có mô tả xử lý linh kiện cũ"}
-                  </p>
-                  {Boolean(item.removedPartNote) && (
-                    <p>{value(item.removedPartNote)}</p>
-                  )}
+                  <ServiceFacts items={[
+                    { label: "Lý do", value: value(item.reason, "Chưa công bố lý do") },
+                    { label: "Xử lý linh kiện cũ", value: <>{dispositions[String(item.removedPartDisposition)] ?? "Chưa có mô tả xử lý linh kiện cũ"}{Boolean(item.removedPartNote) && <small>{value(item.removedPartNote)}</small>}</> },
+                  ]} />
                   <p>
                     {!customer && item.workOrderId ? (
                       <Link to={`/app/work-orders/${item.workOrderId}`}>

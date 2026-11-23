@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError } from '../api/client'
+import { api, ApiError, getViewKey } from '../api/client'
 import { getSessionGeneration } from '../auth/session'
 
 export type DirectoryRow = {
+  fullName?: string | null
+  employeeCode?: string
   defaultServicingBranchId?: string | null
   id: string
   name: string
   code?: string
+  position?: string
   manufacturer?: string
   modelCode?: string
   status?: string
@@ -38,7 +41,7 @@ export function useDirectory<T>(
   revision = 0,
 ) {
   const generation = getSessionGeneration()
-  const key = `${area}:${path}:${revision}:${generation}`
+  const key = `${area}:${path}:${revision}:${generation}:${getViewKey()}`
   const [state, setState] = useState<{
     key: string
     value: T | null

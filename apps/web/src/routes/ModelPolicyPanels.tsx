@@ -4,6 +4,8 @@ import { api } from "../api/client";
 import { useSession } from "../auth/session";
 import { useDirectory, errorText, modelSetupError } from "./registration-data";
 import { LoadState } from "./registration-shared";
+import { ServiceCard, ServiceFacts, ServiceNotice } from "../features/workspace/ServiceDetailUI";
+import { formatDate } from "../features/workspace/workspace-data";
 import type { PolicyItem } from "./ModelPolicyPage";
 import {
   maintenanceTermLabel,
@@ -49,28 +51,33 @@ type Snapshot = {
 };
 export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
   return (
-    <div className="live-columns">
+    <div className="live-columns model-policy-summary">
       <section>
-        <h3>Bảo hành · v{snapshot.warranty.revision}</h3>
-        <p>{snapshot.warranty.body.name}</p>
-        <p>
-          {snapshot.warranty.body.mode === "NONE"
-            ? snapshot.warranty.body.reason
-            : `${snapshot.warranty.body.durationMonths} tháng · ${snapshot.warranty.startDate} → ${snapshot.warranty.endDate}`}
-        </p>
-        <p>{snapshot.warranty.body.terms}</p>
-        {snapshot.warranty.body.exclusions.map((e) => (
-          <p key={e.code}>Loại trừ: {e.text}</p>
-        ))}
+        <header className="model-policy-heading"><h3>Bảo hành</h3><span className="ws-pill">Phiên bản {snapshot.warranty.revision}</span></header>
+        <h4>{snapshot.warranty.body.name}</h4>
+        {snapshot.warranty.body.mode === "NONE" ? <p className="model-policy-terms">{snapshot.warranty.body.reason}</p> : (
+          <ServiceFacts items={[
+            { label: "Thời hạn", value: `${snapshot.warranty.body.durationMonths} tháng` },
+            { label: "Từ ngày", value: formatDate(snapshot.warranty.startDate) },
+            { label: "Đến ngày", value: formatDate(snapshot.warranty.endDate) },
+          ]} />
+        )}
+        <p className="model-policy-terms">{snapshot.warranty.body.terms}</p>
+        {snapshot.warranty.body.exclusions.length > 0 && <section className="model-policy-exclusions">
+          <h4>Điều khoản loại trừ</h4>
+          <ul className="model-policy-list">
+            {snapshot.warranty.body.exclusions.map(e => <li key={e.code}>{e.text}</li>)}
+          </ul>
+        </section>}
       </section>
       <section>
-        <h3>Bảo trì · v{snapshot.maintenance.revision}</h3>
-        <p>{snapshot.maintenance.body.terms}</p>
+        <header className="model-policy-heading"><h3>Bảo trì</h3><span className="ws-pill">Phiên bản {snapshot.maintenance.revision}</span></header>
+        <p className="model-policy-terms">{snapshot.maintenance.body.terms}</p>
         {snapshot.maintenance.body.mode === "NONE" ? (
-          <p>{snapshot.maintenance.body.reason}</p>
+          <p className="model-policy-terms">{snapshot.maintenance.body.reason}</p>
         ) : (
           snapshot.maintenance.body.rules.map((r) => (
-            <div key={r.id}>
+            <div className="model-policy-rule" key={r.id}>
               <h4>
                 {r.name} · mỗi {r.frequencyValue}{" "}
                 {{ DAY: "ngày", WEEK: "tuần", MONTH: "tháng", YEAR: "năm" }[
@@ -82,22 +89,11 @@ export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
                 ?.endDate && (
                 <p>
                   Ngày kết thúc:{" "}
-                  {
-                    snapshot.maintenance.firstDueDates.find(
-                      (d) => d.itemId === r.id,
-                    )?.endDate
-                  }
+                  {formatDate(snapshot.maintenance.firstDueDates.find((d) => d.itemId === r.id)?.endDate)}
                 </p>
               )}
-              <p>
-                Kỳ đầu:{" "}
-                {
-                  snapshot.maintenance.firstDueDates.find(
-                    (d) => d.itemId === r.id,
-                  )?.date
-                }
-              </p>
-              <ul>
+              <p>Kỳ đầu: {formatDate(snapshot.maintenance.firstDueDates.find((d) => d.itemId === r.id)?.date)}</p>
+              <ul className="model-policy-list">
                 {r.checklist.map((i) => (
                   <li key={i.id}>
                     <strong>{i.title}</strong> ·{" "}
@@ -383,36 +379,48 @@ export function AppliedPolicyPanel({ equipmentId }: { equipmentId: string }) {
     }[];
   }>("assetM2", `/equipment/${equipmentId}/applied-policies`);
   return (
-    <section className="m1-card">
-      <h2>Chính sách dịch vụ đã áp dụng</h2>
+    <ServiceCard title="Chính sách dịch vụ đã áp dụng" description="Điều khoản bảo hành và bảo trì được ghi nhận cho thiết bị.">
+      <div className="equipment-applied-policy">
       <LoadState {...data} />
-      {data.value?.state === "AWAITING_CUSTOMER" && <p role="status">Hồ sơ đang chờ khách xác nhận. Các điều khoản dưới đây là nội dung đã gửi; bảo hành và lịch bảo trì chưa được áp dụng.</p>}
+      {data.value?.state === "AWAITING_CUSTOMER" && <ServiceNotice title="Đang chờ khách hàng xác nhận"><p role="status">Các điều khoản dưới đây là nội dung đã gửi; bảo hành và lịch bảo trì chưa được áp dụng.</p></ServiceNotice>}
       {data.value?.state === "SETUP_PENDING" && (
+        <ServiceNotice title="Đang hoàn tất thiết lập dịch vụ">
         <p role="status">
           Hệ thống đang hoàn tất thiết lập lịch bảo trì. Điều khoản dưới đây đã được xác nhận.
         </p>
+        </ServiceNotice>
       )}
       {data.value?.snapshot ? (
         <ModelPolicySummary snapshot={data.value.snapshot} />
       ) : (
         data.value && (
           <>
+            <ServiceNotice title="Chính sách riêng của thiết bị">
             <p>
               Hồ sơ hiện có được ghi nhận theo chính sách riêng; chưa áp dụng
               phiên bản Model.
             </p>
-            {data.value.warranties.map((w) => (
-              <div key={w.id}>
-                <p>
-                  {w.startDate} → {w.endDate}
-                </p>
-                <p>{w.terms}</p>
-              </div>
-            ))}
+            </ServiceNotice>
+            {data.value.warranties.length ? <ul className="equipment-policy-records">
+              {data.value.warranties.map(w => (
+                <li key={w.id}>
+                  <h3>Điều khoản bảo hành</h3>
+                  <ServiceFacts items={[
+                    { label: "Hiệu lực từ", value: formatDate(w.startDate) },
+                    { label: "Đến ngày", value: formatDate(w.endDate) },
+                  ]} />
+                  <section className="equipment-policy-terms">
+                    <h4>Nội dung áp dụng</h4>
+                    <p>{w.terms || "Chưa ghi nhận nội dung điều khoản."}</p>
+                  </section>
+                </li>
+              ))}
+            </ul> : <p className="equipment-source-message">Chưa có chi tiết bảo hành được ghi nhận tại đây.</p>}
           </>
         )
       )}
-    </section>
+      </div>
+    </ServiceCard>
   );
 }
 interface Result {
@@ -626,101 +634,102 @@ export function WarrantyAssessmentPanel({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
-    <section className="m1-card live-admin">
-      <h2>Phạm vi bảo hành của sự cố</h2>
-      <p>
-        {request.coverageAssessment
-          ? `${request.coverageAssessment.decision === "COVERED" ? "Được bảo hành" : "Không thuộc phạm vi bảo hành"} · ${request.coverageAssessment.reason}`
-          : request.assessmentRequired
-            ? "Chưa kết luận. Còn thời hạn không đồng nghĩa sự cố được bảo hành."
-            : "Hồ sơ bảo hành được ghi nhận theo luồng hiện hành."}
-      </p>
-      {request.appliedWarrantyPolicy && (
-        <>
-          <p>{request.appliedWarrantyPolicy.terms}</p>
-          <ul>
-            {request.appliedWarrantyPolicy.exclusions.map((e) => (
-              <li key={e.code}>
-                {e.code} · {e.text}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {error && (
-        <p className="m1-error" role="alert">
-          {error}
+    <ServiceCard title="Phạm vi bảo hành của sự cố">
+      <div className="live-admin request-warranty-assessment">
+        <p>
+          {request.coverageAssessment
+            ? `${request.coverageAssessment.decision === "COVERED" ? "Được bảo hành" : "Không thuộc phạm vi bảo hành"} · ${request.coverageAssessment.reason}`
+            : request.assessmentRequired
+              ? "Chưa kết luận. Còn thời hạn không đồng nghĩa sự cố được bảo hành."
+              : "Hồ sơ bảo hành được ghi nhận theo luồng hiện hành."}
         </p>
-      )}
-      {request.allowedActions.includes("assess-warranty") && (
-        <form
-          className="live-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (busy) return;
-            setBusy(true);
-            setError("");
-            void api
-              .requestsLive(
-                `/service-requests/${request.id}/warranty-assessment`,
-                {
-                  method: "POST",
-                  body: {
-                    expectedVersion: request.assessmentVersion ?? 0,
-                    cause,
-                    decision,
-                    reason,
+        {request.appliedWarrantyPolicy && (
+          <>
+            <p className="request-policy-terms">{request.appliedWarrantyPolicy.terms}</p>
+            <ul className="model-policy-list">
+              {request.appliedWarrantyPolicy.exclusions.map((e) => (
+                <li key={e.code}>
+                  {e.code} · {e.text}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {error && (
+          <p className="m1-error" role="alert">
+            {error}
+          </p>
+        )}
+        {request.allowedActions.includes("assess-warranty") && (
+          <form
+            className="live-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (busy) return;
+              setBusy(true);
+              setError("");
+              void api
+                .requestsLive(
+                  `/service-requests/${request.id}/warranty-assessment`,
+                  {
+                    method: "POST",
+                    body: {
+                      expectedVersion: request.assessmentVersion ?? 0,
+                      cause,
+                      decision,
+                      reason,
+                    },
                   },
-                },
-              )
-              .then(changed)
-              .catch((e) => setError(errorText(e)))
-              .finally(() => setBusy(false));
-          }}
-        >
-          <fieldset disabled={busy}>
-            <label>
-              Nguyên nhân
-              <select value={cause} onChange={(e) => setCause(e.target.value)}>
-                {[
-                  "MANUFACTURING_DEFECT",
-                  "ACCIDENTAL_DAMAGE",
-                  "LIQUID_INGRESS",
-                  "MISUSE",
-                  "WEAR_AND_TEAR",
-                ].map((c) => (
-                  <option key={c} value={c}>
-                    {serviceLabels[c] ?? c}
+                )
+                .then(changed)
+                .catch((e) => setError(errorText(e)))
+                .finally(() => setBusy(false));
+            }}
+          >
+            <fieldset className="request-assessment-fields" disabled={busy}>
+              <label>
+                Nguyên nhân
+                <select value={cause} onChange={(e) => setCause(e.target.value)}>
+                  {[
+                    "MANUFACTURING_DEFECT",
+                    "ACCIDENTAL_DAMAGE",
+                    "LIQUID_INGRESS",
+                    "MISUSE",
+                    "WEAR_AND_TEAR",
+                  ].map((c) => (
+                    <option key={c} value={c}>
+                      {serviceLabels[c] ?? c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Kết luận
+                <select
+                  value={decision}
+                  onChange={(e) => setDecision(e.target.value)}
+                >
+                  <option value="COVERED">Được bảo hành</option>
+                  <option value="NOT_COVERED">
+                    Không thuộc phạm vi bảo hành
                   </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Kết luận
-              <select
-                value={decision}
-                onChange={(e) => setDecision(e.target.value)}
-              >
-                <option value="COVERED">Được bảo hành</option>
-                <option value="NOT_COVERED">
-                  Không thuộc phạm vi bảo hành
-                </option>
-              </select>
-            </label>
-            <label>
-              Lý do / bằng chứng đã kiểm tra
-              <textarea
-                required
-                maxLength={2000}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </label>
-            <button>Lưu kết luận</button>
-          </fieldset>
-        </form>
-      )}
-    </section>
+                </select>
+              </label>
+              <label className="request-assessment-reason">
+                Lý do / bằng chứng đã kiểm tra
+                <textarea
+                  required
+                  maxLength={2000}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+              <button type="submit" className="ws-button">Lưu kết luận</button>
+            </fieldset>
+          </form>
+        )}
+      </div>
+    </ServiceCard>
   );
 }
 

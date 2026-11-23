@@ -57,6 +57,7 @@ function tab(fetch) {
     '../api/config': { identityBase: 'http://identity.test' },
   })
   const client = load('../src/api/client.ts', {
+    '../features/workspace/branch-context': { selectedBranchId: () => '', withBranchFilter: (_area, path) => path },
     '../auth/session': session,
     './config': { bases: { assetM2: 'http://asset.test' } },
   })

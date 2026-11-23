@@ -1,4 +1,5 @@
 import { StaffBranchAssignment } from '../features/workspace/BranchManagement'
+import { SiteLocationContents } from '../features/workspace/LocationTreeView'
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Building2, ChevronDown, MapPin } from 'lucide-react'
@@ -48,14 +49,6 @@ type Site = {
   code: string
   name: string
   address: string
-  status: string
-}
-type Location = {
-  id: string
-  name: string
-  code: string | null
-  type: string
-  parentId: string | null
   status: string
 }
 
@@ -1039,13 +1032,7 @@ export function PortalLocationsPage() {
   )
 }
 function SiteLocations({ site }: { site: Site }) {
-  const [open, setOpen] = useState(false),
-    [revision, refresh] = useState(0)
-  const data = useDirectory<Location[]>(
-    'organization',
-    open ? `/sites/${site.id}/locations` : null,
-    revision,
-  )
+  const [open, setOpen] = useState(false)
   return (
     <section className="m1-card live-site">
       <div className="live-site-header">
@@ -1081,28 +1068,7 @@ function SiteLocations({ site }: { site: Site }) {
       {open && (
         <div className="live-site-locations" id={`site-locations-${site.id}`}>
           <h3>Vị trí lắp đặt</h3>
-          <State {...data} retry={() => refresh(revision + 1)} />
-          {data.value && !data.value.length && <p>Chưa có vị trí lắp đặt.</p>}
-          {!!data.value?.length && (
-            <ul className="live-site-location-list">
-              {data.value.map((row) => (
-                <li className="live-location" key={row.id}>
-                  <div className="live-location-details">
-                    <span className="live-location-name">{row.name}</span>
-                    <span>{row.type} · {row.code || 'Không có mã'}</span>
-                    {row.parentId && (
-                      <small>
-                        Thuộc:{' '}
-                        {data.value?.find((parent) => parent.id === row.parentId)
-                          ?.name ?? 'Vị trí cấp trên'}
-                      </small>
-                    )}
-                  </div>
-                  <StatusBadge status={row.status} />
-                </li>
-              ))}
-            </ul>
-          )}
+          <SiteLocationContents siteId={site.id}/>
         </div>
       )}
     </section>

@@ -25,7 +25,7 @@ export function webTab(fetch, env = {}, storage = new Map()) {
     }).outputText
     const exports = {}
     vm.runInNewContext(code, {
-      exports, fetch, sessionStorage, window, Event, AbortSignal, crypto, URLSearchParams,
+      exports, fetch, sessionStorage, window, Event, AbortSignal, crypto, URLSearchParams, TextEncoder, TextDecoder, Blob,
       __env: env,
       ...globals,
       require: (name) => {
@@ -36,11 +36,12 @@ export function webTab(fetch, env = {}, storage = new Map()) {
     return exports
   }
   const config = load('api/config.ts')
-  const client = load('api/client.ts', { '../auth/session': session, './config': config })
+  const branches = load('features/workspace/branch-context.ts', { '../../auth/session': session })
+  const client = load('api/client.ts', { '../auth/session': session, './config': config, '../features/workspace/branch-context': branches })
   const stock = load('features/inventory/stock-mutation.ts', {
     '../../api/client': client, '../../auth/session': session,
   })
-  return { load, client, stock, config, session, sessionStorage, window, storage,
+  return { load, client, stock, config, session, sessionStorage, window, storage, branches,
     changeSession: () => { generation++ } }
 }
 

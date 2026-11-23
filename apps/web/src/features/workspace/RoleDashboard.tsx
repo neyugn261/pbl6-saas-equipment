@@ -368,14 +368,10 @@ function StandardDashboard() {
             {customer && (
               <Link
                 className="ws-button"
-                to={
-                  customer
-                    ? "/portal/requests/new"
-                    : "/app/service-requests/new"
-                }
+                to="/portal/requests/new"
               >
                 <Plus size={16} />
-                {customer ? "Yêu cầu hỗ trợ" : "Tạo yêu cầu dịch vụ"}
+                Yêu cầu hỗ trợ
               </Link>
             )}
           </>

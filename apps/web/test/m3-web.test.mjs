@@ -222,6 +222,7 @@ for (const mode of ['RECEIVE', 'ADJUST', 'ISSUE', 'RETURN']) {
     })
     const h = hooks()
     const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', {
+      '../workspace/WorkspaceUI': { PageHeading: 'page-heading' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
       react: h.react, 'react/jsx-runtime': h.jsx, 'react-router-dom': { Link: 'link' },
       'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
       '../../api/client': tab.client, '../../auth/session': tab.session, './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'),
@@ -230,6 +231,8 @@ for (const mode of ['RECEIVE', 'ADJUST', 'ISSUE', 'RETURN']) {
     })
     let tree = h.render(InventoryTransactionsPage)
     await settle(); tree = h.render(InventoryTransactionsPage)
+    nodes(tree, node => node.type === 'page-heading')[0].props.actions.props.onClick()
+    tree = h.render(InventoryTransactionsPage)
     function change(label, value) {
       const parent = nodes(tree, (node) => node.type === 'label' && node.props.children[0] === label)[0]
       const control = nodes(parent, (node) => ['input', 'select'].includes(node.type))[0]
@@ -261,7 +264,7 @@ for (const mode of ['RECEIVE', 'ADJUST', 'ISSUE', 'RETURN']) {
     nodes(tree, (node) => node.type === 'button' && node.props.children === 'Thử lại giao dịch đã lưu')[0].props.onClick()
     await settle(); tree = h.render(InventoryTransactionsPage)
     assert.deepEqual(posts[1], posts[0])
-    assert.equal(nodes(tree, (node) => node.type === 'fieldset')[0].props.disabled, false)
+    assert.equal(nodes(tree, (node) => node.type === 'fieldset').length, 0)
     assert.equal(nodes(tree, (node) => node.props?.['aria-label'] === 'Giao dịch chưa xác nhận').length, 0)
     assert.equal(tab.storage.size, 0)
     h.unmount()

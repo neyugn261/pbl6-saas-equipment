@@ -1,4 +1,7 @@
 import { SiteBranchRouting } from "../features/workspace/BranchManagement";
+import SiteLocationTree from '../features/workspace/LocationTreeView';
+import TableToolbar from '../features/workspace/TableToolbar';
+import CustomerOverview, { CustomerMaintenance } from '../features/workspace/CustomerOverview';
 import {
   ServiceSections,
   ServiceFacts,
@@ -7,7 +10,7 @@ import {
 import CustomerServicePanel from "../features/workspace/CustomerServicePanel";
 import { useState } from "react";
 import { Ban, CircleCheck, Pencil, Search } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../auth/session";
 import { StatusBadge } from "../components/Badges";
@@ -21,13 +24,18 @@ import {
 } from "./registration-data";
 
 export function CustomerDirectoryPage() {
-  const { profile } = useSession(),
-    [draft, setDraft] = useState(""),
-    [q, setQ] = useState(""),
-    [page, setPage] = useState(1);
+  const { profile } = useSession();
+  const [params, setParams] = useSearchParams();
+  const q = params.get('q') || '', status = params.get('status') || '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  function filter(values: Record<string, string>) {
+    const next = new URLSearchParams(params); next.delete('page');
+    Object.entries(values).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key));
+    setParams(next, { replace: true });
+  }
   const state = useDirectory<Page<DirectoryRow>>(
     "organization",
-    `/customers?page=${page}&pageSize=20&q=${encodeURIComponent(q)}`,
+    `/customers?page=${page}&pageSize=20&q=${encodeURIComponent(q)}${status ? `&status=${status}` : ''}`,
   );
   const manage = profile?.roles.some((role) => setupRoles.includes(role));
   return (
@@ -43,22 +51,9 @@ export function CustomerDirectoryPage() {
       }
     >
       <section className="m1-card registration-directory">
-        <form
-          className="registration-directory__toolbar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setQ(draft);
-            setPage(1);
-          }}
-        >
-          <label className="registration-directory__search"><Search size={17} aria-hidden="true" /><input
-            aria-label="Tìm khách hàng"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Tìm tên hoặc mã khách hàng…"
-          /></label>
-          <button type="submit" className="registration-directory__search-button">Tìm</button>
-        </form>
+        <TableToolbar query={q} onQuery={value => filter({ q: value })} placeholder="Tìm tên hoặc mã khách hàng…" onReset={() => setParams({})}>
+          <label>Trạng thái<select value={status} onChange={event => filter({ status: event.target.value })}><option value="">Tất cả</option><option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Ngừng hoạt động</option></select></label>
+        </TableToolbar>
         <LoadState {...state} />
         {state.value && (
           <>
@@ -96,7 +91,7 @@ export function CustomerDirectoryPage() {
             {state.value.items.length === 0 && (
               <p className="registration-directory__empty">Chưa có khách hàng phù hợp.</p>
             )}
-            <DirectoryPagination page={page} total={state.value.total} label="khách hàng" onChange={setPage} />
+            <DirectoryPagination page={page} total={state.value.total} label="khách hàng" onChange={value => { const next = new URLSearchParams(params); next.set('page', String(value)); setParams(next); }} />
           </>
         )}
       </section>
@@ -175,6 +170,7 @@ export function CustomerWorkspacePage() {
       }
     >
       <LoadState {...state} />
+      {state.value && id && <CustomerOverview key={id} customerId={id}/>}
       <ServiceNotice title="Hồ sơ phục vụ chăm sóc sau bán hàng">
         <p>
           Quản lý địa điểm đặt thiết bị và đầu mối liên hệ để tiếp nhận, điều
@@ -235,9 +231,10 @@ export function CustomerWorkspacePage() {
       )}
       <ServiceSections
         items={[
+          { key: 'overview', label: 'Tổng quan', content: id && <CustomerServicePanel key={id} customerId={id}/> },
           {
             key: "sites",
-            label: "Địa điểm đặt thiết bị",
+            label: "Vị trí & thiết bị",
             content: (
               <section className="m1-card">
                 <div className="registration-header">
@@ -259,6 +256,7 @@ export function CustomerWorkspacePage() {
                   {sites.value?.map((row) => (
                     <article key={row.id}>
                       <h3>{row.name}</h3>
+                      <SiteLocationTree siteId={row.id}/>
                       <p>
                         {row.code} · {row.address}
                       </p>
@@ -294,6 +292,7 @@ export function CustomerWorkspacePage() {
                     </article>
                   ))}
                 </div>
+                {id && <CustomerServicePanel customerId={id} mode="equipment"/>}
               </section>
             ),
           },
@@ -328,9 +327,10 @@ export function CustomerWorkspacePage() {
           },
           {
             key: "services",
-            label: "Thiết bị & dịch vụ",
-            content: id && <CustomerServicePanel key={id} customerId={id} />,
+            label: "Yêu cầu & lệnh",
+            content: id && <CustomerServicePanel key={id} customerId={id} mode="requests" />,
           },
+          { key: 'maintenance', label: 'Kế hoạch bảo trì', content: id && <CustomerMaintenance key={id} customerId={id}/> },
         ]}
       />
     </SetupPage>

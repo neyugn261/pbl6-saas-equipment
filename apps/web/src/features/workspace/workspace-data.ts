@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../../api/client";
+import { api, ApiError, getViewKey } from "../../api/client";
 import { getSessionGeneration } from "../../auth/session";
 
 export type Row = Record<string, unknown>;
@@ -23,7 +23,7 @@ function sharedRead<T>(
     concurrentReads.clear();
     readGeneration = generation;
   }
-  const key = `${generation}:${area}:${path}:${revision}`;
+  const key = `${generation}:${area}:${path}:${revision}:${getViewKey()}`;
   let pending = concurrentReads.get(key);
   if (!pending) {
     pending = api[area](path);
@@ -103,7 +103,7 @@ export function useWorkspaceData<T>(
   revision = 0,
 ) {
   const generation = getSessionGeneration();
-  const key = `${generation}:${area}:${path}:${revision}`;
+  const key = `${generation}:${area}:${path}:${revision}:${getViewKey()}`;
   const [state, setState] = useState<{ key: string; data?: T; error?: string }>(
     { key: "" },
   );

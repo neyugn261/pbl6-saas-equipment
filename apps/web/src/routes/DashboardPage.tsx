@@ -138,7 +138,7 @@ export default function DashboardPage() {
           <div className="dashboard-section__header"><div><h2>Truy cập nhanh</h2><p>Tiếp tục công việc của bạn</p></div></div>
           {canEquipment && <Link to={equipmentPath}><Boxes size={18} /><span>Tra cứu thiết bị</span><ArrowRight size={15} /></Link>}
           {canRequests && <Link to={requestsPath}><ClipboardList size={18} /><span>Theo dõi yêu cầu</span><ArrowRight size={15} /></Link>}
-          {has(roles, ['CUSTOMER_USER', 'CUSTOMER_ADMIN', 'SERVICE_MANAGER']) && <Link to={`${requestsPath}/new`}><ClipboardList size={18} /><span>Tạo yêu cầu mới</span><ArrowRight size={15} /></Link>}
+          {has(roles, ['CUSTOMER_USER', 'CUSTOMER_ADMIN']) && <Link to={`${requestsPath}/new`}><ClipboardList size={18} /><span>Tạo yêu cầu mới</span><ArrowRight size={15} /></Link>}
           {canTenants && <Link to="/tenants"><Building2 size={18} /><span>Quản lý doanh nghiệp</span><ArrowRight size={15} /></Link>}
         </section>
       </div>

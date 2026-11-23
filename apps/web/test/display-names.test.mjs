@@ -20,6 +20,7 @@ test('full name, employee code, empty/null/error fallback never use a database I
 function renderM2(componentName, response, path = '') {
   const h = hooks()
   const module = tab.load('routes/M2Pages.tsx', {
+    '../components/Badges': { StatusBadge: 'status-badge' },
     react: h.react, 'react/jsx-runtime': h.jsx,
     'react-router-dom': { Link: 'a', useParams: () => ({ id: 'work' }), useLocation: () => ({ pathname: path, search: '' }) },
     '../api/client': { ...tab.client, api: { workorders: async () => response, assetM2: async () => ({ status: 'AVAILABLE', data: {
@@ -87,6 +88,7 @@ test('ledger component renders inactive rows outside dropdowns, preserving histo
     workorders: async () => ({ ...empty, items: [{ id: orderId, workOrderNo: 'WO-007', status: 'COMPLETED' }] }),
   }
   const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
+    '../workspace/WorkspaceUI': { PageHeading: 'page-heading' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
     'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
     './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'), '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
@@ -107,6 +109,7 @@ test('warehouse list uses scoped branch name and keeps branch ID as form value',
     ...empty, items: [{ id: 'warehouse-id', branchId: 'branch-id', branchName: 'Chi nhánh Hà Nội', code: 'W1', name: 'Kho chính', status: 'ACTIVE' }], total: 1,
   } : empty }
   const { InventoryWarehousesPage } = tab.load('features/inventory/InventoryPages.tsx', { react: h.react, 'react/jsx-runtime': h.jsx,
+    '../workspace/WorkspaceUI': { PageHeading: 'page-heading' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
     'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
     './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'), '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })

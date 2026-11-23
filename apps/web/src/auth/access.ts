@@ -47,7 +47,6 @@ export const menu: { path: string; label: string; roles: Role[] }[] = [
 ]
 
 export const creators: Role[] = [
-  'SERVICE_MANAGER',
   'CUSTOMER_ADMIN',
   'CUSTOMER_USER',
 ]

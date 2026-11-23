@@ -69,3 +69,13 @@
   .m2-page .inventory-parts-directory__toolbar { flex-wrap: wrap; }
   .m2-page .inventory-parts-directory__search { width: 100%; }
 }
+
+.m2-editor > fieldset {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

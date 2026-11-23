@@ -23,7 +23,7 @@ const stages = [
     role: 'Customer User',
     path: '/requests/new',
     action: 'Tạo yêu cầu',
-    allowed: ['CUSTOMER_USER', 'CUSTOMER_ADMIN', 'SERVICE_MANAGER'],
+    allowed: ['CUSTOMER_USER', 'CUSTOMER_ADMIN'],
   },
   {
     number: '03',

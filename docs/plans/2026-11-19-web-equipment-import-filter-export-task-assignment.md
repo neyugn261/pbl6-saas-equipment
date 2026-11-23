@@ -2,6 +2,8 @@
 
 Ngày lập: 19/11/2026.
 
+**Cập nhật Nguyên ngày 21/11:** [bảng trạng thái N01–N17, code, kiểm thử và UAT](../testing/nguyen-web-tasks-2026-11-21.md). Đã mở rộng filter URL/cột/xem nhanh/export/mapping file và các màn Web; các checkbox dưới đây giữ nguyên nếu chưa đạt đầy đủ contract, backend và nghiệm thu của từng task. Đặc biệt, import hiện vẫn tạo DRAFT; quyền SM phía backend và báo cáo Portal chưa hoàn tất.
+
 **Bổ sung sau phản hồi cùng ngày:** mục 14 ghi rõ các yêu cầu Service Manager, bố cục Đội ngũ kỹ thuật, Lịch sử sự kiện, tham khảo bộ lọc hiện có và Báo cáo cho khách hàng. Tổng cộng 75 task; các yêu cầu này chưa được coi là đã triển khai.
 
 ## 1. Mục tiêu và cách dùng

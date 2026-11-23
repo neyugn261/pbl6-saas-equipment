@@ -386,8 +386,7 @@
 .request-intake-progress li {
   min-width: 135px;
 }
-.request-intake-grid {
-  align-items: start;
+.request-intake-panels {
   margin-block: 16px;
 }
 .sd-related-link {

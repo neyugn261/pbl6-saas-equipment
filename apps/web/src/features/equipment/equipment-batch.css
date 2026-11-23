@@ -1,1 +1,57 @@
-.equipment-header-actions,.equipment-export-actions{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end}.equipment-results-heading{align-items:flex-start}.equipment-batch-panel{background:#fff;border:1px solid #d8d4ca;border-radius:12px;margin:1rem 0;padding:1rem}.equipment-batch-panel__heading{align-items:flex-start;display:flex;gap:1rem;justify-content:space-between}.equipment-batch-panel__heading h3{margin:0 0 .25rem}.equipment-batch-panel__heading p{color:#6b6e68;margin:.25rem 0 .8rem;max-width:70ch}.equipment-batch-panel__file{display:grid;gap:.4rem;max-width:34rem}.equipment-batch-panel__actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}.equipment-batch-panel__result{background:#f2f2eb;border-radius:8px;margin-top:1rem;padding:.75rem 1rem}.equipment-batch-panel__result p{color:#983d2e;margin:.35rem 0}.equipment-grid th:first-child,.equipment-grid td:first-child{width:2.5rem;text-align:center}.equipment-grid input[type=checkbox]{accent-color:#a95334;block-size:1rem;inline-size:1rem}@media(max-width:760px){.equipment-export-actions,.equipment-header-actions{justify-content:flex-start}.equipment-results-heading{display:grid}}
+.equipment-batch-panel {
+  background: var(--shop-paper, #fcfcf9);
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+  margin: 1rem 0;
+  padding: 1.25rem;
+}
+.equipment-batch-panel__heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.equipment-batch-panel__heading h3 {
+  margin: 0 0 0.25rem;
+  color: var(--shop-ink, #242e2d);
+  font-size: 15px;
+}
+.equipment-batch-panel__heading p {
+  color: var(--shop-muted, #596762);
+  margin: 0.25rem 0 0.8rem;
+  max-width: 70ch;
+  font-size: 12px;
+}
+.equipment-batch-panel__file {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 34rem;
+}
+.equipment-batch-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.equipment-batch-panel__result {
+  background: var(--shop-soft, #e5e9e2);
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+}
+.equipment-batch-panel__result p {
+  color: #9e3d2e;
+  margin: 0.35rem 0;
+}
+.equipment-grid th:first-child,
+.equipment-grid td:first-child {
+  width: 2.5rem;
+  text-align: center;
+}
+.equipment-grid input[type="checkbox"] {
+  accent-color: var(--shop-accent, #a74b26);
+  block-size: 1rem;
+  inline-size: 1rem;
+}
+
