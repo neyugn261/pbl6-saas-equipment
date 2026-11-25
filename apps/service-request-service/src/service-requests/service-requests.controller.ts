@@ -46,6 +46,25 @@ export class ServiceRequestsController {
     return this.requests.list(principal, query);
   }
 
+  @Get('summary')
+  @RequirePermissions('service_request:read')
+  summary(
+    @CurrentUser() principal: Principal,
+    @Query() query: ListServiceRequestsDto,
+  ) {
+    return this.requests.summary(principal, query);
+  }
+
+  @Get('customer-report')
+  @AllowUserTypes('CUSTOMER')
+  @RequirePermissions('service_request:read')
+  customerReport(
+    @CurrentUser() principal: Principal,
+    @Query() query: ListServiceRequestsDto,
+  ) {
+    return this.requests.customerReport(principal, query);
+  }
+
   @Post()
   @RequirePermissions('service_request:create')
   create(

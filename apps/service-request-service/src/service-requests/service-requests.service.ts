@@ -217,19 +217,31 @@ export class ServiceRequestsService {
     @Inject(ASSET_CLIENT) private readonly assets: AssetClient,
   ) {}
 
-  async list(
+  private requestWhere(
     principal: Principal,
     query: ListServiceRequestsDto,
-  ): Promise<Page<ReturnType<typeof publicRequest> & { followUp: ReturnType<typeof followUp> }>> {
+  ): Prisma.ServiceRequestWhereInput {
     const scope = branchDataScope(principal);
-    if (query.unallocated === 'true' &&
-        (principal.userType !== 'TENANT_STAFF' || !principal.roles.includes('TENANT_ADMIN'))) {
-      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only Tenant Admin can read the unallocated queue' });
+    if (
+      query.unallocated === 'true' &&
+      (principal.userType !== 'TENANT_STAFF' ||
+        !principal.roles.includes('TENANT_ADMIN'))
+    ) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Only Tenant Admin can read the unallocated queue',
+      });
     }
     if (query.followUp && principal.userType !== 'TENANT_STAFF') {
-      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Follow-up queue is staff only' });
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Follow-up queue is staff only',
+      });
     }
-    const statuses = query.status?.split(',').map((status) => status.trim());
+
+    const statuses = query.status
+      ?.split(',')
+      .map((status) => status.trim());
     if (
       statuses?.some(
         (status) => !REQUEST_STATUSES.includes(status as RequestStatus),
@@ -240,9 +252,39 @@ export class ServiceRequestsService {
         message: 'One or more request statuses are invalid',
       });
     }
+    if (query.equipmentId && query.equipmentIds) {
+      throw new BadRequestException({
+        code: 'INVALID_EQUIPMENT_FILTER',
+        message: 'Use equipmentId or equipmentIds, not both',
+      });
+    }
+    const equipmentIds = query.equipmentIds
+      ?.split(',')
+      .map((id) => id.trim());
+    if (equipmentIds?.some((id) => !isUUID(id))) {
+      throw new BadRequestException({
+        code: 'INVALID_EQUIPMENT_FILTER',
+        message: 'One or more equipment IDs are invalid',
+      });
+    }
+
+    const createdFrom = query.createdFrom
+      ? new Date(query.createdFrom)
+      : undefined;
+    const createdTo = query.createdTo ? new Date(query.createdTo) : undefined;
+    if (
+      (createdFrom && !Number.isFinite(createdFrom.getTime())) ||
+      (createdTo && !Number.isFinite(createdTo.getTime())) ||
+      (createdFrom && createdTo && createdFrom > createdTo)
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_DATE_FILTER',
+        message: 'createdFrom must be earlier than or equal to createdTo',
+      });
+    }
 
     if (query.branchId) assertBranchAccess(principal, query.branchId);
-    const where: Prisma.ServiceRequestWhereInput = {
+    return {
       ...branchWhere(principal),
       ...(principal.userType === 'TENANT_STAFF' && query.branchId
         ? { branchId: query.branchId }
@@ -256,13 +298,37 @@ export class ServiceRequestsService {
       ...(scope.customerId === null && query.customerId
         ? { customerId: query.customerId }
         : {}),
-      ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
+      ...(equipmentIds?.length
+        ? { equipmentId: { in: equipmentIds } }
+        : query.equipmentId
+          ? { equipmentId: query.equipmentId }
+          : {}),
       ...(query.priority ? { priority: query.priority } : {}),
       ...(statuses?.length ? { status: { in: statuses } } : {}),
-      ...(query.followUp ? {
-        AND: [{ resolutionResult: query.followUp, activeWorkOrderId: null,
-          status: { in: query.followUp === 'UNRESOLVED' ? ['ACCEPTED', 'REVIEWING'] : ['RESOLVED'] } }],
-      } : {}),
+      ...(createdFrom || createdTo
+        ? {
+            createdAt: {
+              ...(createdFrom ? { gte: createdFrom } : {}),
+              ...(createdTo ? { lte: createdTo } : {}),
+            },
+          }
+        : {}),
+      ...(query.followUp
+        ? {
+            AND: [
+              {
+                resolutionResult: query.followUp,
+                activeWorkOrderId: null,
+                status: {
+                  in:
+                    query.followUp === 'UNRESOLVED'
+                      ? ['ACCEPTED', 'REVIEWING']
+                      : ['RESOLVED'],
+                },
+              },
+            ],
+          }
+        : {}),
       ...(query.q
         ? {
             OR: [
@@ -277,6 +343,13 @@ export class ServiceRequestsService {
           }
         : {}),
     };
+  }
+
+  async list(
+    principal: Principal,
+    query: ListServiceRequestsDto,
+  ): Promise<Page<ReturnType<typeof publicRequest> & { followUp: ReturnType<typeof followUp> }>> {
+    const where = this.requestWhere(principal, query);
 
     const skip = (query.page - 1) * query.pageSize;
     let requests: ServiceRequest[];
@@ -305,7 +378,7 @@ export class ServiceRequestsService {
             where: { ...where, priority },
             skip: remainingSkip,
             take: query.pageSize - requests.length,
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           })),
         );
         remainingSkip = 0;
@@ -332,6 +405,63 @@ export class ServiceRequestsService {
     };
   }
 
+  async summary(principal: Principal, query: ListServiceRequestsDto) {
+    const where = this.requestWhere(principal, query);
+    const groups = await this.prisma.serviceRequest.groupBy({
+      by: ['status'],
+      where,
+      _count: { _all: true },
+    });
+    const byStatus = Object.fromEntries(
+      REQUEST_STATUSES.map((status) => [status, 0]),
+    ) as Record<RequestStatus, number>;
+    for (const group of groups) {
+      if (REQUEST_STATUSES.includes(group.status as RequestStatus)) {
+        byStatus[group.status as RequestStatus] = group._count._all;
+      }
+    }
+    return {
+      total: Object.values(byStatus).reduce((total, count) => total + count, 0),
+      byStatus,
+    };
+  }
+
+  async customerReport(principal: Principal, query: ListServiceRequestsDto) {
+    if (principal.userType !== 'CUSTOMER') {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Customer reports are available only to customer accounts',
+      });
+    }
+    const [page, summary] = await Promise.all([
+      this.list(principal, query),
+      this.summary(principal, query),
+    ]);
+    return {
+      page: page.page,
+      pageSize: page.pageSize,
+      total: page.total,
+      summary,
+      items: page.items.map((request) => ({
+        id: request.id,
+        requestNo: request.requestNo,
+        equipmentId: request.equipmentId,
+        type: request.type,
+        priority: request.priority,
+        title: request.title,
+        status: request.status,
+        resolutionResult: request.resolutionResult,
+        resolutionSummary: request.resolutionSummary,
+        resolvedWorkOrderNo: request.resolvedWorkOrderNo,
+        resolutionCompletedAt: request.resolutionCompletedAt,
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt,
+        resolvedAt: request.resolvedAt,
+        closedAt: request.closedAt,
+      })),
+    };
+  }
+
   private async followUps(principal: Principal, requests: ServiceRequest[]) {
     const candidates = principal.userType === 'TENANT_STAFF' ? requests.filter(needsFollowUp) : [];
     const rows = candidates.length ? await this.prisma.workOrderLifecycle.findMany({
@@ -345,6 +475,15 @@ export class ServiceRequestsService {
   }
 
   async create(principal: Principal, input: CreateServiceRequestDto) {
+    if (
+      principal.userType === 'TENANT_STAFF' &&
+      principal.roles.includes('SERVICE_MANAGER')
+    ) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Service Managers cannot create service requests',
+      });
+    }
     const scope = branchDataScope(principal);
     const isCustomer = principal.userType === 'CUSTOMER';
     const equipment = await this.assets.getEquipment(
@@ -1852,11 +1991,11 @@ export class ServiceRequestsService {
           priority: sort === 'priority' ? ('asc' as const) : ('desc' as const),
         },
         { createdAt: 'desc' as const },
+        { id: 'desc' as const },
       ];
     }
-    return {
-      createdAt: sort === 'createdAt' ? ('asc' as const) : ('desc' as const),
-    };
+    const direction = sort === 'createdAt' ? ('asc' as const) : ('desc' as const);
+    return [{ createdAt: direction }, { id: direction }];
   }
 
   private validateWarrantyStatus(

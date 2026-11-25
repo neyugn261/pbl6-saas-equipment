@@ -9,6 +9,7 @@ import { CustomersModule } from './customers/customers.module';
 import { EventsModule } from './events/events.module';
 import { IdentityModule } from './identity/identity.module';
 import { InternalModule } from './internal/internal.module';
+import { BatchLookupsModule } from './lookups/batch-lookups.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
@@ -41,6 +42,7 @@ import { TenantsModule } from './tenants/tenants.module';
     SitesModule,
     MembershipsModule,
     InternalModule,
+    BatchLookupsModule,
   ],
 })
 export class AppModule {}

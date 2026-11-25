@@ -28,6 +28,18 @@ describe('AccessTokenVerifier', () => {
     expect(principal.customerId).toBe(CUSTOMER);
   });
 
+  it('derives current permissions for old Service Manager access tokens', () => {
+    const principal = verifier.verify(
+      sign({ roles: ['SERVICE_MANAGER'] }),
+    );
+
+    expect(principal.permissions.has('service_request:create')).toBe(false);
+    expect(principal.permissions.has('service_request:read')).toBe(true);
+    expect(principal.permissions.has('service_request:review')).toBe(true);
+    expect(principal.permissions.has('work_order:manage')).toBe(true);
+    expect(principal.permissions.has('work_order:assign')).toBe(true);
+  });
+
   it('treats a missing customer_id claim (older tokens) as null', () => {
     const principal = verifier.verify(sign({ customer_id: undefined }));
     expect(principal.customerId).toBeNull();

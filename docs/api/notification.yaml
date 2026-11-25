@@ -59,6 +59,20 @@ paths:
         - name: createdTo
           in: query
           schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          description: Literal case-insensitive search in title, rendered body, or event type.
+          schema: { type: string, maxLength: 100 }
+        - name: eventType
+          in: query
+          description: Case-insensitive event-type substring.
+          schema: { type: string, maxLength: 50 }
+        - name: resourceType
+          in: query
+          description: Filter by the allowlisted linked resource kind. The link does not grant access to that resource.
+          schema:
+            type: string
+            enum: [EQUIPMENT_HANDOVER, SERVICE_REQUEST, WORK_ORDER, EQUIPMENT, STOCK]
       responses:
         "200":
           description: Page of the authenticated user's notifications

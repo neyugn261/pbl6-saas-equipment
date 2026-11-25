@@ -13,7 +13,9 @@ info:
     Request remains AWAITING_CUSTOMER_APPROVAL pending a replacement workflow
     decision. An expired estimate cannot be approved.
     CUSTOMER accounts only see requests of their own customer (ADR 0003) and
-    only `CUSTOMER` comments. Creating a request validates the equipment but
+    only `CUSTOMER` comments. Only CUSTOMER_ADMIN and CUSTOMER_USER create new
+    Service Requests; SERVICE_MANAGER is explicitly denied creation but keeps
+    its existing read, review, estimate, and Work Order permissions. Creating a request validates the equipment but
     does not snapshot its warranty; `review` starts review and records the
     warranty snapshot atomically. Customer-visible resolution summaries are
     populated from `WorkOrderCompleted.v2`.
@@ -91,6 +93,16 @@ paths:
         - name: equipmentId
           in: query
           schema: { type: string, format: uuid }
+        - name: equipmentIds
+          in: query
+          description: Comma-separated equipment UUIDs; mutually exclusive with equipmentId.
+          schema: { type: string, maxLength: 10000 }
+        - name: createdFrom
+          in: query
+          schema: { type: string, format: date-time }
+        - name: createdTo
+          in: query
+          schema: { type: string, format: date-time }
         - name: priority
           in: query
           schema: { $ref: "#/components/schemas/Priority" }
@@ -118,18 +130,72 @@ paths:
                           items:
                             { $ref: "#/components/schemas/ServiceRequest" },
                         }
+  /service-requests/summary:
+    get:
+      tags: [Requests]
+      summary: Summarize requests using the list filters and authorization scope
+      x-permissions: [service_request:read]
+      parameters:
+        - { name: customerId, in: query, description: Ignored for CUSTOMER accounts, schema: { type: string, format: uuid } }
+        - { name: equipmentId, in: query, schema: { type: string, format: uuid } }
+        - { name: equipmentIds, in: query, description: Comma-separated equipment UUIDs, schema: { type: string, maxLength: 10000 } }
+        - { name: createdFrom, in: query, schema: { type: string, format: date-time } }
+        - { name: createdTo, in: query, schema: { type: string, format: date-time } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: priority, in: query, schema: { $ref: "#/components/schemas/Priority" } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+      responses:
+        "200":
+          description: Total and counts by request status over all matching rows
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /service-requests/customer-report:
+    get:
+      tags: [Requests]
+      summary: Customer-safe report of the authenticated customer's requests
+      description: |
+        CUSTOMER_ADMIN and CUSTOMER_USER only. Customer scope comes from the
+        verified principal; customerId query parameters are ignored. This
+        projection contains no internal comments, estimates, technician KPIs,
+        or cross-customer data. Dates and equipment filters match the list and
+        summary predicates. Site filtering is not available until an
+        authorized batch Asset projection is integrated.
+      x-permissions: [service_request:read]
+      x-user-types: [CUSTOMER]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - { name: equipmentId, in: query, schema: { type: string, format: uuid } }
+        - { name: equipmentIds, in: query, description: Comma-separated equipment UUIDs, schema: { type: string, maxLength: 10000 } }
+        - { name: createdFrom, in: query, schema: { type: string, format: date-time } }
+        - { name: createdTo, in: query, schema: { type: string, format: date-time } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+      responses:
+        "200":
+          description: Page and status summary of customer-visible requests
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerRequestReport" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/BadRequest" }
     post:
       tags: [Requests]
       summary: Create a service request
       description: |
-        CUSTOMER accounts create for their own customer (`customerId` omitted,
-        taken from the token) and their own equipment. Staff may omit
-        `customerId`; in that case it is taken from the equipment reference.
+        CUSTOMER_ADMIN and CUSTOMER_USER create for their own customer
+        (`customerId` omitted and taken from the token) and their own equipment.
+        SERVICE_MANAGER receives 403 FORBIDDEN, including from old access tokens;
+        the role retains its separate request-processing and Work Order actions.
         Equipment is validated through Asset (`GET /internal/equipment/{id}`
         with the caller's token). Warranty is checked and snapshotted when a
         staff member reviews the request. Writes `ServiceRequestCreated` and
         initial `ServiceRequestStatusChanged`.
       x-permissions: [service_request:create]
+      x-user-types: [CUSTOMER]
       x-events: [ServiceRequestCreated.v1, ServiceRequestStatusChanged.v1]
       requestBody:
         required: true
@@ -147,6 +213,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "503":
           description: Asset Service is unavailable
           content:
@@ -643,6 +710,56 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
+    RequestSummary:
+      type: object
+      required: [total, byStatus]
+      properties:
+        total: { type: integer, minimum: 0 }
+        byStatus:
+          type: object
+          required: [NEW, REVIEWING, AWAITING_INFO, AWAITING_CUSTOMER_APPROVAL, ACCEPTED, PROCESSING, RESOLVED, CLOSED, REJECTED, CANCELLED, COST_REJECTED]
+          properties:
+            NEW: { type: integer, minimum: 0 }
+            REVIEWING: { type: integer, minimum: 0 }
+            AWAITING_INFO: { type: integer, minimum: 0 }
+            AWAITING_CUSTOMER_APPROVAL: { type: integer, minimum: 0 }
+            ACCEPTED: { type: integer, minimum: 0 }
+            PROCESSING: { type: integer, minimum: 0 }
+            RESOLVED: { type: integer, minimum: 0 }
+            CLOSED: { type: integer, minimum: 0 }
+            REJECTED: { type: integer, minimum: 0 }
+            CANCELLED: { type: integer, minimum: 0 }
+            COST_REJECTED: { type: integer, minimum: 0 }
+    CustomerReportRequest:
+      type: object
+      required: [id, requestNo, equipmentId, type, priority, title, status, resolutionResult, resolutionSummary, resolvedWorkOrderNo, resolutionCompletedAt, createdAt, updatedAt, resolvedAt, closedAt]
+      properties:
+        id: { type: string, format: uuid }
+        requestNo: { type: string }
+        equipmentId: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/Type" }
+        priority: { $ref: "#/components/schemas/Priority" }
+        title: { type: string }
+        status: { $ref: "#/components/schemas/Status" }
+        resolutionResult: { type: [string, "null"], enum: [RESOLVED, PARTIALLY_RESOLVED, UNRESOLVED, null] }
+        resolutionSummary: { type: [string, "null"], maxLength: 2000, description: Published customer-safe resolution only }
+        resolvedWorkOrderNo: { type: [string, "null"] }
+        resolutionCompletedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, "null"], format: date-time }
+        closedAt: { type: [string, "null"], format: date-time }
+    CustomerRequestReport:
+      type: object
+      required: [page, pageSize, total, summary, items]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer, minimum: 0 }
+        summary: { $ref: "#/components/schemas/RequestSummary" }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CustomerReportRequest" }
     PublishedAttachment:
       type: object
       required: [id, fileName, mimeType, sizeBytes, createdAt]

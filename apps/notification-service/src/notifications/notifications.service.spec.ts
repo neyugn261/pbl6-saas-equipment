@@ -171,6 +171,67 @@ describe('NotificationsService', () => {
     expect(db.notification.findMany.mock.calls[0][0].skip).toBe(10);
   });
 
+  it('combines search, source type, read state, dates, and resource filters inside the recipient scope', async () => {
+    const { db, service } = setup();
+    const query = {
+      page: 1,
+      pageSize: 20,
+      readStatus: NotificationReadStatus.UNREAD,
+      createdFrom: '2026-11-01T00:00:00.000Z',
+      createdTo: '2026-11-03T00:00:00.000Z',
+      q: 'pump_100%',
+      eventType: 'ServiceRequest',
+      resourceType: 'SERVICE_REQUEST' as const,
+    };
+
+    await service.list(principal(), query);
+
+    expect(db.notification.findMany.mock.calls[0][0].where).toEqual({
+      tenantId: TENANT,
+      userId: USER,
+      channel: 'IN_APP',
+      customerId: null,
+      OR: [
+        { branchId: USER },
+        { type: { startsWith: 'EquipmentHandoverChanged.' } },
+      ],
+      readAt: null,
+      createdAt: {
+        gte: new Date(query.createdFrom),
+        lte: new Date(query.createdTo),
+      },
+      type: { contains: 'ServiceRequest', mode: 'insensitive' },
+      payload: {
+        path: ['resourceType'],
+        equals: 'SERVICE_REQUEST',
+      },
+      AND: [
+        {
+          OR: [
+            {
+              title: {
+                contains: 'pump\\_100\\%',
+                mode: 'insensitive',
+              },
+            },
+            {
+              content: {
+                contains: 'pump\\_100\\%',
+                mode: 'insensitive',
+              },
+            },
+            {
+              type: {
+                contains: 'pump\\_100\\%',
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it('requires an active customer membership matching the verified principal', async () => {
     const { db, service } = setup();
     db.recipientSnapshot.findUnique.mockResolvedValue(

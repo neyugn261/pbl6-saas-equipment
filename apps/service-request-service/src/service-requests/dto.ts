@@ -94,6 +94,19 @@ export class ListServiceRequestsDto extends PaginationQueryDto {
   equipmentId?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  equipmentIds?: string;
+
+  @IsOptional()
+  @IsDateString()
+  createdFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  createdTo?: string;
+
+  @IsOptional()
   @IsIn(PRIORITIES)
   priority?: RequestPriority;
 

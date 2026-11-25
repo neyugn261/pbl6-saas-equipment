@@ -131,7 +131,6 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     'equipment:manage',
     'warranty:manage',
     'qr:manage',
-    'service_request:create',
     'service_request:read',
     'service_request:review',
     'service_request:comment_internal',

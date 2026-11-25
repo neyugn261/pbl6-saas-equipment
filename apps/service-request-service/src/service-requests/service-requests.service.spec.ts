@@ -20,7 +20,7 @@ function principal(
     sessionId: '00000000-0000-4000-8000-000000000401',
     tenantId: TENANT_ID,
     userType,
-    roles: [],
+    roles: userType === 'CUSTOMER' ? ['CUSTOMER_USER'] : ['SERVICE_MANAGER'],
     permissions: new Set(['service_request:create', 'service_request:review']),
     customerId: userType === 'CUSTOMER' ? CUSTOMER_ID : null,
     accessToken: 'test-token',
@@ -71,7 +71,55 @@ function serviceRequest(
   };
 }
 
+function publicReportFixture() {
+  return {
+    id: REQUEST_ID,
+    requestNo: 'SR-2026-0001',
+    branchId: USER_ID,
+    customerId: CUSTOMER_ID,
+    equipmentId: EQUIPMENT_ID,
+    requesterId: USER_ID,
+    type: 'REPAIR' as const,
+    priority: 'NORMAL' as const,
+    title: 'Equipment stopped',
+    description: 'The equipment no longer starts.',
+    status: 'RESOLVED' as const,
+    resolutionResult: 'RESOLVED' as const,
+    resolutionChecklist: null,
+    resolutionSummary: 'Replaced the failed component.',
+    resolvedWorkOrderNo: 'WO-2026-0001',
+    resolutionCompletedAt: new Date('2026-11-01T00:00:00.000Z'),
+    createdAt: new Date('2026-10-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-11-01T00:00:00.000Z'),
+    resolvedAt: new Date('2026-11-01T00:00:00.000Z'),
+    closedAt: null,
+  };
+}
+
 describe('ServiceRequestsService', () => {
+  it('rejects Service Manager request creation even if a stale permission is present', async () => {
+    const assets = new FakeAssetClient();
+    const getEquipment = jest.spyOn(assets, 'getEquipment');
+    const service = new ServiceRequestsService(
+      {} as PrismaService,
+      assets,
+    );
+
+    await expect(
+      service.create(principal(), {
+        equipmentId: EQUIPMENT_ID,
+        type: 'REPAIR',
+        title: 'Equipment stopped',
+        description: 'The equipment no longer starts.',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'FORBIDDEN',
+      },
+    });
+    expect(getEquipment).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid transitions without writing history or events', async () => {
     const row = serviceRequest({ status: 'CLOSED' });
     const tx = {
@@ -97,6 +145,120 @@ describe('ServiceRequestsService', () => {
     expect(tx.serviceRequest.update).not.toHaveBeenCalled();
     expect(tx.requestStatusHistory.create).not.toHaveBeenCalled();
     expect(tx.$executeRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it('uses the same authenticated-customer filter for request list and summary', async () => {
+    const row = serviceRequest();
+    const prisma = {
+      serviceRequest: {
+        findMany: jest.fn().mockResolvedValue([row]),
+        count: jest.fn().mockResolvedValue(1),
+        groupBy: jest.fn().mockResolvedValue([
+          { status: 'NEW', _count: { _all: 1 } },
+        ]),
+      },
+    } as unknown as PrismaService;
+    const service = new ServiceRequestsService(prisma, new FakeAssetClient());
+    const query = {
+      page: 1,
+      pageSize: 20,
+      customerId: '00000000-0000-4000-8000-000000000999',
+      equipmentIds: EQUIPMENT_ID,
+      createdFrom: '2026-01-01T00:00:00.000Z',
+      createdTo: '2026-12-31T23:59:59.999Z',
+      status: 'NEW,RESOLVED',
+      sort: '-createdAt' as const,
+    };
+
+    await service.list(principal('CUSTOMER'), query);
+    const listedWhere = (
+      prisma.serviceRequest.findMany as jest.Mock
+    ).mock.calls[0][0].where;
+    const result = await service.summary(principal('CUSTOMER'), query);
+    const summaryWhere = (
+      prisma.serviceRequest.groupBy as jest.Mock
+    ).mock.calls[0][0].where;
+
+    expect(listedWhere).toEqual(summaryWhere);
+    expect(summaryWhere).toMatchObject({
+      tenantId: TENANT_ID,
+      customerId: CUSTOMER_ID,
+      equipmentId: { in: [EQUIPMENT_ID] },
+      status: { in: ['NEW', 'RESOLVED'] },
+      createdAt: {
+        gte: new Date(query.createdFrom),
+        lte: new Date(query.createdTo),
+      },
+    });
+    expect(result).toEqual({
+      total: 1,
+      byStatus: {
+        NEW: 1,
+        REVIEWING: 0,
+        AWAITING_INFO: 0,
+        AWAITING_CUSTOMER_APPROVAL: 0,
+        ACCEPTED: 0,
+        PROCESSING: 0,
+        RESOLVED: 0,
+        CLOSED: 0,
+        REJECTED: 0,
+        CANCELLED: 0,
+        COST_REJECTED: 0,
+      },
+    });
+  });
+
+  it('returns a customer-safe report projection and rejects tenant-staff access', async () => {
+    const service = new ServiceRequestsService(
+      {} as PrismaService,
+      new FakeAssetClient(),
+    );
+    jest.spyOn(service, 'list').mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      items: [
+        {
+          ...publicReportFixture(),
+          followUp: null,
+        },
+      ],
+    });
+    jest.spyOn(service, 'summary').mockResolvedValue({
+      total: 1,
+      byStatus: {
+        NEW: 1,
+        REVIEWING: 0,
+        AWAITING_INFO: 0,
+        AWAITING_CUSTOMER_APPROVAL: 0,
+        ACCEPTED: 0,
+        PROCESSING: 0,
+        RESOLVED: 0,
+        CLOSED: 0,
+        REJECTED: 0,
+        CANCELLED: 0,
+        COST_REJECTED: 0,
+      },
+    });
+
+    const result = await service.customerReport(principal('CUSTOMER'), {
+      page: 1,
+      pageSize: 20,
+      sort: '-createdAt',
+    });
+
+    expect(result.items[0]).toHaveProperty('resolutionSummary');
+    expect(result.items[0]).not.toHaveProperty('customerId');
+    expect(result.items[0]).not.toHaveProperty('followUp');
+    await expect(
+      service.customerReport(principal('TENANT_STAFF'), {
+        page: 1,
+        pageSize: 20,
+        sort: '-createdAt',
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'FORBIDDEN' },
+    });
   });
 
   it('hides another customer request as not found', async () => {
@@ -136,7 +298,7 @@ describe('ServiceRequestsService', () => {
     });
   });
 
-  it('derives the staff customer from equipment and defers warranty snapshot until review', async () => {
+  it('derives the customer from the principal and defers warranty snapshot until review', async () => {
     const row = serviceRequest({ requestNo: 'SR-2026-0007' });
     const tx = {
       $queryRawUnsafe: jest.fn().mockResolvedValue([{ last_value: 7n }]),
@@ -173,8 +335,9 @@ describe('ServiceRequestsService', () => {
     const service = new ServiceRequestsService(prisma, assets);
     const warrantyLookup = jest.spyOn(assets, 'getWarrantyStatus');
 
-    const result = await service.create(principal(), {
+    const result = await service.create(principal('CUSTOMER'), {
       equipmentId: EQUIPMENT_ID,
+      customerId: '00000000-0000-4000-8000-000000000999',
       type: 'REPAIR',
       title: 'Equipment stopped',
       description: 'The equipment no longer starts.',

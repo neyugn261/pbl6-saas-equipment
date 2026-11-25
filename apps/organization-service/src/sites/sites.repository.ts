@@ -19,6 +19,100 @@ export type LocationWithCustomer = Location & {
 export class SitesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  lookupByCodes(
+    tenantId: string,
+    references: Array<{ customerId: string; code: string }>,
+  ) {
+    return this.prisma.customerSite.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        customer: { deletedAt: null },
+        OR: references.map(({ customerId, code }) => ({ customerId, code })),
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        customerId: true,
+        code: true,
+        name: true,
+        address: true,
+        status: true,
+        defaultServicingBranchId: true,
+        customer: {
+          select: { code: true, name: true, address: true },
+        },
+        defaultServicingBranch: {
+          select: { id: true, code: true, name: true, status: true },
+        },
+      },
+      orderBy: [{ customerId: 'asc' }, { code: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  lookupLocations(
+    tenantId: string,
+    references: Array<{ customerSiteId: string; code: string }>,
+  ) {
+    return this.prisma.location.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        customerSite: { deletedAt: null, customer: { deletedAt: null } },
+        OR: references.map(({ customerSiteId, code }) => ({
+          customerSiteId,
+          code,
+        })),
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        customerSiteId: true,
+        parentId: true,
+        code: true,
+        name: true,
+        type: true,
+        status: true,
+        customerSite: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            address: true,
+            defaultServicingBranchId: true,
+            customerId: true,
+            customer: {
+              select: { code: true, address: true },
+            },
+          },
+        },
+      },
+      orderBy: [{ customerSiteId: 'asc' }, { code: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  locationPathRows(
+    tenantId: string,
+    siteIds: string[],
+    ids: string[],
+  ) {
+    return this.prisma.location.findMany({
+      where: {
+        tenantId,
+        customerSiteId: { in: siteIds },
+        id: { in: ids },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        customerSiteId: true,
+      },
+    });
+  }
+
   displayNames(scope: { tenantId: string; customerId: string | null }, ids: string[],
   ) {
     return this.prisma.customerSite.findMany({

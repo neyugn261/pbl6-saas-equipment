@@ -78,8 +78,16 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
       .agent(app.getHttpServer())
       .set('authorization', authorization('SERVICE_MANAGER', tenantId));
 
+  const customerActor = (tenantId = tenantA, customerId = customerA) =>
+    request
+      .agent(app.getHttpServer())
+      .set(
+        'authorization',
+        authorization('CUSTOMER_USER', tenantId, customerId),
+      );
+
   const createRequest = (title: string) =>
-    staff().post('/service-requests').send({
+    customerActor().post('/service-requests').send({
       equipmentId,
       type: 'REPAIR',
       title,
@@ -90,6 +98,20 @@ describe('Service Requests (e2e, service_request_test_db)', () => {
     await staff().post(`/service-requests/${requestId}/review`).expect(200);
     await staff().post(`/service-requests/${requestId}/accept`).expect(200);
   };
+  it('allows customer request creation and denies it to Service Managers', async () => {
+    const body = {
+      equipmentId,
+      type: 'REPAIR',
+      title: 'Customer request',
+      description: 'Created by the customer account.',
+    };
+
+    await staff().post('/service-requests').send(body).expect(403);
+    const created = await customerActor().post('/service-requests').send(body).expect(201);
+    expect(created.body.customerId).toBe(customerA);
+    expect(created.body.requesterId).not.toBeUndefined();
+  });
+
   it('enforces queue scope over JWT/HTTP and counts only current unresolved rows', async () => {
     const row = await prisma.serviceRequest.create({ data: {
       tenantId: tenantA, branchId: FIXTURE_BRANCH, customerId: customerA, equipmentId,

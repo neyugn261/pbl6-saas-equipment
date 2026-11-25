@@ -54,6 +54,22 @@ describe('RBAC catalog', () => {
     expect(ROLE_PERMISSIONS.CUSTOMER_USER).toContain('customer:read');
   });
 
+  it('lets customers create requests but not Service Managers', () => {
+    expect(ROLE_PERMISSIONS.SERVICE_MANAGER).not.toContain(
+      'service_request:create',
+    );
+    expect(ROLE_PERMISSIONS.CUSTOMER_ADMIN).toContain(
+      'service_request:create',
+    );
+    expect(ROLE_PERMISSIONS.CUSTOMER_USER).toContain(
+      'service_request:create',
+    );
+    expect(ROLE_PERMISSIONS.SERVICE_MANAGER).toContain('service_request:read');
+    expect(ROLE_PERMISSIONS.SERVICE_MANAGER).toContain('service_request:review');
+    expect(ROLE_PERMISSIONS.SERVICE_MANAGER).toContain('work_order:manage');
+    expect(ROLE_PERMISSIONS.SERVICE_MANAGER).toContain('work_order:assign');
+  });
+
   it('only lets the Platform Admin grant TENANT_ADMIN', () => {
     for (const role of ROLE_CODES) {
       expect(canAssignRole([role], 'TENANT_ADMIN')).toBe(role === 'PLATFORM_ADMIN');

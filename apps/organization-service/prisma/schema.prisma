@@ -143,6 +143,7 @@ model CustomerContact {
   tenantId       String        @map("tenant_id") @db.Uuid
   customerId     String        @map("customer_id") @db.Uuid
   customerSiteId String?       @map("customer_site_id") @db.Uuid
+  code           String?       @db.VarChar(50)
   name           String        @db.VarChar(150)
   email          String?       @db.VarChar(255)
   phone          String?       @db.VarChar(30)

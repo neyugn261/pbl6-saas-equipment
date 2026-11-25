@@ -352,6 +352,8 @@ CREATE TABLE customer_contacts (
     tenant_id UUID NOT NULL,
     customer_id UUID NOT NULL,
     customer_site_id UUID NULL,
+    -- Nullable additive business key; see ADR 0025.
+    code VARCHAR(50),
     name VARCHAR(150) NOT NULL,
     email VARCHAR(255),
     phone VARCHAR(30),
@@ -368,6 +370,9 @@ CREATE TABLE customer_contacts (
 CREATE INDEX idx_customer_contacts_customer ON customer_contacts (tenant_id, customer_id);
 CREATE INDEX idx_customer_contacts_site ON customer_contacts (customer_site_id)
     WHERE customer_site_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_customer_contacts_live_code
+    ON customer_contacts (tenant_id, customer_id, code)
+    WHERE code IS NOT NULL AND deleted_at IS NULL;
 -- At most one live primary contact per customer.
 CREATE UNIQUE INDEX uq_customer_contacts_primary
     ON customer_contacts (customer_id) WHERE is_primary AND deleted_at IS NULL;

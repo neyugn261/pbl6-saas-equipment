@@ -766,6 +766,33 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/OrganizationDisplayName' } }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /lookups/batch:
+    post:
+      tags: [Customers]
+      summary: Resolve Organization business codes for an import batch
+      description: |
+        Resolves customer, site, location and contact codes in one request.
+        Results are restricted to the verified tenant and, for CUSTOMER
+        principals, their customer. Unknown or out-of-scope codes are omitted;
+        a caller can distinguish missing references from multiple matches.
+        There is no 50-row business limit. Callers should batch according to
+        measured transport and memory limits. The route is available through
+        the Gateway and never accepts tenantId or customerId as scope parameters.
+      x-permissions: [customer:read]
+      x-user-types: [TENANT_STAFF, CUSTOMER]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchBusinessCodeLookup' }
+      responses:
+        '200':
+          description: Matching business records only
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchBusinessCodeLookupResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /internal/display-names/sites:
     get:
       tags: [Internal]
@@ -1111,6 +1138,7 @@ components:
         id: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
         customerSiteId: { type: [string, 'null'], format: uuid }
+        code: { type: [string, 'null'], maxLength: 50 }
         name: { type: string }
         email: { type: [string, 'null'] }
         phone: { type: [string, 'null'] }
@@ -1120,12 +1148,107 @@ components:
       type: object
       additionalProperties: false
       properties:
+        code: { type: [string, 'null'], maxLength: 50 }
         customerSiteId: { type: [string, 'null'], format: uuid }
         name: { type: string, maxLength: 150 }
         email: { type: [string, 'null'], format: email }
         phone: { type: [string, 'null'], maxLength: 30 }
         position: { type: [string, 'null'], maxLength: 100 }
         isPrimary: { type: boolean }
+    BatchBusinessCodeLookup:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        customerCodes:
+          type: array
+          minItems: 1
+          items: { type: string, minLength: 1, maxLength: 50 }
+        sites:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [customerCode, code]
+            properties:
+              customerCode: { type: string, minLength: 1, maxLength: 50 }
+              code: { type: string, minLength: 1, maxLength: 50 }
+        locations:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [customerCode, code, locationCode]
+            properties:
+              customerCode: { type: string, minLength: 1, maxLength: 50 }
+              code: { type: string, minLength: 1, maxLength: 50, description: Customer Site code }
+              locationCode: { type: string, minLength: 1, maxLength: 50 }
+        contacts:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [customerCode, code]
+            properties:
+              customerCode: { type: string, minLength: 1, maxLength: 50 }
+              code: { type: string, minLength: 1, maxLength: 50 }
+    BatchBusinessCodeLookupResult:
+      type: object
+      required: [customers, sites, locations, contacts]
+      properties:
+        customers:
+          type: array
+          items:
+            type: object
+            required: [id, code, name, status]
+            properties:
+              id: { type: string, format: uuid }
+              code: { type: string }
+              name: { type: string }
+              address: { type: [string, 'null'] }
+              status: { $ref: '#/components/schemas/ActiveStatus' }
+        sites:
+          type: array
+          items:
+            type: object
+            required: [id, customerId, customerCode, code, name, address, customerAddress]
+            properties:
+              id: { type: string, format: uuid }
+              customerId: { type: string, format: uuid }
+              customerCode: { type: string }
+              customerName: { type: string }
+              customerAddress: { type: [string, 'null'] }
+              code: { type: string }
+              name: { type: string }
+              address: { type: string }
+              status: { $ref: '#/components/schemas/ActiveStatus' }
+              defaultServicingBranchId: { type: [string, 'null'], format: uuid }
+              servicingBranch: { type: [object, 'null'] }
+        locations:
+          type: array
+          items:
+            type: object
+            required: [id, customerSiteId, customerCode, customerAddress, siteCode, siteAddress, locationPath]
+            properties:
+              id: { type: string, format: uuid }
+              customerSiteId: { type: string, format: uuid }
+              customerCode: { type: string }
+              customerAddress: { type: [string, 'null'] }
+              siteCode: { type: string }
+              siteAddress: { type: string }
+              defaultServicingBranchId: { type: [string, 'null'], format: uuid }
+              locationPath:
+                type: array
+                items:
+                  type: object
+                  required: [name]
+                  properties:
+                    code: { type: [string, 'null'] }
+                    name: { type: string }
+        contacts: { type: array, items: { $ref: '#/components/schemas/Contact' } }
     Membership:
       type: object
       required: [id, customerId, userId, status]

@@ -53,6 +53,58 @@ export class CustomersRepository {
     ]);
   }
 
+  lookupByCodes(
+    tenantId: string,
+    onlyId: string | null,
+    codes: string[],
+  ) {
+    return this.prisma.customer.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        code: { in: codes },
+        ...(onlyId ? { id: onlyId } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        address: true,
+        status: true,
+      },
+      orderBy: [{ code: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  lookupContacts(
+    tenantId: string,
+    onlyId: string | null,
+    references: Array<{ customerId: string; code: string }>,
+  ) {
+    return this.prisma.customerContact.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        code: { in: [...new Set(references.map((reference) => reference.code))] },
+        ...(onlyId ? { customerId: onlyId } : {}),
+        OR: references.map(({ customerId, code }) => ({ customerId, code })),
+        customer: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        code: true,
+        customerId: true,
+        customerSiteId: true,
+        name: true,
+        email: true,
+        phone: true,
+        position: true,
+        isPrimary: true,
+      },
+      orderBy: [{ customerId: 'asc' }, { code: 'asc' }, { id: 'asc' }],
+    });
+  }
+
   find(tenantId: string, id: string): Promise<Customer | null> {
     return this.prisma.customer.findFirst({ where: { id, tenantId, deletedAt: null },
     });

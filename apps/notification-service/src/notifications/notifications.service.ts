@@ -23,6 +23,10 @@ import {
 
 type NotificationScope = Prisma.NotificationWhereInput;
 
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -41,6 +45,50 @@ export class NotificationsService {
           ? { readAt: null }
           : {}),
       ...(dateFilter ? { createdAt: dateFilter } : {}),
+      ...(query.eventType
+        ? {
+            type: {
+              contains: escapeLike(query.eventType),
+              mode: 'insensitive',
+            },
+          }
+        : {}),
+      ...(query.resourceType
+        ? {
+            payload: {
+              path: ['resourceType'],
+              equals: query.resourceType,
+            },
+          }
+        : {}),
+      ...(query.q
+        ? {
+            AND: [
+              {
+                OR: [
+                  {
+                    title: {
+                      contains: escapeLike(query.q),
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    content: {
+                      contains: escapeLike(query.q),
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    type: {
+                      contains: escapeLike(query.q),
+                      mode: 'insensitive',
+                    },
+                  },
+                ],
+              },
+            ],
+          }
+        : {}),
     };
     const { skip, take } = toSkipTake(query);
     const [rows, total] = await this.prisma.$transaction([

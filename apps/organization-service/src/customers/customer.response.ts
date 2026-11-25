@@ -20,6 +20,7 @@ export interface ContactResponse {
   id: string;
   customerId: string;
   customerSiteId: string | null;
+  code: string | null;
   name: string;
   email: string | null;
   phone: string | null;
@@ -47,6 +48,7 @@ export function toContactResponse(contact: CustomerContact): ContactResponse {
     id: contact.id,
     customerId: contact.customerId,
     customerSiteId: contact.customerSiteId,
+    code: contact.code,
     name: contact.name,
     email: contact.email,
     phone: contact.phone,

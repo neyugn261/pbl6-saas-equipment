@@ -12,6 +12,12 @@ import { IfPresent, trim } from '../../common/validation';
 
 export class CreateContactDto {
   @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(50)
+  code?: string | null;
+
+  @IsOptional()
   @IsUUID()
   customerSiteId?: string | null;
 
@@ -45,6 +51,12 @@ export class CreateContactDto {
 }
 
 export class UpdateContactDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(50)
+  code?: string | null;
+
   @IsOptional()
   @IsUUID()
   customerSiteId?: string | null;

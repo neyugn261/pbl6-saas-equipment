@@ -154,6 +154,85 @@ describe('Sites, locations and internal lookups (e2e, organization_test_db)', ()
   });
 
   describe('internal lookups', () => {
+    it('batch-resolves business codes in customer scope with address and location-path context', async () => {
+      await manager()
+        .post(`/customers/${other}/sites`, {
+          code: 'S2',
+          name: 'Other plant',
+          address: 'Other site address',
+        })
+        .expect(201);
+      const floor = await location({
+        name: 'Floor 1',
+        type: 'FLOOR',
+        code: 'F1',
+      }).expect(201);
+      const room = await location({
+        name: 'Room 101',
+        type: 'ROOM',
+        code: 'R101',
+        parentId: floor.body.id,
+      }).expect(201);
+      const ownContact = await manager()
+        .post(`/customers/${own}/contacts`, {
+          code: 'CONTACT-1',
+          name: 'Own contact',
+          customerSiteId: site,
+        })
+        .expect(201);
+      await manager()
+        .post(`/customers/${other}/contacts`, {
+          code: 'CONTACT-2',
+          name: 'Other contact',
+        })
+        .expect(201);
+
+      const result = await customerUser()
+        .post('/lookups/batch')
+        .send({
+          customerCodes: ['C1', 'C2'],
+          sites: [
+            { customerCode: 'C1', code: 'S1' },
+            { customerCode: 'C2', code: 'S2' },
+          ],
+          locations: [
+            { customerCode: 'C1', code: 'S1', locationCode: 'R101' },
+            { customerCode: 'C2', code: 'S2', locationCode: 'UNKNOWN' },
+          ],
+          contacts: [
+            { customerCode: 'C1', code: 'CONTACT-1' },
+            { customerCode: 'C2', code: 'CONTACT-2' },
+          ],
+        })
+        .expect(200);
+
+      expect(result.body.customers.map((row: { code: string }) => row.code)).toEqual(['C1']);
+      expect(result.body.sites.map((row: { code: string }) => row.code)).toEqual(['S1']);
+      expect(result.body.locations).toEqual([
+        expect.objectContaining({
+          id: room.body.id,
+          siteAddress: '1 A St',
+          customerAddress: null,
+          locationPath: [
+            { code: 'F1', name: 'Floor 1' },
+            { code: 'R101', name: 'Room 101' },
+          ],
+        }),
+      ]);
+      expect(result.body.contacts).toEqual([
+        expect.objectContaining({ id: ownContact.body.id, code: 'CONTACT-1' }),
+      ]);
+      await api(app, bearer('SERVICE_MANAGER', tenantB))
+        .post('/lookups/batch')
+        .send({ customerCodes: ['C1'] })
+        .expect(200, {
+          customers: [],
+          sites: [],
+          locations: [],
+          contacts: [],
+        });
+    });
+
     it('returns the customer and site references used by Asset and Service Request', async () => {
       const room = await location({ name: 'Room', type: 'ROOM' }).expect(201);
       const customer = await customerUser().get(`/internal/customers/${own}`).expect(200);
