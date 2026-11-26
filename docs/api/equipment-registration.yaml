@@ -72,7 +72,9 @@ paths:
       operationId: listEquipmentRegistrations
       summary: List registrations of the caller tenant
       description: createKey lookup is additionally restricted to the original actor. Neither CUSTOMER
-        nor PLATFORM_STAFF can read this collection.
+        nor PLATFORM_STAFF can read this collection. Each item includes the current equipment identity
+        and the latest unsuperseded handover. Summary counts cover all pages and follow registration and
+        handover filters, so each equipment status remains visible when filtering the table by equipment status.
       tags:
       - Equipment registration
       x-user-types:
@@ -120,6 +122,16 @@ paths:
         in: query
         schema:
           $ref: '#/components/schemas/Status'
+      - name: equipmentStatus
+        in: query
+        schema:
+          type: string
+          enum: [ACTIVE, IN_SERVICE, OUT_OF_SERVICE, RETIRED]
+      - name: handoverStatus
+        in: query
+        schema:
+          type: string
+          enum: [DRAFT, PENDING_CUSTOMER_CONFIRMATION, REJECTED, EXPIRED, CANCELLED, ACTIVATED]
       - name: equipmentId
         in: query
         schema:
@@ -171,8 +183,11 @@ paths:
       summary: Replace submitted decision objects on a draft
       description: DRAFT only, expectedVersion is mandatory. A changed Warranty choice requires warranty:manage.
         A changed confirmed Maintenance choice requires maintenance:manage. Absent decision objects remain
-        unchanged; supplied objects replace the whole prior choice. No Equipment identity/owner/site update
-        is accepted here.
+        unchanged; supplied objects replace the whole prior choice. Changes to modelId or handoverDate
+        clear the saved policy preview. A draft created together with its equipment may also correct the
+        customer, site, location, asset code, serial and delivery method before its first handover. The
+        customer and site must be active and belong to the caller's tenant. Changing to STORE clears
+        customer confirmation details and installation and commissioning dates.
       tags:
       - Equipment registration
       x-user-types:
@@ -677,16 +692,16 @@ components:
       additionalProperties: false
       required: [condition, expiresAt]
       properties:
-        condition: {type: string, minLength: 1, maxLength: 2000, pattern: '\S'}
+        condition: {type: string, maxLength: 2000, description: A nonblank condition is required at submit.}
         notes: {type: string, maxLength: 4000}
-        expiresAt: {type: string, format: date-time, description: Future deadline within 90 days at submit; expiry never accepts}
+        expiresAt: {type: [string, 'null'], format: date-time, description: A future deadline within 90 days is required at submit.}
     CreateInput:
       type: object
       additionalProperties: false
       required:
       - equipment
       properties:
-        deliveryMethod: {type: string, enum: [STORE, CUSTOMER_SITE], description: Optional for legacy API clients; fixed after creation. STORE forbids installation/commissioning dates.}
+        deliveryMethod: {type: string, enum: [STORE, CUSTOMER_SITE], description: Optional for legacy API clients. STORE forbids installation/commissioning dates.}
         handoverDetails: {$ref: '#/components/schemas/HandoverDetails'}
         equipment:
           $ref: '#/components/schemas/EquipmentSource'
@@ -697,10 +712,25 @@ components:
     PatchInput:
       type: object
       additionalProperties: false
+      minProperties: 2
       required:
       - expectedVersion
       properties:
-        handoverDetails: {$ref: '#/components/schemas/HandoverDetails'}
+        handoverDetails: {oneOf: [{$ref: '#/components/schemas/HandoverDetails'}, {type: 'null'}]}
+        deliveryMethod: {type: string, enum: [STORE, CUSTOMER_SITE]}
+        customerId: {type: string, format: uuid}
+        customerSiteId: {type: string, format: uuid}
+        locationId: {type: [string, 'null'], format: uuid}
+        assetCode: {type: string, maxLength: 100, pattern: '\S'}
+        serialNumber: {type: string, maxLength: 150, pattern: '\S'}
+        displayName: {type: [string, 'null'], maxLength: 200, pattern: '\S'}
+        purchaseDate: {type: [string, 'null'], format: date}
+        handoverDate: {type: [string, 'null'], format: date}
+        installationDate: {type: [string, 'null'], format: date}
+        commissionedDate: {type: [string, 'null'], format: date}
+        modelId:
+          type: string
+          format: uuid
         expectedVersion:
           type: integer
           minimum: 1
@@ -708,12 +738,6 @@ components:
           $ref: '#/components/schemas/WarrantyDecision'
         maintenance:
           $ref: '#/components/schemas/MaintenanceDecision'
-      anyOf:
-      - required: [handoverDetails]
-      - required:
-        - warranty
-      - required:
-        - maintenance
     Registration:
       type: object
       required:
@@ -792,6 +816,31 @@ components:
         updatedAt:
           type: string
           format: date-time
+    RegistrationListItem:
+      allOf:
+      - $ref: '#/components/schemas/Registration'
+      - type: object
+        required: [equipment, handover]
+        properties:
+          equipment:
+            type: object
+            required: [status, displayName, assetCode, serialNumber, model]
+            properties:
+              status: {type: string, enum: [ACTIVE, IN_SERVICE, OUT_OF_SERVICE, RETIRED]}
+              displayName: {type: [string, 'null']}
+              assetCode: {type: string}
+              serialNumber: {type: string}
+              model:
+                type: object
+                required: [name]
+                properties:
+                  name: {type: string}
+          handover:
+            type: [object, 'null']
+            required: [id, status]
+            properties:
+              id: {type: string, format: uuid}
+              status: {type: string}
     RegistrationPage:
       type: object
       additionalProperties: false
@@ -800,11 +849,12 @@ components:
       - page
       - pageSize
       - total
+      - summary
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Registration'
+            $ref: '#/components/schemas/RegistrationListItem'
         page:
           type: integer
           minimum: 1
@@ -815,6 +865,19 @@ components:
         total:
           type: integer
           minimum: 0
+        summary:
+          type: object
+          required: [total, byEquipmentStatus]
+          properties:
+            total: {type: integer, minimum: 0}
+            byEquipmentStatus:
+              type: object
+              required: [ACTIVE, IN_SERVICE, OUT_OF_SERVICE, RETIRED]
+              properties:
+                ACTIVE: {type: integer, minimum: 0}
+                IN_SERVICE: {type: integer, minimum: 0}
+                OUT_OF_SERVICE: {type: integer, minimum: 0}
+                RETIRED: {type: integer, minimum: 0}
     MaintenanceInputProjection:
       type: object
       additionalProperties: false

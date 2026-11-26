@@ -1,15 +1,13 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { dataScope, type Principal } from '@pbl6/auth';
 import { toPage, type Page } from '@pbl6/service-kit';
-import type { EquipmentModel } from '../generated/prisma/client.js';
 import type { CreateEquipmentModelDto } from './dto/create-equipment-model.dto';
 import type { ListEquipmentModelsQueryDto } from './dto/list-equipment-models-query.dto';
 import type { UpdateEquipmentModelDto } from './dto/update-equipment-model.dto';
-import { EquipmentModelRepository } from './equipment-model.repository';
+import {
+  EquipmentModelRepository,
+  type EquipmentModelWithCount,
+} from './equipment-model.repository';
 
 export interface EquipmentModelResponse {
   id: string;
@@ -19,11 +17,12 @@ export interface EquipmentModelResponse {
   category: string | null;
   description: string | null;
   status: string;
+  equipmentCount: number;
   createdAt: string;
   updatedAt: string;
 }
 
-function toResponse(row: EquipmentModel): EquipmentModelResponse {
+function toResponse(row: EquipmentModelWithCount): EquipmentModelResponse {
   return {
     id: row.id,
     manufacturer: row.manufacturer,
@@ -32,6 +31,7 @@ function toResponse(row: EquipmentModel): EquipmentModelResponse {
     category: row.category,
     description: row.description,
     status: row.status,
+    equipmentCount: row._count.equipments,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -42,7 +42,10 @@ export class EquipmentModelService {
   constructor(private readonly repository: EquipmentModelRepository) {}
 
   async detail(p: Principal, id: string) {
-    const row = await this.repository.findScoped(dataScope(p).tenantId, id);
+    const row = await this.repository.findScopedWithCount(
+      dataScope(p).tenantId,
+      id,
+    );
     if (!row)
       throw new NotFoundException({
         code: 'MODEL_NOT_FOUND',
@@ -80,12 +83,6 @@ export class EquipmentModelService {
     input: UpdateEquipmentModelDto,
   ): Promise<EquipmentModelResponse> {
     const { tenantId } = dataScope(principal);
-    if (Object.values(input).every((value) => value === undefined)) {
-      throw new BadRequestException({
-        code: 'VALIDATION_FAILED',
-        message: 'At least one model field is required',
-      });
-    }
     if (!(await this.repository.findScoped(tenantId, id))) {
       throw new NotFoundException({
         code: 'MODEL_NOT_FOUND',

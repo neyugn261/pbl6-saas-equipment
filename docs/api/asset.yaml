@@ -71,7 +71,8 @@ paths:
       summary: List equipment models of the tenant
       description: |
         Includes ACTIVE and INACTIVE models. Only TENANT_STAFF may list the
-        tenant's model catalog; CUSTOMER accounts receive 403.
+        tenant's model catalog; CUSTOMER accounts receive 403. Equipment counts
+        include every recorded equipment of each model, including retired equipment.
       x-permissions: [equipment:read]
       x-user-types: [TENANT_STAFF]
       parameters:
@@ -129,8 +130,8 @@ paths:
         schema: { type: string, format: uuid }
     patch:
       tags: [Models]
-      summary: Update a model (status INACTIVE hides it from new equipment)
-      description: An INACTIVE model remains readable and linked to existing equipment, but cannot be selected on POST /equipment.
+      summary: Change model availability
+      description: Model information is read-only after creation. An INACTIVE model remains readable and linked to existing equipment and is excluded from new equipment registration.
       x-permissions: [equipment:manage]
       x-user-types: [TENANT_STAFF]
       requestBody:
@@ -717,7 +718,7 @@ components:
       enum: [IN_WARRANTY, OUT_OF_WARRANTY, NO_WARRANTY]
     EquipmentModel:
       type: object
-      required: [id, manufacturer, modelCode, name, category, description, status, createdAt, updatedAt]
+      required: [id, manufacturer, modelCode, name, category, description, status, equipmentCount, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         manufacturer: { type: string }
@@ -726,6 +727,7 @@ components:
         category: { type: [string, 'null'] }
         description: { type: [string, 'null'] }
         status: { $ref: '#/components/schemas/EquipmentModelStatus' }
+        equipmentCount: { type: integer, minimum: 0, description: Total recorded equipment in this tenant linked to the model }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     EquipmentModelInput:
@@ -741,11 +743,8 @@ components:
     EquipmentModelPatch:
       type: object
       additionalProperties: false
-      minProperties: 1
+      required: [status]
       properties:
-        name: { type: string, minLength: 1, maxLength: 200 }
-        category: { type: [string, 'null'], maxLength: 100 }
-        description: { type: [string, 'null'] }
         status: { $ref: '#/components/schemas/EquipmentModelStatus' }
     Equipment:
       type: object

@@ -1192,21 +1192,17 @@ export function EquipmentFeedPage({
   const state = useRemote<Section<Page<Row>>>(path, () => api.assetM2(path));
   return (
     <div className="m2-page">
-      <Link to={`${base}/equipment/${id}`}>← Hồ sơ thiết bị</Link>
-      <h1>
-        {
-          {
+      <ServiceHeader
+        back={`${base}/equipment/${id}`}
+        backLabel="Về hồ sơ thiết bị"
+        title={{
             "service-requests": "Yêu cầu dịch vụ của thiết bị",
             "work-orders": "Lệnh công việc của thiết bị",
             "maintenance-plans": "Kế hoạch bảo trì của thiết bị",
             "maintenance-tasks": "Công việc bảo trì của thiết bị",
-          }[kind]
-        }
-      </h1>
-      <p>
-        Tra cứu hồ sơ liên quan theo từng thiết bị; chọn một dòng để xem đầy đủ
-        thông tin.
-      </p>
+        }[kind]}
+        description="Chọn một dòng để xem đầy đủ thông tin của hồ sơ liên quan."
+      />
       {kind !== "maintenance-plans" && kind !== "maintenance-tasks" && (
         <label>
           Lọc trạng thái{" "}
@@ -1339,15 +1335,22 @@ export function HistoryFeedPage({ equipmentId }: { equipmentId?: string }) {
     ["referenceId", "ID tham chiếu"],
   ];
   const base = pathname.startsWith("/portal") ? "/portal" : "/app";
+  const historyDescription = "Các sự kiện đã ghi nhận từ hồ sơ thiết bị, bàn giao, bảo hành và lịch sử dịch vụ. Phạm vi này không bao gồm toàn bộ nhật ký của mọi phân hệ.";
   return (
     <div className="m2-page equipment-history-page">
-      {equipmentId && (
-        <Link to={`${base}/equipment/${equipmentId}`}>← Hồ sơ thiết bị</Link>
+      {equipmentId ? (
+        <ServiceHeader
+          back={`${base}/equipment/${equipmentId}`}
+          backLabel="Về hồ sơ thiết bị"
+          title="Lịch sử thiết bị"
+          description={historyDescription}
+        />
+      ) : (
+        <PageHeading
+          title={profile?.roles.includes('SERVICE_MANAGER') ? 'Lịch sử sự kiện' : 'Lịch sử thiết bị'}
+          description={historyDescription}
+        />
       )}
-      <PageHeading
-        title={!equipmentId && profile?.roles.includes('SERVICE_MANAGER') ? 'Lịch sử sự kiện' : 'Lịch sử thiết bị'}
-        description="Các sự kiện đã ghi nhận từ hồ sơ thiết bị, bàn giao, bảo hành và lịch sử dịch vụ. Phạm vi này không bao gồm toàn bộ nhật ký của mọi phân hệ."
-      />
       <section className="ws-card equipment-history-filters">
         <div className="ws-card-header">
           <div>
@@ -2321,16 +2324,11 @@ export function MaintenanceHistoryPage({
   ];
   return (
     <div className="m2-page">
-      <Link
-        to={
-          equipmentId
-            ? `${base}/equipment/${equipmentId}`
-            : `${base}/maintenance`
-        }
-      >
-        ← {equipmentId ? "Hồ sơ thiết bị" : "Bảo trì"}
-      </Link>
-      <h1>Lịch sử bảo trì{equipmentId ? " của thiết bị" : ""}</h1>
+      <ServiceHeader
+        back={equipmentId ? `${base}/equipment/${equipmentId}` : `${base}/maintenance`}
+        backLabel={equipmentId ? "Về hồ sơ thiết bị" : "Về danh sách bảo trì"}
+        title={equipmentId ? "Lịch sử bảo trì của thiết bị" : "Lịch sử bảo trì"}
+      />
       <form
         className="m2-filters"
         onSubmit={(event) => {
@@ -2801,15 +2799,6 @@ export function MaintenanceRecordPage() {
   }
   return (
     <div className="m2-page">
-      <Link
-        to={
-          pathname.startsWith("/portal")
-            ? "/portal/maintenance"
-            : "/app/maintenance"
-        }
-      >
-        ← Bảo trì
-      </Link>
       <ServiceHeader
         back={
           pathname.startsWith("/portal")

@@ -1,14 +1,17 @@
-import { HandoverPolicyPanel } from './ModelPolicyPanels'
+import { HandoverPolicyPanel, ModelPolicySummary, type ModelPolicySnapshot } from './ModelPolicyPanels'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import { getSessionGeneration, useSession } from '../auth/session'
 import type { Page } from '../types/domain'
-import { locationOptions } from '../display-names'
+import { equipmentStatusLabels, handoverStatusLabels, locationOptions } from '../display-names'
+import { StatusBadge } from '../components/Badges'
 import { EquipmentIdentity } from '../features/workspace/WorkspaceUI'
+import { ServiceCard, ServiceFacts, ServiceNotice } from '../features/workspace/ServiceDetailUI'
+import { formatDate } from '../features/workspace/workspace-data'
 import {
   CustomerYouTubePicker,
-  DirectoryPicker,
+  ModelYouTubePicker,
   DirectoryPagination,
   LoadState,
   QuickForm,
@@ -43,14 +46,14 @@ type DeliveryMethod = 'STORE' | 'CUSTOMER_SITE'
 type ConfirmationDetails = {
   condition: string
   notes?: string
-  expiresAt: string
+  expiresAt: string | null
 }
 type Registration = {
   deliveryMethod: DeliveryMethod | null
   handoverDetails: ConfirmationDetails | null
   handoverId: string | null
   maintenanceProvisioning: 'PENDING' | 'READY' | null
-  policyPreview?: Parameters<typeof HandoverPolicyPanel>[0]['snapshot']
+  policyPreview?: ModelPolicySnapshot | null
   maintenancePlanIds?: string[]
   id: string
   equipmentId: string
@@ -131,13 +134,43 @@ function formEquipment(eq: Equipment) {
     commissionedDate: eq.commissionedDate || '',
   }
 }
+function draftEquipmentFields(form: Pick<FormState,
+  'modelId' | 'customerId' | 'siteId' | 'locationId' | 'assetCode' | 'serialNumber' |
+  'displayName' | 'purchaseDate' | 'handoverDate' | 'installationDate' | 'commissionedDate'
+>) {
+  return {
+    modelId: form.modelId,
+    customerId: form.customerId,
+    customerSiteId: form.siteId,
+    locationId: form.locationId || null,
+    assetCode: form.assetCode.trim(),
+    serialNumber: form.serialNumber.trim(),
+    displayName: form.displayName.trim() || null,
+    purchaseDate: form.purchaseDate || null,
+    handoverDate: form.handoverDate || null,
+    installationDate: form.installationDate || null,
+    commissionedDate: form.commissionedDate || null,
+  }
+}
+
+function draftConfirmation(form: FormState): ConfirmationDetails | null {
+  if (form.deliveryMethod !== 'CUSTOMER_SITE') return null
+  const expiresAt = Date.parse(form.expiresAt)
+  return {
+    condition: form.condition.trim(),
+    notes: form.notes.trim(),
+    expiresAt: Number.isFinite(expiresAt) ? new Date(expiresAt).toISOString() : null,
+  }
+}
+
 function currentPolicyPreview(
   row: Registration,
   equipment: Equipment,
 ): Registration {
   return row.status === 'DRAFT' &&
     row.policyPreview &&
-    row.policyPreview.handoverDate !== equipment.handoverDate
+    (row.policyPreview.handoverDate !== equipment.handoverDate ||
+      (row.policyPreview.modelId && row.policyPreview.modelId !== equipment.modelId))
     ? { ...row, policyPreview: null }
     : row
 }
@@ -161,7 +194,7 @@ function formConfirmation(row: Registration) {
     condition: row.handoverDetails?.condition || '',
     notes: row.handoverDetails?.notes || '',
     expiresAt: row.handoverDetails
-      ? localDeadline(row.handoverDetails.expiresAt)
+      ? row.handoverDetails.expiresAt ? localDeadline(row.handoverDetails.expiresAt) : ''
       : localDeadline(new Date(Date.now() + 30 * 86400000).toISOString()),
   }
 }
@@ -169,88 +202,152 @@ function resultStep(row: Registration) {
   return row.deliveryMethod === 'CUSTOMER_SITE' ? 5 : 4
 }
 
+type RegistrationListItem = Registration & {
+  equipment?: {
+    status: string
+    displayName: string | null
+    assetCode: string
+    serialNumber: string
+    model: { name: string }
+  }
+  handover?: { id: string; status: string } | null
+}
+
+type RegistrationList = Page<RegistrationListItem> & {
+  summary: { total: number; byEquipmentStatus: Record<string, number> }
+}
+
+const registrationFilters = [
+  {
+    key: 'status',
+    label: 'Trạng thái hồ sơ',
+    options: Object.fromEntries(Object.entries(statusNames).filter(([key]) => key !== 'NOT_RECORDED')),
+  },
+  { key: 'equipmentStatus', label: 'Trạng thái thiết bị', options: equipmentStatusLabels },
+  { key: 'handoverStatus', label: 'Trạng thái bàn giao', options: handoverStatusLabels },
+] as const
+
 export function RegistrationListPage() {
-  const [status, setStatus] = useState(''),
-    [page, setPage] = useState(1)
-  const state = useDirectory<Page<Registration>>(
-    'assetM2',
-    `/equipment-registrations?page=${page}&pageSize=20${status ? `&status=${status}` : ''}`,
-  )
+  const [params, setParams] = useSearchParams()
+  const rawPage = Number(params.get('page'))
+  const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1
+  const wasHandoverTab = params.get('tab') === 'handovers'
+  const query = new URLSearchParams({ page: String(page), pageSize: '20' })
+  for (const { key, options } of registrationFilters) {
+    const value = wasHandoverTab && key === 'status' ? null
+      : params.get(key) ?? (wasHandoverTab && key === 'handoverStatus' ? params.get('status') : null)
+    if (value && Object.hasOwn(options, value)) query.set(key, value)
+  }
+  const state = useDirectory<RegistrationList>('assetM2', `/equipment-registrations?${query}`)
+  const summary = state.value?.summary
+  const counts = [
+    { label: 'Tổng thiết bị trong hồ sơ', count: summary?.total },
+    ...Object.entries(equipmentStatusLabels).map(([status, label]) => ({
+      label, count: summary?.byEquipmentStatus[status],
+    })),
+  ]
+
+  function updateView(key: string, value: string) {
+    const next = new URLSearchParams(query)
+    next.delete('pageSize')
+    if (key !== 'page') next.delete('page')
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setParams(next)
+  }
+
   return (
-    <SetupPage
-      title="Hồ sơ đăng ký thiết bị"
-      description="Chuẩn bị thông tin máy và chính sách trước khi hoàn tất bàn giao. Các hồ sơ nháp chưa có nghĩa là khách đã nhận máy."
-      actions={
-        <><Link className="m1-button" to="/app/bulk-handovers">Nhập lô CSV / XLSX</Link><Link className="m1-button" to="/app/equipment-registrations/new">
-          + Đăng ký thiết bị
-        </Link></>
-      }
-    >
-      <section className="m1-card registration-directory">
+    <div className="registration-page registration-page--directory">
+      <header className="registration-header page-title-header">
+        <h1>Hồ sơ đăng ký thiết bị</h1>
+        <div className="registration-actions page-title-actions">
+          <Link className="ws-button ws-button--secondary" to="/app/bulk-handovers">
+            Nhập lô CSV / XLSX
+          </Link>
+          <Link className="m1-button" to="/app/equipment-registrations/new">
+            + Đăng ký thiết bị
+          </Link>
+        </div>
+      </header>
+
+      <div className="equipment-summary registration-summary-cards" aria-label="Số thiết bị theo trạng thái" aria-busy={state.loading}>
+        {counts.map(({ label, count }) => (
+          <div className="equipment-summary__card" key={label}>
+            <span>{label}</span>
+            <strong>{typeof count === 'number' ? count.toLocaleString('vi-VN') : '—'}</strong>
+          </div>
+        ))}
+      </div>
+
+      <section className="m1-card registration-directory" aria-label="Danh sách hồ sơ đăng ký">
         <div className="registration-directory__toolbar">
-          <label className="registration-directory__filter">
-            Trạng thái
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value)
-                setPage(1)
-              }}
-            >
-              <option value="">Tất cả</option>
-              {(
-                [
-                  'DRAFT',
-                  'PENDING_MAINTENANCE',
-                  'PENDING_CUSTOMER_CONFIRMATION',
-                  'COMPLETED',
-                ] as const
-              ).map((s) => (
-                <option key={s} value={s}>
-                  {statusNames[s]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {registrationFilters.map(({ key, label, options }) => (
+            <label className="registration-directory__filter" key={key}>
+              {label}
+              <select value={query.get(key) ?? ''} onChange={(e) => updateView(key, e.target.value)}>
+                <option value="">Tất cả</option>
+                {Object.entries(options).map(([status, name]) => (
+                  <option key={status} value={status}>{name}</option>
+                ))}
+              </select>
+            </label>
+          ))}
         </div>
         <LoadState {...state} />
         {state.value && (
           <>
-            <div className="registration-directory__table"><table>
-              <thead>
-                <tr>
-                  <th>Hồ sơ</th>
-                  <th>Trạng thái</th>
-                  <th>Kết quả</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.value.items.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <Link className="registration-directory__name" to={`/app/equipment-registrations/${row.id}`}>
-                        <EquipmentIdentity equipmentId={row.equipmentId} />
-                      </Link>
-                    </td>
-                    <td><span className={`registration-directory__status registration-directory__status--${row.status.toLowerCase()}`}>{statusNames[row.status]}</span></td>
-                    <td>
-                      <Link to={`/app/equipment/${row.equipmentId}`}>
-                        Thiết bị
-                      </Link>
-                      {row.lastErrorCode && (
-                        <small>Cần kiểm tra bước bảo trì</small>
-                      )}
-                    </td>
+            <div className="registration-directory__table registration-directory__table--tracked" tabIndex={0} role="region" aria-label="Bảng hồ sơ đăng ký thiết bị">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Hồ sơ</th>
+                    <th scope="col">Trạng thái thiết bị</th>
+                    <th scope="col">Trạng thái hồ sơ</th>
+                    <th scope="col">Bàn giao</th>
+                    <th scope="col">Thao tác</th>
                   </tr>
-                ))}
-              </tbody>
-            </table></div>
+                </thead>
+                <tbody>
+                  {state.value.items.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <Link className="registration-directory__name" to={`/app/equipment-registrations/${row.id}`}>
+                          <EquipmentIdentity equipmentId={row.equipmentId} equipment={row.equipment} />
+                        </Link>
+                      </td>
+                      <td>
+                        {row.equipment ? <StatusBadge status={row.equipment.status} label={equipmentStatusLabels[row.equipment.status]} /> : '—'}
+                      </td>
+                      <td>
+                        <span className={`registration-directory__status registration-directory__status--${row.status.toLowerCase()}`}>
+                          {statusNames[row.status]}
+                        </span>
+                        {row.lastErrorCode && <small>Cần kiểm tra bước bảo trì</small>}
+                      </td>
+                      <td>
+                        {row.handover ? (
+                          <Link className="ws-text-link" to={`/app/equipment-handovers/${row.handover.id}`}>
+                            {handoverStatusLabels[row.handover.status] ?? row.handover.status}
+                          </Link>
+                        ) : row.deliveryMethod === 'STORE' ? 'Tại cửa hàng' : '—'}
+                      </td>
+                      <td><Link className="ws-text-link" to={`/app/equipment/${row.equipmentId}`}>Xem thiết bị</Link></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {!state.value.items.length && <p className="registration-directory__empty">Chưa có hồ sơ phù hợp.</p>}
-            <DirectoryPagination page={page} total={state.value.total} label="hồ sơ" onChange={setPage} />
+            <DirectoryPagination
+              page={page}
+              total={state.value.total}
+              label="hồ sơ"
+              onChange={(next) => updateView('page', next === 1 ? '' : String(next))}
+            />
           </>
         )}
       </section>
-    </SetupPage>
+    </div>
   )
 }
 
@@ -293,11 +390,11 @@ export function EquipmentRegistrationPage() {
     [quick, setQuick] = useState<QuickKind | null>(null),
     [uncertain, setUncertain] = useState(false),
     [qr, setQr] = useState<{ url: string } | null>(null),
-    [datesDirty, setDatesDirty] = useState(false),
+    [storedEquipment, setStoredEquipment] = useState<Equipment | null>(null),
     [qrImage, setQrImage] = useState(''),
     [needsReload, setNeedsReload] = useState(false)
   const pending = useRef<{ key: string; body: unknown } | null>(null),
-    selectedSequence = useRef(0)
+    saving = useRef(false)
   const markerKey = `pbl6.registration.${window.location.origin}.${profile?.tenantId}.${profile?.id}`
   const canMaintain = profile?.roles.includes('SERVICE_MANAGER') === true
   const frozen =
@@ -306,6 +403,24 @@ export function EquipmentRegistrationPage() {
     record?.status === 'COMPLETED' ||
     uncertain ||
     needsReload
+  const isExistingInService = storedEquipment?.status === 'IN_SERVICE' || storedEquipment?.status === 'RETIRED'
+  const canEditIdentity = !frozen && !isExistingInService && (
+    record ? record.allowedActions?.includes('editEquipmentIdentity') : form.source === 'NEW'
+  )
+  const canChangeModel = !frozen && !isExistingInService && (record?.status === 'DRAFT' || form.source === 'NEW')
+  const fields = draftEquipmentFields(form)
+  const previousFields = storedEquipment && draftEquipmentFields(formEquipment(storedEquipment))
+  const equipmentChanges = Object.fromEntries(
+    Object.entries(fields).filter(([key, value]) =>
+      previousFields && previousFields[key as keyof typeof fields] !== value),
+  )
+  const deliveryChanged = Boolean(record && form.deliveryMethod && form.deliveryMethod !== record.deliveryMethod)
+  const confirmation = draftConfirmation(form)
+  const previousConfirmation = record?.handoverDetails
+  const confirmationChanged = confirmation?.condition !== previousConfirmation?.condition ||
+    (confirmation?.notes || '') !== (previousConfirmation?.notes || '') ||
+    (confirmation?.expiresAt ? Date.parse(confirmation.expiresAt) : null) !==
+      (previousConfirmation?.expiresAt ? Date.parse(previousConfirmation.expiresAt) : null)
   const sites = useDirectory<DirectoryRow[]>(
     'organization',
     form.customerId ? `/customers/${form.customerId}/sites` : null,
@@ -322,15 +437,12 @@ export function EquipmentRegistrationPage() {
     revision,
   )
   const locationChoices = locationOptions(locations.value ?? [], form.siteId)
-  const locationLocked = Boolean(record) ||
-    (form.source === 'EXISTING' && Boolean(form.equipmentId)) || busy || !form.siteId
+  const locationLocked = !canEditIdentity || busy || !form.siteId
   const contacts = useDirectory<DirectoryRow[]>(
     'organization',
     form.customerId ? `/customers/${form.customerId}/contacts` : null,
     revision,
   )
-  const currentEquipmentId =
-    record?.equipmentId || (form.source === 'EXISTING' ? form.equipmentId : '')
   const model = useDirectory<DirectoryRow>(
     'assetM2',
     form.modelId ? `/equipment-models/${form.modelId}` : null,
@@ -364,6 +476,7 @@ export function EquipmentRegistrationPage() {
                 }
               }
               setRecord(current)
+              setStoredEquipment(eq)
               setForm((prev) => ({
                 ...prev,
                 ...formEquipment(eq),
@@ -400,7 +513,10 @@ export function EquipmentRegistrationPage() {
               navigate(`/app/equipment-registrations/${eq.registrationId}`, {
                 replace: true,
               })
-            else setForm((prev) => ({ ...prev, ...formEquipment(eq) }))
+            else {
+              setStoredEquipment(eq)
+              setForm((prev) => ({ ...prev, ...formEquipment(eq) }))
+            }
             setLoading(false)
           }
         },
@@ -466,30 +582,6 @@ export function EquipmentRegistrationPage() {
     }
   }, [pollingId])
 
-  async function selectExisting(equipmentId: string) {
-    const sequence = ++selectedSequence.current
-    field('equipmentId', equipmentId)
-    setError('')
-    if (!equipmentId) return
-    setBusy(true)
-    try {
-      const eq = await api.assetM2<Equipment>(`/equipment/${equipmentId}`)
-      if (sequence !== selectedSequence.current) return
-      if (eq.registrationId)
-        navigate(`/app/equipment-registrations/${eq.registrationId}`)
-      else
-        setForm((prev) => ({
-          ...prev,
-          ...formEquipment(eq),
-          warranty: unknownChoice(),
-          maintenance: unknownChoice(),
-        }))
-    } catch (e) {
-      setError(errorText(e))
-    } finally {
-      if (sequence === selectedSequence.current) setBusy(false)
-    }
-  }
   function validation(part: number, final = false) {
     if (part === 0 && (!form.customerId || !form.siteId))
       return 'Chọn khách hàng và địa điểm đặt thiết bị.'
@@ -504,11 +596,9 @@ export function EquipmentRegistrationPage() {
           !isFutureDeadline(form.expiresAt))
       )
         return 'Nhập tình trạng bàn giao và hạn xác nhận trong tương lai.'
-      if (datesDirty)
-        return 'Lưu các ngày thực tế vừa chỉnh trước khi tiếp tục.'
+      if (!form.modelId) return 'Chọn model cho thiết bị.'
       if (
-        form.source === 'NEW' &&
-        (!form.modelId || !form.assetCode.trim() || !form.serialNumber.trim())
+        !form.assetCode.trim() || !form.serialNumber.trim()
       )
         return 'Chọn model, nhập mã thiết bị và serial.'
       if (form.source === 'EXISTING' && !form.equipmentId)
@@ -516,7 +606,7 @@ export function EquipmentRegistrationPage() {
       if (final && !form.handoverDate)
         return 'Ghi ngày bàn giao thực tế trước khi hoàn tất.'
       if (
-        [form.handoverDate, form.installationDate, form.commissionedDate].some(
+        [form.purchaseDate, form.handoverDate, form.installationDate, form.commissionedDate].some(
           (date) => date && date > today(),
         )
       )
@@ -567,10 +657,9 @@ export function EquipmentRegistrationPage() {
   async function persist(
     complete: boolean,
     retry = false,
-    targetStep = 4,
-    applyPolicies = false,
+    targetStep = step,
   ) {
-    if (busy && !retry) return
+    if (saving.current || (busy && !retry)) return
     const operationGeneration = getSessionGeneration()
     if (!retry)
       for (let part = 0; part < 4; part++) {
@@ -581,6 +670,7 @@ export function EquipmentRegistrationPage() {
           return
         }
       }
+    saving.current = true
     setBusy(true)
     setError('')
     let saved = record
@@ -621,16 +711,7 @@ export function EquipmentRegistrationPage() {
               ...(form.deliveryMethod
                 ? { deliveryMethod: form.deliveryMethod }
                 : {}),
-              ...(form.deliveryMethod === 'CUSTOMER_SITE' &&
-              form.condition.trim()
-                ? {
-                    handoverDetails: {
-                      condition: form.condition.trim(),
-                      notes: form.notes.trim(),
-                      expiresAt: new Date(form.expiresAt).toISOString(),
-                    },
-                  }
-                : {}),
+              ...(confirmation ? { handoverDetails: confirmation } : {}),
               warranty: form.warranty,
               maintenance: form.maintenance,
             },
@@ -653,44 +734,20 @@ export function EquipmentRegistrationPage() {
         pending.current = null
       }
       if (getSessionGeneration() !== operationGeneration) return
-      if (
-        saved.status === 'DRAFT' &&
-        saved.deliveryMethod === 'CUSTOMER_SITE' &&
-        form.condition.trim()
+      if (!complete && saved.status === 'DRAFT' &&
+        (Object.keys(equipmentChanges).length || deliveryChanged || (record && confirmationChanged))
       ) {
-        const details = {
-          condition: form.condition.trim(),
-          notes: form.notes.trim(),
-          expiresAt: new Date(form.expiresAt).toISOString(),
-        }
-        const old = saved.handoverDetails
-        if (
-          !old ||
-          old.condition !== details.condition ||
-          (old.notes || '') !== details.notes ||
-          new Date(old.expiresAt).getTime() !==
-            new Date(details.expiresAt).getTime()
-        )
-          saved = await api.assetM2<Registration>(
-            `/equipment-registrations/${saved.id}`,
-            {
-              method: 'PATCH',
-              body: {
-                expectedVersion: saved.version,
-                handoverDetails: details,
-              },
-            },
-          )
-      }
-      // Pin server-resolved Model policies once, without replacing an existing preview.
-      if (applyPolicies && saved.status === 'DRAFT' && !saved.policyPreview) {
-        const preview = await api.assetM2<
-          Pick<Registration, 'id' | 'version' | 'policyPreview'>
-        >(`/equipment-registrations/${saved.id}/model-policies`, {
-          method: 'POST',
-          body: { expectedVersion: saved.version },
+        saved = await api.assetM2<Registration>(`/equipment-registrations/${saved.id}`, {
+          method: 'PATCH',
+          body: {
+            expectedVersion: saved.version,
+            ...equipmentChanges,
+            ...(deliveryChanged ? { deliveryMethod: form.deliveryMethod } : {}),
+            ...(record && confirmationChanged ? { handoverDetails: confirmation } : {}),
+          },
         })
-        saved = { ...saved, ...preview }
+        if (getSessionGeneration() !== operationGeneration) return
+        setStoredEquipment((previous) => previous && { ...previous, ...fields })
       }
       if (getSessionGeneration() !== operationGeneration) return
       setRecord(saved)
@@ -702,13 +759,19 @@ export function EquipmentRegistrationPage() {
         )
       if (getSessionGeneration() !== operationGeneration) return
       setRecord(saved)
-      setStep(complete ? resultStep(saved) : targetStep)
+      const destination = complete
+        ? resultStep(saved)
+        : targetStep === 4 && !saved.policyPreview
+          ? 2
+          : targetStep
+      setStep(destination)
       setRevision((v) => v + 1)
       sessionStorage.removeItem(markerKey)
-      navigate(`/app/equipment-registrations/${saved.id}`, {
-        replace: true,
-        state: { registrationStep: complete ? resultStep(saved) : targetStep },
-      })
+      if (!id)
+        navigate(`/app/equipment-registrations/${saved.id}`, {
+          replace: true,
+          state: { registrationStep: destination },
+        })
     } catch (e) {
       if (getSessionGeneration() !== operationGeneration) return
       setError(modelSetupError(e))
@@ -736,10 +799,11 @@ export function EquipmentRegistrationPage() {
       } else {
         if (getSessionGeneration() !== operationGeneration) return
         setRecord(saved)
-        navigate(`/app/equipment-registrations/${saved.id}`, {
-          replace: true,
-          state: { registrationStep: targetStep },
-        })
+        if (!id)
+          navigate(`/app/equipment-registrations/${saved.id}`, {
+            replace: true,
+            state: { registrationStep: step },
+          })
         if (
           !(e instanceof ApiError) ||
           e.status >= 500 ||
@@ -752,6 +816,7 @@ export function EquipmentRegistrationPage() {
           setNeedsReload(true)
       }
     } finally {
+      saving.current = false
       setBusy(false)
     }
   }
@@ -764,6 +829,7 @@ export function EquipmentRegistrationPage() {
       )
       const eq = await api.assetM2<Equipment>(`/equipment/${row.equipmentId}`)
       setRecord(currentPolicyPreview(row, eq))
+      setStoredEquipment(eq)
       setForm((prev) => ({
         ...prev,
         ...formEquipment(eq),
@@ -772,7 +838,6 @@ export function EquipmentRegistrationPage() {
         maintenance: row.maintenance,
       }))
       setNeedsReload(false)
-      setDatesDirty(false)
       setError('')
       setStep(row.status === 'DRAFT' ? Math.min(step, 4) : resultStep(row))
     } catch (e) {
@@ -798,36 +863,12 @@ export function EquipmentRegistrationPage() {
       setBusy(false)
     }
   }
-  const dirty =
-    !frozen &&
-    (record
-      ? JSON.stringify([
-          form.warranty,
-          form.maintenance,
-          form.condition,
-          form.notes,
-          form.deliveryMethod === 'CUSTOMER_SITE' && record.handoverDetails
-            ? form.expiresAt
-            : '',
-        ]) !==
-        JSON.stringify([
-          record.warranty,
-          record.maintenance,
-          record.handoverDetails?.condition || '',
-          record.handoverDetails?.notes || '',
-          record.handoverDetails
-            ? localDeadline(record.handoverDetails.expiresAt)
-            : '',
-        ])
-      : Boolean(
-          form.assetCode ||
-          form.serialNumber ||
-          form.warranty.mode !== 'UNCONFIRMED' ||
-          form.maintenance.mode !== 'UNCONFIRMED',
-        ))
+  const dirty = !frozen && (record
+    ? Boolean(Object.keys(equipmentChanges).length || deliveryChanged || confirmationChanged)
+    : Boolean(form.modelId || form.assetCode || form.serialNumber))
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (dirty || busy || datesDirty) e.preventDefault()
+      if (dirty || busy) e.preventDefault()
     }
     const leave = (e: MouseEvent) => {
       const anchor = (e.target as Element)?.closest?.('a')
@@ -845,7 +886,7 @@ export function EquipmentRegistrationPage() {
         return
       if (
         busy ||
-        ((dirty || datesDirty) &&
+        (dirty &&
           !window.confirm('Thông tin chưa lưu sẽ mất. Rời biểu mẫu?'))
       ) {
         e.preventDefault()
@@ -858,7 +899,7 @@ export function EquipmentRegistrationPage() {
       window.removeEventListener('beforeunload', warn)
       document.removeEventListener('click', leave, true)
     }
-  }, [dirty, busy, datesDirty])
+  }, [dirty, busy])
   async function goToStep(target: number) {
     if (
       busy ||
@@ -876,24 +917,32 @@ export function EquipmentRegistrationPage() {
           return
         }
       }
-      if (target === 4 && !record?.policyPreview) {
-        setStep(2)
-        setError('Xem và áp dụng chính sách của Model trước khi xác nhận.')
-        return
-      }
     }
     setError('')
-    if (target === 2 && (!record || !record.policyPreview)) {
-      await persist(false, false, 2, canMaintain)
+    if (target > step && target >= 2 && (!record || dirty)) {
+      await persist(false, false, target)
+    } else if (target === 4 && record?.status === 'DRAFT' && !record.policyPreview) {
+      setStep(2)
+      setError('Áp dụng chính sách Model trước khi kiểm tra hồ sơ.')
     } else setStep(target)
   }
   async function refreshPolicies() {
     if (!record) return
+    const generation = getSessionGeneration()
     const [row, eq] = await Promise.all([
       api.assetM2<Registration>(`/equipment-registrations/${record.id}`),
       api.assetM2<Equipment>(`/equipment/${record.equipmentId}`),
     ])
+    if (generation !== getSessionGeneration()) return
     setRecord(currentPolicyPreview(row, eq))
+    setStoredEquipment(eq)
+    setForm((prev) => ({
+      ...prev,
+      ...formEquipment(eq),
+      ...formConfirmation(row),
+      warranty: row.warranty,
+      maintenance: row.maintenance,
+    }))
     if (row.status !== 'DRAFT') setStep(resultStep(row))
     setRevision((v) => v + 1)
   }
@@ -914,8 +963,7 @@ export function EquipmentRegistrationPage() {
         customerId: row.id,
         siteId: '',
         locationId: '',
-        equipmentId: '',
-        source: 'NEW',
+        ...(!record ? { equipmentId: '', source: 'NEW' } : {}),
       }))
     if (quick === 'site')
       setForm((prev) => ({ ...prev, siteId: row.id, locationId: '' }))
@@ -928,16 +976,7 @@ export function EquipmentRegistrationPage() {
     <SetupPage
       title="Đăng ký thiết bị và chuẩn bị bàn giao"
       description="Lưu hồ sơ nháp → kiểm tra thông tin và chính sách → hoàn tất tại cửa hàng hoặc gửi khách xác nhận tại cơ sở. Ngày bàn giao thực tế chỉ ghi khi đã diễn ra."
-      actions={
-        <Link
-          to="/app/equipment-registrations"
-          onClick={(e) => {
-            if (busy) e.preventDefault()
-          }}
-        >
-          Danh sách hồ sơ
-        </Link>
-      }
+      back={{ to: '/app/equipment-registrations', label: 'Về danh sách hồ sơ đăng ký', disabled: busy }}
     >
       <LoadState loading={loading} error={error} />
       {needsReload && (
@@ -1154,7 +1193,7 @@ export function EquipmentRegistrationPage() {
               onCancel={() => setQuick(null)}
             />
           )}
-          <section className="m1-card registration-step" aria-busy={busy}>
+          <section className={step === 2 || step === 4 ? undefined : 'm1-card registration-step'} aria-busy={busy}>
             <fieldset
               className="registration-content"
               disabled={(frozen && step !== 5) || busy}
@@ -1162,19 +1201,17 @@ export function EquipmentRegistrationPage() {
               {step === 0 && (
                 <>
                   <h2>Khách hàng</h2>
-                  {!record ? (
+                  {!record || canEditIdentity ? (
                     <CustomerYouTubePicker
                       selectedId={form.customerId}
                       selectedCustomer={customer.value}
                       onChange={(value) => {
-                        selectedSequence.current++
                         setForm((prev) => ({
                           ...prev,
                           customerId: value,
                           siteId: '',
                           locationId: '',
-                          equipmentId: '',
-                          source: 'NEW',
+                          ...(!record ? { equipmentId: '', source: 'NEW' } : {}),
                         }))
                       }}
                       onAdd={() => setQuick('customer')}
@@ -1183,8 +1220,7 @@ export function EquipmentRegistrationPage() {
                   ) : (
                     <p>
                       Khách hàng:{' '}
-                      {customer.value?.name || 'Khách hàng không xác định'}. Đổi
-                      chủ sở hữu không thuộc luồng này.
+                      {customer.value?.name || 'Khách hàng không xác định'}
                     </p>
                   )}
                   <LoadState {...customer} />
@@ -1194,16 +1230,12 @@ export function EquipmentRegistrationPage() {
                         <h3>Địa điểm đặt thiết bị</h3>
                         <div className="registration-fields">
                           <label>
-                            Địa điểm đặt thiết bị *
+                            <span>
+                              Địa điểm đặt thiết bị <span className="required-star">*</span>
+                            </span>
                             <select
                               value={form.siteId}
-                              disabled={
-                                Boolean(record) ||
-                                (form.source === 'EXISTING' &&
-                                  Boolean(form.equipmentId)) ||
-                                busy ||
-                                !form.customerId
-                              }
+                              disabled={!canEditIdentity || busy || !form.customerId}
                               onChange={(e) =>
                                 setForm((prev) => ({
                                   ...prev,
@@ -1225,7 +1257,7 @@ export function EquipmentRegistrationPage() {
                                 ))}
                             </select>
                           </label>
-                          {!record && (
+                          {canEditIdentity && (
                             <button
                               type="button"
                               className="ws-button ws-button--secondary"
@@ -1254,7 +1286,7 @@ export function EquipmentRegistrationPage() {
                               ))}
                             </select>
                           </label>
-                          {!record && (
+                          {canEditIdentity && (
                             <button
                               type="button"
                               className="ws-button ws-button--secondary"
@@ -1272,7 +1304,7 @@ export function EquipmentRegistrationPage() {
                           <div>
                             <h3>Người liên hệ</h3>
                           </div>
-                          {!record && (
+                          {canEditIdentity && (
                             <button
                               type="button"
                               className="ws-button ws-button--secondary"
@@ -1327,67 +1359,66 @@ export function EquipmentRegistrationPage() {
               )}
               {step === 1 && (
                 <>
-                  <h2>Máy cụ thể và model</h2>
-                  {!record && (
-                    <label>
-                      Cách ghi nhận
-                      <select
-                        value={form.source}
-                        onChange={(e) => {
-                          selectedSequence.current++
-                          setForm((prev) => ({
-                            ...prev,
-                            source: e.target.value as FormState['source'],
-                            equipmentId: '',
-                            modelId: '',
-                            assetCode: '',
-                            serialNumber: '',
-                            warranty: unknownChoice(),
-                            maintenance: unknownChoice(),
-                          }))
-                        }}
-                      >
-                        <option value="NEW">Ghi nhận máy mới</option>
-                        <option value="EXISTING">
-                          Hoàn thiện máy đã có của khách hàng
-                        </option>
-                      </select>
-                    </label>
-                  )}
-                  {form.source === 'EXISTING' && !record && (
-                    <DirectoryPicker
-                      label="Máy đã có"
-                      area="assetM2"
-                      path={
-                        form.customerId
-                          ? `/equipment?customerId=${form.customerId}`
-                          : null
-                      }
-                      selected={form.equipmentId}
-                      onChange={(value) => void selectExisting(value)}
-                    />
-                  )}
-                  {form.source === 'NEW' && !record && (
-                    <DirectoryPicker
-                      label="Model thiết bị"
-                      area="assetM2"
-                      path="/equipment-models?status=ACTIVE"
-                      selected={form.modelId}
+                  <h2>Thông tin thiết bị và model</h2>
+                  {canChangeModel && (
+                    <ModelYouTubePicker
+                      selectedId={form.modelId}
+                      selectedModel={model.value}
                       onChange={(value) => field('modelId', value)}
                       onAdd={() => setQuick('model')}
                       revision={revision}
                     />
                   )}
-                  <div className="registration-fields">
+                  {!canChangeModel && (
+                    <div className="customer-selected-area">
+                      <div className="customer-yt-selected-card">
+                        <div className="customer-yt-selected-top">
+                          <div className="customer-yt-selected-badge">
+                            <span className="customer-yt-check-icon">✓</span> Model thiết bị đã ghi nhận
+                          </div>
+                          <strong className="customer-yt-selected-name">
+                            {model.value?.name ||
+                              (loading
+                                ? 'Đang tải thông tin model…'
+                                : 'Model không xác định')}
+                          </strong>
+                          {(model.value?.modelCode || model.value?.code) && (
+                            <span className="customer-yt-code-tag">
+                              {model.value?.modelCode || model.value?.code}
+                            </span>
+                          )}
+                        </div>
+                        <div className="customer-yt-selected-details">
+                          {model.value?.manufacturer && (
+                            <span className="customer-yt-detail-item">
+                              <span className="customer-yt-detail-label">Hãng:</span>
+                              <strong>{model.value.manufacturer}</strong>
+                            </span>
+                          )}
+                          {model.value?.description && (
+                            <span className="customer-yt-detail-item">
+                              <span className="customer-yt-detail-label">Mô tả:</span>
+                              <span>{model.value.description}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <LoadState {...model} />
+                  <div className="registration-fields" style={{ marginTop: '20px' }}>
                     {(
                       [
-                        ['assetCode', 'Mã thiết bị *'],
-                        ['serialNumber', 'Serial *'],
-                        ['displayName', 'Tên hiển thị'],
+                        ['assetCode', 'Mã thiết bị', true],
+                        ['serialNumber', 'Serial', true],
+                        ['displayName', 'Tên hiển thị', false],
                       ] as const
-                    ).map(([key, label]) => (
+                    ).map(([key, label, required]) => (
                       <label key={key}>
-                        {label}
+                        <span>
+                          {label}
+                          {required && <span className="required-star"> *</span>}
+                        </span>
                         <input
                           value={form[key]}
                           maxLength={
@@ -1397,38 +1428,41 @@ export function EquipmentRegistrationPage() {
                                 ? 150
                                 : 200
                           }
-                          disabled={
-                            Boolean(record) ||
-                            form.source === 'EXISTING' ||
-                            busy
+                          placeholder={
+                            key === 'assetCode'
+                              ? 'Ví dụ: TB-001 hoặc PUMP-01'
+                              : key === 'serialNumber'
+                                ? 'Ví dụ: SN-2024-99881'
+                                : 'Ví dụ: Máy bơm tầng hầm Tòa A'
                           }
+                          disabled={frozen || busy || (key !== 'displayName' && !canEditIdentity)}
                           onChange={(e) => field(key, e.target.value)}
                         />
                       </label>
                     ))}
                     <label>
-                      Hình thức bàn giao *
+                      <span>
+                        Hình thức bàn giao <span className="required-star">*</span>
+                      </span>
                       <select
                         aria-label="Hình thức bàn giao"
                         value={form.deliveryMethod}
-                        disabled={frozen || busy || Boolean(record)}
+                        disabled={busy || (record ? !canEditIdentity : frozen)}
                         onChange={(e) => {
-                          field(
-                            'deliveryMethod',
-                            e.target.value as DeliveryMethod,
-                          )
-                          if (e.target.value === 'STORE') {
-                            if (
-                              (record || form.source === 'EXISTING') &&
-                              (form.installationDate || form.commissionedDate)
-                            )
-                              setDatesDirty(true)
-                            field('installationDate', '')
-                            field('commissionedDate', '')
-                          }
+                          const deliveryMethod = e.target.value as FormState['deliveryMethod']
+                          setForm((prev) => ({
+                            ...prev,
+                            deliveryMethod,
+                            ...(deliveryMethod === 'STORE' ? {
+                              installationDate: '',
+                              commissionedDate: '',
+                              condition: '',
+                              notes: '',
+                            } : {}),
+                          }))
                         }}
                       >
-                        <option value="">
+                        <option value="" disabled={Boolean(record?.deliveryMethod)}>
                           {record && !record.deliveryMethod
                             ? 'Hồ sơ cũ (giữ luồng hiện tại)'
                             : 'Chọn hình thức bàn giao'}
@@ -1439,17 +1473,12 @@ export function EquipmentRegistrationPage() {
                         </option>
                       </select>
                     </label>
-                    <p className="registration-wide">
-                      {form.deliveryMethod === 'STORE'
-                        ? 'Bảo hành tính từ ngày bàn giao thực tế. Không cần lắp đặt hoặc khách xác nhận. Địa điểm đặt thiết bị vẫn là địa điểm của khách hàng.'
-                        : 'Bảo hành và lịch bảo trì tính từ ngày bàn giao thực tế. Hồ sơ chỉ hoàn tất khi khách xác nhận; ngày lắp đặt và vận hành chưa có thì để trống.'}
-                    </p>
                     {(
                       [
-                        ['handoverDate', 'Ngày bàn giao thực tế'],
-                        ['purchaseDate', 'Ngày mua'],
-                        ['installationDate', 'Ngày lắp đặt'],
-                        ['commissionedDate', 'Ngày đưa vào sử dụng'],
+                        ['handoverDate', 'Ngày bàn giao thực tế', true],
+                        ['purchaseDate', 'Ngày mua', false],
+                        ['installationDate', 'Ngày lắp đặt', false],
+                        ['commissionedDate', 'Ngày đưa vào sử dụng', false],
                       ] as const
                     )
                       .filter(
@@ -1459,19 +1488,18 @@ export function EquipmentRegistrationPage() {
                           form.deliveryMethod === 'CUSTOMER_SITE' ||
                           (record && !record.deliveryMethod),
                       )
-                      .map(([key, label]) => (
+                      .map(([key, label, required]) => (
                         <label key={key}>
-                          {label}
+                          <span>
+                            {label}
+                            {required && <span className="required-star"> *</span>}
+                          </span>
                           <input
                             type="date"
                             value={form[key]}
                             max={today()}
-                            disabled={frozen || busy || (key === 'purchaseDate' && form.source === 'EXISTING')}
-                            onChange={(e) => {
-                              field(key, e.target.value)
-                              if (record || form.source === 'EXISTING')
-                                setDatesDirty(true)
-                            }}
+                            disabled={frozen || busy}
+                            onChange={(e) => field(key, e.target.value)}
                           />
                         </label>
                       ))}
@@ -1479,7 +1507,9 @@ export function EquipmentRegistrationPage() {
                   {form.deliveryMethod === 'CUSTOMER_SITE' && (
                     <div className="registration-fields">
                       <label>
-                        Tình trạng khi bàn giao *
+                        <span>
+                          Tình trạng khi bàn giao <span className="required-star">*</span>
+                        </span>
                         <textarea
                           maxLength={2000}
                           value={form.condition}
@@ -1497,7 +1527,9 @@ export function EquipmentRegistrationPage() {
                         />
                       </label>
                       <label>
-                        Hạn khách xác nhận *
+                        <span>
+                          Hạn khách xác nhận <span className="required-star">*</span>
+                        </span>
                         <input
                           type="datetime-local"
                           value={form.expiresAt}
@@ -1511,141 +1543,22 @@ export function EquipmentRegistrationPage() {
                       </p>
                     </div>
                   )}
-                  {currentEquipmentId && (
-                    <button
-                      type="button"
-                      disabled={busy || frozen || !datesDirty}
-                      onClick={async () => {
-                        setBusy(true)
-                        setError('')
-                        try {
-                          if (
-                            !form.handoverDate ||
-                            [
-                              form.handoverDate,
-                              form.installationDate,
-                              form.commissionedDate,
-                            ].some((d) => d && d > today())
-                          )
-                            throw new Error(
-                              'Nhập ngày bàn giao và ngày thực tế hợp lệ.',
-                            )
-                          await api.assetM2(
-                            `/equipment/${currentEquipmentId}`,
-                            {
-                              method: 'PATCH',
-                              body: {
-                                handoverDate: form.handoverDate,
-                                installationDate: form.installationDate || null,
-                                commissionedDate: form.commissionedDate || null,
-                              },
-                            },
-                          )
-                          setDatesDirty(false)
-                          if (record)
-                            setRecord({ ...record, policyPreview: null })
-                          setRevision((v) => v + 1)
-                        } catch (e) {
-                          setError(errorText(e))
-                        } finally {
-                          setBusy(false)
-                        }
-                      }}
-                    >
-                      Lưu các ngày thực tế
-                    </button>
-                  )}
-                  <p>
-                    Một máy tương ứng một serial. Máy đã có giữ nguyên chủ sở
-                    hữu. Chỉ sửa ngày thực tế khi cần đính chính hồ sơ.
-                  </p>
-                  {record && (
-                    <p>
-                      <Link to={`/app/equipment/${record.equipmentId}`}>
-                        Mở hồ sơ
-                      </Link>{' '}
-                      để bổ sung ngày bàn giao hoặc chỉnh thông tin thiết bị,
-                      sau đó tải lại lần ghi nhận này.
-                    </p>
-                  )}
                 </>
               )}
-              {(step === 2 || step === 4) &&
-                (record?.status === 'DRAFT' ||
-                  record?.policyPreview ||
-                  !record) && (
-                  <>
-                    {form.modelId && (
-                      <p>
-                        Model:{' '}
-                        <strong>
-                          {model.value?.name ||
-                            model.value?.modelCode ||
-                            'Đang tải…'}
-                        </strong>{' '}
-                        ·{' '}
-                        <Link
-                          to={`/app/equipment-models/${form.modelId}`}
-                          state={{ registrationId: record?.id }}
-                        >
-                          Xem / cấu hình chính sách Model
-                        </Link>
-                      </p>
-                    )}
-                    {record ? (
-                      <HandoverPolicyPanel
-                        key={record.id}
-                        id={record.id}
-                        version={record.version}
-                        status={record.status}
-                        snapshot={record.policyPreview}
-                        changed={refreshPolicies}
-                        onBusyChange={setBusy}
-                        showCompleteButton={false}
-                        readOnly={record.status !== 'DRAFT'}
-                      />
-                    ) : (
-                      <>
-                        <h2>Áp dụng chính sách theo Model</h2>
-                        <p>
-                          Hệ thống tự lấy thời hạn bảo hành, điều khoản và các
-                          lịch bảo trì từ Model đã chọn.
-                        </p>
-                        <button
-                          type="button"
-                          disabled={busy || !canMaintain}
-                          onClick={() => void persist(false, false, 2, true)}
-                        >
-                          Lấy chính sách Model
-                        </button>
-                        {!canMaintain && (
-                          <p>
-                            Lưu nháp để Service Manager áp dụng chính sách và
-                            xác nhận bàn giao.
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-              {step === 4 &&
-                record &&
-                record.status !== 'DRAFT' &&
-                !record.policyPreview && (
-                  <section>
-                    <h2>Chính sách đã ghi nhận trước đây</h2>
-                    <p>
-                      Giữ nguyên điều khoản của hồ sơ bàn giao cũ. Thông tin
-                      dưới đây chỉ để xem.
-                    </p>
-                    {form.warranty.terms && (
-                      <p>Điều khoản bảo hành: {form.warranty.terms}</p>
-                    )}
-                    {form.maintenance.description && (
-                      <p>Nội dung bảo trì: {form.maintenance.description}</p>
-                    )}
-                  </section>
-                )}
+              {step === 2 && record && (
+                <HandoverPolicyPanel
+                  key={`${record.id}:${form.modelId}`}
+                  id={record.id}
+                  modelId={form.modelId}
+                  modelName={model.value?.name ?? (model.loading ? 'Đang tải model…' : undefined)}
+                  modelCode={model.value?.modelCode ?? model.value?.code}
+                  version={record.version}
+                  status={record.status}
+                  snapshot={record.policyPreview}
+                  changed={refreshPolicies}
+                  onBusyChange={setBusy}
+                />
+              )}
               {step === 5 && record && (
                 <>
                   <h2>
@@ -1679,95 +1592,133 @@ export function EquipmentRegistrationPage() {
                 </>
               )}
               {step === 4 && (
-                <>
-                  <h2>Kiểm tra thông tin ghi nhận</h2>
-                  <dl className="registration-summary">
-                    <dt>Khách hàng</dt>
-                    <dd>
-                      {customer.value?.name || 'Khách hàng không xác định'}
-                    </dd>
-                    <dt>Địa điểm</dt>
-                    <dd>
-                      {sites.value?.find((row) => row.id === form.siteId)
-                        ?.name || 'Địa điểm không xác định'}
-                    </dd>
-                    <dt>Máy</dt>
-                    <dd>
-                      {form.displayName || form.assetCode} · serial{' '}
-                      {form.serialNumber}
-                    </dd>
-                    <dt>Hình thức</dt>
-                    <dd>
-                      {form.deliveryMethod === 'STORE'
-                        ? 'Tại cửa hàng · nhân viên hoàn tất'
-                        : form.deliveryMethod === 'CUSTOMER_SITE'
-                          ? 'Tại cơ sở khách hàng · cần khách xác nhận'
-                          : 'Hồ sơ cũ'}
-                    </dd>
-                    <dt>Bàn giao</dt>
-                    <dd>{form.handoverDate || 'Chưa xác nhận'}</dd>
-                    <dt>Bảo hành</dt>
-                    <dd>
-                      {record?.policyPreview
-                        ? record.policyPreview.warranty.body.mode === 'NONE'
-                          ? `Không áp dụng: ${record.policyPreview.warranty.body.reason}`
-                          : `Model v${record.policyPreview.warranty.revision} · ${record.policyPreview.warranty.startDate} → ${record.policyPreview.warranty.endDate}`
-                        : record?.status === 'DRAFT' || !record
-                          ? 'Chưa áp dụng chính sách Model'
-                          : form.warranty.mode === 'CREATE'
-                            ? `${form.warranty.warrantyType} · ${form.warranty.startDate} → ${form.warranty.endDate}`
-                            : form.warranty.mode === 'KEEP'
-                              ? 'Giữ bản ghi bảo hành đã chọn'
-                              : form.warranty.mode === 'NONE'
-                                ? `Không áp dụng: ${form.warranty.reason}`
-                                : 'Chưa xác định'}
-                    </dd>
-                    <dt>Bảo trì</dt>
-                    <dd>
-                      {record?.policyPreview
-                        ? record.policyPreview.maintenance.body.mode === 'NONE'
-                          ? `Không lập định kỳ: ${record.policyPreview.maintenance.body.reason}`
-                          : `Model v${record.policyPreview.maintenance.revision} · ${record.policyPreview.maintenance.body.rules.length} lịch bảo trì`
-                        : record?.status === 'DRAFT' || !record
-                          ? 'Chưa áp dụng chính sách Model'
-                          : form.maintenance.mode === 'CREATE'
-                            ? `${form.maintenance.name} · mỗi ${form.maintenance.frequencyValue} ${{ DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng', YEAR: 'năm' }[form.maintenance.frequencyUnit || 'MONTH']} · kỳ đầu ${form.maintenance.nextDueDate}`
-                            : form.maintenance.mode === 'KEEP'
-                              ? 'Giữ kế hoạch và trạng thái đã chọn'
-                              : form.maintenance.mode === 'NONE'
-                                ? `Không lập định kỳ: ${form.maintenance.reason}`
-                                : 'Chờ Service Manager xác nhận'}
-                    </dd>
-                  </dl>
-                </>
+                <div className="registration-review-container">
+                  <h2>Kiểm tra và gửi</h2>
+                  <div className="registration-review-grid">
+                    <ServiceCard title="Khách hàng và địa điểm" headingLevel="h3">
+                      <ServiceFacts items={[
+                        { label: 'Khách hàng', value: customer.value?.name || 'Khách hàng không xác định' },
+                        { label: 'Cơ sở khách hàng', value: sites.value?.find((row) => row.id === form.siteId)?.name || 'Địa điểm không xác định' },
+                        ...(form.locationId ? [{
+                          label: 'Vị trí lắp đặt',
+                          value: locationChoices.find((row) => row.id === form.locationId)?.label || form.locationId,
+                        }] : []),
+                      ]} />
+                    </ServiceCard>
+                    <ServiceCard title="Thiết bị" headingLevel="h3">
+                      <ServiceFacts items={[
+                        {
+                          label: 'Model',
+                          value: model.value?.name || form.displayName || form.assetCode,
+                          hint: model.value?.modelCode || model.value?.code,
+                        },
+                        { label: 'Mã thiết bị', value: form.assetCode },
+                        { label: 'Serial', value: form.serialNumber },
+                        ...(form.displayName ? [{ label: 'Tên hiển thị', value: form.displayName }] : []),
+                      ]} />
+                    </ServiceCard>
+                    <ServiceCard title="Bàn giao" headingLevel="h3">
+                      <ServiceFacts items={[
+                        {
+                          label: 'Hình thức bàn giao',
+                          value: form.deliveryMethod === 'STORE'
+                            ? 'Tại cửa hàng'
+                            : form.deliveryMethod === 'CUSTOMER_SITE'
+                              ? 'Tại cơ sở khách hàng'
+                              : 'Hồ sơ cũ',
+                        },
+                        { label: 'Ngày bàn giao thực tế', value: form.handoverDate ? formatDate(form.handoverDate) : 'Chưa ghi nhận' },
+                        ...(form.purchaseDate ? [{ label: 'Ngày mua', value: formatDate(form.purchaseDate) }] : []),
+                        ...(form.installationDate ? [{ label: 'Ngày lắp đặt', value: formatDate(form.installationDate) }] : []),
+                        ...(form.commissionedDate ? [{ label: 'Ngày đưa vào sử dụng', value: formatDate(form.commissionedDate) }] : []),
+                        ...(record?.handoverDetails ? [{
+                          label: 'Hạn khách xác nhận',
+                          value: formatDate(record.handoverDetails.expiresAt, true),
+                        }] : []),
+                      ]} />
+                      {record?.handoverDetails && (
+                        <div className="registration-review-notes">
+                          <ServiceFacts items={[
+                            { label: 'Tình trạng khi bàn giao', value: record.handoverDetails.condition },
+                            ...(record.handoverDetails.notes ? [{
+                              label: 'Ghi chú cho khách hàng', value: record.handoverDetails.notes,
+                            }] : []),
+                          ]} />
+                        </div>
+                      )}
+                    </ServiceCard>
+                  </div>
+                  <section className="registration-review-policies">
+                    <h3>Chính sách bảo hành và bảo trì</h3>
+                    {record?.policyPreview ? (
+                      <ModelPolicySummary snapshot={record.policyPreview} includeOverrideReason />
+                    ) : record && record.status !== 'DRAFT' ? (
+                      <ServiceCard title="Điều khoản đã ghi nhận" headingLevel="h3">
+                        <ServiceFacts items={[
+                          {
+                            label: 'Bảo hành',
+                            value: form.warranty.mode === 'CREATE'
+                              ? `${form.warranty.warrantyType} · ${form.warranty.startDate} → ${form.warranty.endDate}`
+                              : form.warranty.mode === 'KEEP'
+                                ? 'Giữ bản ghi bảo hành đã chọn'
+                                : form.warranty.mode === 'NONE'
+                                  ? `Không áp dụng: ${form.warranty.reason}`
+                                  : 'Chưa xác định',
+                          },
+                          ...(form.warranty.terms ? [{ label: 'Điều khoản bảo hành', value: form.warranty.terms }] : []),
+                          {
+                            label: 'Bảo trì',
+                            value: form.maintenance.mode === 'CREATE'
+                              ? `${form.maintenance.name} · mỗi ${form.maintenance.frequencyValue} ${{ DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng', YEAR: 'năm' }[form.maintenance.frequencyUnit || 'MONTH']} · kỳ đầu ${form.maintenance.nextDueDate}`
+                              : form.maintenance.mode === 'KEEP'
+                                ? 'Giữ kế hoạch và trạng thái đã chọn'
+                                : form.maintenance.mode === 'NONE'
+                                  ? `Không lập định kỳ: ${form.maintenance.reason}`
+                                  : 'Chờ Service Manager xác nhận',
+                          },
+                          ...(form.maintenance.description ? [{ label: 'Nội dung bảo trì', value: form.maintenance.description }] : []),
+                        ]} />
+                      </ServiceCard>
+                    ) : <ServiceNotice title="Chưa áp dụng chính sách Model">Chọn và áp dụng phiên bản ở bước Chính sách Model.</ServiceNotice>}
+                  </section>
+                </div>
               )}
             </fieldset>
           </section>
           {!frozen && (
-            <footer className="registration-actions">
+            <footer className="ws-actions registration-step-actions">
               <button
+                type="button"
+                className="ws-button ws-button--secondary"
                 disabled={busy || step === 0}
                 onClick={() => void goToStep(step === 4 ? 2 : step - 1)}
               >
                 Quay lại
               </button>
+              {(record || step >= 1) && step < 4 && (
+                <button
+                  type="button"
+                  className="ws-button ws-button--secondary"
+                  disabled={busy || quick !== null}
+                  onClick={() => void persist(false)}
+                >
+                  {busy ? 'Đang lưu…' : 'Lưu bản nháp'}
+                </button>
+              )}
               {step < 4 && (
                 <button
+                  type="button"
+                  className="ws-button"
                   disabled={busy}
                   onClick={() => void goToStep(step === 2 ? 4 : step + 1)}
                 >
                   Tiếp tục
                 </button>
               )}
-              <button
-                disabled={busy || quick !== null}
-                onClick={() => void persist(false)}
-              >
-                {busy ? 'Đang lưu…' : 'Lưu để hoàn thiện sau'}
-              </button>
               {step === 4 && canMaintain && (
                 <button
-                  className="registration-primary"
+                  type="button"
+                  className="ws-button"
                   disabled={busy || quick !== null || !record?.policyPreview}
                   onClick={() => void persist(true)}
                 >

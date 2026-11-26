@@ -17,7 +17,7 @@ export type DirectoryRow = {
   email?: string
   phone?: string
   taxCode?: string
-  category?: string
+  equipmentCount?: number
   description?: string
   assetCode?: string
   serialNumber?: string
@@ -76,7 +76,13 @@ export function modelSetupError(error: unknown): string {
     if (
       ['MODEL_POLICIES_MISSING', 'POLICY_NOT_CONFIGURED'].includes(error.code)
     )
-      return 'Model chưa có đủ chính sách bảo hành và bảo trì đã công bố. Cấu hình cả hai phần, kể cả Không áp dụng có lý do, rồi tải lại chính sách.'
+      return 'Kiểm tra phiên bản đã phát hành hoặc chọn Không áp dụng cho dịch vụ không kèm theo hồ sơ.'
+    if (error.code === 'MODEL_INACTIVE')
+      return 'Model đang ngừng dùng. Chọn model đang dùng ở bước Thiết bị.'
+    if (error.code === 'UNIQUE_VIOLATION')
+      return 'Mã thiết bị hoặc serial đã tồn tại. Kiểm tra lại ở bước Thiết bị.'
+    if (error.code === 'REGISTRATION_IDENTITY_FROZEN')
+      return 'Thiết bị đã có hồ sơ bàn giao hoặc được ghi nhận trước đó. Tải lại hồ sơ để xem các trường còn có thể chỉnh sửa.'
     if (error.code === 'MODEL_POLICIES_DISABLED')
       return 'Việc áp dụng chính sách mới đang tạm dừng. Bạn có thể lưu nháp và tiếp tục sau.'
   }

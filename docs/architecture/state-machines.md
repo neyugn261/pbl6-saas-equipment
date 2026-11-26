@@ -183,9 +183,12 @@ See [ADR 0020](../decisions/0020-maintenance-terms.md).
 
 ## ADR 0018 — Model policies, setup and incident coverage
 
-Policy revisions: DRAFT → PUBLISHED → RETIRED. Only drafts can change content.
-Publishing switches the default under a model/tenant lock. Retirement blocks new
-applications; submitted setup, existing Plans, Tasks and WOs retain their snapshots.
+Policy revisions: DRAFT → PUBLISHED ⇄ RETIRED. Only drafts can change content in place.
+Saving with activation or reactivating switches the default under a model/tenant lock.
+The former default becomes superseded (`PUBLISHED` with `isDefault: false`).
+Drafts that already pinned it can continue. New selections require the active revision.
+Retirement blocks new applications.
+Submitted setup, existing Plans, Tasks and WOs retain their snapshots.
 
 Model setup uses DRAFT → PENDING_MAINTENANCE → COMPLETED (or DRAFT → COMPLETED
 for explicit maintenance NONE). Each rule maps to one Plan. Asset commits its

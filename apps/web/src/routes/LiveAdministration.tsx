@@ -6,6 +6,7 @@ import { Building2, ChevronDown, MapPin } from 'lucide-react'
 import { api } from '../api/client'
 import { useSession, getSessionGeneration, type Profile } from '../auth/session'
 import { StatusBadge } from '../components/Badges'
+import { PageTitle, type PageTitleBack } from '../components/PageTitle'
 import { ChangePasswordPanel } from './PasswordPages'
 import { useDirectory, errorText } from './registration-data'
 import type { Page } from '../types/domain'
@@ -57,16 +58,18 @@ function Screen({
   description,
   children,
   actions,
+  back,
 }: {
   title: string
   description?: string
   children: ReactNode
   actions?: ReactNode
+  back?: PageTitleBack
 }) {
   return (
     <div className="live-admin">
       <header className="m1-header page-title-header">
-        <h1>{title}</h1>
+        <PageTitle title={title} back={back} />
         {actions && <div className="ws-actions page-title-actions">{actions}</div>}
         {description && <p className="page-title-description">{description}</p>}
       </header>
@@ -288,6 +291,7 @@ export function TenantCreatePage() {
   return (
     <Screen
       title="Tạo doanh nghiệp"
+      back={{ to: '/admin/tenants', label: 'Về danh sách doanh nghiệp' }}
       description="Sau khi tạo doanh nghiệp, bạn có thể mời quản trị viên tại trang chi tiết."
     >
       <section className="m1-card">
@@ -326,7 +330,6 @@ export function TenantCreatePage() {
             />
             <div className="live-toolbar">
               <button>{action.busy ? 'Đang tạo…' : 'Tạo doanh nghiệp'}</button>
-              <Link to="/admin/tenants">Quay lại</Link>
             </div>
           </fieldset>
         </form>
@@ -347,7 +350,7 @@ export function TenantDetailPage() {
   return (
     <Screen
       title={tenant?.name ?? 'Chi tiết doanh nghiệp'}
-      actions={<Link to="/admin/tenants">Danh sách doanh nghiệp</Link>}
+      back={{ to: '/admin/tenants', label: 'Về danh sách doanh nghiệp' }}
     >
       <State {...data} retry={() => refresh(revision + 1)} />
       <Feedback action={action} />

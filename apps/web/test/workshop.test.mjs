@@ -52,7 +52,9 @@ test("Field Desk covers responsibility queues and never sends unsupported sort t
     );
     assert.equal(url.searchParams.get("status"), queue.status);
     const list = new URL(queueListPath(queue, "createdAt"), "http://local");
-    assert.equal(list.searchParams.get("status"), queue.status);
+    assert.equal(list.searchParams.get(queue.kind === "handover" ? "handoverStatus" : "status"), queue.status);
+    if (queue.kind === "handover")
+      assert.equal(list.pathname, "/app/equipment-registrations");
     if (queue.kind === "task")
       assert.equal(list.searchParams.get("tab"), "tasks");
   }

@@ -69,8 +69,8 @@ export class ModelSetupService {
     id: string,
     input: {
       expectedVersion: number;
-      warrantyRevisionId?: string;
-      maintenanceRevisionId?: string;
+      warrantyRevisionId?: string | null;
+      maintenanceRevisionId?: string | null;
       durationMonths?: number;
       reason?: string;
       maintenanceOverrides?: {
@@ -96,33 +96,17 @@ export class ModelSetupService {
         'MODEL_POLICY_REFERENCE_INVALID',
         'An active model and actual handover date are required',
       );
-    const w = await this.db.modelWarrantyRevision.findFirst({
-      where: {
-        tenantId,
-        modelId: eq.modelId,
-        ...(input.warrantyRevisionId
-          ? { id: input.warrantyRevisionId }
-          : { isDefault: true }),
-        status: 'PUBLISHED',
-      },
-    });
-    const m = await this.client().getOrNull<
-      PolicyRevision<MaintenanceProfileBody>
-    >(
-      `/equipment-models/${eq.modelId}/maintenance-profiles/${input.maintenanceRevisionId ?? 'default'}`,
-      { accessToken: p.accessToken },
-    );
-    if (
-      !w ||
-      !m ||
-      m.status !== 'PUBLISHED' ||
-      !validWarrantyPolicy(w.body) ||
-      !validMaintenanceProfile(m.body)
-    )
-      throw bad(
-        'MODEL_POLICIES_MISSING',
-        'Publish both policies, including explicit NONE, before applying them',
-      );
+    const { warrantyRevisionId, maintenanceRevisionId } = input;
+    if (warrantyRevisionId === null && input.durationMonths !== undefined)
+      throw new BadRequestException({
+        code: 'WARRANTY_OVERRIDE_WITHOUT_POLICY',
+        message: 'Select a warranty policy before adjusting its duration',
+      });
+    if (maintenanceRevisionId === null && input.maintenanceOverrides?.length)
+      throw new BadRequestException({
+        code: 'MAINTENANCE_OVERRIDE_WITHOUT_POLICY',
+        message: 'Select a maintenance policy before adjusting schedules',
+      });
     if (
       (input.durationMonths !== undefined ||
         input.maintenanceOverrides?.length) &&
@@ -138,68 +122,125 @@ export class ModelSetupService {
         code: 'INVALID_HANDOVER_DATE',
         message: 'Actual handover cannot be in the future',
       });
-    const body = {
-      ...(w.body as unknown as WarrantyPolicyBody),
-      ...(input.durationMonths ? { durationMonths: input.durationMonths } : {}),
-    };
-    if (
-      body.mode !== 'APPLY' &&
-      m.body.rules.some((r) => r.term?.mode === 'WARRANTY_END')
-    )
-      throw new BadRequestException({
-        code: 'MAINTENANCE_WARRANTY_REQUIRED',
-        message:
-          'Lịch bảo trì chọn hết cùng bảo hành cần có bảo hành áp dụng. Hãy chọn số năm hoặc vĩnh viễn trên Model.',
-      });
-    const calendar = await this.client()
-      .request<{
-        body: MaintenanceProfileBody;
-        dates: { itemId: string; date: string; endDate?: string | null }[];
-      }>(
-        'POST',
-        `/equipment-models/${eq.modelId}/maintenance-profiles/${m.id}/preview`,
-        {
-          accessToken: p.accessToken,
-          body: {
-            handoverDate: day,
-            ...(body.mode === 'APPLY'
-              ? { warrantyEndDate: warrantyEnd(day, body.durationMonths) }
-              : {}),
-            overrides: input.maintenanceOverrides ?? [],
-          },
+    let warranty: ModelSetupSnapshot['warranty'];
+    if (warrantyRevisionId === null) {
+      warranty = {
+        revisionId: null,
+        revision: null,
+        body: {
+          mode: 'NONE',
+          name: 'Không áp dụng bảo hành',
+          terms: '',
+          reason: 'Hồ sơ này không kèm bảo hành.',
+          // Reuse the NONE policy body codec. A skipped warranty has no effective dates.
+          durationMonths: 1,
+          coveredCauses: [],
+          exclusions: [],
         },
-      )
-      .catch((error: unknown) => {
-        if (
-          error instanceof UpstreamError &&
-          error.status === 400 &&
-          ['INVALID_SCHEDULE', 'MAINTENANCE_FIRST_DUE_AFTER_END'].includes(
-            error.code ?? '',
-          ) &&
-          error.body &&
-          typeof error.body === 'object'
-        )
-          throw new BadRequestException(error.body);
-        throw error;
+        startDate: null,
+        endDate: null,
+      };
+    } else {
+      const w = await this.db.modelWarrantyRevision.findFirst({
+        where: {
+          tenantId,
+          modelId: eq.modelId,
+          ...(warrantyRevisionId ? { id: warrantyRevisionId } : { isDefault: true }),
+          status: 'PUBLISHED',
+        },
       });
-    const snapshot: ModelSetupSnapshot = {
-      schema: 'model-setup.v1',
-      modelId: eq.modelId,
-      handoverDate: day,
-      warranty: {
+      const sourceBody: unknown = w?.body;
+      if (!w || !validWarrantyPolicy(sourceBody))
+        throw bad('MODEL_POLICIES_MISSING', 'Select a published warranty policy or skip warranty');
+      const body: WarrantyPolicyBody = {
+        ...sourceBody,
+        ...(input.durationMonths === undefined ? {} : { durationMonths: input.durationMonths }),
+      };
+      warranty = {
         revisionId: w.id,
         revision: w.revision,
         body,
         startDate: day,
         endDate: warrantyEnd(day, body.durationMonths),
-      },
-      maintenance: {
+      };
+    }
+    let maintenance: ModelSetupSnapshot['maintenance'];
+    if (maintenanceRevisionId === null) {
+      maintenance = {
+        revisionId: null,
+        revision: null,
+        body: {
+          mode: 'NONE',
+          name: 'Không áp dụng bảo trì',
+          terms: '',
+          reason: 'Hồ sơ này không kèm lịch bảo trì định kỳ.',
+          rules: [],
+        },
+        sourceHash: null,
+        firstDueDates: [],
+      };
+    } else {
+      const m = await this.client().getOrNull<PolicyRevision<MaintenanceProfileBody>>(
+        `/equipment-models/${eq.modelId}/maintenance-profiles/${maintenanceRevisionId ?? 'default'}`,
+        { accessToken: p.accessToken },
+      );
+      if (!m || m.status !== 'PUBLISHED' || (!maintenanceRevisionId && !m.isDefault) ||
+        !validMaintenanceProfile(m.body))
+        throw bad('MODEL_POLICIES_MISSING', 'Select a published maintenance policy or skip maintenance');
+      if (
+        warranty.body.mode !== 'APPLY' &&
+        m.body.rules.some((r) => r.term?.mode === 'WARRANTY_END')
+      )
+        throw new BadRequestException({
+          code: 'MAINTENANCE_WARRANTY_REQUIRED',
+          message:
+            'Lịch bảo trì chọn hết cùng bảo hành cần có bảo hành áp dụng. Hãy chọn số năm hoặc vĩnh viễn trên Model.',
+        });
+      const calendar = await this.client()
+        .request<{
+          body: MaintenanceProfileBody;
+          dates: { itemId: string; date: string; endDate?: string | null }[];
+        }>(
+          'POST',
+          `/equipment-models/${eq.modelId}/maintenance-profiles/${m.id}/preview`,
+          {
+            accessToken: p.accessToken,
+            body: {
+              handoverDate: day,
+              ...(warranty.body.mode === 'APPLY'
+                ? { warrantyEndDate: warranty.endDate }
+                : {}),
+              overrides: input.maintenanceOverrides ?? [],
+            },
+          },
+        )
+        .catch((error: unknown) => {
+          if (
+            error instanceof UpstreamError &&
+            error.status === 400 &&
+            ['INVALID_SCHEDULE', 'MAINTENANCE_FIRST_DUE_AFTER_END'].includes(
+              error.code ?? '',
+            ) &&
+            error.body &&
+            typeof error.body === 'object'
+          )
+            throw new BadRequestException(error.body);
+          throw error;
+        });
+      maintenance = {
         revisionId: m.id,
         revision: m.revision,
         body: calendar.body,
         sourceHash: inputHash(m.body),
         firstDueDates: calendar.dates,
-      },
+      };
+    }
+    const snapshot: ModelSetupSnapshot = {
+      schema: 'model-setup.v1',
+      modelId: eq.modelId,
+      handoverDate: day,
+      warranty,
+      maintenance,
       overrideReason: input.reason?.trim() ?? '',
       hash: '',
     };
@@ -270,28 +311,30 @@ export class ModelSetupService {
     )
       throw bad('POLICY_PREVIEW_INVALID', 'Refresh policy preview');
     // Network validation finishes before taking local locks. No latest resolution.
-    const m = await this.client().get<PolicyRevision<MaintenanceProfileBody>>(
-      `/equipment-models/${snapshot.modelId}/maintenance-profiles/${snapshot.maintenance.revisionId}`,
-      { accessToken: p.accessToken },
-    );
-    if (
-      m.status !== 'PUBLISHED' ||
-      inputHash(m.body) !== snapshot.maintenance.sourceHash
-    )
-      throw bad('POLICY_RETIRED', 'Refresh policy preview');
-    for (const status of ['ACTIVE', 'PAUSED']) {
-      const page = await this.client().get<{ total: number }>(
-        `/maintenance-plans`,
-        {
-          accessToken: p.accessToken,
-          query: { equipmentId: initial.equipmentId, status, pageSize: 1 },
-        },
+    if (snapshot.maintenance.revisionId !== null) {
+      const m = await this.client().get<PolicyRevision<MaintenanceProfileBody>>(
+        `/equipment-models/${snapshot.modelId}/maintenance-profiles/${snapshot.maintenance.revisionId}`,
+        { accessToken: p.accessToken },
       );
-      if (page.total > 0)
-        throw bad(
-          'EXISTING_MAINTENANCE_PLAN',
-          'Keep or manage existing plans before applying a new programme',
+      if (
+        m.status !== 'PUBLISHED' ||
+        inputHash(m.body) !== snapshot.maintenance.sourceHash
+      )
+        throw bad('POLICY_RETIRED', 'Refresh policy preview');
+      for (const status of ['ACTIVE', 'PAUSED']) {
+        const page = await this.client().get<{ total: number }>(
+          `/maintenance-plans`,
+          {
+            accessToken: p.accessToken,
+            query: { equipmentId: initial.equipmentId, status, pageSize: 1 },
+          },
         );
+        if (page.total > 0)
+          throw bad(
+            'EXISTING_MAINTENANCE_PLAN',
+            'Keep or manage existing plans before applying a new programme',
+          );
+      }
     }
     const saved = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM equipments WHERE id=${initial.equipmentId}::uuid AND tenant_id=${initial.tenantId}::uuid FOR UPDATE`;
@@ -309,21 +352,25 @@ export class ModelSetupService {
       )
         throw bad('REGISTRATION_VERSION_CONFLICT', 'Reload draft');
       await tx.$queryRaw`SELECT id FROM equipment_models WHERE id=${eq.modelId}::uuid AND tenant_id=${eq.tenantId}::uuid FOR SHARE`;
-      await tx.$queryRaw`SELECT id FROM model_warranty_revisions WHERE id=${snapshot.warranty.revisionId}::uuid AND tenant_id=${eq.tenantId}::uuid FOR SHARE`;
       const model = await tx.equipmentModel.findFirst({
         where: { id: eq.modelId, tenantId: eq.tenantId, status: 'ACTIVE' },
       });
-      const policy = await tx.modelWarrantyRevision.findFirst({
-        where: {
-          id: snapshot.warranty.revisionId,
-          tenantId: eq.tenantId,
-          modelId: eq.modelId,
-          status: 'PUBLISHED',
-        },
-      });
+      const warranty = snapshot.warranty;
+      if (warranty.revisionId !== null) {
+        await tx.$queryRaw`SELECT id FROM model_warranty_revisions WHERE id=${warranty.revisionId}::uuid AND tenant_id=${eq.tenantId}::uuid FOR SHARE`;
+        const policy = await tx.modelWarrantyRevision.findFirst({
+          where: {
+            id: warranty.revisionId,
+            tenantId: eq.tenantId,
+            modelId: eq.modelId,
+            status: 'PUBLISHED',
+          },
+        });
+        if (!policy)
+          throw bad('POLICY_REFERENCE_CHANGED', 'Refresh equipment and policy preview');
+      }
       if (
         !model ||
-        !policy ||
         eq.status === 'RETIRED' ||
         eq.modelId !== snapshot.modelId ||
         eq.handoverDate?.toISOString().slice(0, 10) !== snapshot.handoverDate ||
@@ -339,24 +386,23 @@ export class ModelSetupService {
         return this.handovers.submit(tx, row, eq, p, customerName);
       }
       let warrantyId: string | null = null;
-      if (snapshot.warranty.body.mode === 'APPLY')
+      if (warranty.revisionId !== null && warranty.body.mode === 'APPLY')
         warrantyId = (
           await this.warranties.add(
             dataScope(p),
             eq.id,
             p.userId,
             {
-              startDate: snapshot.warranty.startDate,
-              endDate: snapshot.warranty.endDate,
+              startDate: warranty.startDate,
+              endDate: warranty.endDate,
               warrantyType: 'MODEL_POLICY',
-              terms: snapshot.warranty.body.terms,
+              terms: warranty.body.terms,
             },
             p.roles,
             tx,
             {
-              versionId: policy.id,
-              snapshot: snapshot.warranty
-                .body as unknown as Prisma.InputJsonValue,
+              versionId: warranty.revisionId,
+              snapshot: warranty.body as unknown as Prisma.InputJsonValue,
             },
           )
         ).id;

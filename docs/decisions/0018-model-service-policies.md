@@ -5,9 +5,13 @@ peer review pending. Amends ADR 0012's single-plan setup limitation. Does not
 claim approval from other repository owners.
 
 Asset owns warranty revisions; Maintenance owns model maintenance profiles.
-Each service serializes revision allocation/default publication per tenant/model.
-Published content is immutable; edits create drafts. Retirement prevents new
-selection but does not erase historical content or interrupt frozen setup replay.
+Each service serializes version allocation and activation per tenant/model.
+Active policy content is immutable. Saving with activation creates or updates
+the revision and switches the default in the same transaction. The former
+default is superseded. Automatic resolution uses the active policy. Staff can
+explicitly select a published version for a draft. Retirement prevents selection and preserves
+historical content and frozen setup replay. Reactivation restores the same
+retired or superseded revision as the default.
 No cross-database FK or query is introduced. No new role/permission is required.
 
 A policy has explicit APPLY or NONE (reason required). Missing policy is not NONE.
@@ -15,6 +19,10 @@ Model policies are opt-in for existing registrations; legacy manually specified
 Warranty/Plan and already pending commands retain their original codec/hash.
 Model-policy selection is server-resolved and pinned to immutable versions in a
 registration preview; a stale preview/retired revision cannot silently select latest.
+An explicit null revision skips the corresponding service for one registration.
+The frozen snapshot records NONE with no source revision. Maintenance
+confirmation events are emitted only for scheduled maintenance. Maintenance
+uses the updated validator to accept those events when warranty was skipped.
 The handover date determines warranty start. Add months with end-of-month clamp;
 exclusive anniversary minus one day is stored as inclusive warranty end.
 Maintenance rules start at occurrence >=1 after handover and retain that calendar

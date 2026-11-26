@@ -23,16 +23,7 @@ import { getSessionGeneration, useSession } from "../auth/session";
 import type { Page } from "../types/domain";
 import { DirectoryPicker } from "./registration-shared";
 import { errorText } from "./registration-data";
-import { displayName } from "../display-names";
-
-const labels: Record<string, string> = {
-  DRAFT: "Bản nháp",
-  PENDING_CUSTOMER_CONFIRMATION: "Chờ khách xác nhận",
-  ACTIVATED: "Đã xác nhận và kích hoạt",
-  REJECTED: "Đã từ chối",
-  CANCELLED: "Đã hủy",
-  EXPIRED: "Hết hạn",
-};
+import { displayName, handoverStatusLabels as labels } from "../display-names";
 type Handover = {
   id: string;
   handoverNo: string;
@@ -84,7 +75,7 @@ function useContext() {
     customer,
     canRespond: profile?.roles.includes("CUSTOMER_ADMIN"),
     base: `${customer ? "/my" : ""}/equipment-handovers`,
-    path: `${customer ? "/portal" : "/app"}/equipment-handovers`,
+    path: customer ? "/portal/equipment-handovers" : "/app/equipment-registrations",
   };
 }
 
@@ -294,7 +285,7 @@ export function HandoverCreatePage() {
   return (
     <section className="m2-page sd-page">
       <ServiceHeader
-        back="/app/equipment-handovers"
+        back="/app/equipment-registrations"
         backLabel="Bàn giao thiết bị"
         code="BÀN GIAO THIẾT BỊ"
         title="Tạo yêu cầu bàn giao"
@@ -699,7 +690,7 @@ export function HandoverDetailPage() {
                     to={
                       row.snapshot.registrationId
                         ? `/app/equipment-registrations/${row.snapshot.registrationId}`
-                        : `${path}/new?equipmentId=${row.equipmentId}`
+                        : `/app/equipment-handovers/new?equipmentId=${row.equipmentId}`
                     }
                   >
                     {row.snapshot.registrationId

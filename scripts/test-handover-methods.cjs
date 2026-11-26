@@ -24,12 +24,49 @@ module.exports = async function (ctx) {
         assetCode: code, serialNumber: code, handoverDate: '2026-01-31', ...extra } },
     }, 201, { 'Idempotency-Key': randomUUID() });
   };
-  const preview = row => call('POST', `${A}/equipment-registrations/${row.id}/model-policies`, manager, { expectedVersion: row.version }, 201);
+  const preview = (row, selection = {}) => call('POST', `${A}/equipment-registrations/${row.id}/model-policies`, manager,
+    { expectedVersion: row.version, ...selection }, 201);
   const submit = row => call('POST', `${A}/equipment-registrations/${row.id}/submit`, manager, { expectedVersion: row.version });
   const get = row => call('GET', `${A}/equipment-registrations/${row.id}`, manager);
   const handover = (id, token = customerToken) => call('GET', `${A}/my/equipment-handovers/${id}`, token);
   const decide = (row, action, token = customerToken, extra = {}) => call('POST', `${A}/my/equipment-handovers/${row.id}/${action}`, token,
     { expectedVersion: row.version, ...(action === 'reject' ? { reason: 'Ngày lắp đặt chưa đúng' } : {}), ...extra });
+
+  const optionalModel = await call('POST', `${A}/equipment-models`, manager,
+    { manufacturer: 'Handover test', modelCode: 'OPTIONAL-SERVICES', name: 'Optional services model' }, 201);
+  const noServices = await create('CUSTOMER_SITE', { modelId: optionalModel.id });
+  const noServicesPreview = await preview(noServices, { warrantyRevisionId: null, maintenanceRevisionId: null });
+  assert.equal(noServicesPreview.policyPreview.warranty.revisionId, null);
+  assert.equal(noServicesPreview.policyPreview.maintenance.revisionId, null);
+  const noServicesPending = await submit(noServicesPreview);
+  await decide(await handover(noServicesPending.handoverId), 'accept');
+  const noServicesDone = await get(noServices);
+  assert.equal(noServicesDone.status, 'COMPLETED');
+  assert.equal(noServicesDone.warrantyId, null);
+  assert.deepEqual(noServicesDone.maintenancePlanIds, []);
+
+  const optionalWarranty = await publish(`${A}/equipment-models/${optionalModel.id}/warranty-policies`, warranty);
+  const warrantyOnly = await create('STORE', { modelId: optionalModel.id });
+  const warrantyOnlyDone = await submit(await preview(warrantyOnly, {
+    warrantyRevisionId: optionalWarranty.id, maintenanceRevisionId: null,
+  }));
+  assert.equal(warrantyOnlyDone.status, 'COMPLETED');
+  assert.ok(warrantyOnlyDone.warrantyId);
+  assert.deepEqual(warrantyOnlyDone.maintenancePlanIds, []);
+
+  const optionalPlan = await publish(`${M}/equipment-models/${optionalModel.id}/maintenance-profiles`, {
+    ...profile, rules: [{ ...rule, term: { mode: 'UNLIMITED' } }],
+  });
+  const maintenanceOnly = await create('CUSTOMER_SITE', { modelId: optionalModel.id });
+  const maintenanceOnlyPending = await submit(await preview(maintenanceOnly, {
+    warrantyRevisionId: null, maintenanceRevisionId: optionalPlan.id,
+  }));
+  await decide(await handover(maintenanceOnlyPending.handoverId), 'accept');
+  await drain(async () => (await get(maintenanceOnly)).maintenanceProvisioning === 'READY');
+  const maintenanceOnlyDone = await get(maintenanceOnly);
+  assert.equal(maintenanceOnlyDone.warrantyId, null);
+  assert.equal(maintenanceOnlyDone.maintenancePlanIds.length, 1);
+  evidence.push({ case: 'Handover with neither policy, warranty only, or maintenance only including confirmation events', status: 'PASS' });
 
   const store = await create('STORE');
   assert.equal((await call('GET', `${A}/equipment/${store.equipmentId}`, manager)).status, 'OUT_OF_SERVICE');
@@ -51,6 +88,24 @@ module.exports = async function (ctx) {
   const onsite = await create('CUSTOMER_SITE', { installationDate: '2026-02-01' });
   let pending = await submit(await preview(onsite));
   assert.equal(pending.status, 'PENDING_CUSTOMER_CONFIRMATION');
+  const registrations = `${A}/equipment-registrations`;
+  const directory = await call('GET', `${registrations}?pageSize=1`, manager);
+  assert.equal(directory.items.length, 1);
+  assert.ok(directory.total > directory.items.length);
+  assert.equal(directory.summary.total, directory.total);
+  assert.equal(Object.values(directory.summary.byEquipmentStatus).reduce((sum, count) => sum + count, 0), directory.total);
+  assert.ok(directory.summary.byEquipmentStatus.ACTIVE > 0);
+  const pendingFilter = `equipmentId=${onsite.equipmentId}&handoverStatus=PENDING_CUSTOMER_CONFIRMATION&status=PENDING_CUSTOMER_CONFIRMATION`;
+  const filtered = await call('GET', `${registrations}?${pendingFilter}&equipmentStatus=OUT_OF_SERVICE`, manager);
+  assert.equal(filtered.total, 1);
+  assert.equal(filtered.items[0].equipment.status, 'OUT_OF_SERVICE');
+  assert.equal(filtered.items[0].handover.id, pending.handoverId);
+  assert.equal(filtered.items[0].handover.status, 'PENDING_CUSTOMER_CONFIRMATION');
+  const anotherStatus = await call('GET', `${registrations}?${pendingFilter}&equipmentStatus=ACTIVE`, manager);
+  assert.equal(anotherStatus.total, 0);
+  assert.equal(anotherStatus.summary.byEquipmentStatus.OUT_OF_SERVICE, 1);
+  const foreignList = await call('GET', `${registrations}?${pendingFilter}`, other);
+  assert.equal(foreignList.summary.total, 0);
   assert.equal(pending.warrantyId, null);
   assert.equal(pending.completedAt, null);
   await assert.rejects(dbs.asset.equipmentRegistration.update({ where: { id: pending.id }, data: { deliveryMethod: null } }), /constraint|check/i);

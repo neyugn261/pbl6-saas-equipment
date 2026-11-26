@@ -7,7 +7,25 @@ import {
 } from './model-policies';
 
 /** Frozen service setup; only Asset publishes it after customer acceptance. */
-export interface ModelSetupSnapshot {
+interface VersionedMaintenanceSetup {
+  revisionId: string;
+  revision: number;
+  body: MaintenanceProfileBody;
+  sourceHash: string;
+  firstDueDates: { itemId: string; date: string; endDate?: string | null }[];
+}
+
+interface SkippedMaintenanceSetup {
+  revisionId: null;
+  revision: null;
+  body: MaintenanceProfileBody & { mode: 'NONE' };
+  sourceHash: null;
+  firstDueDates: [];
+}
+
+export interface ModelSetupSnapshot<
+  Maintenance = VersionedMaintenanceSetup | SkippedMaintenanceSetup,
+> {
   schema: 'model-setup.v1';
   modelId: string;
   handoverDate: string;
@@ -17,14 +35,14 @@ export interface ModelSetupSnapshot {
     body: WarrantyPolicyBody;
     startDate: string;
     endDate: string;
+  } | {
+    revisionId: null;
+    revision: null;
+    body: WarrantyPolicyBody & { mode: 'NONE' };
+    startDate: null;
+    endDate: null;
   };
-  maintenance: {
-    revisionId: string;
-    revision: number;
-    body: MaintenanceProfileBody;
-    sourceHash: string;
-    firstDueDates: { itemId: string; date: string; endDate?: string | null }[];
-  };
+  maintenance: Maintenance;
   overrideReason: string;
   hash: string;
 }
@@ -44,17 +62,23 @@ export function validModelSetupSnapshot(
     typeof s.overrideReason === 'string' &&
     s.overrideReason.length <= 2000 &&
     !!s.warranty &&
-    is.uuid(s.warranty.revisionId) &&
-    positive(s.warranty.revision) &&
     validWarrantyPolicy(s.warranty.body) &&
-    is.isoDate(s.warranty.startDate) &&
-    is.isoDate(s.warranty.endDate) &&
+    (s.warranty.revisionId === null
+      ? s.warranty.revision === null && s.warranty.body.mode === 'NONE' &&
+        s.warranty.startDate === null && s.warranty.endDate === null
+      : is.uuid(s.warranty.revisionId) && positive(s.warranty.revision) &&
+        is.isoDate(s.warranty.startDate) && is.isoDate(s.warranty.endDate)) &&
     !!s.maintenance &&
-    is.uuid(s.maintenance.revisionId) &&
-    positive(s.maintenance.revision) &&
     validMaintenanceProfile(s.maintenance.body) &&
-    hashCheck(s.maintenance.sourceHash) &&
     Array.isArray(s.maintenance.firstDueDates) &&
+    (s.maintenance.revisionId === null
+      ? s.maintenance.revision === null &&
+        s.maintenance.sourceHash === null &&
+        s.maintenance.body.mode === 'NONE' &&
+        s.maintenance.firstDueDates.length === 0
+      : is.uuid(s.maintenance.revisionId) &&
+        positive(s.maintenance.revision) &&
+        hashCheck(s.maintenance.sourceHash)) &&
     s.maintenance.firstDueDates.length <= 8 &&
     s.maintenance.firstDueDates.every(
       (d) =>
@@ -76,7 +100,7 @@ export interface EquipmentRegistrationConfirmedV1 {
   submittedBy: string;
   confirmedBy: string;
   confirmedAt: string;
-  snapshot: ModelSetupSnapshot;
+  snapshot: ModelSetupSnapshot<VersionedMaintenanceSetup>;
 }
 export interface RegistrationMaintenanceReadyV1 {
   registrationId: string;

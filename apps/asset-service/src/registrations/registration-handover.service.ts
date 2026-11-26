@@ -188,23 +188,24 @@ export class RegistrationHandoverService {
         'The submitted registration changed; cancel and submit a new version',
       );
     let warrantyId: string | null = null;
-    if (snapshot.warranty.body.mode === 'APPLY') {
+    const warranty = snapshot.warranty;
+    if (warranty.revisionId !== null && warranty.body.mode === 'APPLY') {
       warrantyId = (
         await this.warranties.add(
           dataScope(p),
           eq.id,
           p.userId,
           {
-            startDate: snapshot.warranty.startDate,
-            endDate: snapshot.warranty.endDate,
+            startDate: warranty.startDate,
+            endDate: warranty.endDate,
             warrantyType: 'MODEL_POLICY',
-            terms: snapshot.warranty.body.terms,
+            terms: warranty.body.terms,
           },
           p.roles,
           tx,
           {
-            versionId: snapshot.warranty.revisionId,
-            snapshot: json(snapshot.warranty.body),
+            versionId: warranty.revisionId,
+            snapshot: json(warranty.body),
           },
         )
       ).id;
@@ -217,7 +218,8 @@ export class RegistrationHandoverService {
         'An unexpected warranty was added; correct and resubmit the registration',
       );
     }
-    const needsPlan = snapshot.maintenance.body.mode === 'APPLY';
+    const maintenance = snapshot.maintenance;
+    const needsPlan = maintenance.body.mode === 'APPLY';
     await tx.equipmentRegistration.update({
       where: { id: row.id },
       data: {
@@ -241,7 +243,7 @@ export class RegistrationHandoverService {
         changes: { handoverId: handover.id, policyHash: snapshot.hash },
       },
     });
-    if (needsPlan)
+    if (needsPlan && maintenance.revisionId !== null)
       await enqueueEvent(tx, Events.EquipmentRegistrationConfirmed, {
         tenantId: eq.tenantId,
         aggregateId: row.id,
@@ -255,7 +257,7 @@ export class RegistrationHandoverService {
           submittedBy: row.submittedBy!,
           confirmedBy: p.userId,
           confirmedAt: now.toISOString(),
-          snapshot,
+          snapshot: { ...snapshot, maintenance },
         },
       });
   }

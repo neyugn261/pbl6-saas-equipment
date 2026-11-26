@@ -15,6 +15,7 @@ test('customer site picker renders the real array contract, searches locally and
     react: h.react, 'react/jsx-runtime': h.jsx,
     '../api/client': tab.client,
     '../auth/session': tab.session,
+    '../components/PageTitle': { PageTitle: 'page-title' },
     './registration-data': {
       errorText: error => error.message,
       useDirectory: (_area, path) => {

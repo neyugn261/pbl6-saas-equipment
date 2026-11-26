@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: PBL6 model service policies — ADR 0018
-  version: 1.0.0
+  version: 1.2.0
   description: Additive contract. Existing registration submit/resume endpoints also return policyPreview
     and maintenancePlanIds; maintenancePlanId is populated only for exactly one Plan. Legacy pending commands
     retain their codec/hash and singular setup endpoint. NONE must include a nonblank reason; APPLY maintenance
@@ -47,7 +47,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
     post:
-      summary: Create a validated draft revision
+      summary: Create a policy revision and optionally activate it
       description: ''
       parameters:
       - name: modelId
@@ -107,7 +107,7 @@ paths:
                 $ref: '#/components/schemas/WarrantyRevision'
         default: *id002
     put:
-      summary: Update draft with optimistic version
+      summary: Update a draft and optionally activate it in the same transaction
       description: ''
       parameters:
       - name: modelId
@@ -159,6 +159,59 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/VersionCommand'
+  /api/assets/equipment-models/{modelId}/warranty-policies/{id}/reactivate:
+    post:
+      summary: Activate a retired or superseded revision without changing its identity or content
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCommand'
+  /api/assets/equipment-models/{modelId}/warranty-policies/{id}/revise:
+    post:
+      summary: Save changed terms from a published or retired revision as a new revision
+      description: Set publish to true to replace the current default atomically. Otherwise the result is a draft.
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarrantyRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WarrantyRevisionCommand'
   /api/assets/equipment-models/{modelId}/warranty-policies/{id}/retire:
     post:
       summary: Retire revision; published content remains immutable
@@ -213,7 +266,7 @@ paths:
                 - items
         default: *id002
     post:
-      summary: Create a validated draft revision
+      summary: Create a policy revision and optionally activate it
       description: ''
       parameters:
       - name: modelId
@@ -273,7 +326,7 @@ paths:
                 $ref: '#/components/schemas/MaintenanceRevision'
         default: *id002
     put:
-      summary: Update draft with optimistic version
+      summary: Update a draft and optionally activate it in the same transaction
       description: ''
       parameters:
       - name: modelId
@@ -325,6 +378,59 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/VersionCommand'
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles/{id}/reactivate:
+    post:
+      summary: Activate a retired or superseded revision without changing its identity or content
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCommand'
+  /api/maintenance/equipment-models/{modelId}/maintenance-profiles/{id}/revise:
+    post:
+      summary: Save changed terms from a published or retired revision as a new revision
+      description: Set publish to true to replace the current default atomically. Otherwise the result is a draft.
+      parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema: *id001
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceRevision'
+        default: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceRevisionCommand'
   /api/maintenance/equipment-models/{modelId}/maintenance-profiles/{id}/retire:
     post:
       summary: Retire revision; published content remains immutable
@@ -468,8 +574,10 @@ paths:
     post:
       summary: Resolve, preview and pin exact model-policy versions into draft
       description: Existing DRAFT only. Requires equipment:manage, warranty:manage and maintenance:manage.
-        Overrides need a reason. Policy absence is MODEL_POLICIES_MISSING/POLICY_NOT_CONFIGURED, never
-        NONE. Commit creates no Warranty or Plan yet.
+        Explicit revision IDs select published versions of this model. An omitted ID resolves the current
+        default. An explicit null skips that service for this registration and saves a NONE snapshot
+        without a revision. Overrides need a reason and a selected policy for the adjusted service.
+        Commit creates no Warranty or Plan yet.
       parameters:
       - name: id
         in: path
@@ -976,8 +1084,8 @@ components:
           type: integer
           minimum: 1
           maximum: 2147483647
-        warrantyRevisionId: *id001
-        maintenanceRevisionId: *id001
+        warrantyRevisionId: {type: [string, 'null'], format: uuid}
+        maintenanceRevisionId: {type: [string, 'null'], format: uuid}
         durationMonths:
           type: integer
           minimum: 1
@@ -1107,6 +1215,10 @@ components:
       properties:
         body:
           $ref: '#/components/schemas/WarrantyPolicy'
+        activate:
+          type: boolean
+          default: false
+          description: Use the saved revision for new registrations and supersede the previous default.
       required:
       - body
     WarrantyEdit:
@@ -1119,9 +1231,30 @@ components:
           maximum: 2147483647
         body:
           $ref: '#/components/schemas/WarrantyPolicy'
+        activate:
+          type: boolean
+          default: false
+          description: Use the saved revision for new registrations and supersede the previous default.
       required:
       - expectedVersion
       - body
+    WarrantyRevisionCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        body:
+          $ref: '#/components/schemas/WarrantyPolicy'
+        publish:
+          type: boolean
+          description: Use the new revision for new registrations and supersede the previous default.
+      required:
+      - expectedVersion
+      - body
+      - publish
     WarrantyRevision:
       type: object
       properties:
@@ -1167,6 +1300,10 @@ components:
       properties:
         body:
           $ref: '#/components/schemas/MaintenanceProfile'
+        activate:
+          type: boolean
+          default: false
+          description: Use the saved revision for new registrations and supersede the previous default.
       required:
       - body
     MaintenanceEdit:
@@ -1179,9 +1316,30 @@ components:
           maximum: 2147483647
         body:
           $ref: '#/components/schemas/MaintenanceProfile'
+        activate:
+          type: boolean
+          default: false
+          description: Use the saved revision for new registrations and supersede the previous default.
       required:
       - expectedVersion
       - body
+    MaintenanceRevisionCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        body:
+          $ref: '#/components/schemas/MaintenanceProfile'
+        publish:
+          type: boolean
+          description: Use the new revision for new registrations and supersede the previous default.
+      required:
+      - expectedVersion
+      - body
+      - publish
     MaintenanceRevision:
       type: object
       properties:
@@ -1237,18 +1395,18 @@ components:
           type: object
           additionalProperties: false
           properties:
-            revisionId: *id001
+            revisionId: {type: [string, 'null'], format: uuid}
             revision:
-              type: integer
+              type: [integer, 'null']
               minimum: 1
               maximum: 2147483647
             body:
               $ref: '#/components/schemas/WarrantyPolicy'
             startDate:
-              type: string
+              type: [string, 'null']
               format: date
             endDate:
-              type: string
+              type: [string, 'null']
               format: date
           required:
           - revisionId
@@ -1260,15 +1418,15 @@ components:
           type: object
           additionalProperties: false
           properties:
-            revisionId: *id001
+            revisionId: {type: [string, 'null'], format: uuid}
             revision:
-              type: integer
+              type: [integer, 'null']
               minimum: 1
               maximum: 2147483647
             body:
               $ref: '#/components/schemas/MaintenanceProfile'
             sourceHash:
-              type: string
+              type: [string, 'null']
               maxLength: 64
             firstDueDates:
               type: array

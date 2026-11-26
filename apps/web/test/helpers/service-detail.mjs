@@ -1,8 +1,17 @@
+export function pageTitleUI(tab, h) {
+  return tab.load('components/PageTitle.tsx', {
+    'react/jsx-runtime': h.jsx,
+    'react-router-dom': { Link: 'a' },
+    'lucide-react': { ArrowLeft: 'icon' },
+  })
+}
+
 export function detailUI(tab,h) {
   return tab.load('features/workspace/ServiceDetailUI.tsx', {
     react:h.react,'react/jsx-runtime':h.jsx,
     'react-router-dom':{Link:'a'},
-    'lucide-react':{ArrowLeft:'icon',ArrowRight:'icon',Info:'icon',RefreshCw:'icon'},
+    'lucide-react':{ArrowRight:'icon',Info:'icon',RefreshCw:'icon'},
+    '../../components/PageTitle': pageTitleUI(tab, h),
     './WorkspaceUI':{Badge:({status}) => h.jsx.jsx('span',{children:status})},
     './service-detail-data':tab.load('features/workspace/service-detail-data.ts'),
     '../../display-names':tab.load('display-names.ts'),

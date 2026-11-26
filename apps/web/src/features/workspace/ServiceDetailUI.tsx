@@ -1,7 +1,8 @@
 import { serviceLabels } from "./service-detail-data";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Info, RefreshCw } from "lucide-react";
+import { ArrowRight, Info, RefreshCw } from "lucide-react";
+import { PageTitle } from "../../components/PageTitle";
 import { Badge } from "./WorkspaceUI";
 import { hideTechnicalIds } from "../../display-names";
 import "./service-detail.css";
@@ -9,6 +10,7 @@ import "./service-detail.css";
 export function ServiceHeader({
   back,
   backLabel,
+  backState,
   code,
   title,
   description,
@@ -18,27 +20,26 @@ export function ServiceHeader({
 }: {
   back: string;
   backLabel: string;
-  code: string;
+  backState?: unknown;
+  code?: string;
   title: string;
-  description: string;
+  description?: string;
   status?: unknown;
   statusLabel?: string;
   actions?: ReactNode;
 }) {
   return (
     <header className="sd-header">
-      <Link className="sd-back" to={back}>
-        <ArrowLeft size={15} />
-        {backLabel}
-      </Link>
       <div className="sd-header-main page-title-header">
-        <span className="ws-eyebrow page-title-eyebrow">{code}</span>
-        <h1>{title}</h1>
-        <div className="sd-header-actions page-title-actions">
-          {status != null && <Badge status={status} label={statusLabel} />}{" "}
-          {actions}
-        </div>
-        <p className="page-title-description">{description}</p>
+        {code && <span className="ws-eyebrow page-title-eyebrow">{code}</span>}
+        <PageTitle title={title} back={{ to: back, label: backLabel, state: backState }} />
+        {(status != null || actions) && (
+          <div className="sd-header-actions page-title-actions">
+            {status != null && <Badge status={status} label={statusLabel} />}
+            {actions}
+          </div>
+        )}
+        {description && <p className="page-title-description">{description}</p>}
       </div>
     </header>
   );
@@ -47,18 +48,20 @@ export function ServiceCard({
   title,
   description,
   actions,
+  headingLevel: Heading = "h2",
   children,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
+  headingLevel?: "h2" | "h3";
   children: ReactNode;
 }) {
   return (
     <section className="sd-card">
       <header>
         <div>
-          <h2>{title}</h2>
+          <Heading>{title}</Heading>
           {description && <p>{description}</p>}
         </div>
         {actions}

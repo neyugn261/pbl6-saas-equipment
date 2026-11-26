@@ -308,7 +308,8 @@ export const Events = {
     type: 'EquipmentRegistrationConfirmed', version: 1, aggregateType: 'EquipmentRegistration', producer: 'asset-service',
     fields: { registrationId: is.uuid, equipmentId: is.uuid, customerId: is.uuid, customerSiteId: is.uuid,
       snapshotVersion: (v) => Number.isSafeInteger(v) && Number(v) >= 0, submittedBy: is.uuid, confirmedBy: is.uuid,
-      confirmedAt: is.isoDateTime, snapshot: validModelSetupSnapshot,
+      confirmedAt: is.isoDateTime,
+      snapshot: (v) => validModelSetupSnapshot(v) && v.maintenance.revisionId !== null,
     },
   }),
   RegistrationMaintenanceReady: define<RegistrationMaintenanceReadyV1>({

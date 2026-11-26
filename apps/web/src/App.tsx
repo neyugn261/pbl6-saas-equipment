@@ -22,9 +22,8 @@ import {
   requestIntake,
 } from "./features/workspace/request-intake";
 import { useWorkspaceData } from "./features/workspace/workspace-data";
-import { recordLabel } from "./display-names";
+import { equipmentStatusLabels, recordLabel } from "./display-names";
 import { PartRequestDetail, PartRequestQueue } from "./features/inventory/PartRequests";
-import { ModelPolicyPage } from "./routes/ModelPolicyPage";
 import { WarrantyAssessmentPanel } from "./routes/ModelPolicyPanels";
 import { useDirectory } from "./routes/registration-data";
 import type { DirectoryRow } from "./routes/registration-data";
@@ -225,6 +224,11 @@ const EquipmentModelsPage = lazy(() =>
     default: module.EquipmentModelsPage,
   })),
 );
+const ModelPolicyPage = lazy(() =>
+  import("./routes/ModelPolicyPage").then((module) => ({
+    default: module.ModelPolicyPage,
+  })),
+);
 const EquipmentRegistrationPage = lazy(() =>
   import("./routes/EquipmentRegistration").then((module) => ({
     default: module.EquipmentRegistrationPage,
@@ -240,6 +244,15 @@ const WorkspaceRequestsPage = lazy(() =>
     default: module.WorkspaceRequestsPage,
   })),
 );
+function HandoverRedirect() {
+  const location = useLocation();
+  const status = new URLSearchParams(location.search).get("status");
+  return <Navigate to={{
+    pathname: "/app/equipment-registrations",
+    search: status ? new URLSearchParams({ handoverStatus: status }).toString() : "",
+  }} replace />;
+}
+
 const HandoverListPage = lazy(() =>
   import("./features/workspace/OperationsPages").then((module) => ({
     default: module.WorkspaceHandoverPage,
@@ -758,12 +771,7 @@ function EquipmentPage() {
     const frame = window.requestAnimationFrame(() => window.scrollTo({ top, behavior: 'instant' }));
     return () => window.cancelAnimationFrame(frame);
   }, [data.loading, scrollKey]);
-  const statusLabels: Record<string, string> = {
-    ACTIVE: "Hoạt động",
-    IN_SERVICE: "Đang sử dụng",
-    OUT_OF_SERVICE: "Ngừng hoạt động",
-    RETIRED: "Ngừng sử dụng",
-  };
+  const statusLabels = equipmentStatusLabels;
   const operationalLabels: Record<string, string> = {
     UNKNOWN: "Chưa đánh giá",
     OPERATIONAL: "Đang vận hành",
@@ -1123,24 +1131,6 @@ function EquipmentPage() {
               <div className="equipment-filter-actions">
                 <span>Model, serial và mã thiết bị được tìm trên toàn bộ dữ liệu theo quyền.</span>
                 <div className="equipment-filter-actions__group">
-                  <button
-                    type="button"
-                    className="ws-button ws-button--secondary equipment-toggle-btn"
-                    aria-expanded={showAdvanced}
-                    onClick={toggleAdvanced}
-                  >
-                    {showAdvanced ? (
-                      <>
-                        <ChevronUp size={15} aria-hidden="true" />
-                        <span>Ẩn bớt</span>
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown size={15} aria-hidden="true" />
-                        <span>{advancedCount > 0 ? `Hiện thêm (${advancedCount})` : "Hiện thêm bộ lọc"}</span>
-                      </>
-                    )}
-                  </button>
                   <button type="submit" className="m1-button">Áp dụng bộ lọc</button>
                 </div>
               </div>
@@ -2080,7 +2070,7 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
     { path: '/app/equipment/:id/public-qr', element: <PublicQrSettingsPage />, roles: ['TENANT_ADMIN', 'SERVICE_MANAGER'] },
     {
       path: "/app/equipment-handovers",
-      element: <HandoverListPage />,
+      element: <HandoverRedirect />,
       roles: ["TENANT_ADMIN", "SERVICE_MANAGER"],
     },
     {

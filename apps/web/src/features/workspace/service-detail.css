@@ -8,15 +8,6 @@
   display: block;
   margin: 0 0 22px;
 }
-.sd-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #66738a;
-  font-size: 12px;
-  margin-bottom: 18px;
-  text-decoration: none;
-}
 .sd-header-main {
   display: flex;
   align-items: flex-start;
@@ -61,7 +52,8 @@
   gap: 12px;
   border-bottom: 1px solid #eef1f6;
 }
-.sd-card h2 {
+.sd-card h2,
+.sd-card > header h3 {
   margin: 0;
   font-size: 15px;
   font-weight: 720;
@@ -800,8 +792,5 @@
   }
   .sd-progress li::after {
     display: none;
-  }
-  .sd-back {
-    margin-bottom: 13px;
   }
 }

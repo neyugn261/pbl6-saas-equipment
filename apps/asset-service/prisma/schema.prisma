@@ -284,6 +284,7 @@ model OutboxEvent {
 model EquipmentRegistration {
   /// Null preserves registrations created before delivery methods existed.
   deliveryMethod       String?   @map("delivery_method") @db.VarChar(20)
+  createdWithEquipment Boolean   @default(false) @map("created_with_equipment")
   handoverDetails      Json?     @map("handover_details")
   handoverId           String?   @map("handover_id") @db.Uuid
   maintenanceProvisioning String? @map("maintenance_provisioning") @db.VarChar(20)

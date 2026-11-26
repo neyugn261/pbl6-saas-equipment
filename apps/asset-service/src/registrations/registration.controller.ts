@@ -19,8 +19,8 @@ class ModelPolicyPreviewDto {
   @Type(() => ScheduleOverrideDto)
   maintenanceOverrides?: ScheduleOverrideDto[];
   @IsInt() @Min(1) expectedVersion: number;
-  @IsOptional() @IsUUID() warrantyRevisionId?: string;
-  @IsOptional() @IsUUID() maintenanceRevisionId?: string;
+  @IsOptional() @IsUUID() warrantyRevisionId?: string | null;
+  @IsOptional() @IsUUID() maintenanceRevisionId?: string | null;
   @IsOptional() @IsInt() @Min(1) @Max(1200) durationMonths?: number;
   @IsOptional() @IsString() @MaxLength(2000) reason?: string;
 }

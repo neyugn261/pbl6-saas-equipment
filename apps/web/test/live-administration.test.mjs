@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { hooks, nodes, settle, webTab } from './helpers/web-tab.mjs'
+import { pageTitleUI } from './helpers/service-detail.mjs'
 
 function setup(fetch, profile = { id: 'admin', tenantId: 'tenant-a', customerId: null, roles: ['TENANT_ADMIN'], userType: 'TENANT_STAFF',
   }, params = {},
@@ -19,6 +20,7 @@ function setup(fetch, profile = { id: 'admin', tenantId: 'tenant-a', customerId:
       },
     '../api/client': tab.client, '../auth/session': tab.session,
     '../components/Badges': { StatusBadge: 'badge' }, './registration-data': directory,
+    '../components/PageTitle': pageTitleUI(tab, host),
     './PasswordPages': { ChangePasswordPanel: 'ChangePasswordPanel' },
     './live-administration.css': {},
       '../features/workspace/BranchManagement': {

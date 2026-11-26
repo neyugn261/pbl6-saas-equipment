@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, api } from "../../api/client";
 import { getSessionGeneration, useSession } from "../../auth/session";
+import { PageTitle } from "../../components/PageTitle";
 import { recordLabel, technicianName } from "../../display-names";
 import type { Page } from "../../types/domain";
 import { DataState, Pagination } from "../workspace/WorkspaceUI";
@@ -580,6 +581,7 @@ export function PartRequestDetail() {
 function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
   const { profile } = useSession();
   const [query] = useSearchParams();
+  const queueQuery = query.toString();
   const [revision, setRevision] = useState(0);
   const [decision, setDecision] = useState<keyof typeof decisions>();
   const [lineId, setLineId] = useState<string>();
@@ -606,12 +608,11 @@ function RequestDetail({ kind, id }: { kind?: string; id?: string }) {
     );
   return (
     <div className="m2-page part-request-page">
-      <Link to={queue + "?" + query}>← Hàng chờ phiếu phụ tùng</Link>
       <div className="part-request-detail-header">
-        <h1>
-          {kind === "part-requests" ? "Phiếu xin cấp" : "Đề nghị trả kho"}{" "}
-          {item?.requestNo}
-        </h1>
+        <PageTitle
+          title={[kind === "part-requests" ? "Phiếu xin cấp" : "Đề nghị trả kho", item?.requestNo].filter(Boolean).join(" ")}
+          back={{ to: queue + (queueQuery ? `?${queueQuery}` : ""), label: "Về hàng chờ phiếu phụ tùng" }}
+        />
         <button type="button" disabled={operation.busy} onClick={reload}>
           Làm mới phiếu
         </button>

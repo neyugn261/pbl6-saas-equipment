@@ -5,6 +5,7 @@ import {
   IsInt,
   IsISO8601,
   IsObject,
+  IsOptional,
   IsString,
   IsUUID,
   Matches,
@@ -16,7 +17,8 @@ import {
   validateSync,
 } from 'class-validator';
 import { PaginationQueryDto } from '@pbl6/service-kit';
-import { CreateEquipmentDto } from '../equipment/dto/equipment.dto';
+import { CreateEquipmentDto, EQUIPMENT_STATUSES } from '../equipment/dto/equipment.dto';
+import { HANDOVER_STATUSES } from '../handovers/handover.dto';
 import { CreateWarrantyDto } from '../warranties/warranty.dto';
 
 const present = (_: unknown, value: unknown) => value !== undefined;
@@ -32,6 +34,13 @@ export class HandoverDetailsDto {
   @ValidateIf(present) @IsString() @MaxLength(4000) notes?: string;
   @IsISO8601({ strict: true }) expiresAt: string;
 }
+export class DraftHandoverDetailsDto {
+  @IsString() @MaxLength(2000) condition: string;
+  @ValidateIf(present) @IsString() @MaxLength(4000) notes?: string;
+  @ValidateIf((_, value) => value !== null)
+  @IsISO8601({ strict: true })
+  expiresAt: string | null;
+}
 export class CreateRegistrationDto {
   @ValidateIf(present)
   @IsIn(['STORE', 'CUSTOMER_SITE'])
@@ -45,13 +54,27 @@ export class VersionDto {
   @IsInt() @Min(1) expectedVersion: number;
 }
 export class PatchRegistrationDto extends VersionDto {
-  @ValidateIf(present) @IsObject() handoverDetails?: Record<string, unknown>;
+  @ValidateIf(present) @IsIn(['STORE', 'CUSTOMER_SITE']) deliveryMethod?: DeliveryMethod;
+  @ValidateIf(present) @IsUUID() modelId?: string;
+  @ValidateIf(present) @IsUUID() customerId?: string;
+  @ValidateIf(present) @IsUUID() customerSiteId?: string;
+  @IsOptional() @IsUUID() locationId?: string | null;
+  @ValidateIf(present) @IsString() @Matches(/\S/) @MaxLength(100) assetCode?: string;
+  @ValidateIf(present) @IsString() @Matches(/\S/) @MaxLength(150) serialNumber?: string;
+  @IsOptional() @IsString() @Matches(/\S/) @MaxLength(200) displayName?: string | null;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) purchaseDate?: string | null;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) handoverDate?: string | null;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) installationDate?: string | null;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) commissionedDate?: string | null;
+  @IsOptional() @IsObject() handoverDetails?: Record<string, unknown> | null;
   @ValidateIf(present) @IsObject() warranty?: Record<string, unknown>;
   @ValidateIf(present) @IsObject() maintenance?: Record<string, unknown>;
 }
 export class EmptyRegistrationDto {}
 export class RegistrationQuery extends PaginationQueryDto {
   @ValidateIf(present) @IsIn(REGISTRATION_STATUSES) status?: string;
+  @ValidateIf(present) @IsIn(EQUIPMENT_STATUSES) equipmentStatus?: string;
+  @ValidateIf(present) @IsIn(HANDOVER_STATUSES) handoverStatus?: string;
   @ValidateIf(present) @IsUUID() equipmentId?: string;
   @ValidateIf(present) @IsUUID() createKey?: string;
 }

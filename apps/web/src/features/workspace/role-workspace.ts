@@ -148,13 +148,6 @@ const links: NavigationItem[] = [
     roles: ["TENANT_ADMIN", "SERVICE_MANAGER"],
   },
   {
-    path: "/app/equipment-handovers",
-    label: "Bàn giao thiết bị",
-    group: "Khách hàng & thiết bị",
-    icon: "ClipboardList",
-    roles: ["TENANT_ADMIN", "SERVICE_MANAGER"],
-  },
-  {
     path: "/app/bulk-handovers",
     label: "Nhập lô thiết bị",
     group: "Khách hàng & thiết bị",
