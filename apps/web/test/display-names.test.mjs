@@ -91,6 +91,7 @@ test('ledger component renders inactive rows outside dropdowns, preserving histo
     '../workspace/WorkspaceUI': { PageHeading: 'page-heading' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
     'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
+    '../../components/PageTitle': { PageTitle: 'page-title' },
     './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'), '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
   h.render(InventoryTransactionsPage); await settle(); const tree = expand(h.render(InventoryTransactionsPage))
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Inactive warehouse').length)
@@ -112,6 +113,7 @@ test('warehouse list uses scoped branch name and keeps branch ID as form value',
     '../workspace/WorkspaceUI': { PageHeading: 'page-heading' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
     'react-router-dom': { Link: 'a' }, '../../api/client': { ...tab.client, api }, '../../auth/session': tab.session,
     'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
+    '../../components/PageTitle': { PageTitle: 'page-title' },
     './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'), '../../display-names': labels, '../workspace/ui-values':tab.load('features/workspace/ui-values.ts') })
   h.render(InventoryWarehousesPage); await settle(); const tree = expand(h.render(InventoryWarehousesPage))
   assert.ok(nodes(tree, n => n.type === 'td' && n.props.children === 'Chi nhánh Hà Nội').length)

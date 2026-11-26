@@ -65,10 +65,12 @@ export class ModelPoliciesService {
   async write(
     p: Principal,
     modelId: string,
-    action: 'CREATE' | 'UPDATE' | 'PUBLISH' | 'RETIRE',
+    action:
+      'CREATE' | 'UPDATE' | 'PUBLISH' | 'RETIRE' | 'REACTIVATE' | 'REVISE',
     id?: string,
     version?: number,
     raw?: unknown,
+    activate = false,
   ) {
     const model = await this.model(p, modelId);
     if (model.status !== 'ACTIVE')
@@ -76,7 +78,10 @@ export class ModelPoliciesService {
         code: 'MODEL_INACTIVE',
         message: 'Model is inactive',
       });
-    if (['CREATE', 'UPDATE'].includes(action) && !validWarrantyPolicy(raw))
+    if (
+      ['CREATE', 'UPDATE', 'REVISE'].includes(action) &&
+      !validWarrantyPolicy(raw)
+    )
       throw new BadRequestException({
         code: 'INVALID_POLICY',
         message: 'Invalid policy fields or limits',
@@ -94,8 +99,53 @@ export class ModelPoliciesService {
           code: 'MODEL_INACTIVE',
           message: 'Model is inactive',
         });
+      const before =
+        action === 'CREATE'
+          ? null
+          : await tx.modelWarrantyRevision.findFirst({
+              where: { id, tenantId, modelId },
+            });
+      if (!before && action !== 'CREATE')
+        throw new NotFoundException({
+          code: 'POLICY_NOT_FOUND',
+          message: 'Policy revision not found',
+        });
+      const statuses: Record<typeof action, string[]> = {
+        UPDATE: ['DRAFT'],
+        PUBLISH: ['DRAFT'],
+        RETIRE: ['PUBLISHED'],
+        REACTIVATE: ['RETIRED', 'PUBLISHED'],
+        REVISE: ['PUBLISHED', 'RETIRED'],
+        CREATE: [],
+      };
+      if (
+        before &&
+        (before.version !== version ||
+          !statuses[action].includes(before.status) ||
+          (action === 'REACTIVATE' && before.isDefault))
+      )
+        throw new ConflictException({
+          code: 'POLICY_VERSION_CONFLICT',
+          message: 'Reload the policy and verify its version and status',
+        });
+      const makeDefault =
+        action === 'PUBLISH' ||
+        action === 'REACTIVATE' ||
+        (activate &&
+          (action === 'CREATE' || action === 'UPDATE' || action === 'REVISE'));
+      if (makeDefault)
+        await tx.modelWarrantyRevision.updateMany({
+          where: { tenantId, modelId, isDefault: true },
+          data: { isDefault: false, version: { increment: 1 } },
+        });
       let row;
-      if (action === 'CREATE') {
+      if (!before || action === 'REVISE') {
+        // Advance the edit token so a replay cannot create another revision.
+        if (before && !(makeDefault && before.isDefault))
+          await tx.modelWarrantyRevision.update({
+            where: { id: before.id },
+            data: { version: { increment: 1 } },
+          });
         const last = await tx.modelWarrantyRevision.findFirst({
           where: { tenantId, modelId },
           orderBy: { revision: 'desc' },
@@ -107,41 +157,22 @@ export class ModelPoliciesService {
             revision: (last?.revision ?? 0) + 1,
             body: raw as Prisma.InputJsonValue,
             createdBy: p.userId,
+            ...(makeDefault ? { status: 'PUBLISHED', isDefault: true } : {}),
           },
         });
       } else {
-        const before = await tx.modelWarrantyRevision.findFirst({
-          where: { id, tenantId, modelId },
-        });
-        if (!before)
-          throw new NotFoundException({
-            code: 'POLICY_NOT_FOUND',
-            message: 'Policy revision not found',
-          });
-        if (
-          before.version !== version ||
-          (action === 'UPDATE' || action === 'PUBLISH'
-            ? before.status !== 'DRAFT'
-            : before.status !== 'PUBLISHED')
-        )
-          throw new ConflictException({
-            code: 'POLICY_VERSION_CONFLICT',
-            message: 'Reload the policy; published content is immutable',
-          });
-        if (action === 'PUBLISH')
-          await tx.modelWarrantyRevision.updateMany({
-            where: { tenantId, modelId, isDefault: true },
-            data: { isDefault: false },
-          });
         row = await tx.modelWarrantyRevision.update({
           where: { id: before.id },
           data: {
             version: { increment: 1 },
             ...(action === 'UPDATE'
               ? { body: raw as Prisma.InputJsonValue }
-              : action === 'PUBLISH'
-                ? { status: 'PUBLISHED', isDefault: true }
-                : { status: 'RETIRED', isDefault: false }),
+              : {}),
+            ...(makeDefault
+              ? { status: 'PUBLISHED', isDefault: true }
+              : action === 'RETIRE'
+                ? { status: 'RETIRED', isDefault: false }
+                : {}),
           },
         });
       }
@@ -153,9 +184,13 @@ export class ModelPoliciesService {
           actorRoles: [...p.roles],
           eventType: 'POLICY_' + action,
           changes: {
+            ...(action === 'REVISE' && before
+              ? { sourceRevisionId: before.id }
+              : {}),
             revisionId: row.id,
             revision: row.revision,
             status: row.status,
+            isDefault: row.isDefault,
             body: row.body,
           },
         },

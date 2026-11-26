@@ -25,6 +25,7 @@ describe('EquipmentModelRepository tenant queries', () => {
     });
     await repository.list('tenant-a', query);
     expect(findMany).toHaveBeenCalledWith({
+      include: { _count: { select: { equipments: true } } },
       where: {
         tenantId: 'tenant-a',
         status: 'INACTIVE',
@@ -48,6 +49,7 @@ describe('EquipmentModelRepository tenant queries', () => {
       manufacturer: 'Acme', modelCode: 'P-1', name: 'Pump',
     });
     expect(create).toHaveBeenCalledWith({
+      include: { _count: { select: { equipments: true } } },
       data: {
         tenantId: 'tenant-a', manufacturer: 'Acme', modelCode: 'P-1',
         name: 'Pump', category: null, description: null,
@@ -55,10 +57,13 @@ describe('EquipmentModelRepository tenant queries', () => {
     });
     await repository.findScoped('tenant-a', 'model-1');
     expect(findFirst).toHaveBeenCalledWith({ where: { tenantId: 'tenant-a', id: 'model-1' } });
-    await repository.update('tenant-a', 'model-1', { category: null, status: 'INACTIVE' });
+    await repository.findScopedWithCount('tenant-a', 'model-1');
+    expect(findFirst).toHaveBeenCalledWith({ where: { tenantId: 'tenant-a', id: 'model-1' }, include: { _count: { select: { equipments: true } } } });
+    await repository.update('tenant-a', 'model-1', { status: 'INACTIVE' });
     expect(update).toHaveBeenCalledWith({
       where: { id: 'model-1', tenantId: 'tenant-a' },
-      data: { category: null, status: 'INACTIVE' },
+      include: { _count: { select: { equipments: true } } },
+      data: { status: 'INACTIVE' },
     });
   });
 });

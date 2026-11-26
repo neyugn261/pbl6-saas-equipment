@@ -198,7 +198,7 @@ function BulkHandoverForm({ storageKey }: { storageKey: string }) {
         <p>Nhập lô là cách đăng ký nhiều máy cùng lúc. Sau khi tạo lô, mở từng hồ sơ để kiểm tra serial, nơi đặt máy, ngày thực tế và chính sách bảo hành/bảo trì.</p>
         <p>Tại địa điểm khách hàng: nhân viên gửi hồ sơ bàn giao, khách xem và xác nhận đúng nội dung đã gửi. Tại cửa hàng: nhân viên hoàn tất theo ngày bàn giao thực tế, không có bước khách xác nhận trên Portal.</p>
         <p>Bảo hành và bảo trì chỉ được áp dụng khi đủ điều kiện của phương thức bàn giao; không bắt đầu chỉ vì đã tải CSV.</p>
-        <Link to="/app/equipment-handovers">Theo dõi hồ sơ chờ khách xác nhận</Link>
+        <Link to="/app/equipment-registrations?handoverStatus=PENDING_CUSTOMER_CONFIRMATION">Theo dõi hồ sơ chờ khách xác nhận</Link>
       </details>
       {!result && (
         <form

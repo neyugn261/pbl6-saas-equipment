@@ -58,7 +58,7 @@ interface Source {
     modelId: string;
     handoverDate: string;
     hash: string;
-    warranty: { body: unknown; endDate?: string };
+    warranty: { body: unknown; endDate?: string | null };
     maintenance: {
       revisionId: string;
       revision: number;

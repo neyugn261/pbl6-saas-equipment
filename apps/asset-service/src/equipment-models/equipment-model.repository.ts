@@ -7,6 +7,13 @@ import type { ListEquipmentModelsQueryDto } from './dto/list-equipment-models-qu
 import type { UpdateEquipmentModelDto } from './dto/update-equipment-model.dto';
 import { changedFields } from '../history/audit';
 
+const includeEquipmentCount = {
+  _count: { select: { equipments: true } },
+} satisfies Prisma.EquipmentModelInclude;
+export type EquipmentModelWithCount = Prisma.EquipmentModelGetPayload<{
+  include: typeof includeEquipmentCount;
+}>;
+
 @Injectable()
 export class EquipmentModelRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -14,7 +21,7 @@ export class EquipmentModelRepository {
   async list(
     tenantId: string,
     query: ListEquipmentModelsQueryDto,
-  ): Promise<{ rows: EquipmentModel[]; total: number }> {
+  ): Promise<{ rows: EquipmentModelWithCount[]; total: number }> {
     const q = query.q?.trim();
     const search = q ? escapeLikePattern(q) : undefined;
     const where: Prisma.EquipmentModelWhereInput = {
@@ -39,6 +46,7 @@ export class EquipmentModelRepository {
     const [rows, total] = await Promise.all([
       this.prisma.equipmentModel.findMany({
         where,
+        include: includeEquipmentCount,
         orderBy,
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
@@ -52,14 +60,25 @@ export class EquipmentModelRepository {
     return this.prisma.equipmentModel.findFirst({ where: { tenantId, id } });
   }
 
+  findScopedWithCount(
+    tenantId: string,
+    id: string,
+  ): Promise<EquipmentModelWithCount | null> {
+    return this.prisma.equipmentModel.findFirst({
+      where: { tenantId, id },
+      include: includeEquipmentCount,
+    });
+  }
+
   create(
     tenantId: string,
     input: CreateEquipmentModelDto,
     actorId?: string,
     roles: readonly string[] = [],
-  ): Promise<EquipmentModel> {
+  ): Promise<EquipmentModelWithCount> {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.equipmentModel.create({
+        include: includeEquipmentCount,
         data: {
           tenantId,
           manufacturer: input.manufacturer,
@@ -99,7 +118,7 @@ export class EquipmentModelRepository {
     input: UpdateEquipmentModelDto,
     actorId?: string,
     roles: readonly string[] = [],
-  ): Promise<EquipmentModel> {
+  ): Promise<EquipmentModelWithCount> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM equipment_models WHERE tenant_id = ${tenantId}::uuid AND id = ${id}::uuid FOR UPDATE`;
       const before = await tx.equipmentModel.findUniqueOrThrow({
@@ -107,28 +126,12 @@ export class EquipmentModelRepository {
       });
       const row = await tx.equipmentModel.update({
         where: { id, tenantId },
-        data: {
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.category !== undefined ? { category: input.category } : {}),
-          ...(input.description !== undefined
-            ? { description: input.description }
-            : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
-        },
+        include: includeEquipmentCount,
+        data: { status: input.status },
       });
       const changes = changedFields(
-        {
-          name: before.name,
-          category: before.category,
-          description: before.description,
-          status: before.status,
-        },
-        {
-          name: row.name,
-          category: row.category,
-          description: row.description,
-          status: row.status,
-        },
+        { status: before.status },
+        { status: row.status },
       );
       if (Object.keys(changes as object).length)
         await tx.equipmentModelHistory.create({

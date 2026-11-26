@@ -70,7 +70,9 @@ export default function ServiceManagerShell({
   const section = navigation.find(
     (item) =>
       location.pathname === item.path ||
-      location.pathname.startsWith(`${item.path}/`),
+      location.pathname.startsWith(`${item.path}/`) ||
+      (item.path === "/app/equipment-registrations" &&
+        location.pathname.startsWith("/app/equipment-handovers")),
   );
   const groups = [...new Set(navigation.map((item) => item.group))];
   const dashboard = [

@@ -1,0 +1,57 @@
+.model-policy-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.model-policy-wide {
+  grid-column: 1 / -1;
+}
+.model-policy-summary .sd-card-body,
+.model-policy-rule,
+.model-policy-detail {
+  display: grid;
+  gap: 12px;
+}
+.model-policy-summary :is(p, h4),
+.model-policy-list p {
+  margin: 0;
+}
+.model-policy-summary h4 {
+  color: var(--shop-ink, #253951);
+  font-size: 13px;
+  font-weight: 650;
+}
+.model-policy-summary .sd-facts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 104px), 1fr));
+  gap: 12px 16px;
+}
+.model-policy-rule,
+.model-policy-detail {
+  padding-top: 12px;
+  border-top: 1px solid var(--shop-line, #e5eaf2);
+}
+.model-policy-terms {
+  padding: 10px 12px;
+  border-radius: var(--shop-radius, 4px);
+  background: var(--shop-canvas, #f6f8fb);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.model-policy-list {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.model-policy-list > li {
+  padding: 6px 10px;
+  border-inline-start: 2px solid var(--shop-line, #e5eaf2);
+  background: var(--shop-canvas, #f6f8fb);
+  overflow-wrap: anywhere;
+}
+.model-policy-list p {
+  color: var(--shop-muted, #69778d);
+  white-space: pre-wrap;
+}

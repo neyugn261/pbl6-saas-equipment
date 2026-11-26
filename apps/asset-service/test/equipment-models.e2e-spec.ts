@@ -31,6 +31,7 @@ function row(tenantId = tenantA) {
     category: null,
     description: null,
     status: 'ACTIVE',
+    _count: { equipments: 2 },
     createdAt: new Date('2026-10-20T00:00:00.000Z'),
     updatedAt: new Date('2026-10-20T00:00:00.000Z'),
   };
@@ -46,6 +47,9 @@ describe('equipment models HTTP contract (e2e)', () => {
     findScoped: jest.fn(async (tenantId: string, id: string) =>
       tenantId === tenantA && id === modelId ? row() : null,
     ),
+    findScopedWithCount: jest.fn(async (tenantId: string, id: string) =>
+      tenantId === tenantA && id === modelId ? row() : null,
+    ),
     create: jest.fn(async (tenantId: string, input: { modelCode: string }) => {
       if (input.modelCode === 'DUP') {
         throw Object.assign(new Error('duplicate'), {
@@ -57,6 +61,7 @@ describe('equipment models HTTP contract (e2e)', () => {
         ...row(tenantId), id: randomUUID(), ...input,
         category: (input as { category?: string }).category ?? null,
         description: (input as { description?: string }).description ?? null,
+        _count: { equipments: 0 },
       };
     }),
     update: jest.fn(async (tenantId: string, id: string, input: object) => ({
@@ -90,10 +95,16 @@ describe('equipment models HTTP contract (e2e)', () => {
       .set('authorization', `Bearer ${staff}`)
       .expect(200);
     expect(res.body).toMatchObject({ page: 2, pageSize: 5, total: 1 });
-    expect(res.body.items[0]).toMatchObject({ category: null, description: null });
+    expect(res.body.items[0]).toMatchObject({ category: null, description: null, equipmentCount: 2 });
+    expect(res.body.items[0]).not.toHaveProperty('_count');
     expect(repo.list).toHaveBeenCalledWith(tenantA, expect.objectContaining({
       page: 2, pageSize: 5, q: 'pump', status: 'ACTIVE', sort: '-createdAt',
     }));
+    const detail = await request(app.getHttpServer()).get(`/equipment-models/${modelId}`)
+      .set('authorization', `Bearer ${staff}`).expect(200);
+    expect(detail.body.equipmentCount).toBe(2);
+    await request(app.getHttpServer()).get(`/equipment-models/${modelId}`)
+      .set('authorization', `Bearer ${otherStaff}`).expect(404);
     await request(app.getHttpServer()).get('/equipment-models')
       .set('authorization', `Bearer ${otherStaff}`).expect(200, {
         items: [], page: 1, pageSize: 20, total: 0,
@@ -108,7 +119,7 @@ describe('equipment models HTTP contract (e2e)', () => {
     const payload = { manufacturer: 'Acme', modelCode: 'P-1', name: 'Pump' };
     const created = await request(app.getHttpServer()).post('/equipment-models')
       .set('authorization', `Bearer ${staff}`).send(payload).expect(201);
-    expect(created.body).toMatchObject({ ...payload, category: null, description: null });
+    expect(created.body).toMatchObject({ ...payload, category: null, description: null, equipmentCount: 0 });
     expect(repo.create).toHaveBeenCalledWith(tenantA, expect.objectContaining(payload), expect.any(String), ['SERVICE_MANAGER']);
     const duplicate = await request(app.getHttpServer()).post('/equipment-models')
       .set('authorization', `Bearer ${staff}`)
@@ -137,22 +148,26 @@ describe('equipment models HTTP contract (e2e)', () => {
   it('updates only a model of the token tenant and validates PATCH', async () => {
     const updated = await request(app.getHttpServer()).patch(`/equipment-models/${modelId}`)
       .set('authorization', `Bearer ${staff}`)
-      .send({ status: 'INACTIVE', category: null }).expect(200);
-    expect(updated.body).toMatchObject({ status: 'INACTIVE', category: null });
+      .send({ status: 'INACTIVE' }).expect(200);
+    expect(updated.body).toMatchObject({ status: 'INACTIVE', category: null, equipmentCount: 2 });
     expect(repo.update).toHaveBeenCalledWith(tenantA, modelId, expect.objectContaining({
-      status: 'INACTIVE', category: null,
+      status: 'INACTIVE',
     }), expect.any(String), ['SERVICE_MANAGER']);
     const outOfScope = await request(app.getHttpServer())
       .patch(`/equipment-models/${modelId}`)
       .set('authorization', `Bearer ${otherStaff}`)
-      .send({ name: 'Other' }).expect(404);
+      .send({ status: 'INACTIVE' }).expect(404);
     expect(outOfScope.body.code).toBe('MODEL_NOT_FOUND');
     expect(repo.update).toHaveBeenCalledTimes(1);
     await request(app.getHttpServer()).patch(`/equipment-models/${modelId}`)
       .set('authorization', `Bearer ${staff}`).send({}).expect(400);
-    await request(app.getHttpServer()).patch(`/equipment-models/${modelId}`)
-      .set('authorization', `Bearer ${staff}`).send({ name: null }).expect(400);
+    for (const field of ['name', 'manufacturer', 'modelCode', 'category', 'description']) {
+      await request(app.getHttpServer()).patch(`/equipment-models/${modelId}`)
+        .set('authorization', `Bearer ${staff}`)
+        .send({ status: 'ACTIVE', [field]: 'Changed' }).expect(400);
+    }
+    expect(repo.update).toHaveBeenCalledTimes(1);
     await request(app.getHttpServer()).patch('/equipment-models/not-a-uuid')
-      .set('authorization', `Bearer ${staff}`).send({ name: 'Other' }).expect(400);
+      .set('authorization', `Bearer ${staff}`).send({ status: 'ACTIVE' }).expect(400);
   });
 });

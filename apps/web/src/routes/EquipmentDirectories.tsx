@@ -9,7 +9,7 @@ import {
 } from "../features/workspace/ServiceDetailUI";
 import CustomerServicePanel from "../features/workspace/CustomerServicePanel";
 import { useState } from "react";
-import { Ban, CircleCheck, Pencil, Search } from "lucide-react";
+import { Ban, CircleCheck, Eye, Plus } from "lucide-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useSession } from "../auth/session";
@@ -22,6 +22,7 @@ import {
   setupRoles,
   useDirectory,
 } from "./registration-data";
+import "./equipment-registration.css";
 
 export function CustomerDirectoryPage() {
   const { profile } = useSession();
@@ -103,6 +104,7 @@ export function CustomerCreatePage() {
   return (
     <SetupPage
       title="Thêm khách hàng"
+      back={{ to: "/app/customers", label: "Về danh sách khách hàng" }}
       description="Tạo hồ sơ doanh nghiệp; tài khoản Customer Portal được mời riêng theo quyền."
     >
       <QuickForm
@@ -150,23 +152,21 @@ export function CustomerWorkspacePage() {
   return (
     <SetupPage
       title={state.value?.name || "Chi tiết khách hàng"}
+      back={{ to: "/app/customers", label: "Về danh sách khách hàng" }}
       description={
         state.value
           ? `${state.value.code} · ${state.value.address || "Chưa có địa chỉ"}`
           : undefined
       }
       actions={
-        <>
-          <Link to="/app/customers">← Khách hàng</Link>
-          {manage && state.value?.status === "ACTIVE" && (
-            <Link
-              className="m1-button"
-              to={`/app/equipment-registrations/new?customerId=${id}`}
-            >
-              Ghi nhận bàn giao
-            </Link>
-          )}
-        </>
+        manage && state.value?.status === "ACTIVE" && (
+          <Link
+            className="m1-button"
+            to={`/app/equipment-registrations/new?customerId=${id}`}
+          >
+            Ghi nhận bàn giao
+          </Link>
+        )
       }
     >
       <LoadState {...state} />
@@ -340,7 +340,7 @@ export function EquipmentModelsPage() {
   const [q, setQ] = useState(""),
     [page, setPage] = useState(1),
     [revision, setRevision] = useState(0);
-  const [form, setForm] = useState<DirectoryRow | "new" | null>(null),
+  const [creating, setCreating] = useState(false),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const state = useDirectory<Page<DirectoryRow>>(
@@ -349,18 +349,17 @@ export function EquipmentModelsPage() {
     revision,
   );
   async function toggle(row: DirectoryRow) {
-    if (
-      !window.confirm(
-        `${row.status === "ACTIVE" ? "Ngừng dùng" : "Kích hoạt"} model ${row.name}? Thiết bị và lịch sử đã có được giữ nguyên.`,
-      )
-    )
-      return;
+    const active = row.status === "ACTIVE";
+    const prompt = active
+      ? `Ngừng dùng model ${row.name}? Model sẽ bị ẩn khi chọn cho thiết bị mới. Hồ sơ nháp dùng chính sách model phải chờ kích hoạt lại để tiếp tục. Thiết bị đã ghi nhận và hồ sơ đã gửi vẫn được giữ lại.`
+      : `Kích hoạt model ${row.name} để có thể chọn lại khi đăng ký thiết bị?`;
+    if (busy || !window.confirm(prompt)) return;
     setBusy(true);
     setError("");
     try {
       await api.assetM2(`/equipment-models/${row.id}`, {
         method: "PATCH",
-        body: { status: row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" },
+        body: { status: active ? "INACTIVE" : "ACTIVE" },
       });
       setRevision((v) => v + 1);
     } catch (e) {
@@ -369,102 +368,111 @@ export function EquipmentModelsPage() {
       setBusy(false);
     }
   }
-  const edit = form;
   return (
     <SetupPage
       title="Danh mục model thiết bị"
-      description="Mỗi model là một dòng sản phẩm. Serial và chính sách thực tế được ghi riêng cho từng máy."
-      actions={<button type="button" className="registration-primary" onClick={() => setForm("new")}>+ Thêm model</button>}
+      actions={
+        <button
+          type="button"
+          className="ws-button registration-primary"
+          onClick={() => setCreating(true)}
+        >
+          <Plus size={16} aria-hidden="true" />
+          Thêm model
+        </button>
+      }
     >
-      {edit && (
+      {creating && (
         <QuickForm
-          key={edit === "new" ? "new" : edit.id}
           kind="model"
-          path={
-            edit === "new"
-              ? "/equipment-models"
-              : `/equipment-models/${edit.id}`
-          }
-          initial={edit === "new" ? undefined : edit}
+          path="/equipment-models"
           onSaved={() => {
-            setForm(null);
+            setCreating(false);
             setRevision((v) => v + 1);
           }}
-          onCancel={() => setForm(null)}
+          onCancel={() => setCreating(false)}
         />
       )}
-      <section className="m1-card registration-directory registration-directory--models">
-        <form
-          className="registration-directory__toolbar"
-          onSubmit={(e) => {
-            e.preventDefault();
+      <section className="m1-card registration-directory" aria-label="Danh mục model thiết bị">
+        <TableToolbar
+          query={q}
+          onQuery={(value) => {
             setPage(1);
-            setQ(String(new FormData(e.currentTarget).get("q") || ""));
+            setQ(value);
           }}
-        >
-          <label className="registration-directory__search"><Search size={17} aria-hidden="true" /><input name="q" aria-label="Tìm model thiết bị" placeholder="Tìm hãng, mã model hoặc tên…" /></label>
-          <button type="submit" className="registration-directory__search-button">Tìm</button>
-        </form>
-        <LoadState {...state} />
-        {error && (
-          <p className="m1-error" role="alert">
-            {error}
-          </p>
+          placeholder="Tìm tên, mã model hoặc hãng sản xuất…"
+        />
+        {(state.loading || state.error || error) && (
+          <div className="ws-card-body">
+            <LoadState {...state} />
+            {error && <p className="m1-error" role="alert">{error}</p>}
+          </div>
         )}
         {state.value && (
           <>
-            <div className="registration-directory__table"><table>
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Hãng</th>
-                  <th>Nhóm</th>
-                  <th>Trạng thái</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {state.value.items.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <Link className="registration-directory__name" to={`/app/equipment-models/${row.id}`}>
-                        {row.name}
-                      </Link>
-                      <small>{row.modelCode}</small>
-                    </td>
-                    <td>{row.manufacturer}</td>
-                    <td>{row.category || "Chưa phân nhóm"}</td>
-                    <td><StatusBadge status={row.status || "INACTIVE"} label={row.status === "ACTIVE" ? "Đang dùng" : "Ngừng dùng"} /></td>
-                    <td>
-                      <div className="registration-actions registration-directory__row-actions">
-                        <Link to={`/app/equipment-models/${row.id}`}>
-                          Chính sách dịch vụ
-                        </Link>
-                        <button className="registration-directory__action" disabled={busy} onClick={() => setForm(row)}>
-                          <Pencil size={14} aria-hidden="true" />
-                          Sửa
-                        </button>
-                        <button
-                          className={`registration-directory__action${row.status === "ACTIVE" ? " registration-directory__action--danger" : ""}`}
-                          disabled={busy}
-                          onClick={() => void toggle(row)}
-                        >
-                          {row.status === "ACTIVE" ? <Ban size={14} aria-hidden="true" /> : <CircleCheck size={14} aria-hidden="true" />}
-                          {row.status === "ACTIVE" ? "Ngừng dùng" : "Kích hoạt"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
-            {state.value.items.length === 0 && (
+            {state.value.items.length > 0 ? (
+              <div className="registration-directory__table" role="region" aria-label="Bảng danh mục model" tabIndex={0}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Tên model</th>
+                      <th scope="col">Mã model</th>
+                      <th scope="col">Hãng sản xuất</th>
+                      <th scope="col">Số thiết bị</th>
+                      <th scope="col">Trạng thái</th>
+                      <th scope="col">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.value.items.map((row) => {
+                      const modelPath = `/app/equipment-models/${row.id}`;
+                      const active = row.status === "ACTIVE";
+                      const availabilityAction = active ? "Ngừng dùng" : "Kích hoạt";
+                      return (
+                        <tr key={row.id}>
+                          <td><Link to={modelPath}>{row.name}</Link></td>
+                          <td>{row.modelCode || "—"}</td>
+                          <td>{row.manufacturer || "—"}</td>
+                          <td>{row.equipmentCount ?? "—"}</td>
+                          <td>
+                            <StatusBadge status={active ? "ACTIVE" : "INACTIVE"} label={active ? "Đang dùng" : "Ngừng dùng"} />
+                          </td>
+                          <td>
+                            <div className="registration-actions model-row-actions">
+                              <Link
+                                to={modelPath}
+                                className="model-row-action"
+                                title="Xem chi tiết / Chính sách"
+                                aria-label={`Xem chi tiết và chính sách của ${row.name}`}
+                              >
+                                <Eye size={16} aria-hidden="true" />
+                              </Link>
+                              <button
+                                type="button"
+                                className={`model-row-action${active ? " model-row-action--deactivate" : ""}`}
+                                title={availabilityAction}
+                                aria-label={`${availabilityAction} model ${row.name}`}
+                                disabled={busy}
+                                onClick={() => void toggle(row)}
+                              >
+                                {active ? <Ban size={16} aria-hidden="true" /> : <CircleCheck size={16} aria-hidden="true" />}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
               <p className="registration-directory__empty">
-                Chưa có model phù hợp. Thêm model từ catalogue của doanh nghiệp
-                hoặc hãng.
+                {q ? "Không tìm thấy model phù hợp." : "Danh mục chưa có model thiết bị."}
               </p>
             )}
-            <DirectoryPagination page={page} total={state.value.total} label="model" onChange={setPage} />
+            {state.value.total > 0 && (
+              <DirectoryPagination page={page} total={state.value.total} label="model" onChange={setPage} />
+            )}
           </>
         )}
       </section>

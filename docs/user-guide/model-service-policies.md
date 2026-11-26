@@ -2,12 +2,20 @@
 
 ## Cấu hình Model
 
-Mở **Thiết bị → Model → tên Model**. Service Manager thiết lập cả bảo hành và
-bảo trì; Tenant Admin có thể quản lý phần bảo hành theo quyền hiện hành.
+Mở **Khách hàng & thiết bị → Model & chính sách → Thông tin và chính sách**.
+Tab **Thông tin** hiển thị số thiết bị đã ghi nhận theo model, bao gồm thiết bị
+đã ngừng sử dụng. Thông tin model chỉ đọc sau khi tạo. Service Manager cấu hình
+cả hai tab **Bảo hành** và **Bảo trì**.
+Tenant Admin có thể quản lý phần bảo hành theo quyền hiện hành.
 
-- Tạo bản nháp bảo hành: thời hạn tháng, nguyên nhân được bảo hành, các điều khoản
+Khi **Ngừng dùng** một model, danh sách chọn cho thiết bị mới sẽ ẩn model đó.
+Hồ sơ nháp dùng chính sách model có thể tiếp tục sau khi **Kích hoạt** lại.
+Thiết bị đã ghi nhận và hồ sơ đã gửi vẫn được giữ lại.
+
+- Nhập chính sách bảo hành gồm thời hạn tháng, nguyên nhân được bảo hành, điều khoản
   loại trừ và điều khoản khách hàng. Không khai báo cùng nguyên nhân vừa được bảo
-  hành vừa bị loại trừ. Chọn **Không áp dụng** phải ghi lý do.
+  hành vừa bị loại trừ. Nếu model không có bảo hành, chọn **Không kèm bảo hành**
+  và ghi lý do.
 - Thêm các lịch bảo trì độc lập, ví dụ mỗi 3 tháng kiểm tra và mỗi năm thay vật tư.
   Mỗi lịch có kỳ đầu tính theo số chu kỳ, checklist, hướng dẫn và yêu cầu bắt buộc.
   Chọn **Thời hạn bảo trì** riêng cho từng lịch: **Trong số năm xác định**
@@ -17,41 +25,52 @@ bảo trì; Tenant Admin có thể quản lý phần bảo hành theo quyền hi
   tạm dừng hoặc ngừng kế hoạch. Bản chính sách cũ chưa có mục này giữ lịch vô hạn.
   Các lịch có thể cùng đến hạn; tránh khai báo trùng công việc. REPLACE không tự
   xuất kho; kỹ thuật viên vẫn dùng quy trình phụ tùng thực tế.
-- Lưu bản nháp, kiểm tra rồi công bố riêng từng phần. Phần nào đã lưu/công bố sẽ
-  có thông báo riêng. Chỉ phiên bản công bố mới được áp dụng khi bàn giao.
-- Muốn sửa bản công bố, chọn **Sao chép thành bản mới**, chỉnh sửa rồi công bố.
-  Máy đã bàn giao giữ nguyên phiên bản cũ. Ngừng áp dụng chỉ ảnh hưởng lựa chọn mới.
+  Nếu model không có chương trình bảo trì, chọn **Không kèm bảo trì** và ghi lý do.
+- Chọn **Lưu và sử dụng** khi tạo hoặc chỉnh sửa chính sách. Mục **Phiên bản**
+  đánh dấu chính sách đang áp dụng là **Đang sử dụng**. Bản nháp và bản đã thay
+  thế hiển thị theo số phiên bản. Hồ sơ đã chọn phiên bản và thiết bị đã được
+  áp dụng giữ nguyên điều khoản đã ghi nhận.
+- Chọn **Sử dụng lại** trên phiên bản đã ngừng hoặc đã thay thế để dùng phiên bản đó
+  cho các lần bàn giao tiếp theo.
 
 ## Bàn giao thiết bị
 
-Luồng bàn giao gồm bốn bước: **Khách hàng → Thiết bị → Chính sách Model → Xác nhận**.
-Chọn khách hàng/địa điểm, nhập Model, mã máy, serial và ngày bàn giao thực tế.
-Khi chuyển sang Chính sách Model, Service Manager được hệ thống lưu nháp và lấy
-các phiên bản đã công bố, tự tính ngày hết bảo hành và kỳ đầu của từng lịch.
-Không còn bước nhập lại bảo hành hoặc tự tạo Plan bằng tay trong màn hình này.
+Mở **Đăng ký thiết bị** để theo dõi tiến độ hồ sơ, trạng thái thiết bị và kết quả
+bàn giao. Bảng có bộ lọc cho cả ba loại trạng thái. Các thẻ số lượng đếm thiết bị
+trên tất cả các trang của kết quả lọc theo hồ sơ và bàn giao. Bấm trạng thái bàn
+giao trong bảng để mở nội dung đã gửi và lịch sử xác nhận.
 
-Kiểm tra điều khoản, phiên bản, các lịch và checklist đã hiển thị. Nếu cần thay
-đổi riêng cho máy, mở **Điều chỉnh ngoại lệ cho thiết bị này**, nhập lý do rồi tính
-lại. Ngoại lệ giữ phiên bản đã chọn, không sửa chính sách nguồn và không làm mất
-ngoại lệ đã lưu ở phần còn lại. Muốn chọn default mới, dùng **Lấy lại chính sách
-hiện hành từ Model**. Quay lại/xem tiếp các bước không tự đổi phiên bản đã chọn.
-Khi đổi ngày bàn giao, phải lấy lại preview để tính đúng lịch trước khi xác nhận.
+Luồng bàn giao gồm bốn bước **Khách hàng → Thiết bị → Chính sách Model → Kiểm tra
+và gửi**. Chọn khách hàng, địa điểm và nhập model, mã máy, serial, ngày bàn giao
+thực tế. Với hồ sơ tạo thiết bị mới chưa gửi, mở lại bản nháp và vào bước
+**Khách hàng** hoặc **Thiết bị** để sửa khách hàng, địa điểm, model, mã máy,
+serial, ngày thực tế và hình thức bàn giao. Chọn **Lưu bản nháp** để ghi nhận
+thay đổi. Đổi model hoặc ngày bàn giao sẽ yêu cầu áp dụng lại chính sách.
+
+Ở bước **Chính sách Model**, Service Manager mở **Chọn phiên bản chính sách
+Model**, chọn riêng phiên bản bảo hành và bảo trì, xem điều khoản và lịch tương
+ứng rồi bấm **Áp dụng**. Chọn phiên bản đã phát hành hoặc **Không áp dụng** cho
+từng dịch vụ. Nếu thiết bị không kèm cả hai dịch vụ, vẫn bấm **Áp dụng** để ghi
+nhận lựa chọn đó. Hệ thống chỉ tạo bảo hành và lịch bảo trì cho dịch vụ đã chọn.
+
+Mở **Điều chỉnh ngoại lệ** để sửa thời hạn bảo hành, chu kỳ hoặc kỳ đầu bảo trì
+riêng cho thiết bị. Nhập lý do rồi bấm **Áp dụng**. Hệ thống giữ nguyên phiên bản
+nguồn và các giá trị ngoại lệ đã lưu ở phần chưa chỉnh sửa. Chọn phiên bản khác
+sẽ đặt lại ngoại lệ của hồ sơ. Khi đổi ngày bàn giao, áp dụng lại chính sách để
+tính lại ngày bảo hành và lịch bảo trì.
 Preview hiển thị thời hạn và ngày kết thúc của từng lịch. **Hết cùng với bảo
 hành** lấy ngày của bản bảo hành thực tế áp dụng, gồm ngoại lệ riêng cho máy;
 chọn không bảo hành sẽ bị chặn. Nếu kỳ đầu nằm sau ngày kết thúc, hãy sửa
 chu kỳ, kỳ đầu hoặc thời hạn. Sửa Model/gia hạn bảo hành sau khi bàn giao không
 tự thay cam kết bảo trì của máy đã xác nhận.
 
-Model chưa đủ cấu hình sẽ chặn hoàn tất. **Xem / cấu hình chính sách Model** mở
-trình chỉnh sửa trong cùng tab. Hồ sơ bàn giao đã được lưu; dùng **Quay lại hồ sơ
-bàn giao** để trở về đúng bước Chính sách Model. Việc xem hoặc chỉnh Model không
-tự thay preview đã chọn; dùng nút lấy lại chính sách để chủ động cập nhật.
-Công bố cả bảo hành và bảo trì, kể cả phiên bản Không áp dụng có lý do, rồi tải
-lại. Tenant Admin có thể lưu nháp để Service Manager tiếp tục; không có cách nhập
-tay để vượt quyền bảo trì.
+Nếu hồ sơ cần một dịch vụ mà model chưa có phiên bản phù hợp, cấu hình phiên bản
+trong danh mục **Model & chính sách**. Tenant Admin có thể lưu bản nháp để Service
+Manager tiếp tục.
 
-Ở bước Xác nhận, chọn **Hoàn tất ghi nhận**. Nếu kết quả lưu chưa rõ, dùng
-**Tải lại kết quả đã lưu** để đối soát trước khi gửi tiếp, không tạo máy khác.
+Ở bước **Kiểm tra và gửi**, rà soát thông tin đã chốt và chọn **Hoàn tất ghi nhận**
+hoặc **Gửi khách xác nhận** theo hình thức bàn giao. Muốn chỉnh sửa, quay lại bước
+tương ứng. Nếu kết quả lưu chưa rõ, dùng **Tải lại kết quả đã lưu** để đối soát.
 Nếu hồ sơ **PENDING_MAINTENANCE**, chọn **Kiểm tra và tiếp tục** trên thông báo
 trạng thái. Chỉ khi nhận đủ Plan, hệ thống mới báo hoàn tất.
 

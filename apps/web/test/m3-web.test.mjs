@@ -225,6 +225,7 @@ for (const mode of ['RECEIVE', 'ADJUST', 'ISSUE', 'RETURN']) {
       '../workspace/WorkspaceUI': { PageHeading: 'page-heading' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
       react: h.react, 'react/jsx-runtime': h.jsx, 'react-router-dom': { Link: 'link' },
       'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
+      '../../components/PageTitle': { PageTitle: 'page-title' },
       '../../api/client': tab.client, '../../auth/session': tab.session, './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'),
       '../../display-names': tab.load('display-names.ts'),
       '../workspace/ui-values':tab.load('features/workspace/ui-values.ts'),

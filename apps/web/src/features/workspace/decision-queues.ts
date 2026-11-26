@@ -102,7 +102,7 @@ export const decisionQueues: DecisionQueue[] = [
     resource: "/equipment-handovers",
     status: "PENDING_CUSTOMER_CONFIRMATION",
     kind: "handover",
-    list: "/app/equipment-handovers",
+    list: "/app/equipment-registrations",
     guidance:
       "Đối chiếu nội dung đã gửi, hạn xác nhận và các phản hồi của khách.",
   },
@@ -178,7 +178,7 @@ export function queuePath(queue: DecisionQueue, sort: string) {
 export function queueListPath(queue: DecisionQueue, sort: string) {
   const [path, search] = queue.list.split("?");
   const params = new URLSearchParams(search);
-  params.set("status", queue.status);
+  params.set(queue.kind === "handover" ? "handoverStatus" : "status", queue.status);
   if (["request", "order"].includes(queue.kind)) params.set("sort", sort);
   return `${path}?${params}`;
 }

@@ -5,6 +5,13 @@
   margin: 0 auto;
   padding-bottom: 32px;
 }
+.registration-page--directory {
+  max-width: 1280px;
+}
+.registration-page .equipment-summary.registration-summary-cards {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  margin: 0;
+}
 .registration-header {
   display: flex;
   justify-content: space-between;
@@ -124,40 +131,13 @@
 }
 .registration-directory__toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: end;
   gap: 10px;
   min-height: 72px;
   padding: 15px 20px;
   border-bottom: 1px solid var(--shop-line, #dce4ed);
 }
-.registration-page .registration-directory__search {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: min(380px, 100%);
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--shop-line, #dce4ed);
-  border-radius: 4px;
-  color: var(--shop-muted, #607083);
-  background: #fff;
-}
-.registration-page .registration-directory__search:focus-within {
-  border-color: var(--shop-accent, #a74b26);
-  box-shadow: 0 0 0 3px rgb(167 75 38 / 12%);
-}
-.registration-page .registration-directory__search input {
-  flex: 1;
-  width: 100%;
-  min-height: 38px;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  box-shadow: none;
-  font-size: 12px;
-}
-.registration-page .registration-directory__search-button,
 .registration-page .registration-directory__pagination button {
   min-height: 38px;
   padding: 8px 14px;
@@ -168,7 +148,6 @@
   font-size: 12px;
   font-weight: 600;
 }
-.registration-page .registration-directory__search-button:hover:not(:disabled),
 .registration-page .registration-directory__pagination button:hover:not(:disabled) {
   background: var(--shop-soft, #f2f4ee);
 }
@@ -179,10 +158,38 @@
 .registration-page .registration-directory__filter select { min-height: 40px; }
 .registration-directory__table { overflow-x: auto; }
 .registration-directory__table table { min-width: 680px; }
-.registration-directory--models .registration-directory__table table { min-width: 900px; }
+.registration-directory__table--tracked table { min-width: 880px; }
 .registration-directory__table th,
 .registration-directory__table td { padding: 14px 20px; }
-.registration-directory--models .registration-directory__table td:last-child { text-align: right; }
+
+.registration-actions.model-row-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.registration-directory .model-row-actions .model-row-action {
+  display: inline-grid;
+  flex: none;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--shop-radius);
+  background: transparent;
+  color: var(--shop-muted);
+}
+
+.registration-directory .model-row-actions .model-row-action:hover:not(:disabled) {
+  background: var(--shop-soft);
+  color: var(--shop-accent);
+}
+
+.registration-directory .model-row-actions .model-row-action--deactivate:hover:not(:disabled) {
+  background: #f8e7e1;
+  color: #a23d2d;
+}
+
 .registration-page .registration-directory a.registration-directory__name,
 .registration-page .registration-directory__name strong {
   color: var(--shop-accent, #a74b26);
@@ -191,36 +198,6 @@
 .registration-page .registration-directory a.registration-directory__name:hover {
   color: var(--shop-accent, #a74b26);
   text-decoration: underline;
-}
-.registration-directory__row-actions { justify-content: flex-end; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
-.registration-directory__row-actions button { min-height: 34px; padding: 6px 10px; font-size: 12px; }
-.registration-page .registration-directory__row-actions .registration-directory__action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 6px 9px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--shop-muted, #596762);
-  font-size: 12px;
-  font-weight: 400;
-  box-shadow: none;
-}
-.registration-page .registration-directory__row-actions .registration-directory__action:hover:not(:disabled) {
-  border-color: var(--shop-line, #cdd4cb);
-  background: var(--shop-soft, #e5e9e2);
-  color: var(--shop-ink, #242e2d);
-}
-.registration-page .registration-directory__row-actions .registration-directory__action--danger {
-  color: #a23d2d;
-}
-.registration-page .registration-directory__row-actions .registration-directory__action--danger:hover:not(:disabled) {
-  border-color: #e6beb3;
-  background: #f8e7e1;
-  color: #a23d2d;
 }
 .registration-directory__status {
   display: inline-flex;
@@ -250,9 +227,14 @@
 }
 .registration-directory__pagination > div { display: flex; gap: 8px; }
 .registration-page .registration-directory__pagination button { min-height: 34px; }
+
+.workshop-shell .ws-page.model-page {
+  max-width: 1240px;
+  margin-inline: 0;
+}
+
 @media (max-width: 600px) {
   .registration-directory__toolbar { flex-wrap: wrap; }
-  .registration-page .registration-directory__search { width: 100%; }
 }
 .registration-steps {
   display: grid;
@@ -286,6 +268,15 @@
 .registration-summary dt {
   font-weight: 600;
   color: #65748a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.required-star {
+  color: #e03131 !important;
+  font-weight: 700;
+  margin-left: 2px;
 }
 .registration-summary dd {
   margin: 0;
@@ -399,6 +390,40 @@
   margin: 10px 0 20px;
   line-height: 1.5;
 }
+
+:is(.registration-page, .workshop-shell) .registration-modal-card.registration-modal-card--model {
+  --model-modal-gutter: clamp(14px, 4vw, 24px);
+  max-width: 580px;
+  padding: 0 !important;
+}
+
+.registration-modal-card--model .registration-modal-header {
+  margin: 0;
+  padding: 12px var(--model-modal-gutter);
+}
+
+.registration-modal-card--model .registration-fields {
+  padding: 16px var(--model-modal-gutter);
+  gap: 12px 16px;
+}
+
+.registration-modal-card--model .registration-fields label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.registration-modal-card--model .registration-fields textarea {
+  min-height: 88px;
+}
+
+.registration-modal-card--model .registration-actions {
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--shop-line, #cdd4cb);
+}
+
 .registration-field-hint {
   display: block;
   font-size: 12px;
@@ -614,10 +639,130 @@
   margin-bottom: 20px;
 }
 
-.registration-model-policies { margin-block: 16px; }
-.registration-policy-overrides { margin-top: 20px; border-top: 1px solid #d6deea; padding-top: 16px; }
-.registration-policy-overrides summary { cursor: pointer; font-weight: 600; }
-.registration-policy-overrides form { margin-top: 16px; }
+.registration-model-policies,
+.registration-review-container {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.registration-policy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.registration-policy-header h2,
+.registration-review-container > h2 {
+  margin: 0;
+}
+.registration-policy-header > div {
+  min-width: 0;
+}
+.registration-policy-model {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 6px 0 0;
+  color: var(--shop-muted);
+  overflow-wrap: anywhere;
+}
+.registration-model-policies > .sd-notice {
+  margin: 0;
+}
+
+.registration-page dialog.registration-policy-dialog {
+  box-sizing: border-box;
+  width: min(1040px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 4px);
+  background: var(--shop-paper, #fcfcf9);
+}
+.registration-policy-dialog-form {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 26px);
+}
+.registration-policy-dialog-form > * {
+  padding: 16px clamp(12px, 3vw, 22px);
+}
+.registration-policy-dialog-header {
+  border-bottom: 1px solid var(--shop-line);
+}
+.registration-policy-dialog-header h2,
+.registration-policy-dialog-footer p {
+  margin: 0;
+}
+.registration-policy-dialog-header p {
+  margin: 4px 0 0;
+  color: var(--shop-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.registration-policy-dialog-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.registration-policy-dialog-body > fieldset {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.registration-policy-dialog-body .sd-notice {
+  margin: 0;
+}
+.registration-policy-dialog-footer {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--shop-line);
+}
+.registration-policy-dialog-footer .ws-actions {
+  justify-content: flex-end;
+}
+.registration-policy-dialog .sd-card-body > .ws-label {
+  margin: 0;
+}
+.registration-policy-dialog .model-policy-summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+.registration-policy-dialog .model-policy-rule:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.registration-policy-preview {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--shop-line);
+}
+.registration-policy-message {
+  color: var(--shop-muted);
+}
+.registration-step-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--shop-line);
+  padding-top: 14px;
+}
+.registration-step-actions > :first-child {
+  margin-inline-end: auto;
+}
+
+@media (min-width: 740px) {
+  .registration-policy-dialog .model-policy-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 
 /* YouTube-like Customer Search Picker */
 .customer-yt-picker {
@@ -639,11 +784,13 @@
   min-height: 400px;
 }
 .customer-yt-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--shop-ink, #242e2d);
-  margin-bottom: 8px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--shop-ink, #242e2d) !important;
+  margin-bottom: 6px !important;
 }
 .customer-yt-toolbar {
   position: relative;
@@ -888,92 +1035,97 @@
   margin: 0;
 }
 
-/* Vùng 2: Khách hàng đã chọn và thông tin (Vùng riêng phía dưới) */
+/* Vùng 2: Khách hàng / Model đã chọn và thông tin (Gọn gàng, đồng bộ với hệ thống) */
 .customer-selected-area {
-  margin-top: 20px;
+  margin-top: 12px;
+  margin-bottom: 16px;
 }
 .customer-yt-selected-card {
-  padding: 16px 20px;
-  background: #fafbf9;
-  border: 1px solid #d8e0d5;
-  border-left: 4px solid #2b7a4b;
+  padding: 10px 14px;
+  background: var(--shop-soft, #f7f9f6);
+  border: 1px solid var(--shop-line, #cdd4cb);
   border-radius: var(--shop-radius, 4px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
-.customer-yt-selected-header {
+.customer-yt-selected-top {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.customer-yt-selected-title {
+.customer-yt-selected-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
+  font-weight: 600;
   color: #205c38;
-  background: #e6f0e4;
-  padding: 2px 8px;
-  border-radius: 10px;
+  background: #e8f2e6;
+  border: 1px solid #d0e4cd;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 .customer-yt-check-icon {
   font-size: 10px;
   font-weight: 800;
 }
 .customer-yt-selected-name {
-  margin: 0 0 12px;
-}
-.customer-yt-selected-name strong {
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--shop-ink, #242e2d);
-  letter-spacing: -0.2px;
 }
-.customer-yt-selected-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px 20px;
-  padding-top: 12px;
-  border-top: 1px solid #e3e8e0;
-  font-size: 13px;
-}
-.customer-yt-grid-item {
+.customer-yt-selected-details {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 8px 18px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px dashed #dbe2d8;
+  font-size: 12px;
 }
-.customer-yt-grid-item--wide {
-  grid-column: 1 / -1;
+.customer-yt-detail-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--shop-ink, #242e2d);
 }
-.customer-yt-grid-label {
-  color: var(--shop-muted, #72807a);
+.customer-yt-detail-label {
   font-size: 11.5px;
+  color: var(--shop-muted, #687771);
   font-weight: 500;
 }
-.customer-yt-grid-val {
-  color: var(--shop-ink, #242e2d);
-  font-weight: 600;
-  font-size: 13.5px;
-  word-break: break-word;
-}
-.customer-yt-grid-val.customer-yt-code-tag {
-  align-self: flex-start;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  font-weight: 600;
-  color: #205c38;
-  background: #edf4ec;
-  border: 1px solid #d4e3d1;
-  padding: 1px 7px;
-  border-radius: 3px;
-}
-.customer-yt-grid-val a {
+.customer-yt-detail-item a {
   color: var(--shop-accent, #a74b26);
   text-decoration: none;
 }
-.customer-yt-grid-val a:hover {
+.customer-yt-detail-item a:hover {
   text-decoration: underline;
+}
+
+.registration-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: 16px;
+}
+.registration-review-container .sd-facts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 114px), 1fr));
+  gap: 12px 16px;
+}
+.registration-review-notes {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--shop-line);
+}
+.registration-review-notes .sd-facts {
+  grid-template-columns: minmax(0, 1fr);
+}
+.registration-review-notes dd {
+  white-space: pre-wrap;
+}
+.registration-review-policies > h3 {
+  margin: 0 0 12px;
 }
 
 .registration-site-section,

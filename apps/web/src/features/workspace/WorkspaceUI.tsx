@@ -226,18 +226,20 @@ export function RelatedName({
 
 export function EquipmentIdentity({
   equipmentId,
+  equipment,
   showCurrentSite = false,
 }: {
   equipmentId: unknown;
+  equipment?: Row;
   showCurrentSite?: boolean;
 }) {
   const data = useWorkspaceData<Row>(
     "assetM2",
-    equipmentId ? `/equipment/${equipmentId}` : null,
+    !equipment && equipmentId ? `/equipment/${equipmentId}` : null,
   );
   if (data.loading) return <span>Đang tải nhận dạng thiết bị…</span>;
   if (data.error) return <span>Chưa tải được nhận dạng thiết bị</span>;
-  const row = data.data;
+  const row = equipment ?? data.data;
   const name = value(row?.displayName, value(asRow(row?.model).name, value(row?.assetCode, "Chưa có tên thiết bị")));
   return (
     <span className="workshop-equipment-identity">

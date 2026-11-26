@@ -200,12 +200,19 @@ async function drain(predicate) {
   throw Error("Timed out waiting for real event consumers");
 }
 async function main() {
-  for (const name of services)
-    execFileSync("pnpm", ["--filter", name + "-service", "db:migrate"], {
-      cwd: root,
+  for (const name of services) {
+    const serviceRequire = req(name);
+    const prismaPackage = serviceRequire.resolve("prisma/package.json");
+    const prismaCli = path.join(
+      path.dirname(prismaPackage),
+      serviceRequire(prismaPackage).bin.prisma,
+    );
+    execFileSync(process.execPath, [prismaCli, "migrate", "deploy"], {
+      cwd: path.join(root, "apps", name + "-service"),
       env: process.env,
       stdio: "inherit",
     });
+  }
   for (const name of [...services, "gateway"]) ports[name] = await port();
   for (const name of [...services, "gateway"])
     process.env[
@@ -311,6 +318,7 @@ async function main() {
     { manufacturer: "Policy fixture", modelCode: "X100", name: "Model X100" },
     201,
   );
+  assert.equal(model.equipmentCount, 0);
   const item = {
     id: randomUUID(),
     title: "Inspect filter",
@@ -359,22 +367,21 @@ async function main() {
   };
   const wp = `${A}/equipment-models/${model.id}/warranty-policies`,
     mp = `${M}/equipment-models/${model.id}/maintenance-profiles`;
-  let w = await call("POST", wp, manager, { body: warranty }, 201),
-    m = await call("POST", mp, manager, { body: profile }, 201);
-  w = await call(
+  const w = await call(
     "POST",
-    wp + `/${w.id}/publish`,
+    wp,
     manager,
-    { expectedVersion: w.version },
+    { body: warranty, activate: true },
     201,
   );
-  m = await call(
+  let m = await call(
     "POST",
-    mp + `/${m.id}/publish`,
+    mp,
     manager,
-    { expectedVersion: m.version },
+    { body: profile, activate: true },
     201,
   );
+  assert.ok(w.isDefault && m.isDefault);
   await call(
     "PUT",
     wp + `/${w.id}`,
@@ -420,30 +427,99 @@ async function main() {
     preview.policyPreview.maintenance.firstDueDates[0].date,
     "2026-04-30",
   );
-  let w2 = await call(
+  const modelPath = A + `/equipment-models/${model.id}`;
+  const listModels = A + "/equipment-models?q=X100";
+  const stoppedModel = await call("PATCH", modelPath, manager, {
+    status: "INACTIVE",
+  });
+  assert.equal(stoppedModel.equipmentCount, 1);
+  assert.equal(
+    (await call("GET", listModels + "&status=ACTIVE", manager)).total,
+    0,
+  );
+  assert.equal(
+    (await call("GET", listModels, manager)).items[0].equipmentCount,
+    1,
+  );
+  const blocked = await call(
     "POST",
-    wp,
+    A + `/equipment-registrations/${draft.id}/submit`,
     manager,
-    { body: { ...warranty, durationMonths: 24 } },
+    {
+      expectedVersion: preview.version,
+    },
+    409,
+  );
+  assert.equal(blocked.code, "POLICY_REFERENCE_CHANGED");
+  const restoredModel = await call("PATCH", modelPath, manager, {
+    status: "ACTIVE",
+  });
+  assert.equal(restoredModel.equipmentCount, 1);
+  assert.equal(
+    (await call("GET", listModels + "&status=ACTIVE", manager)).items[0].id,
+    model.id,
+  );
+  const warrantyEdit = {
+    expectedVersion: w.version,
+    body: { ...warranty, durationMonths: 24 },
+    publish: true,
+  };
+  const w2 = await call(
+    "POST",
+    wp + `/${w.id}/revise`,
+    manager,
+    warrantyEdit,
     201,
   );
-  w2 = await call(
+  assert.notEqual(w2.id, w.id);
+  assert.equal(w2.status, "PUBLISHED");
+  assert.equal(w2.isDefault, true);
+  assert.deepEqual(
+    (await call("GET", wp + `/${w.id}`, manager)).body,
+    warranty,
+  );
+  await call("POST", wp + `/${w.id}/revise`, manager, warrantyEdit, 409);
+  const pendingProfile = await call(
     "POST",
-    wp + `/${w2.id}/publish`,
+    mp,
     manager,
-    { expectedVersion: w2.version },
+    { body: profile },
+    201,
+  );
+  assert.equal(pendingProfile.status, "DRAFT");
+  const m2 = await call("PUT", mp + `/${pendingProfile.id}`, manager, {
+    expectedVersion: pendingProfile.version,
+    body: { ...profile, name: "Updated maintenance programme" },
+    activate: true,
+  });
+  assert.equal(m2.id, pendingProfile.id);
+  assert.equal(m2.isDefault, true);
+  const supersededWarranty = await call("GET", wp + `/${w.id}`, manager);
+  const supersededMaintenance = await call("GET", mp + `/${m.id}`, manager);
+  assert.equal(supersededWarranty.isDefault, false);
+  assert.equal(supersededMaintenance.isDefault, false);
+  const retained = await call(
+    "POST",
+    A + `/equipment-registrations/${draft.id}/model-policies`,
+    manager,
+    {
+      expectedVersion: preview.version,
+      warrantyRevisionId: w.id,
+      maintenanceRevisionId: m.id,
+    },
     201,
   );
   const done = await call(
     "POST",
     A + `/equipment-registrations/${draft.id}/submit`,
     manager,
-    { expectedVersion: preview.version },
+    { expectedVersion: retained.version },
   );
   assert.equal(done.status, "COMPLETED");
   assert.equal(done.maintenancePlanIds.length, 2);
   assert.equal(done.maintenancePlanId, null);
   assert.equal(done.policyPreview.warranty.revisionId, w.id);
+  assert.equal(done.policyPreview.maintenance.revisionId, m.id);
   await call(
     "GET",
     A + `/internal/equipment-registrations/${draft.id}/model-policy-input`,
@@ -477,15 +553,62 @@ async function main() {
     }),
     2,
   );
-  const b = await registration("MODEL-B"),
-    previewB = await call(
-      "POST",
-      A + `/equipment-registrations/${b.id}/model-policies`,
-      manager,
-      { expectedVersion: b.version },
-      201,
-    );
+  const b = await registration("MODEL-B");
+  const newPreview = A + `/equipment-registrations/${b.id}/model-policies`;
+  const manual = await registration("MODEL-MANUAL");
+  const manualPath = A + `/equipment-registrations/${manual.id}`;
+  const manuallySelected = await call(
+    "POST",
+    manualPath + "/model-policies",
+    manager,
+    { expectedVersion: manual.version, warrantyRevisionId: w.id, maintenanceRevisionId: m.id },
+    201,
+  );
+  assert.equal(manuallySelected.policyPreview.warranty.revisionId, w.id);
+  assert.equal(manuallySelected.policyPreview.maintenance.revisionId, m.id);
+  const replacementModel = await call(
+    "POST",
+    A + "/equipment-models",
+    manager,
+    { modelCode: "MODEL-CHANGE", name: "Replacement model", manufacturer: "Policy Vendor" },
+    201,
+  );
+  await call("PATCH", manualPath, manager, { expectedVersion: manual.version, modelId: replacementModel.id }, 409);
+  await call("PATCH", manualPath, manager, { expectedVersion: manuallySelected.version, modelId: randomUUID() }, 422);
+  const changedModel = await call("PATCH", manualPath, manager, {
+    expectedVersion: manuallySelected.version,
+    modelId: replacementModel.id,
+  });
+  assert.equal(changedModel.policyPreview, null);
+  const editedEquipment = await call("GET", A + `/equipment/${manual.equipmentId}`, manager);
+  assert.equal(editedEquipment.modelId, replacementModel.id);
+  await call("POST", manualPath + "/model-policies", manager, {
+    expectedVersion: changedModel.version,
+    warrantyRevisionId: w.id,
+    maintenanceRevisionId: m.id,
+  }, 409);
+  await call("PATCH", A + `/equipment-registrations/${done.id}`, manager, {
+    expectedVersion: done.version,
+    modelId: replacementModel.id,
+  }, 409);
+  const previewB = await call(
+    "POST",
+    newPreview,
+    manager,
+    { expectedVersion: b.version },
+    201,
+  );
   assert.equal(previewB.policyPreview.warranty.revisionId, w2.id);
+  assert.equal(previewB.policyPreview.maintenance.revisionId, m2.id);
+  m = await call(
+    "POST",
+    mp + `/${m.id}/reactivate`,
+    manager,
+    { expectedVersion: supersededMaintenance.version },
+    201,
+  );
+  assert.equal(m.id, supersededMaintenance.id);
+  assert.equal(m.isDefault, true);
   const safe = await call(
     "GET",
     A + `/equipment/${draft.equipmentId}/applied-policies`,
@@ -1043,7 +1166,7 @@ async function main() {
       { expectedVersion: candidate.version },
       201,
     );
-  await call(
+  const retiredWarranty = await call(
     "POST",
     wp + `/${w2.id}/retire`,
     manager,
@@ -1063,6 +1186,66 @@ async function main() {
     }),
     0,
   );
+  const maintenanceDraft = await call(
+    "POST",
+    mp + `/${m.id}/revise`,
+    manager,
+    {
+      expectedVersion: m.version,
+      body: { ...profile, name: "Proposed maintenance" },
+      publish: false,
+    },
+    201,
+  );
+  assert.equal(maintenanceDraft.status, "DRAFT");
+  const currentMaintenance = await call("GET", mp + "/default", manager);
+  assert.equal(currentMaintenance.id, m.id);
+  assert.deepEqual(currentMaintenance.body, profile);
+  const retiredMaintenance = await call(
+    "POST",
+    mp + `/${m.id}/retire`,
+    manager,
+    {
+      expectedVersion: currentMaintenance.version,
+    },
+    201,
+  );
+  for (const [route, retired, foreignModelStatus] of [
+    [wp, retiredWarranty, 404],
+    [mp, retiredMaintenance, 502],
+  ]) {
+    const command = { expectedVersion: retired.version };
+    await call("GET", route + "/default", manager, undefined, 404);
+    await call(
+      "POST",
+      route + `/${retired.id}/reactivate`,
+      other,
+      command,
+      foreignModelStatus,
+    );
+    const restored = await call(
+      "POST",
+      route + `/${retired.id}/reactivate`,
+      manager,
+      command,
+      201,
+    );
+    assert.equal(restored.id, retired.id);
+    assert.equal(restored.revision, retired.revision);
+    assert.deepEqual(restored.body, retired.body);
+    assert.equal(restored.status, "PUBLISHED");
+    assert.equal(
+      (await call("GET", route + "/default", manager)).id,
+      restored.id,
+    );
+    await call(
+      "POST",
+      route + `/${retired.id}/reactivate`,
+      manager,
+      command,
+      409,
+    );
+  }
   evidence.push({
     case: "reasoned overrides; forged source rejected; staff cannot execute technician checklist; customer summary excludes notes; retired preview cannot submit",
     status: "PASS",
@@ -1072,7 +1255,7 @@ async function main() {
     "POST",
     A + `/equipment-registrations/${receiptDraft.id}/model-policies`,
     manager,
-    { expectedVersion: receiptDraft.version, warrantyRevisionId: w.id },
+    { expectedVersion: receiptDraft.version },
     201,
   );
   global.fetch = async function (input, init) {
@@ -1259,6 +1442,57 @@ async function main() {
     { code: "CUSTOMER-B", name: "Other customer" },
     201,
   );
+  const secondSite = await call(
+    "POST", `/api/organization/customers/${secondCustomer.id}/sites`, manager,
+    { code: "DRAFT-SITE", name: "Corrected draft site", address: "Second address" }, 201,
+  );
+  const editable = await registration("DRAFT-EDIT");
+  const editablePath = A + `/equipment-registrations/${editable.id}`;
+  assert.ok(editable.allowedActions.includes("editEquipmentIdentity"));
+  const appliedBeforeEdit = await call("POST", editablePath + "/model-policies", manager, {
+    expectedVersion: editable.version,
+  }, 201);
+  await call("PATCH", editablePath, manager, {
+    expectedVersion: appliedBeforeEdit.version,
+    customerId: secondCustomer.id,
+    customerSiteId: site.id,
+  }, 422);
+  const edited = await call("PATCH", editablePath, manager, {
+    expectedVersion: appliedBeforeEdit.version,
+    customerId: secondCustomer.id,
+    customerSiteId: secondSite.id,
+    deliveryMethod: "CUSTOMER_SITE",
+    assetCode: "DRAFT-CODE-CORRECTED",
+    serialNumber: "DRAFT-SERIAL-CORRECTED",
+    displayName: "Corrected draft name",
+    handoverDate: "2026-02-15",
+    installationDate: "2026-02-15",
+    handoverDetails: { condition: "", notes: "Draft notes", expiresAt: null },
+  });
+  assert.equal(edited.policyPreview, null);
+  assert.deepEqual(edited.handoverDetails, { condition: "", notes: "Draft notes", expiresAt: null });
+  const editedAsset = A + `/equipment/${editable.equipmentId}`;
+  assert.deepEqual(
+    (({ customerId, customerSiteId, assetCode, serialNumber, displayName, status }) =>
+      ({ customerId, customerSiteId, assetCode, serialNumber, displayName, status }))(
+      await call("GET", editedAsset, manager),
+    ),
+    {
+      customerId: secondCustomer.id, customerSiteId: secondSite.id,
+      assetCode: "DRAFT-CODE-CORRECTED", serialNumber: "DRAFT-SERIAL-CORRECTED",
+      displayName: "Corrected draft name", status: "OUT_OF_SERVICE",
+    },
+  );
+  const switched = await call("PATCH", editablePath, manager, {
+    expectedVersion: edited.version,
+    deliveryMethod: "STORE",
+  });
+  assert.equal(switched.deliveryMethod, "STORE");
+  assert.equal(switched.handoverDetails, null);
+  const afterSwitch = await dbs.asset.equipment.findUniqueOrThrow({ where: { id: editable.equipmentId } });
+  assert.equal(afterSwitch.handoverRequired, false);
+  assert.equal(afterSwitch.installationDate, null);
+  evidence.push({ case: "Unsubmitted registration draft edits, scoped customer and location, policy invalidation and delivery-method change", status: "PASS" });
   await fixtureUser(
     "CUSTOMER_ADMIN",
     tenantId,

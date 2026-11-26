@@ -21,19 +21,22 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   EquipmentRepository,
+  dateString,
+  dbDate,
   todayInVietnam,
 } from '../equipment/equipment.repository';
 import { EquipmentService } from '../equipment/equipment.service';
+import { EQUIPMENT_STATUSES } from '../equipment/dto/equipment.dto';
 import { WarrantyRepository } from '../warranties/warranty.repository';
 import {
   ORGANIZATION_CLIENT,
   type OrganizationClient,
 } from '../organization/organization-client';
-import { auditContext, json } from '../history/audit';
+import { auditContext, changedFields, json } from '../history/audit';
 import {
   equipmentSource,
   dto,
-  HandoverDetailsDto,
+  DraftHandoverDetailsDto,
   warrantyChoice,
   maintenanceChoice,
   invalidInput,
@@ -159,7 +162,11 @@ export class RegistrationService {
       updatedAt: row.updatedAt,
       allowedActions:
         row.status === 'DRAFT'
-          ? ['edit', ...(canSubmit ? ['submit'] : [])]
+          ? [
+              'edit',
+              ...(row.createdWithEquipment && !row.handoverId ? ['editEquipmentIdentity'] : []),
+              ...(canSubmit ? ['submit'] : []),
+            ]
           : (row.status === 'PENDING_MAINTENANCE' ||
                 row.maintenanceProvisioning === 'PENDING') &&
               canSubmit
@@ -178,28 +185,72 @@ export class RegistrationService {
     return this.view(await this.load(p, id), p);
   }
   async list(p: Principal, q: RegistrationQuery) {
-    const where = {
-      tenantId: dataScope(p).tenantId,
+    const { tenantId } = dataScope(p);
+    const currentHandover = { supersededById: null };
+    const equipmentFilter = q.handoverStatus
+      ? { handovers: { some: { ...currentHandover, status: q.handoverStatus } } }
+      : {};
+    const baseWhere: Prisma.EquipmentRegistrationWhereInput = {
+      tenantId,
       ...(q.status ? { status: q.status } : {}),
       ...(q.equipmentId ? { equipmentId: q.equipmentId } : {}),
       ...(q.createKey
         ? { createKey: q.createKey, createActorId: p.userId }
         : {}),
+      equipment: { is: equipmentFilter },
     };
-    const [rows, total] = await this.db.$transaction([
+    const where: Prisma.EquipmentRegistrationWhereInput = q.equipmentStatus
+      ? { ...baseWhere, equipment: { is: { ...equipmentFilter, status: q.equipmentStatus } } }
+      : baseWhere;
+    const [rows, total, grouped] = await this.db.$transaction([
       this.db.equipmentRegistration.findMany({
         where,
         orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
         take: q.pageSize,
         skip: (q.page - 1) * q.pageSize,
+        include: {
+          equipment: {
+            select: {
+              status: true,
+              displayName: true,
+              assetCode: true,
+              serialNumber: true,
+              model: { select: { name: true } },
+              handovers: {
+                where: currentHandover,
+                orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+                take: 1,
+                select: { id: true, status: true },
+              },
+            },
+          },
+        },
       }),
       this.db.equipmentRegistration.count({ where }),
-    ]);
-    return toPage(
-      rows.map((row) => this.view(row, p)),
+      this.db.equipment.groupBy({
+        by: ['status'],
+        where: { tenantId, registration: { is: baseWhere } },
+        _count: { _all: true },
+      }),
+    ], { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    const counts = new Map(grouped.map((row) => [row.status, row._count._all]));
+    const page = toPage(
+      rows.map((row) => {
+        const { handovers, ...equipment } = row.equipment;
+        return { ...this.view(row, p), equipment, handover: handovers[0] ?? null };
+      }),
       total,
       q,
     );
+    return {
+      ...page,
+      summary: {
+        total: grouped.reduce((sum, row) => sum + row._count._all, 0),
+        byEquipmentStatus: Object.fromEntries(
+          EQUIPMENT_STATUSES.map((status) => [status, counts.get(status) ?? 0]),
+        ),
+      },
+    };
   }
   private checkDates(
     row: {
@@ -235,7 +286,7 @@ export class RegistrationService {
     const details =
       normalized.handoverDetails === undefined
         ? undefined
-        : dto(HandoverDetailsDto, normalized.handoverDetails);
+        : dto(DraftHandoverDetailsDto, normalized.handoverDetails);
     if (details && deliveryMethod !== 'CUSTOMER_SITE')
       invalidInput('Only customer-site handovers have confirmation details');
     if (
@@ -349,6 +400,7 @@ export class RegistrationService {
           tenantId,
           equipmentId: eq.id,
           deliveryMethod,
+          createdWithEquipment: source.mode === 'NEW',
           handoverDetails: details ? json(details) : Prisma.DbNull,
           createActorId: p.userId,
           createKey: key,
@@ -395,51 +447,128 @@ export class RegistrationService {
       );
   }
   async patch(p: Principal, id: string, input: PatchRegistrationDto) {
-    if (
-      input.warranty === undefined &&
-      input.maintenance === undefined &&
-      input.handoverDetails === undefined
-    )
-      invalidInput('Provide at least one decision');
+    const { expectedVersion, deliveryMethod, handoverDetails, warranty, maintenance, ...fields } = input;
+    if ([deliveryMethod, handoverDetails, warranty, maintenance, ...Object.values(fields)].every((value) => value === undefined))
+      invalidInput('Provide at least one draft field');
+
+    const changingLocation = fields.customerId !== undefined ||
+      fields.customerSiteId !== undefined || fields.locationId !== undefined;
+    const locationFor = (eq: Equipment) => {
+      const customerId = fields.customerId?.toLowerCase() ?? eq.customerId;
+      const customerSiteId = fields.customerSiteId?.toLowerCase() ?? eq.customerSiteId;
+      const sameSite = customerId === eq.customerId && customerSiteId === eq.customerSiteId;
+      return {
+        customerId,
+        customerSiteId,
+        locationId: fields.locationId !== undefined
+          ? fields.locationId?.toLowerCase() ?? null
+          : sameSite ? eq.locationId : null,
+      };
+    };
+    let validatedLocation: ReturnType<typeof locationFor> | undefined;
+    if (changingLocation) {
+      const draft = await this.load(p, id);
+      this.assertDraft(draft, expectedVersion);
+      const eq = await this.db.equipment.findFirst({
+        where: { ...scopeWhere(dataScope(p)), id: draft.equipmentId },
+      });
+      if (!eq) throw referenceError('EQUIPMENT_NOT_FOUND');
+      this.assertDraftIdentity(draft, eq);
+      validatedLocation = locationFor(eq);
+      const { customerId, customerSiteId, locationId } = validatedLocation;
+      const [customer, site] = await Promise.all([
+        this.organization.getCustomer(customerId, p),
+        this.organization.getSite(customerId, customerSiteId, locationId ?? undefined, p),
+      ]);
+      if (!customer || customer.id !== customerId || customer.status !== 'ACTIVE')
+        throw referenceError('CUSTOMER_NOT_FOUND');
+      if (!site || site.customerId !== customerId || site.siteId !== customerSiteId || site.siteStatus !== 'ACTIVE')
+        throw referenceError('SITE_NOT_OF_CUSTOMER');
+      if ((site.locationId ?? null) !== locationId)
+        throw referenceError('LOCATION_NOT_IN_SITE');
+    }
+
     const row = await this.db.$transaction(async (tx) => {
       const { row, eq } = await this.locked(p, id, tx);
-      this.assertDraft(row, input.expectedVersion);
+      this.assertDraft(row, expectedVersion);
       if (eq.status === 'RETIRED') throw referenceError('EQUIPMENT_RETIRED');
-      if (
-        input.handoverDetails !== undefined &&
-        row.deliveryMethod !== 'CUSTOMER_SITE'
-      )
+      const nextDelivery = deliveryMethod ?? row.deliveryMethod;
+      const deliveryChanged = nextDelivery !== row.deliveryMethod;
+      if (changingLocation || deliveryChanged || fields.assetCode !== undefined || fields.serialNumber !== undefined)
+        this.assertDraftIdentity(row, eq);
+      if (validatedLocation && Object.keys(changedFields(validatedLocation, locationFor(eq))).length)
+        throw conflict('EQUIPMENT_REFERENCE_CHANGED', 'Reload the draft');
+
+      const modelId = fields.modelId?.toLowerCase() ?? eq.modelId;
+      const modelChanged = modelId !== eq.modelId;
+      if (modelChanged) {
+        if (eq.status === 'IN_SERVICE') throw referenceError('EQUIPMENT_HANDOVER_CONFLICT');
+        await this.equipmentRepo.lockActiveModel(tx, eq.tenantId, modelId);
+      }
+
+      if (handoverDetails && nextDelivery !== 'CUSTOMER_SITE')
         invalidInput('Only customer-site handovers have confirmation details');
-      const details =
-        input.handoverDetails === undefined
-          ? undefined
-          : dto(HandoverDetailsDto, input.handoverDetails);
-      const validated = this.choices(p, input.warranty, input.maintenance);
-      const warranty =
-        input.warranty === undefined
-          ? this.storedWarranty(row)
-          : validated.warranty;
-      const maintenance =
-        input.maintenance === undefined
-          ? this.storedMaintenance(row)
-          : validated.maintenance;
+      if (nextDelivery === 'STORE' && (fields.installationDate || fields.commissionedDate))
+        invalidInput('Store handovers do not have installation or commissioning dates');
+      this.checkDates(fields);
+      if (fields.purchaseDate && fields.purchaseDate > todayInVietnam())
+        invalidInput('Purchase date cannot be in the future');
+      const details = handoverDetails ? dto(DraftHandoverDetailsDto, handoverDetails) : null;
+      const normalizeDate = (value: string | null | undefined) =>
+        value === undefined ? undefined : value === null ? null : dbDate(value);
+      const handoverChanged = fields.handoverDate !== undefined && fields.handoverDate !== dateString(eq.handoverDate);
+      const validated = this.choices(p, warranty, maintenance);
       const updated = await tx.equipmentRegistration.update({
         where: { id },
         data: {
-          ...this.choiceData(warranty, maintenance),
-          ...(details ? { handoverDetails: json(details) } : {}),
-          ...(input.warranty !== undefined || input.maintenance !== undefined
-            ? { policyPreview: Prisma.DbNull }
-            : {}),
+          ...this.choiceData(
+            warranty === undefined ? this.storedWarranty(row) : validated.warranty,
+            maintenance === undefined ? this.storedMaintenance(row) : validated.maintenance,
+          ),
+          ...(deliveryChanged ? { deliveryMethod: nextDelivery } : {}),
+          ...(handoverDetails !== undefined || deliveryChanged
+            ? { handoverDetails: details ? json(details) : Prisma.DbNull } : {}),
+          ...(modelChanged || handoverChanged || warranty !== undefined || maintenance !== undefined
+            ? { policyPreview: Prisma.DbNull } : {}),
           version: { increment: 1 },
           updatedBy: p.userId,
         },
       });
-      await this.audit(tx, eq, p, 'SERVICE_SETUP_DRAFT_UPDATED', id);
+      let equipment = eq;
+      if (Object.values(fields).some((value) => value !== undefined) || deliveryChanged) {
+        equipment = await tx.equipment.update({
+          where: { id: eq.id, tenantId: eq.tenantId },
+          data: {
+            ...validatedLocation,
+            ...(modelChanged ? { modelId } : {}),
+            assetCode: fields.assetCode?.trim(),
+            serialNumber: fields.serialNumber?.trim(),
+            displayName: fields.displayName === null ? null : fields.displayName?.trim(),
+            handoverDate: normalizeDate(fields.handoverDate),
+            purchaseDate: normalizeDate(fields.purchaseDate),
+            installationDate: deliveryChanged && nextDelivery === 'STORE' ? null : normalizeDate(fields.installationDate),
+            commissionedDate: deliveryChanged && nextDelivery === 'STORE' ? null : normalizeDate(fields.commissionedDate),
+            ...(validatedLocation && Object.keys(changedFields(validatedLocation, {
+              customerId: eq.customerId, customerSiteId: eq.customerSiteId, locationId: eq.locationId,
+            })).length ? { snapshotVersion: { increment: 1 } } : {}),
+            ...(deliveryChanged ? {
+              status: 'OUT_OF_SERVICE',
+              handoverRequired: nextDelivery === 'CUSTOMER_SITE',
+            } : {}),
+          },
+        });
+      }
+      await this.audit(tx, equipment, p, 'SERVICE_SETUP_DRAFT_UPDATED', id);
       return updated;
     });
     return this.view(row, p);
   }
+
+  private assertDraftIdentity(row: EquipmentRegistration, eq: Equipment) {
+    if (!row.createdWithEquipment || row.handoverId || eq.currentHandoverId || eq.status === 'IN_SERVICE' || eq.status === 'RETIRED')
+      throw conflict('REGISTRATION_IDENTITY_FROZEN', 'Equipment identity and delivery method can only be edited before its first handover');
+  }
+
   async submit(p: Principal, id: string, expectedVersion: number) {
     permitted(p, 'warranty:manage');
     permitted(p, 'maintenance:manage');

@@ -38,16 +38,23 @@ import {
   RequirePermissions,
   type Principal,
 } from '@pbl6/auth';
-import { IsInt, IsObject, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsObject, Min } from 'class-validator';
 import { ModelPoliciesService } from './model-policies.service';
 class PolicyBodyDto {
   @IsObject() body: Record<string, unknown>;
+  @IsOptional() @IsBoolean() activate?: boolean;
 }
 class PolicyVersionDto {
   @IsInt() @Min(1) expectedVersion: number;
 }
 class PolicyEditDto extends PolicyVersionDto {
   @IsObject() body: Record<string, unknown>;
+}
+class PolicyUpdateDto extends PolicyEditDto {
+  @IsOptional() @IsBoolean() activate?: boolean;
+}
+class PolicyRevisionDto extends PolicyEditDto {
+  @IsBoolean() publish: boolean;
 }
 @Controller('equipment-models/:modelId/maintenance-profiles')
 @AllowUserTypes('TENANT_STAFF')
@@ -115,13 +122,14 @@ export class ModelPoliciesController {
       undefined,
       undefined,
       input.body,
+      input.activate === true,
     );
   }
   @Put(':id') @RequirePermissions('maintenance:manage') update(
     @CurrentUser() p: Principal,
     @Param('modelId', ParseUUIDPipe) modelId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() input: PolicyEditDto,
+    @Body() input: PolicyUpdateDto,
   ) {
     return this.service.write(
       p,
@@ -130,6 +138,7 @@ export class ModelPoliciesController {
       id,
       input.expectedVersion,
       input.body,
+      input.activate === true,
     );
   }
   @Post(':id/publish') @RequirePermissions('maintenance:manage') publish(
@@ -139,6 +148,36 @@ export class ModelPoliciesController {
     @Body() input: PolicyVersionDto,
   ) {
     return this.service.write(p, modelId, 'PUBLISH', id, input.expectedVersion);
+  }
+  @Post(':id/revise') @RequirePermissions('maintenance:manage') revise(
+    @CurrentUser() p: Principal,
+    @Param('modelId', ParseUUIDPipe) modelId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: PolicyRevisionDto,
+  ) {
+    return this.service.write(
+      p,
+      modelId,
+      'REVISE',
+      id,
+      input.expectedVersion,
+      input.body,
+      input.publish,
+    );
+  }
+  @Post(':id/reactivate') @RequirePermissions('maintenance:manage') reactivate(
+    @CurrentUser() p: Principal,
+    @Param('modelId', ParseUUIDPipe) modelId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: PolicyVersionDto,
+  ) {
+    return this.service.write(
+      p,
+      modelId,
+      'REACTIVATE',
+      id,
+      input.expectedVersion,
+    );
   }
   @Post(':id/retire') @RequirePermissions('maintenance:manage') retire(
     @CurrentUser() p: Principal,

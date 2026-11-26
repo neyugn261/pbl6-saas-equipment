@@ -116,7 +116,7 @@ const metrics: Record<WorkspaceRole, Metric[]> = {
       description: "Đang chờ quản trị khách hàng",
       area: "assetM2",
       path: `/equipment-handovers?${page}&status=PENDING_CUSTOMER_CONFIRMATION`,
-      to: "/app/equipment-handovers?status=PENDING_CUSTOMER_CONFIRMATION",
+      to: "/app/equipment-registrations?handoverStatus=PENDING_CUSTOMER_CONFIRMATION",
     },
   ],
   DISPATCHER: [

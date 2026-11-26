@@ -331,6 +331,7 @@ body:has(.workshop-shell) {
   :is(
     .ws-card-header h2,
     .sd-card h2,
+    .sd-card > header h3,
     .m1-section-header h2,
     .m2-page h2,
     .m2-page h3
@@ -349,7 +350,32 @@ body:has(.workshop-shell) {
   grid-template-areas: "eyebrow eyebrow" "title actions" "description description";
 }
 .workshop-shell .page-title-header > .page-title-eyebrow { grid-area: eyebrow; margin: 0; }
-.workshop-shell .page-title-header > h1 { grid-area: title; margin: 0; min-width: 0; }
+.workshop-shell .page-title-header > :is(h1, .page-title-with-back) { grid-area: title; margin: 0; min-width: 0; }
+.page-title-with-back {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.page-title-with-back > h1 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.page-title-back {
+  display: grid;
+  flex: 0 0 32px;
+  min-height: 40px;
+  place-items: center;
+  color: var(--shop-accent, #a74b26);
+  text-decoration: none;
+}
+.page-title-back:hover:not([aria-disabled="true"]) {
+  color: var(--shop-hover, #883b1c);
+}
+.page-title-back[aria-disabled="true"] {
+  opacity: .5;
+  cursor: not-allowed;
+}
 .workshop-shell .page-title-header > .page-title-description { grid-area: description; margin: 0; }
 .workshop-shell .page-title-header > .page-title-actions {
   grid-area: actions;
@@ -370,7 +396,7 @@ body:has(.workshop-shell) {
     grid-template-areas: none;
   }
   .workshop-shell .page-title-header > .page-title-eyebrow { grid-area: auto; order: 0; }
-  .workshop-shell .page-title-header > h1 { grid-area: auto; order: 1; }
+  .workshop-shell .page-title-header > :is(h1, .page-title-with-back) { grid-area: auto; order: 1; }
   .workshop-shell .page-title-header > .page-title-description { grid-area: auto; order: 2; }
   .workshop-shell .page-title-header > .page-title-actions {
     grid-area: auto;
@@ -548,7 +574,6 @@ body:has(.workshop-shell) {
     .sd-prose,
     .sd-action-fields p,
     .sd-action-panel > p,
-    .sd-back,
     .ws-search
   ) {
   color: var(--shop-muted);
@@ -2521,32 +2546,13 @@ body:has(.workshop-shell) {
 .request-overview .m2-linked-list a { min-width: 0; overflow-wrap: anywhere; }
 .equipment-dossier .m2-linked-list span:not(.m2-status),
 .request-overview .m2-linked-list span:not(.m2-status):not(.ws-badge) { color: var(--shop-muted); text-align: left; }
-.equipment-dossier .model-policy-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 20px;
-}
-.equipment-dossier .model-policy-summary > section { min-width: 0; padding: 18px; border: 1px solid var(--shop-line); border-radius: var(--shop-radius); }
-.equipment-dossier .model-policy-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.equipment-dossier .model-policy-heading > h3,
 .equipment-dossier .equipment-policy-records h3 { margin: 0; color: var(--shop-ink); font-size: 15px; font-weight: 600; }
-.equipment-dossier .model-policy-summary h4,
 .equipment-dossier .equipment-policy-terms h4 { margin: 14px 0 8px; color: var(--shop-ink); font-size: 13px; font-weight: 600; }
-.equipment-dossier .model-policy-terms,
 .equipment-dossier .equipment-policy-terms p,
 .workshop-shell .request-warranty-assessment .request-policy-terms { padding: 14px; border-radius: var(--shop-radius); background: var(--shop-canvas); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
-.equipment-dossier .model-policy-terms,
 .equipment-dossier .equipment-policy-terms p { margin: 14px 0 0; }
-.equipment-dossier .model-policy-terms:empty { display: none; }
-.equipment-dossier .model-policy-rule { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--shop-line); }
-.equipment-dossier .model-policy-rule > h4 { margin-top: 0; }
-.equipment-dossier .model-policy-rule > p { margin: 6px 0; color: var(--shop-muted); font-size: 12px; line-height: 1.7; }
-.equipment-dossier .model-policy-list,
 .request-warranty-assessment .model-policy-list { display: grid; gap: 8px; list-style: none; margin: 12px 0 0; padding: 0; }
-.equipment-dossier .model-policy-list > li,
 .request-warranty-assessment .model-policy-list > li { padding: 10px 12px; border-left: 2px solid var(--shop-line); background: var(--shop-canvas); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
-.equipment-dossier .model-policy-list p { margin: 6px 0 0; color: var(--shop-muted); white-space: pre-wrap; }
 .equipment-dossier .equipment-source-message,
 .equipment-dossier .equipment-applied-policy > [role="status"],
 .equipment-dossier .equipment-applied-policy > [role="alert"] { margin: 0; padding: 14px; border: 1px solid var(--shop-line); border-radius: var(--shop-radius); background: var(--shop-canvas); font-size: 13px; line-height: 1.7; }
@@ -2569,8 +2575,7 @@ body:has(.workshop-shell) {
 .equipment-dossier .equipment-parts-list .sd-facts { margin: 8px 0 12px; }
 .equipment-dossier .sd-stack > .sd-notice { margin-bottom: 0; }
 @media (max-width: 960px) {
-  .equipment-dossier-profile,
-  .equipment-dossier .model-policy-summary { grid-template-columns: minmax(0, 1fr); }
+  .equipment-dossier-profile { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 480px) {
   .equipment-dossier .sd-facts:not(.sd-business-values),

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
+import { PageTitle } from '../components/PageTitle'
 import { ApiError } from '../api/client'
 import { useSession } from '../auth/session'
 import { changePassword, forgotPassword, passwordProblem, resetPassword } from '../auth/password'
@@ -61,7 +62,7 @@ export function ForgotPasswordPage() {
     <AuthStory />
     <main className="m1-card m1-form password-recovery__card">
       <span className="m1-eyebrow">KHÔI PHỤC TÀI KHOẢN</span>
-      <h1>Quên mật khẩu?</h1>
+      <PageTitle title="Quên mật khẩu?" back={{ to: '/login', label: 'Về đăng nhập' }} />
       <p className="password-recovery__intro">Nhập email đăng nhập để yêu cầu mã xác nhận và đặt mật khẩu mới.</p>
       {error && <p role="alert" className="m1-error">{error}</p>}
       {done ? <div className="password-recovery__success" role="status">
@@ -88,7 +89,6 @@ export function ForgotPasswordPage() {
           </form>
         </section>}
       </>}
-      <Link className="password-recovery__back" to="/login">← Về đăng nhập</Link>
     </main>
   </div>
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { api } from '../api/client'
 import { getSessionGeneration } from '../auth/session'
 import type { Page } from '../types/domain'
+import { PageTitle, type PageTitleBack } from '../components/PageTitle'
 
 import { errorText, useDirectory, type DirectoryRow } from './registration-data'
 export type { DirectoryRow } from './registration-data'
@@ -11,16 +12,18 @@ export function SetupPage({
   description,
   children,
   actions,
+  back,
 }: {
   title: string
   description?: string
   children: ReactNode
   actions?: ReactNode
+  back?: PageTitleBack
 }) {
   return (
     <div className="registration-page">
       <header className="registration-header page-title-header">
-        <h1>{title}</h1>
+        <PageTitle title={title} back={back} />
         {actions && <div className="registration-actions page-title-actions">{actions}</div>}
         {description && <p className="page-title-description">{description}</p>}
       </header>
@@ -129,11 +132,10 @@ const fields: Record<QuickKind, Field[]> = {
     },
   ],
   model: [
-    { key: 'manufacturer', label: 'Hãng sản xuất', required: true, max: 150, placeholder: 'Ví dụ: Hitachi, VinaPump...' },
-    { key: 'modelCode', label: 'Mã model', required: true, max: 100, placeholder: 'Ví dụ: PUMP-200, US-100...' },
-    { key: 'name', label: 'Tên dòng thiết bị', required: true, max: 200, wide: true, placeholder: 'Ví dụ: Máy bơm ly tâm công nghiệp PUMP-200' },
-    { key: 'category', label: 'Nhóm thiết bị', max: 100, placeholder: 'Ví dụ: Máy bơm, Thiết bị chẩn đoán...' },
-    { key: 'description', label: 'Mô tả', wide: true, placeholder: 'Mô tả thêm thông số hoặc tính năng' },
+    { key: 'manufacturer', label: 'Hãng sản xuất', required: true, max: 150, placeholder: 'Ví dụ: VinaPump' },
+    { key: 'modelCode', label: 'Mã model', required: true, max: 100, placeholder: 'Ví dụ: PUMP-200' },
+    { key: 'name', label: 'Tên dòng thiết bị', required: true, max: 200, wide: true, placeholder: 'Ví dụ: Máy bơm ly tâm công nghiệp' },
+    { key: 'description', label: 'Mô tả', type: 'textarea', wide: true },
   ],
   contact: [
     { key: 'name', label: 'Tên người liên hệ', required: true, max: 150, placeholder: 'Ví dụ: Nguyễn Văn A' },
@@ -186,6 +188,7 @@ export function QuickForm({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('')
   const edit = Boolean(initial)
+  const model = kind === 'model'
 
   useEffect(() => {
     if (!embedded) return
@@ -272,7 +275,7 @@ export function QuickForm({
       const row =
         kind === 'model'
           ? await api.assetM2<DirectoryRow>(path, {
-              method: edit ? 'PATCH' : 'POST',
+              method: 'POST',
               body,
             })
           : await api.organization<DirectoryRow>(path, {
@@ -290,6 +293,12 @@ export function QuickForm({
   const title = edit
     ? 'Cập nhật thông tin'
     : `Thêm ${{ customer: 'khách hàng', site: 'địa điểm', model: 'model thiết bị', contact: 'người liên hệ', location: 'vị trí chi tiết' }[kind]}`
+  const saveLabel = model ? 'Thêm model' : 'Lưu thông tin'
+  const cancelButton = (
+    <button type="button" className="ws-button ws-button--secondary" disabled={busy} onClick={onCancel}>
+      {model ? 'Hủy' : 'Đóng'}
+    </button>
+  )
 
   const formContent = (
     <>
@@ -307,51 +316,47 @@ export function QuickForm({
           </button>
         )}
       </div>
-      <p className="registration-modal-subtitle">
-        Thông tin được lưu vào danh mục của doanh nghiệp ngay khi bạn bấm Lưu.
-      </p>
+      {!model && (
+        <p className="registration-modal-subtitle">
+          Thông tin được lưu vào danh mục của doanh nghiệp ngay khi bạn bấm Lưu.
+        </p>
+      )}
       <form onSubmit={submit} className="registration-fields">
-        {shown.map((field, index) => (
-          <label
-            key={field.key}
-            className={field.wide ? 'registration-wide' : undefined}
-          >
-            <span>
-              {field.label}
-              {field.required ? ' *' : ''}
-            </span>
-            {field.readonly ? (
-              <input
-                name={field.key}
-                readOnly
-                tabIndex={-1}
-                value={String(
-                  (initial as Record<string, unknown> | undefined)?.[field.key] ??
-                    '',
-                )}
-                className="registration-readonly-field"
-                title="Trường chỉ đọc"
-              />
-            ) : (
-              <input
-                name={field.key}
-                autoFocus={index === firstEditableIndex}
-                required={field.required}
-                type={field.type || 'text'}
-                maxLength={field.max}
-                placeholder={field.placeholder}
-                defaultValue={String(
-                  (initial as Record<string, unknown> | undefined)?.[field.key] ??
-                    '',
-                )}
-                disabled={busy}
-              />
-            )}
-            {field.hint && (
-              <small className="registration-field-hint">{field.hint}</small>
-            )}
-          </label>
-        ))}
+        {shown.map((field, index) => {
+          const value = String((initial as Record<string, unknown> | undefined)?.[field.key] ?? '')
+          const inputProps = {
+            name: field.key,
+            autoFocus: index === firstEditableIndex,
+            required: field.required,
+            maxLength: field.max,
+            placeholder: field.placeholder,
+            defaultValue: value,
+            disabled: busy,
+          }
+          return (
+            <label key={field.key} className={field.wide ? 'registration-wide' : undefined}>
+              <span>
+                {field.label}
+                {field.required ? <span className="required-star"> *</span> : ''}
+              </span>
+              {field.readonly ? (
+                <input
+                  name={field.key}
+                  readOnly
+                  tabIndex={-1}
+                  value={value}
+                  className="registration-readonly-field"
+                  title="Trường chỉ đọc"
+                />
+              ) : field.type === 'textarea' ? (
+                <textarea {...inputProps} rows={3} />
+              ) : (
+                <input {...inputProps} type={field.type || 'text'} />
+              )}
+              {field.hint && <small className="registration-field-hint">{field.hint}</small>}
+            </label>
+          )
+        })}
         {kind === 'location' && (
           <p className="registration-field-hint registration-wide" style={{ margin: '4px 0 0' }}>
             Mẫu kết quả: Khu vực A, Tòa nhà B, Tầng C, Phòng D. Bạn có thể để trống các ô không áp dụng.
@@ -363,12 +368,11 @@ export function QuickForm({
           </p>
         )}
         <div className="registration-actions registration-wide">
+          {model && cancelButton}
           <button type="submit" className="ws-button registration-primary" disabled={busy}>
-            {busy ? 'Đang lưu…' : 'Lưu thông tin'}
+            {busy ? 'Đang lưu…' : saveLabel}
           </button>
-          <button type="button" className="ws-button ws-button--secondary" disabled={busy} onClick={onCancel}>
-            Đóng
-          </button>
+          {!model && cancelButton}
         </div>
       </form>
     </>
@@ -382,7 +386,7 @@ export function QuickForm({
         role="presentation"
       >
         <section
-          className="registration-modal-card m1-card"
+          className={`registration-modal-card m1-card${model ? ' registration-modal-card--model' : ''}`}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -695,7 +699,7 @@ export function CustomerYouTubePicker({
         }`}
       >
         <label className="customer-yt-label" htmlFor="customer-yt-search-input">
-          Tìm kiếm khách hàng *
+          <span>Tìm kiếm khách hàng</span> <span className="required-star">*</span>
         </label>
 
         {/* YouTube Search Bar */}
@@ -918,58 +922,452 @@ export function CustomerYouTubePicker({
       {activeCustomer && (
         <div className="customer-selected-area">
           <div className="customer-yt-selected-card">
-            <div className="customer-yt-selected-header">
-              <div className="customer-yt-selected-title">
-                <span className="customer-yt-check-icon">✓</span>
-                <span>Khách hàng đã chọn</span>
+            <div className="customer-yt-selected-top">
+              <div className="customer-yt-selected-badge">
+                <span className="customer-yt-check-icon">✓</span> Khách hàng đã chọn
               </div>
+              <strong className="customer-yt-selected-name">{activeCustomer.name}</strong>
+              {activeCustomer.code && (
+                <span className="customer-yt-code-tag">{activeCustomer.code}</span>
+              )}
             </div>
-            <div className="customer-yt-selected-name">
-              <strong>{activeCustomer.name}</strong>
+            <div className="customer-yt-selected-details">
+              {activeCustomer.taxCode && (
+                <span className="customer-yt-detail-item">
+                  <span className="customer-yt-detail-label">MST:</span>
+                  <strong>{activeCustomer.taxCode}</strong>
+                </span>
+              )}
+              {activeCustomer.phone && (
+                <span className="customer-yt-detail-item">
+                  <span className="customer-yt-detail-label">SĐT:</span>
+                  <a href={`tel:${activeCustomer.phone}`}>{activeCustomer.phone}</a>
+                </span>
+              )}
+              {activeCustomer.email && (
+                <span className="customer-yt-detail-item">
+                  <span className="customer-yt-detail-label">Email:</span>
+                  <a href={`mailto:${activeCustomer.email}`}>{activeCustomer.email}</a>
+                </span>
+              )}
+              {activeCustomer.address && (
+                <span className="customer-yt-detail-item">
+                  <span className="customer-yt-detail-label">Địa chỉ:</span>
+                  <span>{activeCustomer.address}</span>
+                </span>
+              )}
             </div>
-            <div className="customer-yt-selected-grid">
-              <div className="customer-yt-grid-item">
-                <span className="customer-yt-grid-label">Mã khách hàng</span>
-                <span className="customer-yt-grid-val customer-yt-code-tag">
-                  {activeCustomer.code || '—'}
-                </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const RECENT_MODEL_KEY = 'pbl6.recent_model_ids'
+
+function getRecentModelIds(): string[] {
+  try {
+    const raw = sessionStorage.getItem(RECENT_MODEL_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecentModelId(id: string) {
+  const list = [id, ...getRecentModelIds().filter((item) => item !== id)].slice(0, 10)
+  try {
+    sessionStorage.setItem(RECENT_MODEL_KEY, JSON.stringify(list))
+  } catch {
+    // ignore
+  }
+  return list
+}
+
+export function ModelYouTubePicker({
+  selectedId,
+  selectedModel,
+  onChange,
+  onAdd,
+  revision = 0,
+}: {
+  selectedId: string
+  selectedModel?: DirectoryRow | null
+  onChange: (id: string) => void
+  onAdd?: () => void
+  revision?: number
+}) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [showResultsTable, setShowResultsTable] = useState(false)
+  const [lastExecutedSearch, setLastExecutedSearch] = useState('')
+  const [recentIds, setRecentIds] = useState(getRecentModelIds)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch active equipment models
+  const modelsQuery = useDirectory<Page<DirectoryRow>>(
+    'assetM2',
+    '/equipment-models?status=ACTIVE&pageSize=100',
+    revision,
+  )
+
+  const allModels = useMemo(
+    () => modelsQuery.value?.items || [],
+    [modelsQuery.value?.items],
+  )
+
+  // Determine current selected model info
+  const activeModel = useMemo(() => {
+    if (selectedModel && selectedModel.id === selectedId) return selectedModel
+    if (!selectedId) return null
+    return allModels.find((m) => m.id === selectedId) || null
+  }, [selectedId, selectedModel, allModels])
+
+  // Get recent models or first 5
+  const recentModels = useMemo(() => {
+    if (recentIds.length > 0 && allModels.length > 0) {
+      const found = recentIds
+        .map((id) => allModels.find((m) => m.id === id))
+        .filter((m): m is DirectoryRow => Boolean(m))
+      if (found.length > 0) return found.slice(0, 5)
+    }
+    return allModels.slice(0, 5)
+  }, [allModels, recentIds])
+
+  // Matching models for autocomplete when typing
+  const matchingModels = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return []
+    return allModels.filter((m) => {
+      const name = (m.name || '').toLowerCase()
+      const code = (m.modelCode || m.code || '').toLowerCase()
+      const manufacturer = (m.manufacturer || '').toLowerCase()
+      const description = (m.description || '').toLowerCase()
+      return (
+        name.includes(term) ||
+        code.includes(term) ||
+        manufacturer.includes(term) ||
+        description.includes(term)
+      )
+    })
+  }, [allModels, searchTerm])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleSelect = (m: DirectoryRow) => {
+    setRecentIds(saveRecentModelId(m.id))
+    onChange(m.id)
+    setShowDropdown(false)
+    setShowResultsTable(false)
+  }
+
+  const handleSearchSubmit = (termToSearch?: string) => {
+    const term = (termToSearch !== undefined ? termToSearch : searchTerm).trim()
+    setLastExecutedSearch(term)
+    setShowResultsTable(true)
+    setShowDropdown(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSearchSubmit()
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false)
+    }
+  }
+
+  // Filter for table view
+  const tableResults = useMemo(() => {
+    const term = lastExecutedSearch.toLowerCase()
+    if (!term) return allModels
+    return allModels.filter((m) => {
+      const name = (m.name || '').toLowerCase()
+      const code = (m.modelCode || m.code || '').toLowerCase()
+      const manufacturer = (m.manufacturer || '').toLowerCase()
+      const description = (m.description || '').toLowerCase()
+      return (
+        name.includes(term) ||
+        code.includes(term) ||
+        manufacturer.includes(term) ||
+        description.includes(term)
+      )
+    })
+  }, [allModels, lastExecutedSearch])
+
+  return (
+    <div className="customer-yt-picker" ref={containerRef}>
+      {/* Vùng tìm kiếm, thêm model thiết bị (Vùng riêng phía trên) */}
+      <div
+        className={`customer-search-area ${
+          showDropdown ? 'is-dropdown-open' : ''
+        }`}
+      >
+        <label className="customer-yt-label" htmlFor="model-yt-search-input">
+          <span>Tìm kiếm model thiết bị</span> <span className="required-star">*</span>
+        </label>
+
+        {/* YouTube Search Bar */}
+        <div className="customer-yt-toolbar">
+          <div className="customer-yt-search-wrapper">
+            <div className="customer-yt-search-box">
+              <span className="customer-yt-search-icon" aria-hidden="true">
+                🔍
+              </span>
+              <input
+                id="model-yt-search-input"
+                ref={inputRef}
+                type="text"
+                className="customer-yt-input"
+                placeholder="Tìm theo tên, mã model hoặc hãng sản xuất…"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setShowDropdown(true)
+                }}
+                onFocus={() => setShowDropdown(true)}
+                onKeyDown={handleKeyDown}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                className="customer-yt-search-btn"
+                onClick={() => handleSearchSubmit()}
+                title="Tìm kiếm"
+              >
+                Tìm
+              </button>
+            </div>
+
+            {/* Autocomplete Suggestions Dropdown */}
+            {showDropdown && (
+              <div className="customer-yt-dropdown" role="listbox">
+                {!searchTerm.trim() ? (
+                  <>
+                    {recentModels.length === 0 ? (
+                      <div className="customer-yt-empty-item">
+                        Chưa có lịch sử model thiết bị
+                      </div>
+                    ) : (
+                      recentModels.map((m) => (
+                        <div
+                          key={m.id}
+                          className={`customer-yt-dropdown-item ${
+                            m.id === selectedId ? 'is-selected' : ''
+                          }`}
+                          onClick={() => handleSelect(m)}
+                          role="option"
+                          aria-selected={m.id === selectedId}
+                        >
+                          <span
+                            className="customer-yt-item-icon"
+                            aria-hidden="true"
+                          >
+                            🕒
+                          </span>
+                          <div className="customer-yt-item-info">
+                            <div className="customer-yt-item-title">
+                              <strong>{m.name}</strong>
+                              {(m.modelCode || m.code) && (
+                                <span className="customer-yt-code-tag">
+                                  {m.modelCode || m.code}
+                                </span>
+                              )}
+                              {m.id === selectedId && (
+                                <span className="customer-yt-active-badge">
+                                  Đang chọn
+                                </span>
+                              )}
+                            </div>
+                            <div className="customer-yt-item-meta">
+                              {m.manufacturer && (
+                                <span>Hãng: {m.manufacturer}</span>
+                              )}
+                              {m.description && <span>{m.description}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {matchingModels.length === 0 ? (
+                      <div className="customer-yt-empty-item">
+                        <span>
+                          Không tìm thấy model thiết bị nào phù hợp với từ khóa.
+                        </span>
+                      </div>
+                    ) : (
+                      matchingModels.slice(0, 8).map((m) => (
+                        <div
+                          key={m.id}
+                          className={`customer-yt-dropdown-item ${
+                            m.id === selectedId ? 'is-selected' : ''
+                          }`}
+                          onClick={() => handleSelect(m)}
+                          role="option"
+                          aria-selected={m.id === selectedId}
+                        >
+                          <span
+                            className="customer-yt-item-icon"
+                            aria-hidden="true"
+                          >
+                            🔍
+                          </span>
+                          <div className="customer-yt-item-info">
+                            <div className="customer-yt-item-title">
+                              <strong>{m.name}</strong>
+                              {(m.modelCode || m.code) && (
+                                <span className="customer-yt-code-tag">
+                                  {m.modelCode || m.code}
+                                </span>
+                              )}
+                              {m.id === selectedId && (
+                                <span className="customer-yt-active-badge">
+                                  Đang chọn
+                                </span>
+                              )}
+                            </div>
+                            <div className="customer-yt-item-meta">
+                              {m.manufacturer && (
+                                <span>Hãng: {m.manufacturer}</span>
+                              )}
+                              {m.description && <span>{m.description}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </>
+                )}
               </div>
-              <div className="customer-yt-grid-item">
-                <span className="customer-yt-grid-label">Mã số thuế</span>
-                <span className="customer-yt-grid-val">
-                  {activeCustomer.taxCode || '—'}
-                </span>
+            )}
+          </div>
+
+          {onAdd && (
+            <button
+              type="button"
+              className="ws-button ws-button--secondary customer-yt-add-btn"
+              onClick={onAdd}
+            >
+              + Thêm model thiết bị
+            </button>
+          )}
+        </div>
+
+        <LoadState {...modelsQuery} />
+
+        {/* Results Table Panel (When Search button clicked or Enter pressed) */}
+        {showResultsTable && (
+          <div className="customer-yt-results-panel">
+            {tableResults.length === 0 ? (
+              <div className="customer-yt-table-empty">
+                <p>Không tìm thấy model thiết bị nào phù hợp với từ khóa.</p>
               </div>
-              <div className="customer-yt-grid-item">
-                <span className="customer-yt-grid-label">Số điện thoại</span>
-                <span className="customer-yt-grid-val">
-                  {activeCustomer.phone ? (
-                    <a href={`tel:${activeCustomer.phone}`}>
-                      {activeCustomer.phone}
-                    </a>
-                  ) : (
-                    '—'
-                  )}
-                </span>
+            ) : (
+              <div className="customer-yt-table-scroll">
+                <table className="customer-yt-table">
+                  <thead>
+                    <tr>
+                      <th>Mã model</th>
+                      <th>Tên dòng thiết bị</th>
+                      <th>Hãng sản xuất</th>
+                      <th>Mô tả</th>
+                      <th style={{ textAlign: 'center', width: '110px' }}>
+                        Thao tác
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableResults.map((row) => {
+                      const isRowSelected = row.id === selectedId
+                      return (
+                        <tr
+                          key={row.id}
+                          className={isRowSelected ? 'is-row-selected' : ''}
+                        >
+                          <td>
+                            <span className="customer-yt-code-tag">
+                              {row.modelCode || row.code || '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>{row.name}</strong>
+                          </td>
+                          <td>{row.manufacturer || '—'}</td>
+                          <td>{row.description || '—'}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            {isRowSelected ? (
+                              <span className="customer-yt-selected-pill">
+                                ✓ Đang chọn
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="ws-button ws-button--secondary ws-button--sm"
+                                onClick={() => handleSelect(row)}
+                              >
+                                Chọn
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <div className="customer-yt-grid-item">
-                <span className="customer-yt-grid-label">Email</span>
-                <span className="customer-yt-grid-val">
-                  {activeCustomer.email ? (
-                    <a href={`mailto:${activeCustomer.email}`}>
-                      {activeCustomer.email}
-                    </a>
-                  ) : (
-                    '—'
-                  )}
-                </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Vùng model thiết bị đã chọn và thông tin (Vùng riêng phía dưới) */}
+      {activeModel && (
+        <div className="customer-selected-area">
+          <div className="customer-yt-selected-card">
+            <div className="customer-yt-selected-top">
+              <div className="customer-yt-selected-badge">
+                <span className="customer-yt-check-icon">✓</span> Model thiết bị đã chọn
               </div>
-              <div className="customer-yt-grid-item customer-yt-grid-item--wide">
-                <span className="customer-yt-grid-label">Địa chỉ</span>
-                <span className="customer-yt-grid-val">
-                  {activeCustomer.address || '—'}
+              <strong className="customer-yt-selected-name">{activeModel.name}</strong>
+              {(activeModel.modelCode || activeModel.code) && (
+                <span className="customer-yt-code-tag">
+                  {activeModel.modelCode || activeModel.code}
                 </span>
-              </div>
+              )}
+            </div>
+            <div className="customer-yt-selected-details">
+              {activeModel.manufacturer && (
+                <span className="customer-yt-detail-item">
+                  <span className="customer-yt-detail-label">Hãng:</span>
+                  <strong>{activeModel.manufacturer}</strong>
+                </span>
+              )}
+              {activeModel.description && (
+                <span className="customer-yt-detail-item">
+                  <span className="customer-yt-detail-label">Mô tả:</span>
+                  <span>{activeModel.description}</span>
+                </span>
+              )}
             </div>
           </div>
         </div>

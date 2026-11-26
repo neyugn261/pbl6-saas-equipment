@@ -1,0 +1,218 @@
+.workshop-shell .model-policy-page > .sd-header {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.model-info-description {
+  white-space: pre-wrap;
+}
+
+.model-policy-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
+  gap: 10px 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--shop-line);
+}
+
+.model-policy-page .model-policy-revisions {
+  flex: 1 1 auto;
+  align-items: end;
+  margin: 0;
+}
+
+.model-policy-revisions label {
+  display: grid;
+  flex: 0 1 260px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.model-policy-page .live-form {
+  margin-top: 14px;
+  max-width: none;
+}
+
+.model-policy-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  align-items: end;
+  gap: 12px 16px;
+}
+
+.model-policy-fields label {
+  min-width: 0;
+}
+
+@media (min-width: 761px) {
+  .model-policy-basics {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  .model-policy-basics:has(> label:nth-child(3)) {
+    grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  }
+}
+
+.model-policy-warranty {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.model-policy-page .live-form .model-policy-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius);
+}
+
+.model-policy-schedules,
+.model-policy-checklist,
+.model-policy-disclosure-body {
+  display: grid;
+  gap: 10px;
+}
+
+.model-policy-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.model-policy-section-heading > :is(h3, h4),
+.model-policy-group > legend {
+  margin: 0;
+  color: var(--shop-ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.model-policy-group > legend {
+  padding-inline: 6px;
+}
+
+.model-policy-page .model-policy-disclosure {
+  margin: 0;
+  padding: 0 12px;
+}
+
+.model-policy-page .model-policy-disclosure > summary {
+  padding: 10px 0 !important;
+  color: var(--shop-ink);
+}
+
+.model-policy-disclosure > summary small {
+  margin-inline-start: 8px;
+  color: var(--shop-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.model-policy-disclosure-body {
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--shop-line);
+}
+
+.model-policy-checklist {
+  padding: 10px;
+  border: 1px solid var(--shop-line);
+  border-radius: var(--shop-radius);
+}
+
+.model-policy-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.model-policy-warranty .model-policy-checks {
+  display: grid;
+  gap: 0;
+}
+
+.model-policy-page .live-form .live-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 32px;
+}
+
+.model-policy-page .live-form input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--shop-accent);
+}
+
+.model-policy-page .live-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.model-policy-page .live-form :is(input:not([type="checkbox"]), select, textarea):disabled {
+  background: var(--shop-paper);
+  opacity: 1;
+}
+
+.model-policy-exclusion {
+  display: grid;
+  grid-template-columns: minmax(0, 190px) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.model-policy-exclusion + .model-policy-exclusion {
+  padding-top: 10px;
+  border-top: 1px solid var(--shop-line);
+}
+
+.model-policy-group > button {
+  justify-self: start;
+}
+
+.model-policy-hint {
+  margin: 0;
+  color: var(--shop-muted);
+  font-size: 12px;
+}
+
+.model-policy-status {
+  margin-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .model-policy-warranty {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .model-policy-warranty .model-policy-checks {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .model-policy-exclusion {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .model-policy-exclusion > button {
+    justify-self: start;
+  }
+
+  .model-policy-disclosure > summary small {
+    display: block;
+    margin-inline-start: 0;
+  }
+}

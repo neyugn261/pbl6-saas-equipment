@@ -1,5 +1,5 @@
 import { serviceLabels } from "../features/workspace/service-detail-data";
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useSession } from "../auth/session";
 import { useDirectory, errorText, modelSetupError } from "./registration-data";
@@ -11,11 +11,14 @@ import {
   maintenanceTermLabel,
   type MaintenanceTerm,
 } from "../features/workspace/maintenance-term";
-type Snapshot = {
+import "./policy-summary.css";
+export type ModelPolicySnapshot = {
+  modelId?: string;
   handoverDate?: string;
+  overrideReason?: string;
   warranty: {
-    revisionId?: string;
-    revision: number;
+    revisionId?: string | null;
+    revision: number | null;
     body: {
       mode: string;
       name: string;
@@ -25,12 +28,12 @@ type Snapshot = {
       coveredCauses: string[];
       exclusions: { code: string; text: string }[];
     };
-    startDate: string;
-    endDate: string;
+    startDate: string | null;
+    endDate: string | null;
   };
   maintenance: {
-    revisionId?: string;
-    revision: number;
+    revisionId?: string | null;
+    revision: number | null;
     body: {
       mode: string;
       name: string;
@@ -49,318 +52,404 @@ type Snapshot = {
     firstDueDates: { itemId: string; date: string; endDate?: string | null }[];
   };
 };
-export function ModelPolicySummary({ snapshot }: { snapshot: Snapshot }) {
+const frequencyUnits: Record<string, string> = { DAY: "ngày", WEEK: "tuần", MONTH: "tháng", YEAR: "năm" };
+type Snapshot = ModelPolicySnapshot;
+type Warranty = Snapshot["warranty"];
+type Maintenance = Snapshot["maintenance"];
+type PolicyRevision<T> = {
+  id: string;
+  revision: number;
+  status: string;
+  isDefault: boolean;
+  body: T;
+};
+type ScheduleOverride = { itemId: string; frequencyValue: number; firstOccurrence: number };
+
+function WarrantyDetails({ policy }: { policy: Pick<Warranty, "body"> & Partial<Warranty> }) {
+  const { body, startDate, endDate } = policy;
   return (
-    <div className="live-columns model-policy-summary">
-      <section>
-        <header className="model-policy-heading"><h3>Bảo hành</h3><span className="ws-pill">Phiên bản {snapshot.warranty.revision}</span></header>
-        <h4>{snapshot.warranty.body.name}</h4>
-        {snapshot.warranty.body.mode === "NONE" ? <p className="model-policy-terms">{snapshot.warranty.body.reason}</p> : (
-          <ServiceFacts items={[
-            { label: "Thời hạn", value: `${snapshot.warranty.body.durationMonths} tháng` },
-            { label: "Từ ngày", value: formatDate(snapshot.warranty.startDate) },
-            { label: "Đến ngày", value: formatDate(snapshot.warranty.endDate) },
-          ]} />
-        )}
-        <p className="model-policy-terms">{snapshot.warranty.body.terms}</p>
-        {snapshot.warranty.body.exclusions.length > 0 && <section className="model-policy-exclusions">
+    <>
+      <h4>{body.name}</h4>
+      {body.mode === "NONE" ? <p className="model-policy-terms">{body.reason}</p> : (
+        <ServiceFacts items={[
+          { label: "Thời hạn", value: `${body.durationMonths} tháng` },
+          ...(startDate && endDate ? [
+            { label: "Từ ngày", value: formatDate(startDate) },
+            { label: "Đến ngày", value: formatDate(endDate) },
+          ] : []),
+        ]} />
+      )}
+      {body.coveredCauses?.length > 0 && (
+        <section className="model-policy-detail">
+          <h4>Nguyên nhân được bảo hành</h4>
+          <p>{body.coveredCauses.map((code) => serviceLabels[code] ?? code).join(", ")}</p>
+        </section>
+      )}
+      {body.exclusions.length > 0 && (
+        <section className="model-policy-detail">
           <h4>Điều khoản loại trừ</h4>
           <ul className="model-policy-list">
-            {snapshot.warranty.body.exclusions.map(e => <li key={e.code}>{e.text}</li>)}
+            {body.exclusions.map((row) => <li key={row.code}>{row.text}</li>)}
           </ul>
-        </section>}
-      </section>
-      <section>
-        <header className="model-policy-heading"><h3>Bảo trì</h3><span className="ws-pill">Phiên bản {snapshot.maintenance.revision}</span></header>
-        <p className="model-policy-terms">{snapshot.maintenance.body.terms}</p>
-        {snapshot.maintenance.body.mode === "NONE" ? (
-          <p className="model-policy-terms">{snapshot.maintenance.body.reason}</p>
-        ) : (
-          snapshot.maintenance.body.rules.map((r) => (
-            <div className="model-policy-rule" key={r.id}>
-              <h4>
-                {r.name} · mỗi {r.frequencyValue}{" "}
-                {{ DAY: "ngày", WEEK: "tuần", MONTH: "tháng", YEAR: "năm" }[
-                  r.frequencyUnit
-                ] ?? r.frequencyUnit}
-              </h4>
-              <p>Thời hạn: {maintenanceTermLabel(r.term)}</p>
-              {snapshot.maintenance.firstDueDates.find((d) => d.itemId === r.id)
-                ?.endDate && (
-                <p>
-                  Ngày kết thúc:{" "}
-                  {formatDate(snapshot.maintenance.firstDueDates.find((d) => d.itemId === r.id)?.endDate)}
-                </p>
+        </section>
+      )}
+      {body.terms && <p className="model-policy-terms">{body.terms}</p>}
+    </>
+  );
+}
+
+function MaintenanceDetails({ policy }: { policy: Pick<Maintenance, "body"> & Partial<Maintenance> }) {
+  const { body, firstDueDates } = policy;
+  return (
+    <>
+      <h4>{body.name}</h4>
+      {body.mode === "NONE" ? <p className="model-policy-terms">{body.reason}</p> : (
+        body.rules.map((rule) => {
+          const dates = firstDueDates?.find((entry) => entry.itemId === rule.id);
+          return (
+            <section className="model-policy-rule" key={rule.id}>
+              <h4>{rule.name}</h4>
+              <ServiceFacts items={[
+                { label: "Chu kỳ", value: `Mỗi ${rule.frequencyValue} ${frequencyUnits[rule.frequencyUnit] ?? rule.frequencyUnit}` },
+                { label: "Kỳ đầu", value: firstDueDates ? formatDate(dates?.date) : `Sau ${rule.firstOccurrence} chu kỳ` },
+                { label: "Thời hạn", value: maintenanceTermLabel(rule.term) },
+                ...(dates?.endDate ? [{ label: "Ngày kết thúc", value: formatDate(dates.endDate) }] : []),
+              ]} />
+              {rule.checklist.length > 0 && (
+                <ul className="model-policy-list">
+                  {rule.checklist.map((item) => (
+                    <li key={item.id}>
+                      <strong>{item.title}</strong> · {serviceLabels[item.action] ?? item.action}
+                      {item.instructions && <p>{item.instructions}</p>}
+                    </li>
+                  ))}
+                </ul>
               )}
-              <p>Kỳ đầu: {formatDate(snapshot.maintenance.firstDueDates.find((d) => d.itemId === r.id)?.date)}</p>
-              <ul className="model-policy-list">
-                {r.checklist.map((i) => (
-                  <li key={i.id}>
-                    <strong>{i.title}</strong> ·{" "}
-                    {serviceLabels[i.action] ?? i.action}
-                    <p>{i.instructions}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
-        )}
-      </section>
+            </section>
+          );
+        })
+      )}
+      {body.terms && <p className="model-policy-terms">{body.terms}</p>}
+    </>
+  );
+}
+
+export function ModelPolicySummary({
+  snapshot, includeOverrideReason = false,
+}: {
+  snapshot: Snapshot;
+  includeOverrideReason?: boolean;
+}) {
+  return (
+    <div className="model-policy-summary">
+      <ServiceCard title="Bảo hành" headingLevel="h3" actions={snapshot.warranty.revision !== null
+        ? <span className="ws-pill">Phiên bản {snapshot.warranty.revision}</span>
+        : undefined}>
+        <WarrantyDetails policy={snapshot.warranty} />
+      </ServiceCard>
+      <ServiceCard title="Bảo trì" headingLevel="h3" actions={snapshot.maintenance.revision !== null
+        ? <span className="ws-pill">Phiên bản {snapshot.maintenance.revision}</span>
+        : undefined}>
+        <MaintenanceDetails policy={snapshot.maintenance} />
+      </ServiceCard>
+      {includeOverrideReason && snapshot.overrideReason && (
+        <p className="model-policy-terms model-policy-wide">
+          <strong>Lý do ngoại lệ:</strong> {snapshot.overrideReason}
+        </p>
+      )}
     </div>
   );
 }
+
+function PolicyVersionSelect<T extends { name: string }>({
+  label, revisions, value, onChange, noneLabel,
+}: {
+  label: string;
+  revisions: PolicyRevision<T>[];
+  value: string;
+  onChange: (value: string) => void;
+  noneLabel?: string;
+}) {
+  return (
+    <label className="ws-label">
+      {label}
+      <select disabled={!noneLabel && revisions.length === 0} required={!noneLabel} value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{noneLabel ?? "Chọn phiên bản"}</option>
+        {revisions.map((row) => (
+          <option key={row.id} value={row.id}>
+            {`Phiên bản ${row.revision} · ${row.body.name}${row.isDefault ? " (Đang sử dụng)" : ""}`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function HandoverPolicyPanel({
-  id,
-  version,
-  status,
-  snapshot,
-  changed,
-  onBusyChange,
-  showCompleteButton = true,
-  readOnly = false,
+  id, modelId, modelName, modelCode, version, status, snapshot, changed, onBusyChange,
 }: {
   id: string;
+  modelId: string;
+  modelName?: string;
+  modelCode?: string;
   version: number;
   status: string;
   snapshot?: Snapshot | null;
   changed: () => void | Promise<void>;
   onBusyChange?: (busy: boolean) => void;
-  showCompleteButton?: boolean;
-  readOnly?: boolean;
 }) {
   const { profile } = useSession();
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [months, setMonths] = useState(""),
-    [reason, setReason] = useState("");
-  const [scheduleOverrides, setScheduleOverrides] = useState<
-    Record<
-      string,
-      { itemId: string; frequencyValue: number; firstOccurrence: number }
-    >
-  >({});
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
   const pending = useRef(false);
-  const canManage = profile?.roles.includes("SERVICE_MANAGER");
-  async function run(path?: string, body?: unknown) {
-    if (pending.current) return false;
+  const [view, setView] = useState<"versions" | "overrides" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [warrantyId, setWarrantyId] = useState<string | null>(null);
+  const [maintenanceId, setMaintenanceId] = useState<string | null>(null);
+  const [months, setMonths] = useState("");
+  const [reason, setReason] = useState("");
+  const [scheduleOverrides, setScheduleOverrides] = useState<Record<string, ScheduleOverride>>({});
+  const canManage = status === "DRAFT" && profile?.roles.includes("SERVICE_MANAGER");
+  const path = view === "versions" && canManage ? `/equipment-models/${modelId}` : null;
+  const warranties = useDirectory<{ items: PolicyRevision<Warranty["body"]>[] }>(
+    "assetM2", path && `${path}/warranty-policies`,
+  );
+  const profiles = useDirectory<{ items: PolicyRevision<Maintenance["body"]>[] }>(
+    "maintenance", path && `${path}/maintenance-profiles`,
+  );
+  const warrantyRevisions = warranties.value?.items.filter((row) => row.status === "PUBLISHED") ?? [];
+  const maintenanceRevisions = profiles.value?.items.filter((row) => row.status === "PUBLISHED") ?? [];
+  const currentWarrantyId = snapshot?.warranty.revisionId;
+  const warranty = warrantyId === null && currentWarrantyId !== null
+    ? warrantyRevisions.find((row) => row.id === currentWarrantyId)
+      ?? warrantyRevisions.find((row) => row.isDefault)
+    : warrantyRevisions.find((row) => row.id === warrantyId);
+  const selectedWarrantyId = warranty?.id ?? null;
+  const currentMaintenanceId = snapshot?.maintenance.revisionId;
+  const maintenance = maintenanceId === null && currentMaintenanceId !== null
+    ? maintenanceRevisions.find((row) => row.id === currentMaintenanceId)
+      ?? maintenanceRevisions.find((row) => row.isDefault)
+    : maintenanceRevisions.find((row) => row.id === maintenanceId);
+  const selectedMaintenanceId = maintenance?.id ?? null;
+  const keepVersions = Boolean(snapshot &&
+    selectedWarrantyId === currentWarrantyId && selectedMaintenanceId === currentMaintenanceId);
+  const loadingVersions = warranties.loading || profiles.loading;
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (view && element && !element.open) element.showModal();
+  }, [view]);
+
+  function open(next: "versions" | "overrides") {
+    setError("");
+    setWarrantyId(null);
+    setMaintenanceId(null);
+    setMonths(String(snapshot?.warranty.body.durationMonths ?? ""));
+    setReason(snapshot?.overrideReason ?? "");
+    setScheduleOverrides({});
+    setView(next);
+  }
+
+  function close() {
+    dialog.current?.close();
+    setView(null);
+  }
+
+  async function apply(body?: Record<string, unknown>) {
+    if (pending.current) return;
     pending.current = true;
     setBusy(true);
     onBusyChange?.(true);
     setError("");
     try {
-      if (path)
-        await api.assetM2(`/equipment-registrations/${id}/${path}`, {
+      if (body)
+        await api.assetM2(`/equipment-registrations/${id}/model-policies`, {
           method: "POST",
-          body,
+          body: { expectedVersion: version, ...body },
         });
       await changed();
-      return true;
+      close();
     } catch (e) {
       setError(modelSetupError(e));
-      return false;
     } finally {
       pending.current = false;
       setBusy(false);
       onBusyChange?.(false);
     }
   }
+
+  const overrideWarranty = snapshot?.warranty.body.mode === "APPLY";
+  const rules = snapshot?.maintenance.body.rules ?? [];
+  const overrideChanged =
+    (overrideWarranty && Number(months) !== snapshot.warranty.body.durationMonths) ||
+    rules.some((rule) => {
+      const change = scheduleOverrides[rule.id];
+      return change && (change.frequencyValue !== rule.frequencyValue || change.firstOccurrence !== rule.firstOccurrence);
+    });
   return (
-    <section className="m1-card live-admin registration-model-policies">
-      <h2>Áp dụng chính sách theo Model</h2>
-      {error && (
-        <p role="alert" className="m1-error">
-          {error}
-        </p>
-      )}
-      {snapshot ? (
-        <ModelPolicySummary snapshot={snapshot} />
-      ) : (
-        <p>
-          Hệ thống lấy chính sách đã công bố của Model và tự tính ngày bảo hành,
-          lịch cùng hạng mục bảo trì theo ngày bàn giao.
-        </p>
-      )}
-      {!canManage && status === "DRAFT" && (
-        <p>
-          Service Manager áp dụng chính sách và xác nhận bàn giao. Bạn có thể
-          lưu hồ sơ để tiếp tục sau.
-        </p>
-      )}
-      {!readOnly && status === "DRAFT" && (
-        <button type="button" disabled={busy} onClick={() => void run()}>
-          Tải lại kết quả đã lưu
-        </button>
-      )}
-      {!readOnly && status === "DRAFT" && canManage && (
-        <>
-          <p>
-            Chính sách được chọn sẽ áp dụng cho thiết bị khi xác nhận hoàn tất
-            bàn giao.
-          </p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={async () => {
-              if (await run("model-policies", { expectedVersion: version })) {
-                setMonths("");
-                setReason("");
-                setScheduleOverrides({});
-              }
-            }}
-          >
-            {busy
-              ? "Đang lấy chính sách…"
-              : snapshot
-                ? "Lấy lại chính sách hiện hành từ Model"
-                : "Áp dụng chính sách Model"}
-          </button>
-          {snapshot &&
-            (snapshot.warranty.body.mode === "APPLY" ||
-              snapshot.maintenance.body.mode === "APPLY") && (
-              <details className="registration-policy-overrides">
-                <summary>
-                  Điều chỉnh ngoại lệ cho thiết bị này (tùy chọn)
-                </summary>
-                <p>
-                  Giữ nguyên phiên bản đã chọn. Mọi thay đổi cần có lý do và
-                  không sửa chính sách nguồn của Model.
-                </p>
-                <form
-                  className="live-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!months && !Object.keys(scheduleOverrides).length) {
-                      setError(
-                        "Chọn thời hạn hoặc lịch cần điều chỉnh trước khi lưu ngoại lệ.",
-                      );
-                      return;
-                    }
-                    void run("model-policies", {
-                      expectedVersion: version,
-                      warrantyRevisionId: snapshot.warranty.revisionId,
-                      maintenanceRevisionId: snapshot.maintenance.revisionId,
-                      ...(snapshot.warranty.body.mode === "APPLY"
-                        ? {
-                            durationMonths: months
-                              ? Number(months)
-                              : snapshot.warranty.body.durationMonths,
-                          }
-                        : {}),
-                      maintenanceOverrides: snapshot.maintenance.body.rules.map(
-                        (rule) =>
-                          scheduleOverrides[rule.id] ?? {
-                            itemId: rule.id,
-                            frequencyValue: rule.frequencyValue,
-                            firstOccurrence: rule.firstOccurrence,
-                          },
-                      ),
-                      reason,
-                    });
-                  }}
-                >
-                  <fieldset disabled={busy}>
-                    {snapshot.warranty.body.mode === "APPLY" && (
-                      <label>
-                        Thời hạn bảo hành riêng (tháng)
-                        <input
-                          type="number"
-                          min={1}
-                          max={1200}
-                          value={months}
-                          placeholder={String(
-                            snapshot.warranty.body.durationMonths,
-                          )}
-                          onChange={(e) => setMonths(e.target.value)}
-                        />
-                      </label>
-                    )}
-                    {snapshot.maintenance.body.rules.map((rule) => (
-                      <div key={rule.id}>
-                        <label>
-                          Chu kỳ riêng cho {rule.name}
-                          <input
-                            type="number"
-                            min={1}
-                            max={1000}
-                            value={
-                              scheduleOverrides[rule.id]?.frequencyValue ??
-                              rule.frequencyValue
-                            }
-                            onChange={(e) =>
-                              setScheduleOverrides({
-                                ...scheduleOverrides,
-                                [rule.id]: {
-                                  itemId: rule.id,
-                                  frequencyValue: Number(e.target.value),
-                                  firstOccurrence:
-                                    scheduleOverrides[rule.id]
-                                      ?.firstOccurrence ?? rule.firstOccurrence,
-                                },
-                              })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Kỳ đầu sau bao nhiêu chu kỳ?
-                          <input
-                            type="number"
-                            min={1}
-                            max={100}
-                            value={
-                              scheduleOverrides[rule.id]?.firstOccurrence ??
-                              rule.firstOccurrence
-                            }
-                            onChange={(e) =>
-                              setScheduleOverrides({
-                                ...scheduleOverrides,
-                                [rule.id]: {
-                                  itemId: rule.id,
-                                  frequencyValue:
-                                    scheduleOverrides[rule.id]
-                                      ?.frequencyValue ?? rule.frequencyValue,
-                                  firstOccurrence: Number(e.target.value),
-                                },
-                              })
-                            }
-                          />
-                        </label>
-                      </div>
-                    ))}
-                    <label>
-                      Lý do ngoại lệ
-                      <textarea
-                        required
-                        maxLength={2000}
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                      />
-                    </label>
-                    <button disabled={busy}>
-                      Tính lại chính sách với ngoại lệ
-                    </button>
-                  </fieldset>
-                </form>
-              </details>
+    <section className="registration-model-policies">
+      <header className="registration-policy-header">
+        <div>
+          <h2>Chính sách Model</h2>
+          {modelName && <p className="registration-policy-model">
+            <strong>{modelName}</strong>
+            {modelCode && modelCode !== modelName && <span className="ws-pill">{modelCode}</span>}
+          </p>}
+        </div>
+        {canManage && (
+          <div className="ws-actions">
+            {snapshot && (overrideWarranty || rules.length > 0) && (
+              <button type="button" className="ws-button ws-button--secondary" disabled={busy} onClick={() => open("overrides")}>
+                Điều chỉnh ngoại lệ
+              </button>
             )}
-          {snapshot && showCompleteButton && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void run("submit", { expectedVersion: version })}
-            >
-              Xác nhận chính sách và hoàn tất bàn giao
+            <button type="button" className="ws-button" disabled={busy} onClick={() => open("versions")}>
+              Chọn phiên bản chính sách Model
             </button>
-          )}
-        </>
+          </div>
+        )}
+      </header>
+      {snapshot ? <ModelPolicySummary snapshot={snapshot} includeOverrideReason /> : (
+        <ServiceNotice title="Chưa áp dụng chính sách cho hồ sơ này.">
+          {canManage
+            ? "Chọn phiên bản cho từng dịch vụ nếu hồ sơ có áp dụng."
+            : "Service Manager áp dụng chính sách và xác nhận bàn giao."}
+        </ServiceNotice>
       )}
-      {!readOnly && status === "PENDING_MAINTENANCE" && canManage && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run("resume", {})}
+      {canManage && (
+        <dialog
+          ref={dialog}
+          className="registration-policy-dialog"
+          aria-labelledby={titleId}
+          aria-describedby={descriptionId}
+          onCancel={(event) => {
+            if (pending.current) event.preventDefault();
+            else setView(null);
+          }}
         >
-          Đối soát và tiếp tục cùng hồ sơ
-        </button>
+          {view && (
+            <form className="registration-policy-dialog-form" onSubmit={(event) => {
+              event.preventDefault();
+              if (view === "versions" && !loadingVersions) {
+                if (keepVersions) close();
+                else void apply({ warrantyRevisionId: selectedWarrantyId, maintenanceRevisionId: selectedMaintenanceId });
+              }
+              if (view === "overrides" && snapshot && overrideChanged && reason.trim())
+                void apply({
+                  warrantyRevisionId: snapshot.warranty.revisionId,
+                  maintenanceRevisionId: snapshot.maintenance.revisionId,
+                  ...(overrideWarranty ? { durationMonths: Number(months) } : {}),
+                  maintenanceOverrides: rules.map((rule) => scheduleOverrides[rule.id] ?? {
+                    itemId: rule.id, frequencyValue: rule.frequencyValue, firstOccurrence: rule.firstOccurrence,
+                  }),
+                  reason: reason.trim(),
+                });
+            }}>
+              <header className="registration-policy-dialog-header">
+                <h2 id={titleId}>{view === "versions" ? "Chọn phiên bản chính sách Model" : "Điều chỉnh ngoại lệ"}</h2>
+                <p id={descriptionId}>{view === "versions"
+                  ? "Bạn có thể áp dụng từng dịch vụ hoặc chọn không áp dụng cả hai."
+                  : "Các điều chỉnh áp dụng riêng cho thiết bị trong hồ sơ này."}</p>
+              </header>
+              <div className="registration-policy-dialog-body">
+                <fieldset disabled={busy}>
+                  {view === "versions" ? (
+                    <>
+                      <div className="model-policy-summary">
+                        <ServiceCard title="Bảo hành" headingLevel="h3">
+                          <PolicyVersionSelect
+                            label="Phiên bản bảo hành"
+                            revisions={warrantyRevisions}
+                            value={selectedWarrantyId ?? ""}
+                            onChange={setWarrantyId}
+                            noneLabel="Không áp dụng bảo hành"
+                          />
+                          <LoadState {...warranties} />
+                          {warranty && <div className="registration-policy-preview"><WarrantyDetails policy={warranty} /></div>}
+                          {!warranty && !warranties.loading && <p className="registration-policy-message">Hồ sơ này sẽ không tạo bảo hành.</p>}
+                        </ServiceCard>
+                        <ServiceCard title="Bảo trì" headingLevel="h3">
+                          <PolicyVersionSelect
+                            label="Phiên bản bảo trì"
+                            revisions={maintenanceRevisions}
+                            value={selectedMaintenanceId ?? ""}
+                            onChange={setMaintenanceId}
+                            noneLabel="Không áp dụng bảo trì"
+                          />
+                          <LoadState {...profiles} />
+                          {maintenance && <div className="registration-policy-preview"><MaintenanceDetails policy={maintenance} /></div>}
+                          {!maintenance && !profiles.loading && <p className="registration-policy-message">Hồ sơ này sẽ không tạo lịch bảo trì định kỳ.</p>}
+                        </ServiceCard>
+                      </div>
+                      {snapshot?.overrideReason && !keepVersions && !loadingVersions && (
+                        <ServiceNotice title="Đặt lại ngoại lệ">
+                          Chọn phiên bản khác sẽ đặt lại các ngoại lệ của hồ sơ.
+                        </ServiceNotice>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="model-policy-summary">
+                        <ServiceCard title="Bảo hành" headingLevel="h3">
+                          {overrideWarranty ? (
+                            <label className="ws-label">
+                              Thời hạn bảo hành (tháng)
+                              <input type="number" min={1} max={1200} required value={months}
+                                onChange={(event) => setMonths(event.target.value)} />
+                            </label>
+                          ) : <p className="registration-policy-message">Phiên bản này không kèm bảo hành.</p>}
+                        </ServiceCard>
+                        <ServiceCard title="Bảo trì" headingLevel="h3">
+                          {rules.length ? rules.map((rule) => {
+                            const schedule = scheduleOverrides[rule.id] ?? rule;
+                            return (
+                              <section className="model-policy-rule" key={rule.id}>
+                                <h4>{rule.name}</h4>
+                                <div className="ws-form-grid">
+                                  <label className="ws-label">
+                                    Chu kỳ ({frequencyUnits[rule.frequencyUnit] ?? rule.frequencyUnit})
+                                    <input type="number" min={1} max={1000} required value={schedule.frequencyValue || ""}
+                                      onChange={(event) => setScheduleOverrides((prev) => ({
+                                        ...prev, [rule.id]: { itemId: rule.id, firstOccurrence: schedule.firstOccurrence, frequencyValue: Number(event.target.value) },
+                                      }))} />
+                                  </label>
+                                  <label className="ws-label">
+                                    Kỳ đầu (số chu kỳ)
+                                    <input type="number" min={1} max={100} required value={schedule.firstOccurrence || ""}
+                                      onChange={(event) => setScheduleOverrides((prev) => ({
+                                        ...prev, [rule.id]: { itemId: rule.id, frequencyValue: schedule.frequencyValue, firstOccurrence: Number(event.target.value) },
+                                      }))} />
+                                  </label>
+                                </div>
+                              </section>
+                            );
+                          }) : <p className="registration-policy-message">Phiên bản này không có lịch bảo trì.</p>}
+                        </ServiceCard>
+                      </div>
+                      <label className="ws-label">
+                        Lý do ngoại lệ
+                        <textarea required maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} />
+                      </label>
+                    </>
+                  )}
+                </fieldset>
+              </div>
+              <footer className="registration-policy-dialog-footer">
+                {error && <p role="alert" className="m1-error">{error}</p>}
+                <div className="ws-actions">
+                  {error && <button type="button" className="ws-button ws-button--secondary" disabled={busy}
+                    onClick={() => void apply()}>Tải lại kết quả đã lưu</button>}
+                  <button type="button" className="ws-button ws-button--secondary" disabled={busy} onClick={close}>Hủy</button>
+                  <button type="submit" className="ws-button" disabled={busy || (view === "versions" ? loadingVersions : !overrideChanged || !reason.trim())}>
+                    {busy ? "Đang áp dụng…" : "Áp dụng"}
+                  </button>
+                </div>
+              </footer>
+            </form>
+          )}
+        </dialog>
       )}
     </section>
   );

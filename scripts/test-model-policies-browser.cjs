@@ -80,340 +80,168 @@ module.exports = async function ({
       return page;
     }
     const manager = await login("manager@policy.test");
-    await manager.goto(`${base}/app/equipment-models/${modelId}`);
-    const warranty = manager
-      .locator("section.m1-card")
-      .filter({
-        has: manager.getByRole("heading", {
-          name: "Chính sách bảo hành",
-          exact: true,
-        }),
-      })
-      .first();
-    await warranty
-      .getByLabel("Tên chính sách", { exact: true })
-      .fill("Browser warranty revision");
-    await warranty
-      .getByLabel("Điều khoản cho khách hàng", { exact: true })
-      .fill("Warranty created and published through the browser");
-    await warranty
-      .getByRole("button", { name: "Lưu bản nháp", exact: true })
-      .click();
-    await warranty.getByRole("status").filter({ hasText: "Đã lưu" }).waitFor();
-    await warranty.getByRole("button", { name: /Công bố phiên bản/ }).click();
-    await warranty
-      .getByRole("status")
-      .filter({ hasText: "Đã công bố" })
-      .waitFor();
-    assert.equal(
-      await warranty.getByLabel("Tên chính sách", { exact: true }).isDisabled(),
-      true,
-    );
-    await manager.screenshot({
-      path: artifacts + "/web-model-policies.png",
-      fullPage: true,
-    });
+    const nextStep = page => page.getByRole("button", { name: "Tiếp tục", exact: true });
+    const chooseVersions = page => page.getByRole("button", { name: "Chọn phiên bản chính sách Model", exact: true });
+    const apply = dialog => dialog.getByRole("button", { name: "Áp dụng", exact: true });
+    const complete = page => page.getByRole("button", { name: "Hoàn tất ghi nhận", exact: true });
+    await manager.goto(`${base}/app/equipment-models/${modelId}#section=warranty`);
+    await manager.getByLabel("Phiên bản", { exact: true }).selectOption("");
+    await manager.getByLabel("Tên chính sách", { exact: true }).fill("Browser warranty revision");
+    await manager.getByLabel("Điều khoản cho khách hàng", { exact: true }).fill("Terms created through the browser");
+    await manager.getByRole("button", { name: "Lưu và sử dụng", exact: true }).click();
+    await manager.getByRole("button", { name: "Chỉnh sửa", exact: true }).waitFor();
+    assert.equal(await manager.getByLabel("Tên chính sách", { exact: true }).isDisabled(), true);
+    await manager.screenshot({ path: artifacts + "/web-model-policies.png", fullPage: true });
+
     await manager.goto(`${base}/app/equipment-registrations/${registrationId}`);
-    await manager
-      .getByRole("heading", { name: "Áp dụng chính sách theo Model" })
-      .waitFor();
-    await manager.getByText("Bảo hành · v1", { exact: true }).waitFor();
-    assert.ok(
-      !(await manager.locator(".registration-summary").innerText()).includes(
-        "Chưa xác định",
-      ),
-    );
-    await manager.screenshot({
-      path: artifacts + "/web-handover-applied.png",
-      fullPage: true,
-    });
-    await manager.goto(
-      `${base}/app/equipment-registrations/${legacyRegistrationId}`,
-    );
-    await manager
-      .getByRole("heading", {
-        name: "Chính sách đã ghi nhận trước đây",
-        exact: true,
-      })
-      .waitFor();
-    await manager
-      .getByText("Legacy agreed warranty terms", { exact: false })
-      .waitFor();
-    assert.ok(
-      (await manager.locator(".registration-summary").innerText()).includes(
-        "STANDARD",
-      ),
-    );
-    assert.equal(
-      await manager
-        .getByRole("button", { name: "Áp dụng chính sách Model", exact: true })
-        .count(),
-      0,
-    );
-    // New handovers use Model policies throughout the wizard, without manual CREATE/KEEP/NONE selectors.
-    async function startHandover(selectedModel, prefix) {
-      const serial =
-        prefix + "-" + require("node:crypto").randomUUID().slice(0, 8);
-      await manager.goto(`${base}/app/equipment-registrations/new`);
-      await manager
-        .getByLabel("Khách hàng", { exact: true })
-        .selectOption(customerId);
-      await manager
-        .getByRole("combobox", { name: /Địa điểm đặt thiết bị/ })
-        .selectOption(siteId);
-      await manager
-        .getByRole("button", { name: "Tiếp tục", exact: true })
-        .click();
-      await manager
-        .getByLabel("Model thiết bị", { exact: true })
-        .selectOption(selectedModel);
+    await manager.getByRole("heading", { name: "Kiểm tra và gửi", exact: true }).waitFor();
+    await manager.getByText("Phiên bản 1", { exact: true }).first().waitFor();
+    assert.equal(await chooseVersions(manager).count(), 0);
+    await manager.screenshot({ path: artifacts + "/web-handover-applied.png", fullPage: true });
+    await manager.goto(`${base}/app/equipment-registrations/${legacyRegistrationId}`);
+    await manager.getByText("Legacy agreed warranty terms", { exact: true }).waitFor();
+    assert.equal(await chooseVersions(manager).count(), 0);
+
+    async function selectModel(code) {
+      await manager.getByPlaceholder("Tìm theo tên, mã model hoặc hãng sản xuất…").fill(code);
+      await manager.getByRole("option", { name: new RegExp(code) }).click();
+    }
+    async function startHandover(modelCode, prefix) {
+      const serial = prefix + "-" + require("node:crypto").randomUUID().slice(0, 8);
+      await manager.goto(`${base}/app/equipment-registrations/new?customerId=${customerId}&siteId=${siteId}`);
+      await nextStep(manager).click();
+      await selectModel(modelCode);
       await manager.getByLabel("Mã thiết bị *", { exact: true }).fill(serial);
       await manager.getByLabel("Serial *", { exact: true }).fill(serial);
-      await manager
-        .getByLabel("Ngày bàn giao thực tế", { exact: true })
-        .fill("2026-01-31");
-      const created = manager.waitForResponse(
-        (r) =>
-          r.request().method() === "POST" &&
-          r.url().endsWith("/equipment-registrations"),
+      await manager.getByLabel("Hình thức bàn giao", { exact: true }).selectOption("STORE");
+      await manager.getByLabel(/Ngày bàn giao thực tế/).fill("2026-01-31");
+      const created = manager.waitForResponse(r =>
+        r.request().method() === "POST" && r.url().endsWith("/equipment-registrations"),
       );
-      await manager
-        .getByRole("button", { name: "Tiếp tục", exact: true })
-        .click();
+      await nextStep(manager).click();
       const response = await created;
       assert.equal(response.status(), 201);
       const row = await response.json();
-      await manager.waitForURL((url) =>
-        url.pathname.endsWith("/equipment-registrations/" + row.id),
-      );
-      assert.equal(
-        await manager
-          .getByLabel("Cách áp dụng bảo hành", { exact: true })
-          .count(),
-        0,
-      );
-      assert.equal(
-        await manager.getByLabel("Kế hoạch bảo trì", { exact: true }).count(),
-        0,
-      );
+      await manager.waitForURL(url => url.pathname.endsWith("/equipment-registrations/" + row.id));
+      await chooseVersions(manager).waitFor();
       assert.deepEqual(
-        (
-          await manager.locator(".registration-steps button").allTextContents()
-        ).map((s) => s.trim()),
-        ["1. Khách hàng", "2. Thiết bị", "3. Chính sách Model", "4. Xác nhận"],
+        (await manager.locator(".registration-steps button").allTextContents()).map(text => text.trim()),
+        ["1. Khách hàng", "2. Thiết bị", "3. Chính sách Model", "4. Kiểm tra và gửi"],
       );
       return row;
     }
-    const uiDraft = await startHandover(modelId, "UI-POLICY");
-    await manager.getByRole("heading", { name: /Bảo hành · v/ }).waitFor();
-    await manager.getByText("2026-04-30", { exact: false }).waitFor();
-    assert.equal(
-      await manager
-        .getByLabel("Thời hạn bảo hành riêng (tháng)", { exact: true })
-        .isVisible(),
-      false,
-    );
-    await manager.evaluate(() => window.scrollTo(0, 0));
-    await manager.screenshot({
-      path: artifacts + "/web-handover-model-step.png",
-      fullPage: true,
-      animations: "disabled",
-    });
-    // Model configuration stays in the authenticated tab and returns to the pinned draft.
-    const pagesBefore = manager.context().pages().length;
-    let previewWrites = 0;
-    const countPreview = (req) => {
-      if (
-        req.method() === "POST" &&
-        req
-          .url()
-          .endsWith(`/equipment-registrations/${uiDraft.id}/model-policies`)
-      )
-        previewWrites++;
-    };
-    manager.on("request", countPreview);
-    const configure = manager.getByRole("link", {
-      name: "Xem / cấu hình chính sách Model",
-      exact: true,
-    });
-    assert.equal(await configure.getAttribute("target"), null);
-    await configure.click();
-    await manager.waitForURL(
-      (url) => url.pathname === `/app/equipment-models/${modelId}`,
-    );
-    await manager
-      .getByRole("heading", { name: "Chính sách bảo hành", exact: true })
-      .waitFor();
-    assert.equal(manager.context().pages().length, pagesBefore);
-    await manager
-      .getByRole("link", { name: "← Quay lại hồ sơ bàn giao", exact: true })
-      .click();
-    await manager.waitForURL(
-      (url) => url.pathname === `/app/equipment-registrations/${uiDraft.id}`,
-    );
-    await manager
-      .getByRole("heading", {
-        name: "Áp dụng chính sách theo Model",
-        exact: true,
-      })
-      .waitFor();
-    assert.equal(
-      await manager
-        .locator(".registration-steps [aria-current=step]")
-        .innerText(),
-      "3. Chính sách Model",
-    );
-    assert.equal(
-      previewWrites,
-      0,
-      "Returning from configuration must keep the pinned policy preview",
-    );
-    manager.off("request", countPreview);
-    console.log(
-      "PASS Model configuration link: same tab, authenticated Model editor, return to original saved draft/policy step without replaying preview.",
-    );
-    // Response lost after the preview is committed: reconcile via GET, never create another equipment.
-    let reapplyCount = 0;
+    async function openVersions() {
+      await chooseVersions(manager).click();
+      const dialog = manager.getByRole("dialog");
+      await dialog.getByLabel("Phiên bản bảo hành", { exact: true }).waitFor();
+      await dialog.getByLabel("Phiên bản bảo trì", { exact: true }).waitFor();
+      return dialog;
+    }
+    async function checkPolicyDialogLayout(dialog, stacked = false) {
+      const layout = await dialog.evaluate(el => {
+        const [warranty, maintenance] = el.querySelectorAll(".model-policy-summary > .sd-card");
+        const left = warranty.getBoundingClientRect();
+        const right = maintenance.getBoundingClientRect();
+        return {
+          width: el.getBoundingClientRect().width,
+          noOuterScroll: el.scrollHeight <= el.clientHeight + 2,
+          stacked: right.top >= left.bottom,
+        };
+      });
+      assert.equal(layout.stacked, stacked);
+      assert.ok(layout.noOuterScroll, "Only the dialog body should scroll");
+      if (!stacked) assert.ok(layout.width >= 960, "Desktop dialog should open at its wide width");
+    }
+    async function submit(row) {
+      await nextStep(manager).click();
+      const review = manager.locator(".registration-review-container");
+      await review.waitFor();
+      assert.equal(await review.locator("input, select, textarea, button").count(), 0);
+      assert.equal(await chooseVersions(manager).count(), 0);
+      assert.equal(await manager.getByRole("button", { name: "Lưu bản nháp", exact: true }).count(), 0);
+      const submitted = manager.waitForResponse(r =>
+        r.request().method() === "POST" && r.url().endsWith(`/equipment-registrations/${row.id}/submit`),
+      );
+      await complete(manager).click();
+      const result = await (await submitted).json();
+      assert.equal(result.status, "COMPLETED");
+      return result;
+    }
+
+    const uiDraft = await startHandover("X100", "UI-POLICY");
     const previewPattern = `**/equipment-registrations/${uiDraft.id}/model-policies`;
-    await manager.route(previewPattern, async (route) => {
-      reapplyCount++;
+    let applies = 0;
+    await manager.route(previewPattern, async route => {
+      applies++;
       await route.fetch();
       await route.abort("failed");
     });
-    await manager
-      .getByRole("button", {
-        name: "Lấy lại chính sách hiện hành từ Model",
-        exact: true,
-      })
-      .click();
-    await manager
-      .getByRole("alert")
-      .filter({ hasText: /Failed to fetch|kết quả|NetworkError/ })
-      .waitFor();
+    let dialog = await openVersions();
+    await checkPolicyDialogLayout(dialog);
+    await apply(dialog).click();
+    await dialog.getByRole("alert").filter({ hasText: /kết quả|NetworkError/ }).waitFor();
     await manager.unroute(previewPattern);
-    const readBack = manager.waitForResponse(
-      (r) =>
-        r.request().method() === "GET" &&
-        r.url().endsWith(`/equipment-registrations/${uiDraft.id}`),
+    await dialog.getByRole("button", { name: "Tải lại kết quả đã lưu", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal(applies, 1);
+
+    await manager.getByRole("button", { name: "Điều chỉnh ngoại lệ", exact: true }).click();
+    dialog = manager.getByRole("dialog");
+    await checkPolicyDialogLayout(dialog);
+    await dialog.getByLabel("Thời hạn bảo hành (tháng)", { exact: true }).fill("15");
+    await dialog.getByLabel("Chu kỳ (tháng)", { exact: true }).fill("4");
+    await dialog.getByLabel("Lý do ngoại lệ", { exact: true }).fill("Thỏa thuận riêng");
+    await apply(dialog).click();
+    await dialog.waitFor({ state: "hidden" });
+    await manager.getByText("Lý do ngoại lệ: Thỏa thuận riêng", { exact: true }).waitFor();
+
+    await manager.getByRole("button", { name: "2. Thiết bị", exact: true }).click();
+    await selectModel("UI-NONE");
+    await nextStep(manager).click();
+    await manager.getByText("Chưa áp dụng chính sách cho hồ sơ này.", { exact: true }).waitFor();
+    await manager.getByRole("button", { name: "2. Thiết bị", exact: true }).click();
+    await selectModel("X100");
+    await manager.getByLabel(/Ngày bàn giao thực tế/).fill("2026-02-28");
+    await nextStep(manager).click();
+    dialog = await openVersions();
+    const revised = manager.waitForResponse(r =>
+      r.request().method() === "POST" && r.url().endsWith("/model-policies"),
     );
-    await manager
-      .getByRole("button", { name: "Tải lại kết quả đã lưu", exact: true })
-      .click();
-    await readBack;
-    assert.equal(reapplyCount, 1);
-    // Change handover date: the old calendar must be replaced by a fresh server preview.
-    await manager
-      .getByRole("button", { name: "2. Thiết bị", exact: true })
-      .click();
-    await manager
-      .getByLabel("Ngày bàn giao thực tế", { exact: true })
-      .fill("2026-02-28");
-    const dates = manager.waitForResponse(
-      (r) =>
-        r.request().method() === "PATCH" && r.url().includes("/equipment/"),
-    );
-    await manager
-      .getByRole("button", { name: "Lưu các ngày thực tế", exact: true })
-      .click();
-    await dates;
-    const revised = manager.waitForResponse(
-      (r) =>
-        r.request().method() === "POST" && r.url().endsWith("/model-policies"),
-    );
-    await manager
-      .getByRole("button", { name: "Tiếp tục", exact: true })
-      .click();
+    await apply(dialog).click();
     const revisedBody = await (await revised).json();
     assert.equal(revisedBody.policyPreview.warranty.startDate, "2026-02-28");
-    assert.equal(
-      revisedBody.policyPreview.maintenance.firstDueDates[0].date,
-      "2026-05-28",
-    );
-    await manager
-      .getByRole("button", { name: "Tiếp tục", exact: true })
-      .click();
-    const submitted = manager.waitForResponse(
-      (r) =>
-        r.request().method() === "POST" &&
-        r.url().endsWith(`/equipment-registrations/${uiDraft.id}/submit`),
-    );
-    await manager
-      .getByRole("button", { name: "Hoàn tất ghi nhận", exact: true })
-      .click();
-    const applied = await (await submitted).json();
-    assert.equal(applied.status, "COMPLETED");
+    assert.equal(revisedBody.policyPreview.maintenance.firstDueDates[0].date, "2026-05-28");
+    assert.equal(revisedBody.policyPreview.overrideReason, "");
+    const applied = await submit(uiDraft);
     assert.equal(applied.maintenancePlanIds.length, 2);
-    const missing = await startHandover(missingModelId, "UI-MISSING");
-    await manager
-      .getByRole("alert")
-      .filter({ hasText: "Model chưa có đủ chính sách" })
-      .waitFor();
-    assert.equal(
-      await manager
-        .getByRole("button", { name: "Hoàn tất ghi nhận", exact: true })
-        .count(),
-      0,
-    );
-    // Tenant Admin sees policy setup but cannot fall back to manual maintenance or call preview.
+
+    const missing = await startHandover("UI-MISSING", "UI-MISSING");
+    dialog = await openVersions();
+    await dialog.getByText("Hồ sơ này sẽ không tạo bảo hành.", { exact: true }).waitFor();
+    await dialog.getByText("Hồ sơ này sẽ không tạo lịch bảo trì định kỳ.", { exact: true }).waitFor();
+    assert.equal(await apply(dialog).isDisabled(), false);
+    await dialog.getByRole("button", { name: "Hủy", exact: true }).click();
+    assert.equal(await complete(manager).count(), 0);
+
     const tenantAdmin = await login("admin@policy.test");
     await tenantAdmin.goto(`${base}/app/equipment-registrations/${missing.id}`);
-    await tenantAdmin
-      .getByRole("button", { name: "3. Chính sách Model", exact: true })
-      .click();
-    await tenantAdmin
-      .getByText("Service Manager áp dụng chính sách và xác nhận bàn giao.", {
-        exact: false,
-      })
-      .waitFor();
-    assert.equal(
-      await tenantAdmin
-        .getByRole("button", { name: "Áp dụng chính sách Model", exact: true })
-        .count(),
-      0,
-    );
-    const noDraft = await startHandover(noneModelId, "UI-NONE");
-    await manager
-      .getByText("Không bảo hành theo thỏa thuận", { exact: true })
-      .waitFor();
-    await manager
-      .getByText("Không bảo trì định kỳ theo thỏa thuận", { exact: true })
-      .waitFor();
-    await manager
-      .getByRole("button", { name: "Tiếp tục", exact: true })
-      .click();
-    const noneSubmitted = manager.waitForResponse(
-      (r) =>
-        r.request().method() === "POST" &&
-        r.url().endsWith(`/equipment-registrations/${noDraft.id}/submit`),
-    );
-    await manager
-      .getByRole("button", { name: "Hoàn tất ghi nhận", exact: true })
-      .click();
-    const noneApplied = await (await noneSubmitted).json();
-    assert.equal(noneApplied.status, "COMPLETED");
+    await tenantAdmin.getByRole("button", { name: "3. Chính sách Model", exact: true }).click();
+    await tenantAdmin.getByText("Service Manager áp dụng chính sách và xác nhận bàn giao.", { exact: true }).waitFor();
+    assert.equal(await chooseVersions(tenantAdmin).count(), 0);
+
+    const noDraft = await startHandover("UI-NONE", "UI-NONE");
+    await manager.setViewportSize({ width: 390, height: 844 });
+    dialog = await openVersions();
+    await dialog.getByText("Không bảo hành theo thỏa thuận", { exact: true }).waitFor();
+    await dialog.getByText("Không bảo trì định kỳ theo thỏa thuận", { exact: true }).waitFor();
+    await checkPolicyDialogLayout(dialog, true);
+    assert.ok(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 2));
+    await manager.screenshot({ path: artifacts + "/web-handover-model-mobile.png", animations: "disabled" });
+    await apply(dialog).click();
+    const noneApplied = await submit(noDraft);
     assert.equal(noneApplied.warrantyId, null);
     assert.deepEqual(noneApplied.maintenancePlanIds, []);
-    await manager.setViewportSize({ width: 390, height: 844 });
-    await manager.waitForFunction(
-      () =>
-        document.querySelector(".m1-sidebar").getBoundingClientRect().right <=
-        0,
-    );
-    await manager.evaluate(() => window.scrollTo(0, 0));
-    assert.ok(
-      await manager.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth + 2,
-      ),
-      "Handover must fit mobile viewport",
-    );
-    await manager.screenshot({
-      path: artifacts + "/web-handover-model-mobile.png",
-      fullPage: true,
-      animations: "disabled",
-    });
-    console.log(
-      "PASS Model-only handover wizard: real create/preview/submit, date recomputation, response loss recovery, missing/explicit NONE policies, Tenant Admin permissions, mobile layout.",
-    );
+    console.log("PASS Handover: version selection, exceptions, draft model change, review, response recovery and mobile dialog.");
 
     const tech = await login("technician@policy.test");
     await tech.goto(`${base}/app/work-orders/${orderId}`);

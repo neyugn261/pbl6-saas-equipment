@@ -251,6 +251,18 @@ export class EquipmentRepository {
     });
   }
 
+  async lockActiveModel(tx: Prisma.TransactionClient, tenantId: string, modelId: string) {
+    const models = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status FROM equipment_models
+      WHERE tenant_id = ${tenantId}::uuid AND id = ${modelId}::uuid
+      FOR SHARE`;
+    if (!models[0] || models[0].status !== 'ACTIVE')
+      throw new UnprocessableEntityException({
+        code: models[0] ? 'MODEL_INACTIVE' : 'MODEL_NOT_FOUND',
+        message: 'Reference cannot be validated',
+      });
+  }
+
   async createWithHistory(
     tenantId: string,
     actorId: string,
@@ -261,22 +273,7 @@ export class EquipmentRepository {
     const write = async (tx: Prisma.TransactionClient) => {
       // A model may be deactivated after the API's initial check while
       // Organization is called. Hold a shared row lock until registration commits.
-      const models = await tx.$queryRaw<{ status: string }[]>`
-        SELECT status FROM equipment_models
-        WHERE tenant_id = ${tenantId}::uuid AND id = ${input.modelId}::uuid
-        FOR SHARE`;
-      if (models.length === 0) {
-        throw new UnprocessableEntityException({
-          code: 'MODEL_NOT_FOUND',
-          message: 'Reference cannot be validated',
-        });
-      }
-      if (models[0].status !== 'ACTIVE') {
-        throw new UnprocessableEntityException({
-          code: 'MODEL_INACTIVE',
-          message: 'Reference cannot be validated',
-        });
-      }
+      await this.lockActiveModel(tx, tenantId, input.modelId);
       const equipment = await tx.equipment.create({
         data: {
           tenantId,

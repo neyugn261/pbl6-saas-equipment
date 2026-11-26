@@ -9,6 +9,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { ApiError, api } from "../../api/client";
 import { StatusBadge } from "../../components/Badges";
+import { PageTitle } from "../../components/PageTitle";
 import { getSessionGeneration, useSession } from "../../auth/session";
 import type { Page } from "../../types/domain";
 import { StockMutation, type StockRequest } from "./stock-mutation";
@@ -415,7 +416,9 @@ export function InventoryPartPage() {
   const error = current ? state.error : "";
   return (
     <div className="m2-page">
-      <Link to="/app/inventory/parts">← Danh mục phụ tùng</Link>
+      <header className="m1-header page-title-header">
+        <PageTitle title={part?.name ?? "Chi tiết phụ tùng"} back={{ to: "/app/inventory/parts", label: "Về danh mục phụ tùng" }} />
+      </header>
       {loading ? (
         <p role="status">Đang tải phụ tùng…</p>
       ) : error ? (
@@ -425,7 +428,6 @@ export function InventoryPartPage() {
       ) : (
         part && (
           <>
-            <h1>{part.name}</h1>
             <p>
               {part.sku} · Đơn vị: {part.unit} ·{" "}
               {part.status === "ACTIVE" ? "Đang sử dụng" : "Ngừng sử dụng"}

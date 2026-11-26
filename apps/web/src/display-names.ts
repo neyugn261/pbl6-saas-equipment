@@ -1,4 +1,18 @@
 export type DisplayKind = 'technician' | 'branch' | 'warehouse' | 'part' | 'user' | 'site' | 'equipment' | 'customer' | 'workOrder';
+export const equipmentStatusLabels: Record<string, string> = {
+  ACTIVE: 'Hoạt động',
+  IN_SERVICE: 'Đang sử dụng',
+  OUT_OF_SERVICE: 'Ngừng hoạt động',
+  RETIRED: 'Ngừng sử dụng',
+};
+export const handoverStatusLabels: Record<string, string> = {
+  DRAFT: 'Bản nháp',
+  PENDING_CUSTOMER_CONFIRMATION: 'Chờ khách xác nhận',
+  ACTIVATED: 'Đã xác nhận và kích hoạt',
+  REJECTED: 'Đã từ chối',
+  CANCELLED: 'Đã hủy',
+  EXPIRED: 'Hết hạn',
+};
 const fallback: Record<DisplayKind, string> = {
   technician: 'Kỹ thuật viên không xác định', branch: 'Chi nhánh không xác định',
   warehouse: 'Kho không xác định', part: 'Phụ tùng không xác định', user: 'Nhân viên không xác định',
