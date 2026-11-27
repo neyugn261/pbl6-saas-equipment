@@ -169,13 +169,6 @@ const links: NavigationItem[] = [
     roles: staff,
   },
   {
-    path: "/app/inventory/parts",
-    label: "Phụ tùng",
-    group: "Kho phụ tùng",
-    icon: "Package",
-    roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "TECHNICIAN", "INVENTORY_STAFF"],
-  },
-  {
     path: "/app/inventory/warehouses",
     label: "Kho & tồn kho",
     group: "Kho phụ tùng",

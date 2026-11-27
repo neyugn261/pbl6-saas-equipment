@@ -1,5 +1,8 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsIn,
   IsBoolean,
   IsString,
@@ -8,6 +11,7 @@ import {
   MaxLength,
   MinLength,
   ValidateIf,
+  ValidateNested,
   IsInt,
   Min,
 } from 'class-validator';
@@ -74,6 +78,7 @@ export class StockQuery extends PaginationQueryDto {
   @ValidateIf(supplied) @IsUUID() warehouseId?: string;
   @ValidateIf(supplied) @IsUUID() partId?: string;
   @ValidateIf(supplied) @IsIn(['true', 'false']) lowStock?: string;
+  @ValidateIf(supplied) @Transform(trim) @IsString() @MaxLength(100) q?: string;
 }
 export class LedgerQuery extends PaginationQueryDto {
   @ValidateIf(supplied) @IsUUID() warehouseId?: string;
@@ -115,10 +120,7 @@ export interface InventoryQuery extends PaginationQueryDto {
 export class ThresholdInput {
   @Matches(QUANTITY) minQuantity: string;
 }
-export class StockMutation {
-  @IsUUID() warehouseId: string;
-  @IsUUID() partId: string;
-  @Matches(QUANTITY) quantity: string;
+class ReceiptReference {
   @ValidateIf(supplied)
   @Transform(trim)
   @IsString()
@@ -131,6 +133,27 @@ export class StockMutation {
   @MinLength(1)
   @MaxLength(150)
   documentReference?: string;
+}
+export class StockMutation extends ReceiptReference {
+  @IsUUID() warehouseId: string;
+  @IsUUID() partId: string;
+  @Matches(QUANTITY) quantity: string;
+}
+export class ReceiptLine {
+  @Transform(trim) @IsString() @MinLength(1) @MaxLength(100) sku: string;
+  @Matches(QUANTITY) quantity: string;
+  @ValidateIf(supplied) @Transform(trim) @IsString() @MinLength(1) @MaxLength(200)
+  name?: string;
+  @ValidateIf(supplied) @Transform(trim) @IsString() @MinLength(1) @MaxLength(30)
+  unit?: string;
+  @ValidateIf(supplied) @IsBoolean() allowFractional?: boolean;
+  @ValidateIf(supplied) @Transform(trim) @IsString() @MaxLength(4000)
+  description?: string;
+}
+export class WarehouseReceiptInput extends ReceiptReference {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100)
+  @ValidateNested({ each: true }) @Type(() => ReceiptLine)
+  lines: ReceiptLine[];
 }
 export class AdjustInput extends StockMutation {
   @IsIn(['ADJUST_IN', 'ADJUST_OUT']) direction: 'ADJUST_IN' | 'ADJUST_OUT';

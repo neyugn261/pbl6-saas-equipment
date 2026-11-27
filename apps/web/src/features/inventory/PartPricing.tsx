@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { api, ApiError } from "../../api/client";
+import { ServiceCard, ServiceFacts } from "../workspace/ServiceDetailUI";
 import { priceText } from "./prices";
 
 export type Prices = {
@@ -48,39 +49,32 @@ export function PartPricing({
     }
   }
   return (
-    <section className="m1-card m1-section-card">
-      <div className="m1-section-body">
-        <h2>Đơn giá tham khảo</h2>
-        <p>
-          Giá niêm yết:{" "}
-          <strong>{priceText(part.standardPrice, part.currency)}</strong>
-        </p>
-        {canManage && (
-          <p>
-            Giá vốn nội bộ:{" "}
-            <strong>{priceText(part.costPrice, part.currency)}</strong>
-          </p>
-        )}
-        <p>
-          Đơn giá theo đơn vị tính của phụ tùng. Giá mới áp dụng cho lần lập báo
-          giá tiếp theo; nội dung khách đã duyệt được giữ nguyên.
-        </p>
-        {canManage && (
+    <ServiceCard title="Đơn giá tham khảo" actions={
+      canManage && (
           <button
             type="button"
+            className="ws-button ws-button--secondary"
+            aria-expanded={editing}
             disabled={busy}
             onClick={() => {
               setEditing(!editing);
+              setError("");
               setStandard(part.standardPrice ?? "");
               setCost(part.costPrice ?? "");
             }}
           >
-            Cập nhật đơn giá
+            {editing ? "Hủy chỉnh sửa" : "Cập nhật đơn giá"}
           </button>
-        )}
-        {editing && (
-          <form className="m2-editor" onSubmit={(event) => void save(event)}>
-            <label>
+      )
+    }>
+      <ServiceFacts items={[
+        { label: "Giá niêm yết", value: priceText(part.standardPrice, part.currency) },
+        ...(canManage ? [{ label: "Giá vốn nội bộ", value: priceText(part.costPrice, part.currency) }] : []),
+      ]} />
+      {editing && (
+        <form className="inventory-pricing-form" onSubmit={(event) => void save(event)}>
+          <fieldset className="ws-form-grid" disabled={busy}>
+            <label className="ws-label">
               Giá niêm yết (VND)
               <input
                 inputMode="decimal"
@@ -89,7 +83,7 @@ export function PartPricing({
                 onChange={(e) => setStandard(e.target.value)}
               />
             </label>
-            <label>
+            <label className="ws-label">
               Giá vốn nội bộ (VND)
               <input
                 inputMode="decimal"
@@ -98,18 +92,16 @@ export function PartPricing({
                 onChange={(e) => setCost(e.target.value)}
               />
             </label>
-            <p>
-              Để trống nếu chưa xác định giá. Nhập 0 chỉ khi muốn đặt giá bằng
-              0.
-            </p>
-            <button disabled={busy}>{busy ? "Đang lưu…" : "Lưu giá"}</button>
-            <button type="button" disabled={busy} onClick={onSaved}>
-              Tải lại giá
-            </button>
-          </form>
-        )}
-        {error && <p role="alert">{error}</p>}
-      </div>
-    </section>
+            {error && <p className="ws-full m1-error" role="alert">{error}</p>}
+            <div className="ws-full ws-actions">
+              <button type="button" className="ws-button ws-button--secondary" disabled={busy} onClick={onSaved}>
+                Tải lại giá
+              </button>
+              <button type="submit" className="ws-button" disabled={busy}>{busy ? "Đang lưu…" : "Lưu giá"}</button>
+            </div>
+          </fieldset>
+        </form>
+      )}
+    </ServiceCard>
   );
 }

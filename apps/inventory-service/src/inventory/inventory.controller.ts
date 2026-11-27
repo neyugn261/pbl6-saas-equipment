@@ -37,6 +37,7 @@ import {
   ThresholdInput,
   WarehouseInput,
   WarehousePatch,
+  WarehouseReceiptInput,
 } from './dto';
 import { PaginationQueryDto } from '@pbl6/service-kit';
 import {
@@ -138,6 +139,16 @@ export class InventoryController {
   @RequirePermissions('inventory:read')
   stocks(@CurrentUser() p: Principal, @Query() q: StockQuery) {
     return this.service.stocks(p, q);
+  }
+  @Post('warehouses/:id/receipts')
+  @RequirePermissions('inventory:manage')
+  receiveBatch(
+    @CurrentUser() p: Principal,
+    @Headers('idempotency-key') key: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: WarehouseReceiptInput,
+  ) {
+    return this.service.receiveBatch(p, key, id, input);
   }
   @Put('warehouses/:warehouseId/stocks/:partId')
   @RequirePermissions('inventory:manage')

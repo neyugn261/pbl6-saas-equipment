@@ -2,7 +2,7 @@ import { ApiError, api } from '../../api/client'
 import { getSessionGeneration } from '../../auth/session'
 
 export type StockRequest = {
-  readonly mode: 'RECEIVE' | 'ADJUST' | 'ISSUE' | 'RETURN' | 'REQUEST_PARTS' | 'FULFILL' | 'RECEIPT'
+  readonly mode: 'RECEIVE' | 'RECEIVE_BATCH' | 'ADJUST' | 'ISSUE' | 'RETURN' | 'REQUEST_PARTS' | 'FULFILL' | 'RECEIPT'
   readonly label?: string
   readonly path: string
   readonly body: Readonly<Record<string, unknown>>
@@ -14,6 +14,7 @@ function validIntent(value: unknown): value is Intent {
   const item = value as Partial<Intent>
   const paths = {
     RECEIVE: /^\/stock-transactions\/receive$/,
+    RECEIVE_BATCH: /^\/warehouses\/[\da-f-]{36}\/receipts$/i,
     ADJUST: /^\/stock-transactions\/adjust$/,
     ISSUE: /^\/work-orders\/[^/]+\/parts$/,
     RETURN: /^\/work-order-parts\/[^/]+\/return$/,
@@ -26,7 +27,7 @@ function validIntent(value: unknown): value is Intent {
     && (item.label === undefined || typeof item.label === 'string')
     && typeof item.path === 'string' && paths[item.mode].test(item.path)
     && item.body !== undefined && item.body !== null && typeof item.body === 'object' && !Array.isArray(item.body)
-    && (['REQUEST_PARTS', 'FULFILL', 'RECEIPT'].includes(item.mode)
+    && (['RECEIVE_BATCH', 'REQUEST_PARTS', 'FULFILL', 'RECEIPT'].includes(item.mode)
       || Object.values(item.body).every((value) => typeof value === 'string'))
 }
 
@@ -39,8 +40,8 @@ export class StockMutation {
   private running = false
   readonly storageError: string
 
-  constructor(scope: string, generation: number, area?: 'requests') {
-    this.storageKey = `pbl6.inventory.intent.${encodeURIComponent(scope)}${area ? '.requests' : ''}`
+  constructor(scope: string, generation: number, area?: 'requests' | 'receipts') {
+    this.storageKey = `pbl6.inventory.intent.${encodeURIComponent(scope)}${area ? '.' + area : ''}`
     this.generation = generation
     let error = ''
     try {

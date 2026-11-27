@@ -195,13 +195,6 @@ const metrics: Record<WorkspaceRole, Metric[]> = {
       to: "/app/inventory/warehouses",
     },
     {
-      label: "Danh mục phụ tùng",
-      description: "Phụ tùng đang được quản lý",
-      area: "inventory",
-      path: `/parts?${page}`,
-      to: "/app/inventory/parts",
-    },
-    {
       label: "Kho phụ tùng",
       description: "Các kho thuộc doanh nghiệp",
       area: "inventory",

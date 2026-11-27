@@ -167,7 +167,7 @@ test('Notification inbox, filters, pagination, mark-read and bell use the config
   const imports = (h) => ({ react: h.react, 'react/jsx-runtime': h.jsx, 'lucide-react': { Bell: 'bell' },
     'react-router-dom': { Link: 'link' }, './notifications.css': {}, '../../api/client': tab.client, '../../auth/session': tab.session,
     '../../display-names': tab.load('display-names.ts'),
-    '../workspace/WorkspaceUI': { PageHeading: 'page-heading' },
+    '../workspace/WorkspaceUI': { PageHeading: 'page-heading', DataState: ({ children }) => children, Pagination: 'pagination', EmptyState: 'empty-state' },
     '../workspace/workspace-data': tab.load('features/workspace/workspace-data.ts', {
       react: h.react, '../../api/client': tab.client, '../../auth/session': tab.session,
     }),
@@ -222,11 +222,15 @@ for (const mode of ['RECEIVE', 'ADJUST', 'ISSUE', 'RETURN']) {
     })
     const h = hooks()
     const { InventoryTransactionsPage } = tab.load('features/inventory/InventoryPages.tsx', {
-      '../workspace/WorkspaceUI': { PageHeading: 'page-heading' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
+      '../workspace/WorkspaceUI': { PageHeading: 'page-heading', DataState: ({ children }) => children, Pagination: 'pagination', EmptyState: 'empty-state' }, '../workspace/TableToolbar': { default: 'table-toolbar' },
       react: h.react, 'react/jsx-runtime': h.jsx, 'react-router-dom': { Link: 'link' },
       'lucide-react': { Search: 'icon' }, '../../components/Badges': { StatusBadge: 'badge' }, './inventory-parts.css': {},
       '../../components/PageTitle': { PageTitle: 'page-title' },
-      '../../api/client': tab.client, '../../auth/session': tab.session, './stock-mutation': tab.stock, './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'),
+      '../../api/client': tab.client, '../../auth/session': tab.session, './stock-mutation': tab.stock, './WarehouseReceipt': { WarehouseReceipt: 'warehouse-receipt' },
+    './InventoryDialog': { InventoryDialog: 'inventory-dialog', RequiredMark: 'required-mark' },
+ '../workspace/ServiceDetailUI': { ServiceCard: 'service-card', ServiceFacts: 'service-facts' },
+ '../workspace/workspace-data': { useWorkspaceData: () => ({ data: undefined, loading: false }) },
+ './PartPricing': { PartPricing: 'part-pricing' }, './prices': tab.load('features/inventory/prices.ts'),
       '../../display-names': tab.load('display-names.ts'),
       '../workspace/ui-values':tab.load('features/workspace/ui-values.ts'),
     })

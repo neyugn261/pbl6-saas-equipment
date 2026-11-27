@@ -68,6 +68,7 @@ test("pricing conflict preserves edited fields and requires explicit reload inst
       },
     },
     "./prices": tab.load("features/inventory/prices.ts"),
+    "../workspace/ServiceDetailUI": { ServiceCard: "service-card", ServiceFacts: "service-facts" },
   });
   const props = {
     part: {
@@ -82,7 +83,7 @@ test("pricing conflict preserves edited fields and requires explicit reload inst
   };
   let tree = h.render(PartPricing, props);
   nodes(
-    tree,
+    tree.props.actions,
     (n) => n.type === "button" && n.props.children === "Cập nhật đơn giá",
   )[0].props.onClick();
   tree = h.render(PartPricing, props);

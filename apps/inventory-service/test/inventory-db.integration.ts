@@ -268,6 +268,48 @@ describe('Inventory PostgreSQL transactions and reservation recovery', () => {
     await app?.close();
   });
 
+  it('receives known and new SKUs in one warehouse exactly once and rejects unauthorized calls', async () => {
+    const path = `/warehouses/${warehouseId}/receipts`;
+    const payload = {
+      documentReference: 'FILE-001',
+      lines: [
+        { sku: 'FILTER', quantity: '1.50' },
+        { sku: 'CLAMP', name: 'Clamp', unit: 'pc', quantity: '3' },
+      ],
+    };
+    await api('post', path, payload, randomUUID(), technicianToken).expect(403);
+    await api('post', path, payload, randomUUID(), foreignToken).expect(404);
+    const key = randomUUID();
+    const [first, replay] = await Promise.all([
+      api('post', path, payload, key).expect(201),
+      api('post', path, payload, key).expect(201),
+    ]);
+    expect(first.body).toEqual(replay.body);
+    expect(first.body.count).toBe(2);
+    expect(first.body.movements).toEqual([
+      expect.objectContaining({ partId, warehouseId, balanceAfter: '1.50', documentReference: 'FILE-001' }),
+      expect.objectContaining({ warehouseId, balanceAfter: '3.00', partSnapshot: expect.objectContaining({ sku: 'CLAMP', unit: 'cái' }) }),
+    ]);
+    await api('post', path, { ...payload, note: 'different' }, key).expect(409);
+    const found = await api('get', `/stocks?warehouseId=${warehouseId}&q=clamp`).expect(200);
+    expect(found.body.total).toBe(1);
+    expect(found.body.items[0]).toMatchObject({ quantity: '3.00', part: { sku: 'CLAMP' } });
+    expect(await db.stockTransaction.count({ where: { tenantId, warehouseId } })).toBe(2);
+  });
+
+  it('rolls back parts and stock when a later receipt row is invalid', async () => {
+    await api('post', `/warehouses/${warehouseId}/receipts`, {
+      note: 'Delivery',
+      lines: [
+        { sku: 'FILTER', quantity: '2' },
+        { sku: 'BOLT', name: 'Bolt', unit: 'cái', quantity: '1.50' },
+      ],
+    }, randomUUID()).expect(422);
+    expect(await db.part.count({ where: { tenantId, sku: 'BOLT' } })).toBe(0);
+    expect(await db.stock.count({ where: { tenantId, warehouseId } })).toBe(0);
+    expect(await db.stockTransaction.count({ where: { tenantId, warehouseId } })).toBe(0);
+  });
+
   it('scopes catalogue by token, rejects duplicate codes and keeps immutable fields', async () => {
     await api(
       'get',
