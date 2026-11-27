@@ -17,6 +17,19 @@ export const conflict = (code: string, message: string) =>
   new ConflictException({ code, message });
 export const invalid = (code: string, message: string) =>
   new UnprocessableEntityException({ code, message });
+export function inventoryUnit(value: string) {
+  const aliases = new Map([
+    ['chiếc', 'cái'], ['pc', 'cái'], ['pcs', 'cái'], ['piece', 'cái'],
+    ['pieces', 'cái'], ['mét', 'm'], ['meter', 'm'], ['litre', 'l'],
+    ['liter', 'l'], ['lít', 'l'],
+  ]);
+  const unit = value.trim().toLowerCase();
+  return aliases.get(unit) ?? unit;
+}
+export function assertFractionalUnit(unit: string, allowFractional?: boolean) {
+  if (allowFractional && ['cái', 'bộ', 'hộp', 'chiếc'].includes(unit))
+    throw invalid('INVALID_FRACTIONAL_UNIT', 'Countable units require whole quantities');
+}
 export function decimal(
   value: string,
   positive = false,

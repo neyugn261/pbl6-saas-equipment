@@ -22,9 +22,11 @@ import {
 import { ReferencesClient } from './references.client';
 import {
   conflict,
+  assertFractionalUnit,
   decimal,
   fingerprint,
   invalid,
+  inventoryUnit,
   json,
   nonEmptyPatch,
   notFound,
@@ -39,6 +41,7 @@ import type {
   ReturnInput,
   StockMutation,
   WarehouseInput,
+  WarehouseReceiptInput,
   WarehousePatch,
   ConfirmUseInput,
   ReverseUseInput,
@@ -115,33 +118,12 @@ export class InventoryService {
     return json(await this.repo.part(this.tenant(p), id));
   }
   async createPart(p: Principal, input: PartInput) {
-    const aliases: Record<string, string> = {
-      cái: 'cái',
-      chiếc: 'cái',
-      pc: 'cái',
-      pcs: 'cái',
-      piece: 'cái',
-      pieces: 'cái',
-      mét: 'm',
-      meter: 'm',
-      litre: 'l',
-      liter: 'l',
-      lít: 'l',
-    };
-    const unit = input.unit.trim().toLowerCase();
-    const normalizedUnit = aliases[unit] ?? unit;
-    if (
-      input.allowFractional &&
-      ['cái', 'bộ', 'hộp', 'chiếc'].includes(normalizedUnit)
-    )
-      throw invalid(
-        'INVALID_FRACTIONAL_UNIT',
-        'Countable units require whole quantities',
-      );
+    const unit = inventoryUnit(input.unit);
+    assertFractionalUnit(unit, input.allowFractional);
     return json(
       await this.repo.createPart(
         this.tenant(p),
-        { ...input, unit: normalizedUnit },
+        { ...input, unit },
         p.userId,
       ),
     );
@@ -231,16 +213,34 @@ export class InventoryService {
   }
   async receive(p: Principal, key: string, input: StockMutation) {
     await this.scopedWarehouse(p, input.warehouseId);
-    if (!input.documentReference?.trim() && !input.note?.trim())
-      throw new BadRequestException({
-        code: 'RECEIPT_REFERENCE_REQUIRED',
-        message: 'A receipt needs a document reference or explanatory note',
-      });
+    this.requireReceiptReference(input);
     return (
       await this.repo.transact(
         this.context(p, key, 'RECEIVE', this.movement(input)),
       )
     ).response;
+  }
+  async receiveBatch(p: Principal, key: string, warehouseId: string, input: WarehouseReceiptInput) {
+    warehouseId = warehouseId.toLowerCase();
+    await this.scopedWarehouse(p, warehouseId);
+    this.requireReceiptReference(input);
+    const lines = input.lines.map((line) => ({
+      ...line,
+      quantity: decimal(line.quantity, true).toFixed(2),
+      ...(line.unit === undefined ? {} : { unit: inventoryUnit(line.unit) }),
+    }));
+    if (new Set(lines.map((line) => line.sku)).size !== lines.length)
+      throw invalid('DUPLICATE_RECEIPT_SKU', 'Enter each SKU once per receipt');
+    return this.repo.receiveBatch(this.tenant(p), p.userId, this.key(key), {
+      warehouseId, note: input.note, documentReference: input.documentReference, lines,
+    });
+  }
+  private requireReceiptReference(input: { documentReference?: string; note?: string }) {
+    if (!input.documentReference?.trim() && !input.note?.trim())
+      throw new BadRequestException({
+        code: 'RECEIPT_REFERENCE_REQUIRED',
+        message: 'A receipt needs a document reference or explanatory note',
+      });
   }
   async adjust(p: Principal, key: string, input: AdjustInput) {
     await this.scopedWarehouse(p, input.warehouseId);

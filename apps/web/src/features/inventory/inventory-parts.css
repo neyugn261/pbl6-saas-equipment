@@ -1,75 +1,338 @@
-.m2-page .inventory-parts-directory {
+.inventory-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.workshop-shell .inventory-page.part-request-page {
+  max-width: none;
+}
+.inventory-page .inventory-card {
+  min-width: 0;
   padding: 0;
   overflow: hidden;
 }
-.m2-page .inventory-parts-directory__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 72px;
+.inventory-card > .ws-toolbar {
   margin: 0;
-  padding: 15px 20px;
   border: 0;
-  border-bottom: 1px solid var(--shop-line, #dce4ed);
+  border-bottom: 1px solid var(--shop-line, #cdd4cb);
   border-radius: 0;
-  box-shadow: none;
 }
-.m2-page .inventory-parts-directory__search {
+.inventory-toolbar {
+  align-items: end;
+}
+.workshop-shell .inventory-card .management-toolbar .ws-search input[type="search"] {
+  padding-inline-start: 37px;
+}
+.inventory-section-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 9px;
-  width: min(380px, 100%);
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--shop-line, #dce4ed);
-  border-radius: 4px;
-  color: var(--shop-muted, #607083);
-  background: #fff;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--shop-line, #cdd4cb);
 }
-.m2-page .inventory-parts-directory__search:focus-within {
-  border-color: var(--shop-accent, #a74b26);
-  box-shadow: 0 0 0 3px rgb(167 75 38 / 12%);
+.inventory-section-heading h2,
+.inventory-section-heading p {
+  margin: 0;
 }
-.m2-page .inventory-parts-directory__search input {
-  flex: 1;
-  min-height: 38px;
+.inventory-section-heading h2 {
+  font-size: 15px;
+}
+.inventory-section-heading p,
+.inventory-muted {
+  color: var(--shop-muted, #596762);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.inventory-page .ws-table td {
+  overflow-wrap: anywhere;
+}
+.inventory-page .ws-table-wrap {
+  padding: 0;
+}
+.inventory-card > :is(.ws-empty, .ws-error, .ws-skeleton) {
+  margin: 16px 20px;
+}
+.inventory-page .page-title-with-back {
+  min-width: 0;
+}
+.inventory-page .page-title-with-back h1 {
+  overflow-wrap: anywhere;
+}
+.inventory-part-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+.inventory-part-layout > * {
+  min-width: 0;
+}
+.inventory-part-pricing {
+  grid-column: 1 / -1;
+}
+.inventory-part-layout .sd-facts {
+  gap: 12px 18px;
+}
+.inventory-part-balances .sd-facts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 90px), 1fr));
+}
+.inventory-part-balances .sd-facts dd {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.inventory-threshold-form,
+.inventory-pricing-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--shop-line, #cdd4cb);
+}
+.inventory-threshold-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 12px;
+}
+.inventory-threshold-form > label {
+  flex: 0 1 175px;
+}
+.inventory-threshold-form > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.inventory-pricing-form fieldset {
+  min-width: 0;
+  margin: 0;
   padding: 0;
   border: 0;
-  outline: 0;
-  background: transparent;
-  box-shadow: none;
-  font-size: 12px;
 }
-.m2-page .inventory-parts-directory .inventory-parts-directory__toolbar button {
-  min-height: 38px;
-  padding: 8px 14px;
-  border: 1px solid var(--shop-line, #dce4ed);
-  border-radius: 4px;
-  color: var(--shop-ink, #242e2d);
-  background: #fff;
-  font-size: 12px;
+.inventory-pricing-form .ws-actions {
+  justify-content: flex-end;
 }
-.m2-page .inventory-parts-directory .inventory-parts-directory__toolbar button:hover:not(:disabled) {
-  background: var(--shop-soft, #f2f4ee);
+.inventory-feedback {
+  margin: 8px 0 0;
+  color: var(--shop-muted, #596762);
+  font-size: 13px;
 }
-.inventory-parts-directory .m2-inventory-table { margin: 0; }
-.inventory-parts-directory .m2-inventory-table table { min-width: 660px; }
-.inventory-parts-directory .m2-inventory-table th,
-.inventory-parts-directory .m2-inventory-table td { padding: 14px 20px; }
-.inventory-parts-directory > p { margin: 0; padding: 20px; }
-.inventory-parts-directory .registration-pagination {
-  min-height: 62px;
+.warehouse-receipt-actions > .ws-actions {
+  justify-content: flex-end;
+}
+.warehouse-receipt-recovery {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.warehouse-receipt-recovery p {
   margin: 0;
-  padding: 12px 20px;
-  border-top: 1px solid var(--shop-line, #dce4ed);
+}
+.workshop-shell .inventory-dialog {
+  --inventory-dialog-gutter: clamp(14px, 4vw, 22px);
+  width: min(610px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+  background: var(--shop-paper, #fcfcf9);
+  color: var(--shop-ink, #242e2d);
+}
+.workshop-shell .inventory-dialog--wide {
+  width: min(740px, calc(100% - 24px));
+}
+.inventory-dialog[open],
+.inventory-dialog-form {
+  display: flex;
+  flex-direction: column;
+}
+.inventory-dialog-heading {
+  flex: none;
+  padding: 16px var(--inventory-dialog-gutter);
+}
+.inventory-dialog-heading h2 {
+  font-size: 19px;
+}
+.inventory-dialog-heading p {
+  margin-top: 5px;
+}
+.workshop-shell .inventory-dialog .inventory-dialog-close {
+  display: grid;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  place-items: center;
+  color: var(--shop-muted, #596762);
+  border: 0;
+  background: transparent;
+}
+.workshop-shell .inventory-dialog .inventory-dialog-close:hover:not(:disabled) {
+  color: var(--shop-accent, #a74b26);
+  background: var(--shop-soft, #e4e8e0);
+}
+.inventory-dialog-form,
+.inventory-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.inventory-dialog-body {
+  overflow-y: auto;
+}
+.inventory-dialog-content {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 16px var(--inventory-dialog-gutter) 20px;
+  border: 0;
+}
+.inventory-dialog-form p {
+  margin: 0;
+}
+.inventory-dialog-footer {
+  flex: none;
+  justify-content: flex-end;
+  padding: 13px var(--inventory-dialog-gutter);
+  border-top: 1px solid var(--shop-line, #cdd4cb);
+  background: var(--shop-paper, #fcfcf9);
+}
+.inventory-dialog-bottom {
+  flex: none;
+}
+.inventory-dialog-bottom > .m1-error {
+  margin: 0 var(--inventory-dialog-gutter) 12px;
+}
+.inventory-required-mark {
+  color: var(--danger, #c42b2b);
+  font-weight: 700;
+}
+.warehouse-receipt-reference {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+}
+.warehouse-receipt-reference legend {
+  padding-inline: 4px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.receipt-part-picker {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+.receipt-part-combobox {
+  position: relative;
+}
+.workshop-shell .inventory-dialog .receipt-part-search input {
+  padding-inline-start: 37px;
+}
+.receipt-part-results,
+.receipt-part-selection {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+}
+.receipt-part-results {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  background: var(--shop-paper, #fcfcf9);
+  box-shadow: 0 6px 16px rgb(36 46 45 / 12%);
+}
+.receipt-part-results ul {
+  max-height: min(220px, 32dvh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.receipt-part-results [role="option"],
+.receipt-part-results > p,
+.receipt-part-page,
+.receipt-part-selection {
+  padding: 9px 12px;
+}
+.receipt-part-results [role="option"] {
+  cursor: pointer;
+}
+.receipt-part-results [role="option"]:not(:last-child) {
+  border-bottom: 1px solid var(--shop-line, #cdd4cb);
+}
+.receipt-part-results [role="option"]:is(:hover, [aria-selected="true"]) {
+  background: var(--shop-soft, #e4e8e0);
+}
+.receipt-part-selection strong,
+.receipt-part-results strong,
+.receipt-part-picker small {
+  display: block;
+}
+.receipt-part-picker strong {
+  font-size: 13px;
+}
+.receipt-part-picker small {
+  color: var(--shop-muted, #596762);
   font-size: 12px;
 }
-.inventory-parts-directory .registration-pagination button { min-height: 34px; border-radius: 4px; }
-@media (max-width: 600px) {
-  .m2-page .inventory-parts-directory__toolbar { flex-wrap: wrap; }
-  .m2-page .inventory-parts-directory__search { width: 100%; }
+.receipt-part-page,
+.receipt-part-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
-
+.receipt-part-results ul:not(:empty) + .receipt-part-page {
+  border-top: 1px solid var(--shop-line, #cdd4cb);
+}
+.warehouse-receipt-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.workshop-shell .warehouse-receipt-check input {
+  width: auto;
+  min-height: 0;
+}
+.warehouse-receipt-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.warehouse-receipt-file > label {
+  flex: 1 1 230px;
+}
+.warehouse-receipt-file input::file-selector-button {
+  margin-inline-end: 8px;
+  border: 1px solid var(--shop-line, #cdd4cb);
+  border-radius: var(--shop-radius, 3px);
+  background: var(--shop-soft, #e4e8e0);
+  color: var(--shop-ink, #242e2d);
+  padding: 4px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.warehouse-receipt-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.warehouse-receipt-preview .m2-inventory-table {
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+}
+.warehouse-receipt-preview .m2-inventory-table table {
+  min-width: 320px;
+}
 .m2-editor > fieldset {
   display: grid;
   grid-column: 1 / -1;
@@ -78,4 +341,28 @@
   margin: 0;
   padding: 0;
   border: 0;
+}
+@media (max-width: 860px) {
+  .inventory-part-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .workshop-shell .inventory-card .ws-table {
+    min-width: 0;
+  }
+  .inventory-page .ws-table td:last-child {
+    align-items: flex-start;
+  }
+  .inventory-page .ws-table td:last-child::before {
+    display: block;
+  }
+}
+@media (max-width: 640px) {
+  .inventory-page {
+    gap: 14px;
+  }
+  .warehouse-receipt-actions > .ws-actions {
+    justify-content: flex-start;
+  }
 }

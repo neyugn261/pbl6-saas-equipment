@@ -22,8 +22,11 @@ import {
 } from "../workspace/ui-values";
 import "./inventory-parts.css";
 import { PartPricing, type Prices } from './PartPricing';
-import { priceText } from './prices';
-import { PageHeading } from '../workspace/WorkspaceUI';
+import { WarehouseReceipt } from "./WarehouseReceipt";
+import { InventoryDialog, RequiredMark } from "./InventoryDialog";
+import { ServiceCard, ServiceFacts } from "../workspace/ServiceDetailUI";
+import { useWorkspaceData } from "../workspace/workspace-data";
+import { DataState, EmptyState, PageHeading, Pagination } from '../workspace/WorkspaceUI';
 import TableToolbar from '../workspace/TableToolbar';
 
 type Part = Prices & {
@@ -116,7 +119,7 @@ const date = (value: string) =>
 const isZero = (value: string) => /^0(?:\.0+)?$/.test(value);
 const isManager = (roles: string[]) => roles.includes("INVENTORY_STAFF");
 
-function usePage<T>(path: string, revision: number) {
+function usePage<T>(path: string | null, revision: number) {
   const sessionGeneration = getSessionGeneration();
   const key = `${path}:revision-${revision}:session-${sessionGeneration}`;
   const [state, setState] = useState<{
@@ -130,6 +133,7 @@ function usePage<T>(path: string, revision: number) {
   });
   useEffect(() => {
     let active = true;
+    if (path === null) return;
     api.inventory<Page<T>>(path).then(
       (value) => {
         if (active) setState({ key, data: value, error: "" });
@@ -145,7 +149,7 @@ function usePage<T>(path: string, revision: number) {
   const current = state.key === key;
   return {
     data: current ? state.data : null,
-    loading: !current,
+    loading: path !== null && !current,
     error: current ? state.error : "",
   };
 }
@@ -196,300 +200,61 @@ function Pager({
   );
 }
 
-export function InventoryPartsPage() {
-  const { profile } = useSession();
-  const createLock = useRef(false);
-  const canManage = isManager(profile?.roles ?? []);
-  const [page, setPage] = useState(1);
-  const [query, setQuery] = useState("");
-  const [revision, setRevision] = useState(0);
-  const [showForm, setShowForm] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    sku: "",
-    name: "",
-    unit: "",
-    allowFractional: false,
-    description: "",
-    costPrice: '', standardPrice: '',
-  });
-  const path = `/parts?page=${page}&pageSize=${pageSize}${query ? `&q=${encodeURIComponent(query)}` : ""}`;
-  const state = usePage<Part>(path, revision);
-
-  async function create(event: FormEvent) {
-    event.preventDefault();
-    if (createLock.current) return;
-    createLock.current = true;
-    setBusy(true);
-    setError("");
-    try {
-      await api.inventory("/parts", {
-        method: "POST",
-        body: { ...form, description: form.description || undefined,
-          costPrice: form.costPrice || null, standardPrice: form.standardPrice || null },
-      });
-      setForm({
-        sku: "",
-        name: "",
-        unit: "",
-        allowFractional: false,
-        description: "",
-        costPrice: '', standardPrice: '',
-      });
-      setShowForm(false);
-      setRevision((value) => value + 1);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      createLock.current = false;
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="m2-page">
-      <PageHeading title="Danh mục phụ tùng" description="Tra cứu phụ tùng, giá và đơn vị tính để chuẩn bị xử lý dịch vụ." actions={canManage && <button type="button" className="ws-button" aria-expanded={showForm} disabled={busy} onClick={() => setShowForm(value => !value)}>Thêm phụ tùng</button>}/>
-      {canManage && showForm && (
-        <form className="m2-editor" onSubmit={(event) => void create(event)}>
-          <fieldset disabled={busy}>
-          <label>
-            Mã SKU
-            <input
-              required
-              maxLength={100}
-              value={form.sku}
-              onChange={(event) =>
-                setForm({ ...form, sku: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Tên phụ tùng
-            <input
-              required
-              maxLength={200}
-              value={form.name}
-              onChange={(event) =>
-                setForm({ ...form, name: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Đơn vị
-            <input
-              required
-              maxLength={30}
-              value={form.unit}
-              onChange={(event) =>
-                setForm({ ...form, unit: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Mô tả
-            <textarea
-              rows={3}
-              maxLength={4000}
-              value={form.description}
-              onChange={(event) =>
-                setForm({ ...form, description: event.target.value })
-              }
-            />
-          </label>
-          <label>Giá niêm yết (VND)<input inputMode="decimal" pattern="(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?" value={form.standardPrice} onChange={e => setForm({ ...form, standardPrice: e.target.value })} /></label>
-          <label>Giá vốn nội bộ (VND)<input inputMode="decimal" pattern="(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?" value={form.costPrice} onChange={e => setForm({ ...form, costPrice: e.target.value })} /></label>
-          <p>Để trống nếu chưa cấu hình. Giá vốn chỉ hiển thị cho nhân viên có quyền quản lý kho.</p>
-          <label>
-            <input
-              type="checkbox"
-              checked={form.allowFractional}
-              onChange={(event) =>
-                setForm({ ...form, allowFractional: event.target.checked })
-              }
-            />{" "}
-            Cho phép số lượng lẻ
-          </label>
-          <button disabled={busy}>{busy ? "Đang tạo…" : "Lưu phụ tùng"}</button>
-          <button type="button" disabled={busy} onClick={() => setShowForm(false)}>Hủy</button>
-          </fieldset>
-        </form>
-      )}
-      {error && (
-        <p role="alert" className="m1-error">
-          {error}
-        </p>
-      )}
-      <section className="m1-card inventory-parts-directory">
-      <TableToolbar query={query} onQuery={value => { setQuery(value); setPage(1); }} placeholder="Tìm SKU hoặc tên phụ tùng…" onReset={() => { setQuery(''); setPage(1); }}/>
-      <PageStatus loading={state.loading} error={state.error}>
-        {state.data && (
-          <>
-            <div className="m2-inventory-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Tên phụ tùng</th>
-                    <th>Đơn vị</th>
-                    <th>Cho phép lượng lẻ</th>
-                    <th>Giá niêm yết</th>
-                    {canManage && <th>Giá vốn</th>}
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.data.items.map((part) => (
-                    <tr key={part.id}>
-                      <td>
-                        <Link to={`/app/inventory/parts/${part.id}`}>
-                          {part.sku}
-                        </Link>
-                      </td>
-                      <td>{part.name}</td>
-                      <td>{part.unit}</td>
-                      <td>{part.allowFractional ? "Có" : "Không"}</td>
-                      <td>{priceText(part.standardPrice, part.currency)}</td>
-                      {canManage && <td>{priceText(part.costPrice, part.currency)}</td>}
-                      <td>
-                        <StatusBadge status={part.status} label={part.status === "ACTIVE" ? "Đang sử dụng" : "Ngừng sử dụng"} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {!state.data.items.length && <p>Không có phụ tùng phù hợp.</p>}
-            <Pager page={page} total={state.data.total} onPage={setPage} />
-          </>
-        )}
-      </PageStatus>
-      </section>
-    </div>
-  );
-}
 
 export function InventoryPartPage() {
-  const { id } = useParams();
+  const { id, warehouseId } = useParams();
   const { profile } = useSession();
   const canManage = isManager(profile?.roles ?? []);
-  const sessionGeneration = getSessionGeneration();
   const [revision, setRevision] = useState(0);
-  const [stockPage, setStockPage] = useState(1);
-  const key = `${id ?? ""}:${stockPage}:${revision}:session-${sessionGeneration}`;
-  const [state, setState] = useState<{
-    key: string;
-    part: Part | null;
-    stock: Page<Stock> | null;
-    error: string;
-  }>({
-    key: "",
-    part: null,
-    stock: null,
-    error: "",
-  });
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      api.inventory<Part>(`/parts/${encodeURIComponent(id ?? "")}`),
-      api.inventory<Page<Stock>>(
-        `/stocks?page=${stockPage}&pageSize=20&partId=${encodeURIComponent(id ?? "")}`,
-      ),
-    ]).then(
-      ([partResult, stockResult]) => {
-        if (active)
-          setState({ key, part: partResult, stock: stockResult, error: "" });
-      },
-      (cause: unknown) => {
-        if (active)
-          setState({ key, part: null, stock: null, error: message(cause) });
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [id, key, stockPage]);
-  const current = state.key === key;
-  const part = current ? state.part : null;
-  const stock = current ? state.stock : null;
-  const loading = !current;
-  const error = current ? state.error : "";
+  const reload = () => setRevision(value => value + 1);
+  const stock = usePage<Stock>(id && warehouseId
+    ? `/stocks?page=1&pageSize=1&partId=${encodeURIComponent(id)}&warehouseId=${encodeURIComponent(warehouseId)}`
+    : null, revision);
+  const row = stock.data?.items[0];
+  const part = row?.part;
+  const partDetails = useWorkspaceData<Part>("inventory", part ? `/parts/${part.id}` : null, revision);
+
   return (
-    <div className="m2-page">
-      <header className="m1-header page-title-header">
-        <PageTitle title={part?.name ?? "Chi tiết phụ tùng"} back={{ to: "/app/inventory/parts", label: "Về danh mục phụ tùng" }} />
+    <div className="m2-page inventory-page inventory-part-detail">
+      <header className="ws-heading page-title-header">
+        <PageTitle title={part?.name ?? "Chi tiết phụ tùng"} back={{ to: `${warehousesPath}/${warehouseId}`, label: "Về kho" }} />
       </header>
-      {loading ? (
-        <p role="status">Đang tải phụ tùng…</p>
-      ) : error ? (
-        <p role="alert" className="m1-error">
-          {error}
-        </p>
-      ) : (
-        part && (
-          <>
-            <p>
-              {part.sku} · Đơn vị: {part.unit} ·{" "}
-              {part.status === "ACTIVE" ? "Đang sử dụng" : "Ngừng sử dụng"}
-            </p>
-            <section className="m1-card m1-section-card">
-              <div className="m1-section-body">
-                <h2>Thông tin phụ tùng</h2>
-                <p>{part.description || "Chưa có mô tả bổ sung."}</p>
-                <p>
-                  Cho phép số lượng lẻ: {part.allowFractional ? "Có" : "Không"}
-                </p>
-                {!canManage && (
-                  <p>
-                    Quản lý dịch vụ có quyền tra cứu. Liên hệ nhân viên kho để
-                    nhập, xuất, nhận trả hoặc điều chỉnh tồn.
-                  </p>
-                )}
+      <DataState {...stock} retry={reload}>
+        {row && part ? (
+          <div className="inventory-part-layout">
+            <ServiceCard title="Thông tin phụ tùng" actions={<StatusBadge status={part.status} />}>
+              <div className="inventory-part-identity">
+                <ServiceFacts items={[
+                  { label: "Mã phụ tùng (SKU)", value: part.sku },
+                  { label: "Kho", value: row.warehouse.name },
+                  { label: "Đơn vị tính", value: part.unit },
+                  { label: "Cho phép số lượng lẻ", value: part.allowFractional ? "Có" : "Không" },
+                  ...(part.description ? [{ label: "Mô tả", value: part.description }] : []),
+                ]} />
               </div>
-            </section>
-            <h2>Tồn theo kho</h2>
-            <PartPricing key={`${part.id}:${part.pricingVersion}`} part={part} canManage={canManage} onSaved={() => setRevision(value => value + 1)} />
-            {stock?.items.map((row) => (
-              <section
-                className="m1-card m1-section-card"
-                key={`${row.warehouseId}:${row.partId}`}
-              >
-                <div className="m1-section-body">
-                  <strong>{row.warehouse.name}</strong>
-                  <p>
-                    Khả dụng: {quantityText(row.quantity)} {part.unit} · Cách
-                    ly: {quantityText(row.quantityQuarantined)} · Mức tối thiểu:{" "}
-                    {quantityText(row.minQuantity)}
-                  </p>
-                  {row.isLowStock && (
-                    <p role="status">
-                      Thiếu {quantityText(row.shortageQuantity)} {part.unit} so
-                      với mức tối thiểu.
-                    </p>
-                  )}
-                  {canManage && (
-                    <MinimumQuantityForm
-                      key={`${row.warehouseId}:${row.partId}:${quantityText(row.minQuantity)}`}
-                      warehouseId={row.warehouseId}
-                      partId={row.partId}
-                      initial={quantityEntry(row.minQuantity)}
-                      onSaved={() => setRevision((value) => value + 1)}
-                    />
-                  )}
-                </div>
-              </section>
-            ))}
-            {!stock?.items.length && <p>Chưa có tồn kho cho phụ tùng này.</p>}
-            {stock && (
-              <Pager
-                page={stockPage}
-                total={stock.total}
-                onPage={setStockPage}
-              />
-            )}
-          </>
-        )
-      )}
+            </ServiceCard>
+            <ServiceCard title="Tồn kho" actions={
+              <StatusBadge status={row.isLowStock ? "NEW" : "ACTIVE"}
+                label={row.isLowStock ? `Thiếu ${quantityText(row.shortageQuantity)} ${part.unit}` : "Đủ tồn"} />
+            }>
+              <div className="inventory-part-balances">
+                <ServiceFacts items={[
+                  { label: "Khả dụng", value: `${quantityText(row.quantity)} ${part.unit}` },
+                  { label: "Cách ly", value: `${quantityText(row.quantityQuarantined)} ${part.unit}` },
+                  { label: "Mức tối thiểu", value: `${quantityText(row.minQuantity)} ${part.unit}` },
+                ]} />
+              </div>
+              {canManage && <MinimumQuantityForm key={row.minQuantity} warehouseId={row.warehouseId} partId={row.partId}
+                initial={quantityEntry(row.minQuantity)} onSaved={reload} />}
+            </ServiceCard>
+            <div className="inventory-part-pricing">
+              <DataState {...partDetails} retry={reload}>
+                {partDetails.data && <PartPricing key={partDetails.data.pricingVersion} part={partDetails.data} canManage={canManage} onSaved={reload} />}
+              </DataState>
+            </div>
+          </div>
+        ) : <EmptyState title="Không tìm thấy phụ tùng trong kho" description="Chọn phụ tùng từ danh sách tồn của kho." />}
+      </DataState>
     </div>
   );
 }
@@ -511,7 +276,7 @@ function MinimumQuantityForm({
   const [busy, setBusy] = useState(false);
   return (
     <form
-      className="m2-editor"
+      className="inventory-threshold-form"
       onSubmit={async (event) => {
         event.preventDefault();
         if (getSessionGeneration() !== sessionGeneration) return;
@@ -533,17 +298,18 @@ function MinimumQuantityForm({
         }
       }}
     >
-      <label>
-        Mức tồn tối thiểu
+      <label className="ws-label">
+        <span>Mức tồn tối thiểu mới <RequiredMark /></span>
         <input
           required
           inputMode="decimal"
           pattern="[0-9]+([.,][0-9]{1,2})?"
           value={value}
+          disabled={busy}
           onChange={(event) => setValue(event.target.value)}
         />
       </label>
-      <button disabled={busy}>
+      <button type="submit" className="ws-button ws-button--secondary" disabled={busy}>
         {busy ? "Đang lưu…" : "Cập nhật cảnh báo"}
       </button>
       {error && (
@@ -555,32 +321,31 @@ function MinimumQuantityForm({
   );
 }
 
+
+const warehousesPath = "/app/inventory/warehouses";
+
 export function InventoryWarehousesPage() {
   const { profile } = useSession();
+  const createDialog = useRef<HTMLDialogElement>(null);
   const createLock = useRef(false);
   const canManage = isManager(profile?.roles ?? []);
   const [revision, setRevision] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState("");
-  const [stockPage, setStockPage] = useState(1);
+  const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({
-    branchId: "",
-    code: "",
-    name: "",
-    address: "",
-  });
+  const [form, setForm] = useState({ branchId: "", code: "", name: "", address: "" });
   const state = usePage<Warehouse>(
-    `/warehouses?page=${page}&pageSize=${pageSize}`,
+    `/warehouses?page=${page}&pageSize=${pageSize}${status ? `&status=${status}` : ""}`,
     revision,
   );
-  const stocks = usePage<Stock>(
-    `/stocks?page=${stockPage}&pageSize=20${selected ? `&warehouseId=${encodeURIComponent(selected)}` : ""}`,
-    revision,
-  );
-  const branches = usePage<Branch>("/branches?page=1&pageSize=100", revision);
+  const branches = useWorkspaceData<Page<Branch>>("organization", showCreate ? "/branches?page=1&pageSize=100" : null, revision);
+  const reload = () => setRevision((value) => value + 1);
+  function closeCreate() {
+    setShowCreate(false);
+    createDialog.current?.close();
+  }
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -593,9 +358,11 @@ export function InventoryWarehousesPage() {
         method: "POST",
         body: { ...form, address: form.address || undefined },
       });
-      setShowCreate(false);
+      closeCreate();
       setForm({ branchId: "", code: "", name: "", address: "" });
-      setRevision((value) => value + 1);
+      setStatus("");
+      setPage(1);
+      reload();
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -603,198 +370,162 @@ export function InventoryWarehousesPage() {
       setBusy(false);
     }
   }
+
   return (
-    <div className="m2-page">
-      <PageHeading title="Kho và tồn kho" description="Kiểm tra tồn khả dụng, lượng cách ly và phụ tùng cần bổ sung trước khi điều phối." actions={canManage && <button type="button" className="ws-button" aria-expanded={showCreate} disabled={busy} onClick={() => setShowCreate(value => !value)}>Thêm kho</button>}/>
-      {canManage && showCreate && (
-        <form className="m2-editor" onSubmit={(event) => void create(event)}>
-          <fieldset disabled={busy}>
-          {branches.loading ? (
-            <p role="status">Đang tải chi nhánh…</p>
-          ) : branches.error ? (
-            <p role="alert" className="m1-error">
-              {branches.error}
-            </p>
-          ) : (
-            <label>
-              Chi nhánh
-              <select
-                required
-                value={form.branchId}
-                onChange={(event) =>
-                  setForm({ ...form, branchId: event.target.value })
-                }
-              >
-                <option value="">Chọn chi nhánh</option>
-                {branches.data?.items
-                  .filter((branch) => branch.status === "ACTIVE")
-                  .map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.code} · {branch.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-          )}
-          <label>
-            Mã kho
-            <input
-              required
-              maxLength={50}
-              value={form.code}
-              onChange={(event) =>
-                setForm({ ...form, code: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Tên kho
-            <input
-              required
-              maxLength={150}
-              value={form.name}
-              onChange={(event) =>
-                setForm({ ...form, name: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Địa chỉ
-            <input
-              maxLength={4000}
-              value={form.address}
-              onChange={(event) =>
-                setForm({ ...form, address: event.target.value })
-              }
-            />
-          </label>
-          <button disabled={busy || branches.loading}>
-            {busy ? "Đang tạo…" : "Lưu kho"}
-          </button>
-          <button type="button" disabled={busy} onClick={() => setShowCreate(false)}>Hủy</button>
-          </fieldset>
-        </form>
+    <div className="m2-page inventory-page">
+      <PageHeading title="Kho và tồn kho" actions={canManage && (
+        <button type="button" className="ws-button" aria-haspopup="dialog" aria-expanded={showCreate} disabled={busy} onClick={() => {
+          setError("");
+          setShowCreate(true);
+          createDialog.current?.showModal();
+        }}>Thêm kho</button>
+      )} />
+      {canManage && (
+        <InventoryDialog dialogRef={createDialog} title="Thêm kho" busy={busy} onClose={() => setShowCreate(false)}>
+          {showCreate && <form className="inventory-dialog-form" onSubmit={(event) => void create(event)}>
+            <div className="inventory-dialog-body">
+              <fieldset className="inventory-dialog-content" disabled={busy}>
+                <div className="ws-form-grid">
+                  <label className="ws-label">
+                    <span>Chi nhánh <RequiredMark /></span>
+                    <select required disabled={branches.loading || !!branches.error} value={form.branchId}
+                      onChange={(event) => setForm({ ...form, branchId: event.target.value })}>
+                      <option value="">{branches.loading ? "Đang tải chi nhánh…" : "Chọn chi nhánh"}</option>
+                      {branches.data?.items.filter((branch) => branch.status === "ACTIVE").map((branch) => (
+                        <option key={branch.id} value={branch.id}>{branch.name} · {branch.code}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="ws-label">
+                    <span>Mã kho <RequiredMark /></span>
+                    <input required maxLength={50} placeholder="VD Kho-DN-01" value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} />
+                  </label>
+                  <label className="ws-label ws-full">
+                    <span>Tên kho <RequiredMark /></span>
+                    <input required maxLength={150} placeholder="VD Kho phụ tùng Đà Nẵng" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+                  </label>
+                  <label className="ws-label ws-full">Địa chỉ
+                    <input maxLength={4000} placeholder="VD 12 Nguyễn Lương Bằng, Đà Nẵng" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} />
+                  </label>
+                </div>
+                {(error || branches.error) && <p className="m1-error" role="alert">{error || branches.error}</p>}
+              </fieldset>
+            </div>
+            <footer className="ws-actions inventory-dialog-footer">
+              <button type="button" className="ws-button ws-button--secondary" disabled={busy} onClick={closeCreate}>Hủy</button>
+              <button type="submit" className="ws-button" disabled={busy || branches.loading || !!branches.error}>{busy ? "Đang tạo…" : "Lưu kho"}</button>
+            </footer>
+          </form>}
+        </InventoryDialog>
       )}
-      {error && (
-        <p role="alert" className="m1-error">
-          {error}
-        </p>
-      )}
-      <PageStatus loading={state.loading} error={state.error}>
-        {state.data && (
-          <>
-            <div className="m2-inventory-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Mã kho</th>
-                    <th>Kho</th>
-                    <th>Chi nhánh</th>
-                    <th>Trạng thái</th>
-                    <th></th>
-                  </tr>
-                </thead>
+      <section className="m1-card inventory-card" aria-label="Danh sách kho">
+        <div className="ws-toolbar inventory-toolbar">
+          <label className="ws-label">Trạng thái
+            <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+              <option value="">Tất cả kho</option><option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Ngừng hoạt động</option>
+            </select>
+          </label>
+        </div>
+        <DataState {...state} retry={reload}>
+          {state.data?.items.length ? (
+            <div className="ws-table-wrap">
+              <table className="ws-table">
+                <thead><tr><th>Kho</th><th>Chi nhánh</th><th>Địa chỉ</th><th>Trạng thái</th></tr></thead>
                 <tbody>
                   {state.data.items.map((warehouse) => (
                     <tr key={warehouse.id}>
-                      <td>{warehouse.code}</td>
-                      <td>{warehouse.name}</td>
-                      <td>
-                        {displayName("branch", {
-                          name: warehouse.branchName,
-                          code: warehouse.branchCode,
-                        })}
-                      </td>
-                      <td>
-                        {warehouse.status === "ACTIVE"
-                          ? "Đang hoạt động"
-                          : "Ngừng hoạt động"}
-                      </td>
-                      <td>
-                        <button
-                          onClick={() => {
-                            setSelected(warehouse.id);
-                            setStockPage(1);
-                          }}
-                        >
-                          Xem tồn
-                        </button>
-                      </td>
+                      <td data-label="Kho"><Link className="ws-text-link" to={`${warehousesPath}/${warehouse.id}`}>{warehouse.name}</Link></td>
+                      <td data-label="Chi nhánh">{displayName("branch", { name: warehouse.branchName, code: warehouse.branchCode })}</td>
+                      <td data-label="Địa chỉ">{warehouse.address || "—"}</td>
+                      <td data-label="Trạng thái"><StatusBadge status={warehouse.status} /></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Pager page={page} total={state.data.total} onPage={setPage} />
-          </>
+          ) : <EmptyState title="Chưa có kho phù hợp" description="Kho xuất hiện ở đây sau khi được tạo cho chi nhánh." />}
+          <Pagination page={page} total={state.data?.total} onChange={setPage} />
+        </DataState>
+      </section>
+    </div>
+  );
+}
+
+export function InventoryWarehousePage() {
+  const { warehouseId } = useParams();
+  return <WarehouseStock key={warehouseId} warehouseId={warehouseId ?? ""} />;
+}
+
+function WarehouseStock({ warehouseId }: { warehouseId: string }) {
+  const { profile } = useSession();
+  const canManage = isManager(profile?.roles ?? []);
+  const [revision, setRevision] = useState(0);
+  const [warehouseRevision, setWarehouseRevision] = useState(0);
+  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [lowStock, setLowStock] = useState("");
+  const id = encodeURIComponent(warehouseId);
+  const warehouse = useWorkspaceData<Warehouse>("inventory", `/warehouses/${id}`, warehouseRevision);
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), warehouseId });
+  if (query) params.set("q", query);
+  if (lowStock) params.set("lowStock", lowStock);
+  const stock = usePage<Stock>(warehouse.data ? `/stocks?${params}` : null, revision);
+  const reload = () => setRevision((value) => value + 1);
+  const title = warehouse.data?.name ?? "Chi tiết kho";
+
+  return (
+    <div className="m2-page inventory-page">
+      <header className="ws-heading page-title-header">
+        <PageTitle title={title} back={{ to: warehousesPath, label: "Về danh sách kho" }} />
+        {warehouse.data && canManage && (
+          <div className="page-title-actions"><WarehouseReceipt warehouse={warehouse.data} onSaved={() => { setPage(1); reload(); }} /></div>
         )}
-      </PageStatus>
-      <div className="registration-actions">
-        <h2>Tồn kho {selected ? "đã lọc theo kho" : "toàn bộ kho"}</h2>
-        {selected && (
-          <button
-            onClick={() => {
-              setSelected("");
-              setStockPage(1);
-            }}
-          >
-            Bỏ lọc kho
-          </button>
+      </header>
+      <DataState {...warehouse} retry={() => setWarehouseRevision((value) => value + 1)}>
+        {warehouse.data && (
+          <section className="m1-card inventory-card" aria-label="Phụ tùng trong kho">
+            <header className="inventory-section-heading">
+              <h2>Phụ tùng trong kho</h2>
+              <StatusBadge status={warehouse.data.status} />
+            </header>
+            <TableToolbar query={query} onQuery={(value) => { setQuery(value); setPage(1); }} placeholder="Tìm mã hoặc tên phụ tùng…">
+              <label>Mức tồn
+                <select value={lowStock} onChange={(event) => { setLowStock(event.target.value); setPage(1); }}>
+                  <option value="">Tất cả</option><option value="true">Dưới ngưỡng</option><option value="false">Đủ tồn tối thiểu</option>
+                </select>
+              </label>
+            </TableToolbar>
+            <DataState {...stock} retry={reload}>
+              {stock.data?.items.length ? (
+                <div className="ws-table-wrap">
+                  <table className="ws-table">
+                    <thead><tr><th>Phụ tùng</th><th>Đơn vị</th><th>Khả dụng</th><th>Cách ly</th><th>Tối thiểu</th><th>Cảnh báo</th></tr></thead>
+                    <tbody>
+                      {stock.data.items.map((row) => (
+                        <tr key={row.partId}>
+                          <td data-label="Phụ tùng">
+                            <Link className="ws-text-link" to={`${warehousesPath}/${warehouseId}/parts/${row.partId}`}>{row.part.name}</Link>
+                            <small>{row.part.sku}</small>
+                          </td>
+                          <td data-label="Đơn vị">{row.part.unit}</td>
+                          <td data-label="Khả dụng"><strong>{quantityText(row.quantity)}</strong></td>
+                          <td data-label="Cách ly">{quantityText(row.quantityQuarantined)}</td>
+                          <td data-label="Tối thiểu">{quantityText(row.minQuantity)}</td>
+                          <td data-label="Cảnh báo"><StatusBadge status={row.isLowStock ? "NEW" : "ACTIVE"} label={row.isLowStock ? `Thiếu ${quantityText(row.shortageQuantity)}` : "Đủ"} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState title={query || lowStock ? "Không có phụ tùng phù hợp" : "Kho chưa có phụ tùng"}
+                  description={query || lowStock ? "Thử từ khóa hoặc mức tồn khác." : "Phụ tùng sẽ xuất hiện sau lần nhập kho đầu tiên."} />
+              )}
+              <Pagination page={page} total={stock.data?.total} onChange={setPage} />
+            </DataState>
+          </section>
         )}
-      </div>
-      <PageStatus loading={stocks.loading} error={stocks.error}>
-        {stocks.data && (
-          <>
-            {stocks.data.items.some((row) => row.isLowStock) && (
-              <p role="status">Có phụ tùng dưới ngưỡng tồn tối thiểu.</p>
-            )}
-            <div className="m2-inventory-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Kho</th>
-                    <th>SKU / Phụ tùng</th>
-                    <th>Khả dụng</th>
-                    <th>Cách ly</th>
-                    <th>Tối thiểu</th>
-                    <th>Cảnh báo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stocks.data.items.map((row) => (
-                    <tr key={`${row.warehouseId}:${row.partId}`}>
-                      <td>{row.warehouse.name}</td>
-                      <td>
-                        <Link to={`/app/inventory/parts/${row.partId}`}>
-                          {row.part.sku} · {row.part.name}
-                        </Link>
-                      </td>
-                      <td>
-                        {quantityText(row.quantity)} {row.part.unit}
-                      </td>
-                      <td>
-                        {quantityText(row.quantityQuarantined)} {row.part.unit}
-                      </td>
-                      <td>{quantityText(row.minQuantity)}</td>
-                      <td>
-                        {row.isLowStock
-                          ? `Thiếu ${quantityText(row.shortageQuantity)}`
-                          : "Đủ"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {!stocks.data.items.length && <p>Chưa có số tồn phù hợp.</p>}
-            <Pager
-              page={stockPage}
-              total={stocks.data.total}
-              onPage={setStockPage}
-            />
-          </>
-        )}
-      </PageStatus>
+      </DataState>
     </div>
   );
 }

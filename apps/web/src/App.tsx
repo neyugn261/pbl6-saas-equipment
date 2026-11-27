@@ -134,11 +134,6 @@ const InventoryPartPage = lazy(() =>
     default: module.InventoryPartPage,
   })),
 );
-const InventoryPartsPage = lazy(() =>
-  import("./features/inventory/InventoryPages").then((module) => ({
-    default: module.InventoryPartsPage,
-  })),
-);
 const InventoryTransactionsPage = lazy(() =>
   import("./features/inventory/InventoryPages").then((module) => ({
     default: module.InventoryTransactionsPage,
@@ -147,6 +142,11 @@ const InventoryTransactionsPage = lazy(() =>
 const InventoryWarehousesPage = lazy(() =>
   import("./features/inventory/InventoryPages").then((module) => ({
     default: module.InventoryWarehousesPage,
+  })),
+);
+const InventoryWarehousePage = lazy(() =>
+  import("./features/inventory/InventoryPages").then((module) => ({
+    default: module.InventoryWarehousePage,
   })),
 );
 const TenantListPage = lazy(() =>
@@ -2196,7 +2196,7 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
     },
     {
       path: "/app/inventory/parts",
-      element: <InventoryPartsPage />,
+      element: <Navigate to="/app/inventory/warehouses" replace />,
       roles: [
         "TENANT_ADMIN",
         "SERVICE_MANAGER",
@@ -2206,7 +2206,7 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
     },
     {
       path: "/app/inventory/parts/:id",
-      element: <InventoryPartPage />,
+      element: <Navigate to="/app/inventory/warehouses" replace />,
       roles: [
         "TENANT_ADMIN",
         "SERVICE_MANAGER",
@@ -2223,6 +2223,16 @@ const workspaceRoutes: { path: string; element: ReactNode; roles: string[] }[] =
         "TECHNICIAN",
         "INVENTORY_STAFF",
       ],
+    },
+    {
+      path: "/app/inventory/warehouses/:warehouseId",
+      element: <InventoryWarehousePage />,
+      roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "TECHNICIAN", "INVENTORY_STAFF"],
+    },
+    {
+      path: "/app/inventory/warehouses/:warehouseId/parts/:id",
+      element: <InventoryPartPage />,
+      roles: ["TENANT_ADMIN", "SERVICE_MANAGER", "TECHNICIAN", "INVENTORY_STAFF"],
     },
     {
       path: "/app/inventory/requests",

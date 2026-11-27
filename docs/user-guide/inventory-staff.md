@@ -6,20 +6,28 @@ Inventory is not a purchasing, procurement, or accounting system.
 
 ## Parts and warehouses
 
-1. Open **Phụ tùng** (`/app/inventory/parts`) and add a part with a unique SKU,
-   name, unit, and fractional-quantity setting.
-2. Open **Kho & tồn kho** (`/app/inventory/warehouses`) and create a warehouse
-   under an active branch.
-3. Inspect stock and minimum thresholds from the warehouse list or part detail.
-   Quantities are decimal strings; preserve the displayed precision and do not
-   round through a spreadsheet float conversion.
+1. Open **Kho & tồn kho** (`/app/inventory/warehouses`) and choose a warehouse.
+   Inventory Staff can add a warehouse under an active branch.
+2. Search for a SKU or part name in the warehouse. Open the part to see its
+   available, quarantined and minimum quantities.
+3. Select **Nhập tay**. Search by name or SKU and select an existing part from
+   the results. Use **Khai báo phụ tùng mới** to enter the SKU, name and unit
+   for a part being received for the first time.
+4. Select **Nhập từ file** and download the XLSX template. CSV and XLSX files
+   support up to 100 rows and 2 MB, with up to 100 KB of parsed receipt data.
+   Fill `sku` and `quantity` for each line. Format SKU as text in Excel to keep leading zeros.
+   New SKUs also require `name` and `unit`. Optional columns are
+   `allowFractional` and `description`. List each SKU once.
+5. Review the preview, enter a document reference or note, then confirm. A
+   rejected line rolls back the whole receipt. If the result is uncertain,
+   choose **Xác nhận lại giao dịch** to replay the same receipt.
 
 ## Phiếu phụ tùng trên Web
 
 - Vào **Kho phụ tùng → Phiếu phụ tùng**, chọn **Xin cấp phụ tùng** hoặc **Đề nghị trả kho**. Có thể lọc theo trạng thái và lệnh công việc. Service Manager cũng có thể mở phiếu theo lệnh từ hồ sơ công việc và lập phiếu xin cấp khi lệnh đủ điều kiện.
 - Khi cấp, chọn dòng phụ tùng, kho thuộc chi nhánh, số lượng giao và mã biên nhận đã ký. Người nhận lấy từ kỹ thuật viên hiện tại đã nhận lệnh. Nếu cấp thiếu, phiếu tiếp tục hiển thị lượng có thể cấp. Từ chối hoặc đóng phần còn lại cần lý do.
 - Khi nhận trả, kiểm tra kho xuất gốc rồi ghi số lượng thực nhận và tình trạng. Hàng hỏng hoặc cần kiểm tra vào tồn cách ly. Đóng phần chưa nhận giữ phần còn phải đối soát trên lệnh.
-- Nếu chưa rõ kết quả sau khi gửi, dùng **Thử lại thao tác đã lưu**. Nếu phiếu báo cần đối soát, mở **Giao dịch & đối soát** của lệnh. Mở **Lịch sử phiếu** để xem các lần cấp, nhận hoặc quyết định đóng.
+- Nếu chưa rõ kết quả sau khi gửi, dùng **Thử lại thao tác đã lưu**. Nếu phiếu báo cần đối soát, mở **Giao dịch & đối soát** của lệnh. Trong **Thông tin phiếu**, mở **Lịch sử phiếu** để xem thời điểm và số lượng từng lần cấp, nhận hoặc lý do đóng phiếu.
 
 ## Receive, issue, return, and adjust
 

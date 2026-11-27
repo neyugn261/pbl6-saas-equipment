@@ -10,13 +10,16 @@ import type {
   PartPricingInput,
   WarehouseInput,
   WarehousePatch,
+  WarehouseReceiptInput,
   AuditQuery,
 } from './dto';
 import {
+  assertFractionalUnit,
   conflict,
   canonical,
   fingerprint,
   invalid,
+  inventoryUnit,
   json,
   lowStockPolicy,
   notFound,
@@ -272,6 +275,10 @@ export class InventoryRepository {
       tenantId,
       warehouseId: q.warehouseId,
       partId: q.partId,
+      ...(q.q ? { part: { OR: [
+        { sku: { contains: q.q, mode: 'insensitive' } },
+        { name: { contains: q.q, mode: 'insensitive' } },
+      ] } } : {}),
       ...(q.lowStock === 'true'
         ? { quantity: { lt: this.db.stock.fields.minQuantity } }
         : {}),
@@ -885,6 +892,80 @@ export class InventoryRepository {
       },
       { timeout: 15000, maxWait: 15000 },
     );
+  }
+  receiveBatch(
+    tenantId: string,
+    actorId: string,
+    key: string,
+    request: WarehouseReceiptInput & { warehouseId: string },
+  ) {
+    const operation = 'RECEIVE_BATCH';
+    const hash = fingerprint(operation, request);
+    return this.db.$transaction(async (tx) => {
+      await this.keyLock(tx, tenantId, key);
+      const existing = await tx.inventoryOperation.findUnique({
+        where: { tenantId_key: { tenantId, key } },
+      });
+      if (existing) {
+        if (existing.operation !== operation || existing.fingerprint !== hash)
+          throw conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key belongs to a different operation or payload');
+        return existing.response;
+      }
+
+      const lines = request.lines;
+      const skus = lines.map((line) => line.sku);
+      const catalog = await tx.part.findMany({ where: { tenantId, sku: { in: skus } }, select: { sku: true } });
+      const known = new Set(catalog.map((part) => part.sku));
+      const newParts = lines.filter((line) => !known.has(line.sku))
+        .sort((a, b) => a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0)
+        .map(({ sku, name, unit, allowFractional, description }) => {
+          if (!name || !unit)
+            throw invalid('RECEIPT_PART_DETAILS_REQUIRED', `${sku}: nhập tên và đơn vị cho phụ tùng mới.`);
+          assertFractionalUnit(unit, allowFractional);
+          return { tenantId, sku, name, unit, allowFractional, description };
+        });
+      if (newParts.length) {
+        const created = await tx.part.createManyAndReturn({ data: newParts, skipDuplicates: true });
+        for (const part of created)
+          await this.audit(tx, tenantId, actorId, 'PART', part.id, 'CREATE', null, part);
+      }
+
+      // Acquire all Part locks before the first move takes the Warehouse lock.
+      // A single-line writer holding a later Part cannot deadlock against the batch.
+      await tx.$queryRaw`SELECT id FROM parts WHERE tenant_id = ${tenantId}::uuid
+        AND sku IN (${Prisma.join(skus)}) ORDER BY id FOR UPDATE`;
+      const parts = await tx.part.findMany({ where: { tenantId, sku: { in: skus } } });
+      const bySku = new Map(parts.map((part) => [part.sku, part]));
+      const movements: Prisma.InputJsonValue[] = [];
+      for (const line of lines) {
+        const part = bySku.get(line.sku);
+        if (!part || part.status !== 'ACTIVE')
+          throw invalid('INACTIVE_INVENTORY', `${line.sku}: phụ tùng không còn hoạt động.`);
+        if ((line.unit && line.unit !== inventoryUnit(part.unit)) ||
+            (line.allowFractional !== undefined && line.allowFractional !== part.allowFractional))
+          throw invalid('RECEIPT_PART_UNIT_MISMATCH', `${line.sku}: đơn vị hoặc cách đếm khác danh mục.`);
+        if (!part.allowFractional && !new Prisma.Decimal(line.quantity).isInteger())
+          throw invalid('WHOLE_QUANTITY_REQUIRED', `${line.sku}: phụ tùng này yêu cầu số lượng nguyên.`);
+        movements.push(await this.move(tx, {
+          tenantId, actorId, key, operation: 'RECEIVE',
+          request: {
+            warehouseId: request.warehouseId,
+            partId: part.id,
+            quantity: line.quantity,
+            note: request.note,
+            documentReference: request.documentReference,
+          },
+        }));
+      }
+      const response = { count: movements.length, movements };
+      await tx.inventoryOperation.create({
+        data: {
+          tenantId, actorId, key, operation, fingerprint: hash,
+          request: json(request), state: 'COMMITTED', response, httpStatus: 201,
+        },
+      });
+      return response;
+    }, { timeout: 15000, maxWait: 15000 });
   }
   private async lockStock(
     tx: Tx,

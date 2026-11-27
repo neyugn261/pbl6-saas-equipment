@@ -57,14 +57,14 @@ export function PageHeading({
   actions,
 }: {
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
 }) {
   return (
     <header className="ws-heading page-title-header">
       <h1>{title}</h1>
       {actions && <div className="ws-actions page-title-actions">{actions}</div>}
-      <p className="page-title-description">{description}</p>
+      {description && <p className="page-title-description">{description}</p>}
     </header>
   );
 }

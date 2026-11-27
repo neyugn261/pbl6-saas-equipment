@@ -88,7 +88,7 @@ const columnName = (index: number) => {
   return value;
 };
 
-export function makeXlsx(headers: string[], rows: SheetRow[]) {
+export function makeXlsx(headers: string[], rows: SheetRow[], sheetName = "Equipment") {
   const table = [headers, ...rows.map(row => headers.map(key => row[key] ?? ""))];
   const sheetRows = table.map((row, ri) => `<row r="${ri + 1}">${row.map((value, ci) => {
     const ref = `${columnName(ci)}${ri + 1}`;
@@ -97,14 +97,14 @@ export function makeXlsx(headers: string[], rows: SheetRow[]) {
   const files = {
     "[Content_Types].xml": '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
     "_rels/.rels": '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-    "xl/workbook.xml": '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Equipment" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
     "xl/_rels/workbook.xml.rels": '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
     "xl/worksheets/sheet1.xml": `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`,
   };
   return zipStore(files);
 }
 
-async function findEntry(bytes: Uint8Array, filename: string) {
+async function findEntry(bytes: Uint8Array, filename: string, limit?: number) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
@@ -122,13 +122,24 @@ async function findEntry(bytes: Uint8Array, filename: string) {
       if (view.getUint32(localOffset, true) !== 0x04034b50) throw new Error("Dữ liệu XLSX bị lỗi.");
       const localName = view.getUint16(localOffset + 26, true), localExtra = view.getUint16(localOffset + 28, true);
       const start = localOffset + 30 + localName + localExtra, part = bytes.slice(start, start + compressed);
+      if (limit !== undefined && (view.getUint32(cursor + 24, true) > limit || part.byteLength > limit))
+        throw new Error("Dữ liệu sau khi giải nén XLSX quá lớn.");
       if (method === 0) return part;
       if (method !== 8 || typeof DecompressionStream === "undefined") throw new Error("Trình duyệt không hỗ trợ giải nén XLSX này.");
-      return new Uint8Array(await new Response(new Blob([part]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+      const content = new Blob([part]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      let decompressed = 0;
+      const bounded = limit === undefined ? content : content.pipeThrough(new TransformStream({
+        transform(chunk: Uint8Array, controller) {
+          decompressed += chunk.byteLength;
+          if (decompressed > limit) throw new Error("Dữ liệu sau khi giải nén XLSX quá lớn.");
+          controller.enqueue(chunk);
+        },
+      }));
+      return new Uint8Array(await new Response(bounded).arrayBuffer());
     }
     cursor += 46 + nameLength + extra + comment;
   }
-  throw new Error(`Không tìm thấy ${filename} trong XLSX.`);
+  return null;
 }
 
 export function excelDate(value: string) {
@@ -145,10 +156,11 @@ export function mapImportRows(rows: SheetRow[], mapping: Record<string, string>,
   })));
 }
 
-export async function parseXlsx(file: File): Promise<SheetRow[]> {
+export async function parseXlsx(file: File, maxEntryBytes?: number): Promise<SheetRow[]> {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const sharedBytes = await findEntry(bytes, "xl/sharedStrings.xml").catch(() => null);
-  const sheetBytes = await findEntry(bytes, "xl/worksheets/sheet1.xml");
+  const sharedBytes = await findEntry(bytes, "xl/sharedStrings.xml", maxEntryBytes);
+  const sheetBytes = await findEntry(bytes, "xl/worksheets/sheet1.xml", maxEntryBytes);
+  if (!sheetBytes) throw new Error("Không tìm thấy trang tính đầu tiên trong XLSX.");
   const parser = new DOMParser();
   const sharedDoc = sharedBytes ? parser.parseFromString(new TextDecoder().decode(sharedBytes), "application/xml") : null;
   const shared = sharedDoc ? [...sharedDoc.getElementsByTagName("si")].map(si => [...si.getElementsByTagName("t")].map(t => t.textContent ?? "").join("")) : [];
